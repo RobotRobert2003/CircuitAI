@@ -4,13 +4,21 @@
 		"unit": {
 		//             	   0          1         2          3            4         5          6          7            8         9        10
 			"armada": ["armllt",  "armtl",  "armrl",   "armbeamer", "armhlt", "armjuno", "armclaw", "armcir",  "armferret", "armpb", "armatl",
-					   "armflak", "armamb", "armanni", "armguard",  "armamd", "armtarg", "armgate", "armmercury", "armnanotc", "armbrtha", "armvulc", "armemp"],
+					   "armflak", "armamb", "armanni", "armguard",  "armamd", "armtarg", "armgate", "armmercury", "armnanotc", "armbrtha", "armvulc", "armemp", "armbeamer", "armarad", "armveil"],
 		//            	   0          1           2          3          4         5          6            7          8          9      10
 			"cortex": ["corllt",  "cortl",    "corrl",   "corhllt", "corhlt", "corjuno", "cormaw",  "cormadsam", "corerad", "corvipe", "coratl",
-					   "corflak", "cortoast", "cordoom", "corpun",  "corfmd", "cortarg", "corgate", "corscreamer", "cornanotc", "corint", "corbuzz", "cortron"]
+					   "corflak", "cortoast", "cordoom", "corpun",  "corfmd", "cortarg", "corgate", "corscreamer", "cornanotc", "corint", "corbuzz", "cortron", "corhllt", "corarad", "corshroud"]
 		},
 		// Actual number of defences per cluster bounded by income - the order of defenses that should be build with numbers as above.
-		"land":  [0, 2, 3, 3, 4, 3, 7, 5, 12, 12, 15, 13, 18, 17, 18, 20, 22, 20, 19, 19, 20, 20, 18, 17, 17, 22, 12, 12, 21, 12, 12, 12],
+		// 23: a second Beamer / Twin Guard / Dragon's Jaw, right after the T2 flak (11) and the HLT (4).
+		//     Its own slot, so the early Beamer-slot entries (3) stay Hive for Legion.
+		// Juno (5) is the 4th entry, after the Sentry, the light AA and one Beamer.
+		// 24: long-range radar (armarad / corarad / legarad: 400 metal, 14000 energy, T2, radar 3500), once,
+		//     right after the first T2 entries (12, 11): a cluster gets there only with T2 constructors about.
+		// 25: long-range jammer (armveil / corshroud / legajam: 125-130 metal but 19000-20000 energy and
+		//     125 E/s upkeep), once, after the first Annihilator / Doomsday / Bastion (13): late, hiding
+		//     the cluster's heavy guns from enemy radar (owner, 2026-10-11: both back in the chain).
+		"land":  [0, 2, 3, 5, 3, 4, 3, 7, 12, 11, 24, 23, 12, 15, 13, 25, 18, 17, 18, 20, 22, 20, 19, 19, 20, 20, 18, 17, 17, 22, 12, 12, 21, 12, 12, 12],
 		"water": [1, 1, 19, 1, 4, 9, 10, 9, 10],
 		"prevent": 1,  // number of preventive defences
 		"amount": {  // income bound factor
