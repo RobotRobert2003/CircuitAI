@@ -61,6 +61,7 @@ class CTerrainManager;
 class CBattleAnalysis;
 class CBuilderManager;
 class CCommanderControl;
+class CWidgetState;
 class CFactoryManager;
 class CEconomyManager;
 class CMilitaryManager;
@@ -337,6 +338,7 @@ public:
 	CBattleAnalysis*  GetBattle()          const { return battle.get(); }  // D-126
 	CBuilderManager*  GetBuilderManager()  const { return builderManager.get(); }
     CCommanderControl* GetCommanderControl() const { return commanderControl.get(); }
+    CWidgetState* GetWidgetState() const { return widgetState.get(); }  // D-300
 	CFactoryManager*  GetFactoryManager()  const { return factoryManager.get(); }
 	CEconomyManager*  GetEconomyManager()  const { return economyManager.get(); }
 	CMilitaryManager* GetMilitaryManager() const { return militaryManager.get(); }
@@ -394,6 +396,7 @@ private:
 	std::shared_ptr<CBattleAnalysis> battle;  // D-126: TECH's weapon clusters
 	std::shared_ptr<CBuilderManager> builderManager;
     std::unique_ptr<CCommanderControl> commanderControl;
+    std::unique_ptr<CWidgetState> widgetState;  // D-300: AI -> widget state file
 	std::shared_ptr<CFactoryManager> factoryManager;
 	std::shared_ptr<CEconomyManager> economyManager;
 	std::shared_ptr<CMilitaryManager> militaryManager;

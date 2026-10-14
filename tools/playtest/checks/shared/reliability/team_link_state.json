@@ -1,0 +1,26 @@
+{
+  "stop_minute": 14,
+  "complete_on": {
+    "key": "complete",
+    "pattern": "\\[LinkCheck\\] PASS completed",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 5,
+  "expect": [
+    {"key": "roster", "pattern": "\\[LinkCheck\\] PASS roster complete", "scope": "any"},
+    {"key": "aggression", "pattern": "\\[LinkCheck\\] PASS aggression reply", "scope": "any"},
+    {"key": "role-switch", "pattern": "\\[LinkCheck\\] PASS role switch", "scope": "any"},
+    {"key": "role-reply", "pattern": "\\[LinkCheck\\] PASS role reply event", "scope": "any"},
+    {"key": "events", "pattern": "\\[LinkCheck\\] PASS event log", "scope": "any"},
+    {"key": "layout", "pattern": "\\[LinkCheck\\] PASS layout overlay team", "scope": "any"},
+    {"key": "layout-hidden", "pattern": "\\[LinkCheck\\] PASS layout overlay hidden", "scope": "any"},
+    {"key": "layout-again", "pattern": "\\[LinkCheck\\] PASS layout overlay shown again", "scope": "any"},
+    {"key": "completed", "pattern": "\\[LinkCheck\\] PASS completed", "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]|\\[LinkCheck\\] FAIL", "scope": "any"},
+    {"key": "widget", "pattern": "(Error in|Failed to load).*(team_link|gui_barb_team_link)|\\[BARb link\\] (cannot read|state file error|message error)", "scope": "any"},
+    {"key": "crash", "pattern": "Access violation|has crashed|Fatal:", "scope": "any"}
+  ]
+}

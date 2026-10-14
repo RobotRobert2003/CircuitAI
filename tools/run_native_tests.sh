@@ -20,7 +20,7 @@ if [ -z "$IMAGE" ]; then
 	echo "run_native_tests: the recoil-build-amd64-windows image is not present (run a docker build once)" >&2
 	exit 2
 fi
-tests=(commander_combat_test callback_buffer_test resurrection_claim_test reservation_claim_test task_reference_test dormant_task_chain_test economy_index_test route_command_test reservation_candidates_test construction_recovery_test guard_command_test target_preference_test layout_ranking_test base_layout_geometry_test allied_reservations_test local_reservations_test lane_solver_test strategic_targeting_test terrain_route_test air_geometry_test metal_field_test enemy_reclaim_policy_test naval_geometry_test air_safety_test ranged_geometry_test ground_cohort_test local_rush_test water_survey_test)
+tests=(commander_combat_test callback_buffer_test resurrection_claim_test reservation_claim_test task_reference_test dormant_task_chain_test economy_index_test route_command_test reservation_candidates_test construction_recovery_test guard_command_test target_preference_test layout_ranking_test base_layout_geometry_test allied_reservations_test local_reservations_test lane_solver_test strategic_targeting_test terrain_route_test air_geometry_test metal_field_test enemy_reclaim_policy_test naval_geometry_test air_safety_test widget_state_test ranged_geometry_test ground_cohort_test local_rush_test water_survey_test)
 cmd=""
 for t in "${tests[@]}"; do
     extra=""

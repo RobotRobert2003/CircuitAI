@@ -31,6 +31,7 @@
 #include "util/Performance.h"
 #include "angelscript/include/angelscript.h"
 #include "util/Profiler.h"
+#include "util/WidgetState.h"
 #ifdef DEBUG_VIS
 #include "map/InfluenceMap.h"
 #include "map/ThreatMap.h"
@@ -685,6 +686,9 @@ int CCircuitAI::Init(int skirmishAIId, const struct SSkirmishAICallback* sAICall
 	militaryManager = std::make_shared<CMilitaryManager>(this);
 	militaryManager->InitHandlers();
     commanderControl=std::make_unique<CCommanderControl>(this);
+    // D-300: before script init, so AiMain can already publish widget state.
+    widgetState=std::make_unique<CWidgetState>(this);
+    widgetState->Start();
 
 	// TODO: Remove EconomyManager from module (move abilities to BuilderManager).
 	modules.push_back(militaryManager);
@@ -783,8 +787,12 @@ int CCircuitAI::Release(int reason)
 		return 0;
 	}
 
+	if (widgetState != nullptr) {
+		widgetState->Stop();
+	}
 	scheduler->ProcessRelease();
 	scheduler = nullptr;
+	widgetState.reset();  // its repeat job died with the scheduler
 
 	delete script;  // NOTE: Threaded scripts, hence destroy contexts after scheduler
 	script = nullptr;

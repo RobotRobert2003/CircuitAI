@@ -6,38 +6,79 @@
 
 WIDGET LINK
 
-ai.CallUI(msg) is the engine's AI -> LuaUI channel: CAICallback::CallLuaUI
-invokes the unsynced callin RecvSkirmishAIMessage(aiTeam, dataStr) on the
-LuaUI of the machine that runs this AI instance. BAR's widget handler does NOT
-forward that callin to widgets (it is not in barwidgets.lua's callInLists), so
-the widget installs the LuaUI global itself (D-113). It is local only: the host
-of the AIs sees it, playing or spectating; a client on another machine does not.
-It never reaches gadgets, other AIs or other players, so it is safe to mirror
-internal state through it.
+D-300. BAR's user-widget sandbox (BAR PRs #9547/#9658/#9660) stopped every
+ai.CallUI message from reaching a user widget: RecvSkirmishAIMessage is an
+engine callin the widget handler does not forward, and the getfenv(0) hook the
+widget used (D-113) now lands in its own table. Widget -> AI still works.
 
-Every line is "barb|<topic>|<senderTeamId>|<senderAllyTeamId>|<payload>". The
-ally team id lets a widget that watches several locally hosted ally teams keep
-them apart. Topics mirrored today:
-    roster    payload = the roster line (see roster.as), sent when we announce
-              ourselves ("self") and when an ally's entry is first stored ("ally")
-    orphan    request / donate events of the orphan rescue (team.as)
-    donation  T2 constructor hand-outs (donation.as)
-    role      reply to a widget command (commands.as)
-    ferry     ferry runs (ferry.as); spam  on / off / front / focus (spam.as);
-    seaassist shipyard unlocks and hand-outs (sea_assist.as); layout  the
-              planned base for the overlay (shared leased feed below)
+So AI -> widget is now a state file the native side writes a short while after
+changes (CWidgetState, src/circuit/util/WidgetState.h):
+    <writeDir>/LuaUI/Config/BARb/state/team<N>.txt
+and the host's widget polls it. It is eventually consistent (about 0.5-3 s of
+wall time plus the widget's poll), local only like CallUI was, and never
+reaches gadgets, other AIs or other players.
 
-tools/widgets/gui_barb_team_link.lua is a widget that displays them.
+Every published line keeps the old wire form
+"barb|<topic>|<senderTeamId>|<senderAllyTeamId>|<payload>", so the widget feeds
+it to the same handler. Topics are split by how the widget uses them:
+    state (latest value per key, rewritten only when it changes)
+        roster      key "roster" (self) and "roster.<team>" (allies we relay)
+        aggression  key "aggression"
+        layout      key "layout": the planned base for the overlay, whole
+                    (no 3000-byte chunks), only while the widget holds a lease
+    events (bounded ring of the latest 64, with increasing ids)
+        role (command replies), orphan, donation, ferry, spam, seaassist, draw
+Lanes ("barbtheatre", lanes.as) are deliberately NOT mirrored: their payload is
+large and recalculated often. They still use ai.CallUI and stay unavailable
+under the sandbox (KI-617).
+
+tools/widgets/gui_barb_team_link.lua is the widget that displays them.
 
 ******************************************************************************/
 namespace WidgetLink {
     bool Enabled = true;
     const string Prefix = "barb|";
+    // Wall-clock coalescing of file writes (CWidgetState): write once changes
+    // have been quiet for QuietMs, or MaxDelayMs after the first unwritten one.
+    int QuietMs = 500;
+    int MaxDelayMs = 3000;
+    bool timingSent = false;
+
+    string Line(const string &in topic, const string &in payload)
+    {
+        return Prefix + topic + "|" + ai.teamId + "|" + ai.allyTeamId + "|" + payload;
+    }
+    void Timing()
+    {
+        if (timingSent) return;
+        timingSent = true;
+        ai.SetWidgetStateTiming(QuietMs, MaxDelayMs);
+    }
+    void SetState(const string &in key, const string &in line)
+    {
+        if (!Enabled) return;
+        Timing();
+        ai.SetWidgetState(key, line);
+    }
 
     void Send(const string &in topic, const string &in payload)
     {
         if (!Enabled) return;
-        ai.CallUI(Prefix + topic + "|" + ai.teamId + "|" + ai.allyTeamId + "|" + payload);
+        Timing();
+        const string line = Line(topic, payload);
+        if (topic == "roster") {
+            // "self|roster|1|<team>|..." or "ally|roster|1|<team>|..."
+            if (payload.findFirst("ally|") == 0) {
+                array<string>@ f = payload.split("|");
+                if (f.length() > 3) ai.SetWidgetState("roster." + f[3], line);
+            } else {
+                ai.SetWidgetState("roster", line);
+            }
+        } else if (topic == "aggression") {
+            ai.SetWidgetState("aggression", line);
+        } else {
+            ai.PushWidgetEvent(line);
+        }
     }
     // Local observation only: one feed for every role using native layouts.
     // Stop all serialization when hidden; renew the lease from the UI so a
@@ -50,7 +91,7 @@ namespace WidgetLink {
         const bool starting = on && !layoutOverlay;
         layoutOverlay = on;
         layoutUntil = ai.frame + 45 * SECOND;
-        if (!on) { layoutLast = ""; layoutFrame = -1; return; }
+        if (!on) { layoutLast = ""; layoutFrame = -1; SetState("layout", ""); return; }
         if (starting) { layoutLast = ""; layoutFrame = -1; }
         LayoutTick(starting || refresh);
     }
@@ -63,9 +104,8 @@ namespace WidgetLink {
         const string snapshot = aiTerrainMgr.IsLayoutEnabled() ? aiTerrainMgr.DescribeLayout() : "";
         if (!force && snapshot == layoutLast) return;
         layoutLast = snapshot;
-        const uint parts = (snapshot.length() + 2999) / 3000;
-        if (parts == 0) Send("layout", "0|0|none");
-        for (uint i = 0; i < parts; ++i)
-            Send("layout", "" + (i + 1) + "|" + parts + "|" + snapshot.substr(i * 3000, 3000));
+        // The native store skips an unchanged value, so a forced refresh of the
+        // same plan costs no file write.
+        SetState("layout", Line("layout", snapshot.length() == 0 ? "none" : snapshot));
     }
 }

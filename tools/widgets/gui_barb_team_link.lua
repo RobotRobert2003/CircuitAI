@@ -19,8 +19,14 @@
 --
 -- Both directions only work on the machine that runs the AIs (the host),
 -- playing or spectating:
---   AI -> widget   ai.CallUI  -> RecvSkirmishAIMessage(aiTeam, "barb|<topic>|<team>|<allyTeam>|<payload>")
+--   AI -> widget   a state file the AI rewrites a short while after changes (D-300):
+--                  <writeDir>/LuaUI/Config/BARb/state/team<N>.txt, polled here once
+--                  a second. Each record carries the old "barb|<topic>|<team>|<allyTeam>|<payload>"
+--                  line. BAR's user-widget sandbox (BAR PRs #9547/#9658/#9660) no longer
+--                  lets a user widget receive RecvSkirmishAIMessage (KI-617).
 --   widget -> AI   Spring.SendSkirmishAIMessage(teamId, "barb|<command>|<teamId>|...")
+-- Lanes still travel only through ai.CallUI -> RecvSkirmishAIMessage, so they
+-- work only on a BAR build that delivers that callin to widgets.
 -- Commands carry the target team id and the AI ignores any other; the widget
 -- never broadcasts, so hosting two ally teams locally cannot cross-steer them.
 -- Wire formats: data/script/src/systems/presentation/widget_link.as and commands.as.
@@ -731,6 +737,7 @@ local eventScroll, listScroll = 0, 0
 local lastQueryFrame = -1
 local firstAnnounceFrame = nil
 local blueprints = {} -- shared read-only layout observer; initialized below
+local stateFiles = {} -- D-300 AI state file reader; initialized with the message code
 local hookAIMessages, unhookAIMessages   -- defined with the message code below
 local lastRowClick = nil                 -- a row's last click (double-click flies the camera)
 
@@ -1024,6 +1031,10 @@ function widget:Initialize()
 			return out
 		end,
 		LastReply = function(teamId) local e = ais[teamId]; return e and e.lastReply end,
+		-- D-300 diagnostics for tools/playtest: the event log size and the last
+		-- state file sequence read for a team (nil before the first read)
+		EventCount = function() return #events end,
+		StateSeq = function(teamId) return stateFiles.Seq and stateFiles.Seq(teamId) end,
 	}
 end
 
@@ -1053,13 +1064,14 @@ function widget:SetConfigData(data)
 end
 
 function widget:Update()
+    if stateFiles.Poll then stateFiles.Poll() end
     local waiting=false
     for id,p in pairs(theatrePending) do
         local result=theatres.Snapshot(id)
         if result and result.frame>=p.frame then theatrePending[id]=nil
         elseif Spring.DiffTimers(Spring.GetTimer(),p.time)>5 then
             theatrePending[id]=nil
-            theatreStatus="No lane reply: update AI DLL + scripts, then restart game."
+            theatreStatus="No lane reply: this BAR build does not pass AI messages to widgets (KI-617)."
             addEvent("Player " .. id .. ": " .. theatreStatus,"warn")
             spEcho("[BARb link] " .. theatreStatus)
         else waiting=true end
@@ -1169,6 +1181,13 @@ do
         d.parts[idx]=payload; d.next=idx+1
         if idx==total then commit(id,table.concat(d.parts)) end
     end
+    -- D-300: the state file carries the whole snapshot ("none" = no plan); the
+    -- reader only calls this when the stored value changed.
+    function blueprints.Whole(id,payload)
+        if not wanted[id] or not mayCommand(id) or not isPermittedTeam(id) then return end
+        commit(id,payload=='none' and '' or payload)
+    end
+    function blueprints.Wanted(id) return wanted[id]==true end
     function blueprints.SetMode(value)
         if value~=nil and value~='team' and type(value)~='number' then return end
         mode=value; refreshTeams()
@@ -1282,6 +1301,99 @@ local function onAIMessage(aiTeam, dataStr)
 	elseif topic == "layout" and sender == aiTeam then
 		blueprints.Receive(sender, tonumber(p[5]) or 0, tonumber(p[6]) or 0, table.concat(p, "|", 7))
 	end
+end
+
+-- D-300: the AI state files. Each locally hosted BARb rewrites
+-- LuaUI/Config/BARb/state/team<N>.txt a short while after its widget state
+-- changes (src/circuit/util/WidgetState.h):
+--   barbstate|<format>|<team>|<allyTeam>|<seq>|<frame>
+--   s|<key>|<barb line>      latest value per key (roster, aggression, layout)
+--   e|<id>|<barb line>       the latest 64 events, ids increasing
+--   end|<seq>                trailer: a torn or half-written file is skipped
+-- Cost: one VFS read per hosted AI per POLL_SECONDS of wall time; the header
+-- sequence skips parsing an unchanged file, and only changed values or new
+-- event ids reach onAIMessage. No per-frame work.
+do
+    local FORMAT, POLL_SECONDS = 1, 1.0
+    local files = {}           -- teamId -> { seq, event, states = {key -> line}, layoutShown }
+    local lastPoll = nil
+    local readError = nil
+    local function path(id) return "LuaUI/Config/BARb/state/team" .. id .. ".txt" end
+    local function load(id)
+        if not (VFS and VFS.LoadFile) then return nil, "VFS.LoadFile is unavailable" end
+        local ok, text = pcall(VFS.LoadFile, path(id), VFS.RAW)
+        if not ok then return nil, tostring(text) end
+        return text
+    end
+    local function apply(id, text)
+        local f = files[id] or { seq = -1, event = 0, states = {} }
+        files[id] = f
+        local format, team, _, seq, frame = text:match("^barbstate|(%d+)|(%d+)|(%d+)|(%d+)|(%d+)")
+        format, team, seq, frame = tonumber(format), tonumber(team), tonumber(seq), tonumber(frame)
+        if format ~= FORMAT or team ~= id or not seq then return end
+        if seq == f.seq then return end
+        -- A file from a longer earlier game: the AI deletes it on start, so this
+        -- is only a leftover when the AI is not running here.
+        if frame and frame > spGetGameFrame() + 900 then return end
+        if not text:find("\nend|" .. seq .. "\n", 1, true) then return end   -- torn: next poll
+        if seq < f.seq then f.event = 0; f.states = {}; f.layoutShown = nil end   -- the AI restarted
+        f.seq = seq
+        local seen = {}
+        for line in text:gmatch("[^\n]+") do
+            local kind = line:sub(1, 2)
+            if kind == "s|" then
+                local key, value = line:match("^s|([^|]+)|(.*)$")
+                if key then
+                    seen[key] = true
+                    if key == "layout" then
+                        local payload = value:match("^barb|layout|%d+|%d+|(.*)$")
+                        if payload and blueprints.Wanted(id) and (f.states.layout ~= value or not f.layoutShown) then
+                            blueprints.Whole(id, payload); f.layoutShown = true
+                        end
+                        f.states.layout = value
+                    elseif f.states[key] ~= value then
+                        f.states[key] = value
+                        onAIMessage(id, value)
+                    end
+                end
+            elseif kind == "e|" then
+                local eid, value = line:match("^e|(%d+)|(.*)$")
+                eid = tonumber(eid)
+                if eid and eid > f.event then
+                    f.event = eid
+                    onAIMessage(id, value)
+                end
+            end
+        end
+        for key in pairs(f.states) do if not seen[key] then f.states[key] = nil end end
+        if not seen.layout then f.layoutShown = nil end
+    end
+    function stateFiles.Poll()
+        local now = Spring.GetTimer()
+        if lastPoll and Spring.DiffTimers(now, lastPoll) < POLL_SECONDS then return end
+        lastPoll = now
+        for _, id in ipairs(aiOrder) do
+            if hostedHere(id) and isPermittedTeam(id) then
+                -- A newly wanted overlay must show the stored plan even when the
+                -- file itself has not changed since the last read.
+                local f = files[id]
+                if f and not blueprints.Wanted(id) then f.layoutShown = nil end
+                if f and blueprints.Wanted(id) and not f.layoutShown and f.states.layout then
+                    local payload = f.states.layout:match("^barb|layout|%d+|%d+|(.*)$")
+                    if payload then blueprints.Whole(id, payload); f.layoutShown = true end
+                end
+                local text, err = load(id)
+                if err and readError ~= err then
+                    readError = err
+                    spEcho("[BARb link] cannot read AI state file " .. path(id) .. ": " .. err)
+                elseif type(text) == "string" and #text > 0 then
+                    local ok, perr = pcall(apply, id, text)
+                    if not ok then spEcho("[BARb link] state file error team " .. id .. ": " .. tostring(perr)) end
+                end
+            end
+        end
+    end
+    function stateFiles.Seq(id) return files[id] and files[id].seq or nil end
 end
 
 -- BAR's widget handler (luaui/barwidgets.lua) does not forward the engine's

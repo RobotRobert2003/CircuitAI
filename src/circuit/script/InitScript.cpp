@@ -36,6 +36,7 @@
 #include "util/ExtAS.h"
 #include "util/Utils.h"
 #include "util/Performance.h"
+#include "util/WidgetState.h"
 
 #include "angelscript/include/angelscript.h"
 #include "angelscript/add_on/scriptarray/scriptarray.h"
@@ -623,6 +624,31 @@ static std::string CCircuitAI_CallUI(CCircuitAI* circuit, const std::string& dat
 	return circuit->GetLua()->CallUI(data.c_str(), data.size());
 }
 
+// D-300: AI -> widget state file (BAR's user-widget sandbox drops CallUI).
+static void CCircuitAI_SetWidgetState(CCircuitAI* circuit, const std::string& key, const std::string& value)
+{
+	CWidgetState* state = circuit->GetWidgetState();
+	if (state != nullptr) {
+		state->SetState(key, value);
+	}
+}
+
+static void CCircuitAI_PushWidgetEvent(CCircuitAI* circuit, const std::string& line)
+{
+	CWidgetState* state = circuit->GetWidgetState();
+	if (state != nullptr) {
+		state->PushEvent(line);
+	}
+}
+
+static void CCircuitAI_SetWidgetStateTiming(CCircuitAI* circuit, int quietMs, int maxDelayMs)
+{
+	CWidgetState* state = circuit->GetWidgetState();
+	if (state != nullptr) {
+		state->SetTiming(quietMs, maxDelayMs);
+	}
+}
+
 static float CCircuitAI_GetGameRulesParamFloat(CCircuitAI* circuit, const std::string& key, float defVal)
 {
 	return circuit->GetGame()->GetRulesParamFloat(key.c_str(), defVal);
@@ -1125,6 +1151,10 @@ void CInitScript::RegisterCore()
 	// Lua<-->AI communications [in Spring 0.83+]
 	r = engine->RegisterObjectMethod("CCircuitAI", "string CallRules(const string& in)", asFUNCTION(CCircuitAI_CallRules), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "string CallUI(const string& in)", asFUNCTION(CCircuitAI_CallUI), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	// D-300: widget state file; an empty value removes the key
+	r = engine->RegisterObjectMethod("CCircuitAI", "void SetWidgetState(const string& in, const string& in)", asFUNCTION(CCircuitAI_SetWidgetState), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CCircuitAI", "void PushWidgetEvent(const string& in)", asFUNCTION(CCircuitAI_PushWidgetEvent), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CCircuitAI", "void SetWidgetStateTiming(int, int)", asFUNCTION(CCircuitAI_SetWidgetStateTiming), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	// RulesParams accessors on AI (game/team)
 	r = engine->RegisterObjectMethod("CCircuitAI", "float GetGameRulesParam(const string& in, float) const", asFUNCTION(CCircuitAI_GetGameRulesParamFloat), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "string GetGameRulesParam(const string& in, const string& in) const", asFUNCTION(CCircuitAI_GetGameRulesParamString), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
