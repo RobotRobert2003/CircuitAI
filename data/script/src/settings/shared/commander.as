@@ -34,4 +34,16 @@ namespace Global { namespace Commander {
     float T3Hunt=0.f, T3ArtilleryApproach=180.f, T3Trade=0.f, T3RetrySeconds=2.f;
     float T3CloakedVolleyRisk=0.25f; // future retargeting only; incoming salvos/death blasts retain full risk
     float T3BaitCount=4.f, T3BaitMargin=150.f, T3BaitDistance=120.f, T3BaitSpacing=80.f, T3BaitTimeout=5.f;
+    // D-299: FRONT commander work ladder (CommanderFront::Work orders it).
+    // Fallback line: one LineDefence turret per LineIncome metal income,
+    // clamped to [LineMin, LineMax], counted per line (no stacking), the line
+    // kept open LineHoldSeconds after the fallback ends. Timed: one LLT and one
+    // light AA every TimedInterval seconds after reaching the front, until
+    // TimedUntil seconds of game time. WorkRadius 0 = the commander's LOS.
+    bool Work=true;
+    float LineIncome=20.f, LineMin=1.f, LineMax=6.f, LineRadius=400.f, LineSpacing=80.f;
+    float LineHoldSeconds=60.f, LineRetrySeconds=5.f;
+    float TimedInterval=30.f, TimedUntil=300.f;
+    float WorkRadius=0.f, WorkClearance=400.f, RepairHealth=.98f;
+    float ReclaimStorage=.95f, ReclaimMetal=1.f, RadarCoverage=.8f, BaseRadius=1500.f;
 } }

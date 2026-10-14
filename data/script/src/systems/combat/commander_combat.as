@@ -93,6 +93,25 @@ namespace CommanderCombat {
             Option("t3_bait_distance",Global::Commander::T3BaitDistance);
             Option("t3_bait_spacing",Global::Commander::T3BaitSpacing);
             Option("t3_bait_timeout",Global::Commander::T3BaitTimeout);
+            // D-299 work ladder
+            Option("line_income",Global::Commander::LineIncome);
+            Option("line_min",Global::Commander::LineMin);
+            Option("line_max",Global::Commander::LineMax);
+            Option("line_radius",Global::Commander::LineRadius);
+            Option("line_spacing",Global::Commander::LineSpacing);
+            Option("line_hold_seconds",Global::Commander::LineHoldSeconds);
+            Option("line_retry_seconds",Global::Commander::LineRetrySeconds);
+            Option("timed_interval",Global::Commander::TimedInterval);
+            Option("timed_until",Global::Commander::TimedUntil);
+            Option("work_radius",Global::Commander::WorkRadius);
+            Option("work_clearance",Global::Commander::WorkClearance);
+            Option("repair_health",Global::Commander::RepairHealth);
+            Option("reclaim_storage",Global::Commander::ReclaimStorage);
+            Option("reclaim_metal",Global::Commander::ReclaimMetal);
+            Option("radar_coverage",Global::Commander::RadarCoverage);
+            Option("base_radius",Global::Commander::BaseRadius);
+            Global::Commander::Work=aiSetupMgr.ConfigFloat("commander/combat/work",Global::Commander::Work?1.f:0.f)>0.f;
+            aiBuilderMgr.SetCommanderCombatOption("work",Global::Commander::Work?1.f:0.f);
             const string baitName=aiSetupMgr.ConfigString("commander/combat/t3_bait_unit",
                 UnitHelpers::GetStaticLLTNameForSide(side));
             CCircuitDef@ bait=ai.GetCircuitDef(baitName);

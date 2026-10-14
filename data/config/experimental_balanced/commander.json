@@ -24,6 +24,13 @@
 		"t3_leash": 900, "t3_hold_seconds": 4, "t3_dodge_seconds": 1.2, "t3_hunt_leash": 1800, "t3_screen": 300,
 		"t3_hunt": 0, "t3_artillery_approach": 180, "t3_trade": 0, "t3_retry_seconds": 2, "t3_cloaked_volley_risk": 0.25,
 		"t3_bait_count": 4, "t3_bait_margin": 150, "t3_bait_distance": 120, "t3_bait_spacing": 80, "t3_bait_timeout": 5,
+		// D-299 FRONT commander work ladder: fallback line turrets (1 per line_income metal
+		// income in [line_min, line_max], per line, no stacking), timed LLT + light AA
+		// every timed_interval s after reaching the front until timed_until s of game.
+		"work": 1, "line_income": 20, "line_min": 1, "line_max": 6, "line_radius": 400, "line_spacing": 80,
+		"line_hold_seconds": 60, "line_retry_seconds": 5, "timed_interval": 30, "timed_until": 300,
+		"work_radius": 0, "work_clearance": 400, "repair_health": 0.98, "reclaim_storage": 0.95,
+		"reclaim_metal": 1, "radar_coverage": 0.8, "base_radius": 1500,
 		"t3_profiles": {
 			// Drone carrier: its reach is indirect, so the auto plan never qualifies it
 			// as artillery. Treat as siege; a long hunt requires t3_hunt=1.

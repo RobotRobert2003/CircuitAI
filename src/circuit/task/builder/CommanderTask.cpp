@@ -57,4 +57,9 @@ void CCommanderTask::Resume(CCircuitUnit* unit) {
         manager->AssignTask(unit,previous);
     } else RemoveAssignee(unit);
 }
+void CCommanderTask::Handover(CCircuitUnit* unit) {
+    performance::Scope measured(manager->GetCircuit(),performance::COMMANDER_HANDOVER);
+    TRY_UNIT(manager->GetCircuit(),unit,unit->CmdStop();)
+    RemoveAssignee(unit);
+}
 }

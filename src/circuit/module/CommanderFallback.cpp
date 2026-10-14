@@ -75,7 +75,7 @@ void CCommanderControl::PlanFallback(CCircuitUnit* unit,State& s,int frame) {
     };
     const size_t tried=std::min<size_t>(4,porcs.size());
     std::partial_sort(porcs.begin(),porcs.begin()+tried,porcs.end(),order);
-    int chosen=-1; AIFloat3 goal=home; float perimeter=options.fallbackOffset;
+    int chosen=-1; AIFloat3 goal=home,line=home; float perimeter=options.fallbackOffset;
     for(size_t i=0;i<tried;++i) {
         auto* ally=ai->GetFriendlyUnit(porcs[i].id);
         if(!ally || ally->GetUnit()->GetHealth()<=0 || ally->GetUnit()->IsBeingBuilt()) continue;
@@ -85,7 +85,7 @@ void CCommanderControl::PlanFallback(CCircuitUnit* unit,State& s,int frame) {
         AIFloat3 candidate=F(P(p)+away*options.fallbackOffset);
         candidate.y=ai->GetMap()->GetElevationAt(candidate.x,candidate.z);
         if(!OnMap(candidate) || !ai->GetTerrainManager()->CanReachAt(unit,candidate,64)) continue;
-        chosen=porcs[i].id; goal=candidate;
+        chosen=porcs[i].id; goal=candidate; line=p;
         perimeter=p.distance2D(home)+options.fallbackOffset;
         break;
     }
@@ -133,6 +133,11 @@ void CCommanderControl::PlanFallback(CCircuitUnit* unit,State& s,int frame) {
         s.fallbackMoveUntil=frame+int((goal.distance2D(pos)/speed+options.sensorMemory)*FRAMES_PER_SEC);
     }
     s.fallbackPorc=chosen; s.fallbackGoal=goal; s.fallbackBoundary={P(home),perimeter};
+    // D-299: the line the commander's turrets join is the porc, or the rear
+    // station when no porc survives; it outlives the fallback by line_hold.
+    if(chosen<0) line=goal;
+    if(line.SqDistance2D(s.lineAnchor)>options.lineRadius*options.lineRadius) s.lineDone=false;
+    s.lineAnchor=line; s.lineThreat=s.fallbackThreat;
 }
 
 bool CCommanderControl::RetreatStation(CCircuitUnit* unit,AIFloat3& goal) const {
@@ -185,6 +190,7 @@ bool CCommanderControl::Fallback(CCircuitUnit* unit,State& s,IUnitTask* current,
     // disabling policy must release regardless of which path renewed one.
     if(s.fallback && (!options.fallback || frame>=s.fallbackUntil)) {
         s.fallback=false; s.fallbackPorc=-1; s.fallbackReach=0; s.fallbackMoveUntil=-1;
+        if(LadderActive()) s.lineUntil=frame+int(options.lineHoldSeconds*FRAMES_PER_SEC);
         ai->LOG("[CommanderFallback] unit=%i off frame=%i",unit->GetId(),frame);
         if(task && s.mode==Mode::FALLBACK) {
             Transition(unit,s,Mode::SUPPORT,frame);
@@ -207,24 +213,30 @@ bool CCommanderControl::Fallback(CCircuitUnit* unit,State& s,IUnitTask* current,
             ai->GetAllyTeam()->GetCommanderShots().Release(ai->GetTeamId(),unit->GetId());
         } else return true;
     }
-    if(!task) {
+    // D-299: on the line with no shot, the work ladder (line turrets, repair,
+    // reclaim, radar, assist) runs under its builder task, filtered to the
+    // perimeter. Combat ownership returns the moment a shot is worth taking.
+    const bool working=!task && LineWorking(unit,s,current,frame);
+    const auto seize=[&]() {
         // A safety withdrawal, like a defensive shot, may interrupt
         // no-disrupt construction; enemy reclaim was excluded by Tick.
         task=ai->GetBuilderManager()->EnqueueCommander(current);
         ai->GetBuilderManager()->AssignTask(unit,task);
-        if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return true; }
+        if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); task=nullptr; return false; }
         s.started=frame; s.exit=s.fallbackGoal; s.failed=0; s.cloak=unit->GetUnit()->IsCloaked(); ++operation;
         unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
         TRY_UNIT(ai,unit,unit->CmdStop();)
-    }
-    if(unit->GetDGunAct()!=nullptr || task->GetAssignees().size()!=1 || task->GetAssignees().count(unit)!=1) {
+        return true;
+    };
+    if(!task && !working && !seize()) return true;
+    if(task && (unit->GetDGunAct()!=nullptr || task->GetAssignees().size()!=1 || task->GetAssignees().count(unit)!=1)) {
         ai->LOG("[INVARIANT] INV-214 commander fallback has competing owner unit=%i",unit->GetId());
         task->Resume(unit); return true;
     }
-    s.budget=0; s.deployed=false;
-    Transition(unit,s,Mode::FALLBACK,frame);
     const bool inside=s.fallbackBoundary.Contains(P(pos),64.f);
-    {
+    if(task) {
+        s.budget=0; s.deployed=false;
+        Transition(unit,s,Mode::FALLBACK,frame);
         // Disengage cloaked when it is funded: while travelling to the line,
         // and on the line while the threat outranges the commander's own
         // weapon (lasers achieve nothing there and only reveal it). The
@@ -277,6 +289,10 @@ bool CCommanderControl::Fallback(CCircuitUnit* unit,State& s,IUnitTask* current,
         const float minValue=commander::MinimumValue(options.minValue,
             ai->GetMilitaryManager()->GetAggression(),options.aggression);
         if(best.target>=0 && best.value>=minValue) {
+            if(!task) {
+                if(!seize()) return true;
+                s.budget=0; s.deployed=false; Transition(unit,s,Mode::FALLBACK,frame);
+            }
             const float spendable=ai->GetEconomyManager()->GetEnergyCur()-std::max(0.f,reserve);
             if(bestPos.SqDistance2D(pos)<16.f*16.f) {
                 if(unit->IsDGunReady(frame,spendable) && frame>=s.retry && Fire(unit,s,best,frame)) return true;
@@ -286,7 +302,17 @@ bool CCommanderControl::Fallback(CCircuitUnit* unit,State& s,IUnitTask* current,
             }
         }
     }
-    if(s.fallbackGoal.SqDistance2D(pos)>64.f*64.f) Move(unit,s,s.fallbackGoal,frame);
+    if(working) return true;
+    if(s.fallbackGoal.SqDistance2D(pos)>64.f*64.f) { Move(unit,s,s.fallbackGoal,frame); return true; }
+    if(LadderActive() && inside && s.pending<0 && frame>=s.lineRetry) {
+        // Bounded hand-over: if the ladder offers nothing inside the
+        // perimeter the next tick seizes back, and the next yield waits
+        // line_retry_seconds (at most two orders per retry window).
+        s.lineRetry=frame+int(options.lineRetrySeconds*FRAMES_PER_SEC); s.lineYield=frame;
+        Conceal(unit,s,false); Transition(unit,s,Mode::SUPPORT,frame);
+        ai->LOG("[CommanderWork] unit=%i line yield porc=%i x=%.0f z=%.0f",unit->GetId(),s.fallbackPorc,pos.x,pos.z);
+        task->Handover(unit);
+    }
     return true;
 }
 }

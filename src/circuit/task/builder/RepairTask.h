@@ -21,6 +21,9 @@ public:
 	virtual ~CBRepairTask();
 
 	virtual bool CanAssignTo(CCircuitUnit* unit) const override;
+	// D-299: commanders never take generic repairs; the FRONT work ladder
+	// invites exactly one. Transient (not saved): a reload re-offers it.
+	void InviteCommander(int unitId) { invitedCommander = unitId; }
 
 	virtual void Start(CCircuitUnit* unit) override;
 
@@ -31,6 +34,8 @@ private:
 	virtual bool Reevaluate(CCircuitUnit* unit) override;
 
 	virtual bool Load(std::istream& is) override;
+
+	int invitedCommander = -1;
 };
 
 } // namespace circuit

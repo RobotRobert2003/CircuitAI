@@ -34,6 +34,7 @@ const CCommanderControl::Definition& CCommanderControl::DefinitionFor(CCircuitDe
         const auto& params=ud->GetCustomParams();
         const auto level=params.find("techlevel");
         d.t3=level!=params.end() && std::atoi(level->second.c_str())>=3 && def->IsMobile() && def->IsAttacker();
+        d.tech=level!=params.end()?float(std::atof(level->second.c_str())):1.f;
         if(d.t3) {
             const std::unique_ptr<springai::WeaponDef> blast(ud->GetDeathExplosion());
             if(blast) {

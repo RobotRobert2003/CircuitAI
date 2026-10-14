@@ -1,0 +1,48 @@
+{
+  "stop_minute": 14,
+  "expect": [
+    {
+      "key": "ready",
+      "pattern": "\\[CommanderFront\\] ready=1",
+      "scope": "any",
+      "by_minute": 4
+    },
+    {
+      "key": "radar",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=10 ",
+      "scope": "any"
+    },
+    {
+      "key": "repair",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=(6|7) ",
+      "scope": "any"
+    },
+    {
+      "key": "reclaim",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=8 ",
+      "scope": "any"
+    },
+    {
+      "key": "mex",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=13 ",
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "commander_invariant",
+      "pattern": "\\[INVARIANT\\] INV-21[4-8]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

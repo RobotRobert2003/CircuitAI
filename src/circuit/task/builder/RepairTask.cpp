@@ -34,7 +34,7 @@ CBRepairTask::~CBRepairTask()
 
 bool CBRepairTask::CanAssignTo(CCircuitUnit* unit) const
 {
-	if (unit->GetCircuitDef()->IsRoleComm()) {
+	if (unit->GetCircuitDef()->IsRoleComm() && unit->GetId() != invitedCommander) {
 		return false;
 	}
 	return IRepairTask::CanAssignTo(unit);

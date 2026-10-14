@@ -2042,6 +2042,23 @@ IBuilderTask* CBuilderManager::FindRecoveryTask(CCircuitUnit* unit, int mode, fl
     return task;
 }
 
+IBuilderTask* CBuilderManager::EnqueueRepairFor(CAllyUnit* target, int timeout, CCircuitUnit* commander)
+{
+    if (target == nullptr) return nullptr;
+    IBuilderTask* task = GetRepairTask(target->GetId());
+    if (task == nullptr) {
+        // Same construction as FindRecoveryTask's repair branch.
+        task = new CBRepairTask(this, IBuilderTask::Priority::HIGH, target, timeout);
+        ActivateTask(task);
+        lastEnqueued = task;
+        TaskAdded(task);
+    }
+    if (commander != nullptr) {
+        if (auto* repair = dynamic_cast<CBRepairTask*>(task)) repair->InviteCommander(commander->GetId());
+    }
+    return task;
+}
+
 IBuilderTask* CBuilderManager::MakeCommTask(CCircuitUnit* unit, const CQueryCostMap* query, float sqMaxBaseRange)
 {
 	CThreatMap* threatMap = circuit->GetThreatMap();

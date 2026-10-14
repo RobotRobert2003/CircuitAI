@@ -54,6 +54,16 @@ private:
         float t3Closest=0,t3Juke=0,t3Standoff=0,t3MinHealth=0,t3Radius=0,t3Splash=0,t3Cost=0,t3Advance=0,t3Reach=0;
         springai::AIFloat3 t3Anchor,t3LastPos,t3Heading; // heading: last direction of travel
         std::vector<int> farT3; int farT3Frame=-10000; // D-294 artillery beyond scan
+        // D-299 work ladder. lineUntil keeps the last fallback line's turret
+        // quota open after the fallback ends; workTask is the last ladder task
+        // (address compared only, never dereferenced) that Deploy must not
+        // interrupt. timedNext: definition id -> next due frame.
+        int lineUntil=-1,lineRetry=0,lineYield=-10000,frontArrived=-1,radarFrame=-10000;
+        bool lineDone=false,radarCovered=false,workHeld=false; // workHeld: offered under a fallback
+        springai::AIFloat3 lineAnchor{-1,0,-1},lineThreat,radarPos{-1,0,-1};
+        const IUnitTask* workTask=nullptr;
+        commander::FallbackBoundary workBoundary; // perimeter when workTask was offered
+        std::map<int,int> timedNext;
         std::vector<routecommand::Command> route;
     };
     struct Threat {
@@ -65,6 +75,7 @@ private:
     struct Projectile { commander::Point pos,velocity; float radius=0; int frame=0; };
     struct Options {
         bool enabled=false,advance=false,decoys=false,frontDuty=false,frontReady=false;
+        bool work=true; // D-299 ladder and fallback hand-over (script Global::Commander::Work)
         float scan=1000,leash=700,step=96,support=600,minValue=180,killReward=45;
         float hpReserve=.35f,retreat=.45f,recover=.8f,aggression=.25f;
         float shots=2,margin=150,escapeSeconds=4.3f,alignSeconds=.6f;
@@ -86,6 +97,10 @@ private:
         float t3Hunt=0,t3ArtilleryApproach=180,t3Trade=0,t3RetrySeconds=2;
         float t3CloakedVolleyRisk=1; // script tunes uncertain new targeting; in-flight damage stays full
         float t3BaitDef=-1,t3BaitCount=0,t3BaitMargin=150,t3BaitDistance=120,t3BaitSpacing=80,t3BaitTimeout=5;
+        // D-299 FRONT work ladder. work_radius 0 = the commander's own LOS.
+        float workRadius=0,workClearance=400,repairHealth=.98f,reclaimStorage=.95f,reclaimMetal=1;
+        float lineIncome=20,lineMin=1,lineMax=6,lineRadius=400,lineSpacing=80,lineHoldSeconds=60,lineRetrySeconds=5;
+        float timedInterval=30,timedUntil=300,radarCoverage=.8f,baseRadius=1500;
     } options;
 public:
     // D-294 per-T3 strategy. Negative fields resolve automatically from the
@@ -116,6 +131,7 @@ private:
     struct Definition {
         float radar=0,jammer=0,seismic=0,decloak=0,blastRadius=0,blastEdge=0;
         bool t3=false,stealth=false;
+        float tech=1; // BAR customparams.techlevel (1, 1.5, 2, 3); D-299 repair order
         std::vector<float> blastDamage; // immutable definition data, loaded only for T3
     };
     std::map<int,Definition> definitions;
@@ -154,5 +170,23 @@ private:
     void PlanFallback(CCircuitUnit* unit,State& state,int frame);
     bool Fallback(CCircuitUnit* unit,State& state,IUnitTask* current,int frame);
     void CheckPerimeter(CCircuitUnit* unit,const State& state,const springai::AIFloat3& goal,int frame,const char* source) const;
+    // D-299 work ladder (CommanderWork.cpp). Kinds 5..12; see FrontWork.
+    enum WorkKind { WORK_LINE=5,WORK_REPAIR_DEFENCE=6,WORK_REPAIR_UNITS=7,WORK_RECLAIM=8,
+        WORK_TIMED=9,WORK_RADAR=10,WORK_FACTORY=11,WORK_BASE=12,WORK_MEX=13 };
+    IUnitTask* LadderWork(CCircuitUnit* unit,State& state,int kind,CCircuitDef* buildDef,float radius,int frame);
+    IUnitTask* RepairWork(CCircuitUnit* unit,const State& state,bool defence,float radius,int frame);
+    IUnitTask* ReclaimWork(CCircuitUnit* unit,const State& state,float radius,int frame);
+    IUnitTask* LineWork(CCircuitUnit* unit,State& state,CCircuitDef* buildDef,int frame);
+    IUnitTask* RadarWork(CCircuitUnit* unit,State& state,CCircuitDef* buildDef,int frame);
+    IUnitTask* AssistWork(CCircuitUnit* unit,const State& state,const springai::AIFloat3& center,float radius,bool factories,int frame);
+    float WorkRadius(CCircuitUnit* unit) const;
+    // A ladder target is legal while a fallback holds only inside its perimeter.
+    bool InsideLine(const State& state,const springai::AIFloat3& p,int frame,float slack) const {
+        return !FallbackActive(state,frame) || state.fallbackBoundary.Contains({p.x,p.z},slack);
+    }
+    bool LineWorking(CCircuitUnit* unit,const State& state,IUnitTask* current,int frame) const;
+    // The hand-over exists only where the script ladder will offer work.
+    bool LadderActive() const { return options.work && options.frontDuty && options.frontReady; }
+    std::vector<int> workIds; // copy of a shared callback buffer; reused
 };
 }

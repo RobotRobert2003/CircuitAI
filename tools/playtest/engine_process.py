@@ -69,7 +69,11 @@ class EngineProcess:
 
     def terminate(self):
         if self.alive() and not self.api.TerminateProcess(self.handle, 1):
-            raise ctypes.WinError(ctypes.get_last_error())
+            error = ctypes.get_last_error()
+            # A process already exiting refuses termination with
+            # ERROR_ACCESS_DENIED; that race is a successful stop.
+            if not (error == 5 and self.api.WaitForSingleObject(self.handle, 5000) == 0):
+                raise ctypes.WinError(error)
         result = self.api.WaitForSingleObject(self.handle, 5000)
         if result == 0xFFFFFFFF:
             raise ctypes.WinError(ctypes.get_last_error())

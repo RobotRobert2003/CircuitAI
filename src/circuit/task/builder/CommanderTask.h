@@ -19,6 +19,9 @@ public:
     void OnUnitDestroyed(CCircuitUnit* unit,CEnemyInfo*) override;
     void OnUnitMoveFailed(CCircuitUnit* unit) override;
     void Resume(CCircuitUnit* unit);
+    // D-299: hand the unit back to its manager for a new task instead of the
+    // retained previous one (a fallback line must not resume front work).
+    void Handover(CCircuitUnit* unit);
 private:
     IUnitTask* previous;
     int oldFire=2,oldMove=1;

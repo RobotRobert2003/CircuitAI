@@ -108,6 +108,7 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         options.frontDuty=value>0; return true;
     }
     if(name=="front_ready") { options.frontReady=value>0; return true; }
+    if(name=="work") { options.work=value>0; return true; }
     if(name.rfind("t3.",0)==0) return SetProfileOption(name,value);
     if(name.rfind("reset.t3.",0)==0) return SetProfileOption(name.substr(6),value,true);
     if(name=="fallback") {
@@ -144,7 +145,16 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"t3_cloaked_volley_risk",&options.t3CloakedVolleyRisk,0,1},
         {"t3_bait_def",&options.t3BaitDef,-1,100000},{"t3_bait_count",&options.t3BaitCount,0,8},
         {"t3_bait_margin",&options.t3BaitMargin,0,1000},{"t3_bait_distance",&options.t3BaitDistance,16,400},
-        {"t3_bait_spacing",&options.t3BaitSpacing,32,300},{"t3_bait_timeout",&options.t3BaitTimeout,1,20}};
+        {"t3_bait_spacing",&options.t3BaitSpacing,32,300},{"t3_bait_timeout",&options.t3BaitTimeout,1,20},
+        // D-299 work ladder
+        {"work_radius",&options.workRadius,0,3000},{"work_clearance",&options.workClearance,0,2000},
+        {"repair_health",&options.repairHealth,.5f,1},{"reclaim_storage",&options.reclaimStorage,.1f,1},
+        {"reclaim_metal",&options.reclaimMetal,0,10000},{"line_income",&options.lineIncome,0,1000},
+        {"line_min",&options.lineMin,0,20},{"line_max",&options.lineMax,0,20},
+        {"line_radius",&options.lineRadius,100,2000},{"line_spacing",&options.lineSpacing,32,400},
+        {"line_hold_seconds",&options.lineHoldSeconds,0,600},{"line_retry_seconds",&options.lineRetrySeconds,1,60},
+        {"timed_interval",&options.timedInterval,5,600},{"timed_until",&options.timedUntil,0,7200},
+        {"radar_coverage",&options.radarCoverage,.1f,1},{"base_radius",&options.baseRadius,200,5000}};
     for(const auto& field:fields) if(name==field.name) {
         *field.field=std::clamp(value,field.low,field.high); return true;
     }
@@ -729,12 +739,17 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         if(frame<s.frontYield) return false;
         if(!options.frontReady || unit->GetHealthPercent()<options.recover
             || unit->GetTask()->GetType()==IUnitTask::Type::RETREAT) return false;
+        // D-299: hold the last fallback line until its turret quota stands
+        // (bounded by line_hold_seconds); the ladder offers that work.
+        if(frame<s.lineUntil && !s.lineDone) return false;
         const auto pos=unit->GetPos(frame),goal=FrontPosition(unit,s,frame);
         if(goal.x<0 || Exposure(P(pos),P(pos),1.f,pos.y)>unit->GetUnit()->GetHealth()*.12f) return false;
         auto* build=dynamic_cast<IBuilderTask*>(unit->GetTask());
         // Finish a live frame/chain; planned base economy no longer prevents
         // deployment forever. Front work has its own bounded area and owner.
-        if(build && (build->GetNextTask() || build->GetTarget()
+        // A ladder task (repair, reclaim, radar on the way) is local by
+        // construction; finish it before walking on (D-299).
+        if(build && (build->GetNextTask() || build->GetTarget() || build==s.workTask
             || build->GetPosition().SqDistance2D(goal)<=options.frontRadius*options.frontRadius)) return true;
         if(!task) {
             task=ai->GetBuilderManager()->EnqueueCommander(nullptr);
@@ -746,6 +761,7 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         s.deployed=true; Conceal(unit,s,false); Transition(unit,s,Mode::SUPPORT,frame);
         if(pos.SqDistance2D(goal)<=options.frontRadius*options.frontRadius*.25f) {
             s.frontYield=frame+60;
+            if(s.frontArrived<0) s.frontArrived=frame; // D-299 timed defence clock
             task->Resume(unit); // next builder callback selects front work
         } else {
             const Point delta=P(goal)-P(pos);

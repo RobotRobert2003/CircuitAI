@@ -417,6 +417,8 @@ public:
 	SBuildChain* GetBuildChain(IBuilderTask::BuildType buildType, CCircuitDef* cdef) const;
 
 	IBuilderTask* GetRepairTask(ICoreUnit::Id unitId) const;
+	// D-299: the repair task for target (own or allied), reused if one exists.
+	IBuilderTask* EnqueueRepairFor(CAllyUnit* target, int timeout, CCircuitUnit* commander = nullptr);
 	IBuilderTask* GetReclaimFeatureTask(const springai::AIFloat3& pos, float radius) const;
 	IBuilderTask* GetResurrectTask(const springai::AIFloat3& pos, float radius) const;
 	void RegisterReclaim(CAllyUnit* unit);

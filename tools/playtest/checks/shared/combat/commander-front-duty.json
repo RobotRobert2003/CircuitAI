@@ -15,7 +15,7 @@
     },
     {
       "key": "work",
-      "pattern": "\\[CommanderFront\\].*work=[023]",
+      "pattern": "\\[Commander(Front|Work)\\].*work=(0|2|3|9|10) ",
       "scope": "any",
       "by_minute": 2.5
     }

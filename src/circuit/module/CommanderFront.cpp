@@ -64,8 +64,21 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
         || unit->GetHealthPercent()<options.recover) return nullptr;
     auto found=commanders.find(unit->GetId()); if(found==commanders.end()) return nullptr;
     auto& s=found->second; const int frame=ai->GetLastFrame();
-    // D-293: no front work beyond the porc line while a fallback holds.
-    if(FallbackActive(s,frame)) return nullptr;
+    const auto record=[&](IUnitTask* task) {
+        s.workTask=task; s.workHeld=FallbackActive(s,frame); s.workBoundary=s.fallbackBoundary;
+        if(task) ai->LOG("[CommanderWork] unit=%i work=%i task=%i",unit->GetId(),kind,
+            task->GetType()==IUnitTask::Type::BUILDER?int(static_cast<IBuilderTask*>(task)->GetBuildType()):-1);
+        return task;
+    };
+    // Native Start can re-ask policy synchronously; keep a live ladder task.
+    if(auto* current=unit->GetTask(); current && current==s.workTask && !current->IsDead()) return current;
+    // D-299 ladder kinds: commander-local, filtered to the perimeter while a
+    // fallback holds. The script orders them (CommanderFront::Work).
+    if(kind>=WORK_LINE) return record(LadderWork(unit,s,kind,buildDef,radius,frame));
+    // D-293: no front work beyond the porc line while a fallback holds; D-299
+    // assists construction inside it.
+    if(FallbackActive(s,frame))
+        return kind==0?record(AssistWork(unit,s,unit->GetPos(frame),WorkRadius(unit),false,frame)):nullptr;
     const auto anchor=FrontPosition(unit,s,frame),pos=unit->GetPos(frame);
     if(anchor.x<0) return nullptr;
     auto* builder=ai->GetBuilderManager();
@@ -78,8 +91,12 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
         // Otherwise mex/radar offers can swap recursively in the same frame.
         return current;
     }
-    if(pos.SqDistance2D(anchor)>options.frontRadius*options.frontRadius*.25f)
-        return kind==4 ? builder->EnqueueCommander(nullptr):nullptr;
+    if(pos.SqDistance2D(anchor)>options.frontRadius*options.frontRadius*.25f) {
+        // Not while the last fallback line still wants turrets (D-299).
+        if(kind!=4 || (frame<s.lineUntil && !s.lineDone)) return nullptr;
+        return builder->EnqueueCommander(nullptr);
+    }
+    if(s.frontArrived<0) s.frontArrived=frame; // D-299 timed defence clock
     if(ai->GetThreatMap()->GetThreatAt(unit,pos)>options.frontThreat) return nullptr;
     radius=std::clamp(radius,64.f,options.frontRadius);
     IUnitTask* result=nullptr;

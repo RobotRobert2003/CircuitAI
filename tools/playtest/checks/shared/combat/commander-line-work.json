@@ -1,0 +1,63 @@
+{
+  "stop_minute": 5,
+  "expect": [
+    {
+      "key": "ready",
+      "pattern": "\\[CommanderFront\\] ready=1",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "timed",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=9 ",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "fallback",
+      "pattern": "\\[CommanderFallback\\] unit=\\d+ on metal=",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "yield",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ line yield",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "line_turret",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ line turret \\d+/\\d+",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "line_complete",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ line complete",
+      "scope": "any",
+      "by_minute": 5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

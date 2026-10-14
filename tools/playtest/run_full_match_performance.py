@@ -33,7 +33,8 @@ def main():
     p.add_argument('--map',choices=['metal-plate','glacial','serene','glitters','supreme','shore'],required=True)
     p.add_argument('--dll',type=Path,required=True)
     p.add_argument('--data',type=Path,help='Matching pinned data tree; defaults to current repository data')
-    p.add_argument('--game',default='Beyond All Reason test-31479-433a460')
+    # D-298: default to the lobby's last game; a pinned archive dies on the next BAR update.
+    p.add_argument('--game',default=None)
     p.add_argument('--profile',default='experimental_balanced')
     p.add_argument('--profiles',help='Comma-separated per-team profiles for compatibility coverage; excluded from cost comparisons')
     p.add_argument('--mode',choices=['fast','visual','performance'],default='performance')
@@ -118,7 +119,7 @@ def main():
     shots=','.join(f'{m}@{focus["height"]}@{focus["x"]}:{focus["z"]}' for m in shot_minutes)
     cli=[sys.executable,str(playtest.HERE/'playtest.py')]
     cmd=cli+['stage','--dir',str(d),'--dll',str(a.dll),'--map',name,*extra,
-       '--game',a.game,'--engine','recoil_2026.07.04',
+       *(['--game',a.game] if a.game else []),'--engine','recoil_2026.07.04',
        '--roles','all','--role',role,'--side','armada','--bonus','0',
        '--ai-option','profile='+a.profile,'--ai-option','random_seed=220001',
        '--modoption','deathmode=com','--minutes',str(a.minutes),'--speed',str(a.speed),'--speed-plan',plan,'--mode',a.mode,
