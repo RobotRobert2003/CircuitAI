@@ -29,7 +29,7 @@ namespace KingsAssault {
 		StartSpot(AIFloat3(2143, 0, 1148), AiRole::FRONT, false), // P2  front
 		StartSpot(AIFloat3(2118, 0, 2561), AiRole::FRONT, false), // P3  front
 		StartSpot(AIFloat3( 729, 0, 2819), AiRole::FRONT, false), // P4  front
-		StartSpot(AIFloat3(2045, 0, 4083), AiRole::FRONT, false), // P5  front
+		StartSpot(AIFloat3(2045, 0, 4083), AiRole::SUPPORT, false), // P5  support (owner 2026-10-13, was front)
 		StartSpot(AIFloat3( 557, 0, 5052), AiRole::FRONT, false), // P6  front
 		StartSpot(AIFloat3(1392, 0, 6723), AiRole::FRONT, false), // P7  front
 		StartSpot(AIFloat3(1592, 0, 7585), AiRole::FRONT, false), // P8  front
@@ -37,7 +37,7 @@ namespace KingsAssault {
 		StartSpot(AIFloat3(8074, 0, 1107), AiRole::FRONT, false), // P10 front
 		StartSpot(AIFloat3(8131, 0, 2555), AiRole::FRONT, false), // P11 front
 		StartSpot(AIFloat3(9507, 0, 2806), AiRole::FRONT, false), // P12 front
-		StartSpot(AIFloat3(8196, 0, 4072), AiRole::FRONT, false), // P13 front
+		StartSpot(AIFloat3(8196, 0, 4072), AiRole::SUPPORT, false), // P13 support (owner 2026-10-13, was front)
 		StartSpot(AIFloat3(9671, 0, 5062), AiRole::FRONT, false), // P14 front
 		StartSpot(AIFloat3(8878, 0, 6747), AiRole::FRONT, false), // P15 front
 		StartSpot(AIFloat3(8662, 0, 7575), AiRole::FRONT, false) // P16 front
