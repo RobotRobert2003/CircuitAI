@@ -379,6 +379,11 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
             // It never licenses movement past the firing line to chase it.
             float s=(1.f+c.cost)/std::max(hit,c.health)*world.Progress(c.id,policy.repairedTargetPenalty);
             if(c.def->IsBuilder()) s*=2.f;
+            // D-301: opportunistic focus on in-range repairers. A target
+            // already fully reserved by other shots falls back to the
+            // ordinary score, so the line spreads to the next repairer.
+            if(policy.repairerFocus>0.f && ranged::RepairerTarget(!c.mobile,c.def->IsAbleToRepair(),c.def->IsAbleToResurrect())
+                && world.Reserved(c.id,id)<c.health) s*=policy.repairerFocus;
             if(c.id==target) s*=policy.targetHysteresis;
             if(world.Reserved(c.id,id)>=c.health) s*=.2f;
             if(s>score) { score=s; best=i; weapon=int(wi); damage=hit; }
@@ -668,6 +673,9 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
                 policy.preferHeavy && c.def->IsEnemyRoleAny(CCircuitDef::HEAVY|CCircuitDef::COMM),c.los,world.Progress(c.id,policy.repairedTargetPenalty)) : .01f/(1.f+world.Reserved(c.id,id));
             if(c.def && policy.mode!=RangedPolicy::Mode::PRECISION)
                 value+=policy.splashWeight*std::max(0.f,world.ClusterValue(c.pos,w.splash)-c.cost);
+            // D-301: same in-range repairer focus as the cohort scorer.
+            if(c.def && policy.repairerFocus>0.f && ranged::RepairerTarget(!c.mobile,c.def->IsAbleToRepair(),c.def->IsAbleToResurrect())
+                && world.Reserved(c.id,id)<c.health) value*=policy.repairerFocus;
             // D-294: opt-in hit-likelihood test for slow shells against fast
             // targets. Identified: a 0.05 penalty (with nothing better the shot
             // is still taken). Unidentified dot for an avoid-category shooter:

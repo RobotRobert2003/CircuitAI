@@ -2009,7 +2009,7 @@
 			"corthud": {
 				"role": ["assault"],
 				"attribute": ["ranged"],
-				"ranged": {"coordinated": true,
+				"ranged": {"repairer_focus": 100.0, "coordinated": true,
                 "sustained_rush": true,
                 "sustained_rush_ratio": 2.0,
                 "sustained_rush_radius": 900.0,

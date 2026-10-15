@@ -58,6 +58,11 @@ struct RangedPolicy {
     // Excluded contacts are never targeted, approached or escaped from; they
     // remain hazards in CRangedWorld::Safe/DangerSign. O(1) AND per candidate.
     int avoidCategory = 0;
+    // D-301: score multiplier for a contact that heals or rebuilds the enemy
+    // line (a static repairer: construction turret; or a resurrection unit),
+    // applied only among targets already in weapon range. It never moves a
+    // unit, widens target permission or waives a hazard. Zero = off.
+    float repairerFocus = 0.f;
     // D-294: 0 = off. Penalise a mobile target whose drift during projectile
     // flight exceeds evasionLimit*(splash+target radius); see ranged::Evasive.
     float evasionLimit = 0.f;

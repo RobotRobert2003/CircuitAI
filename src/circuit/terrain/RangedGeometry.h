@@ -233,6 +233,13 @@ inline float UsefulScore(float cost, float hp, float damage, float reserved,
     const float efficiency=precision ? useful/std::max(1.f,damage) : 1.f;
     return (1.f+cost)*(.05f+.95f*efficiency)*(heavy?1.2f:1.f)*(los?1.f:.65f)*progress;
 }
+// D-301: a contact that keeps the enemy line alive. Static repairers are
+// construction turrets (BAR gives them no build options, so the generic
+// builder bonus misses them); resurrection units rebuild wrecks and repair.
+// Mobile constructors are deliberately not included. O(1).
+inline bool RepairerTarget(bool isStatic, bool canRepair, bool canResurrect) {
+    return canResurrect || (isStatic && canRepair);
+}
 
 // Callback-owned storage for a map-sized grid, with a sparse overflow for legal
 // negative/off-map coordinates. Configure only before use: touched holds bucket

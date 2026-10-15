@@ -118,6 +118,18 @@ def summarize(directory):
     assigned_types = sorted(set(re.findall(r'RANGED: assigned (\w+)\(', text)))
     if len(assigned_types) < checks.get('min_types_assigned',0): failures.append('missing ranged unit admissions')
     if len(kills) < checks.get('min_kills', 1): failures.append('insufficient target kills')
+    # D-301: kill order. Every unit type in priority_kills must die, and no
+    # unit type in priority_before may die before the last of them.
+    if checks.get('priority_kills'):
+        killed = {}
+        for d in kills: killed.setdefault(d['unit'], []).append(int(d['frame']))
+        missing = [u for u in checks['priority_kills'] if u not in killed]
+        if missing:
+            failures.append('priority targets survived: ' + ','.join(missing))
+        else:
+            last = max(max(killed[u]) for u in checks['priority_kills'])
+            if any(d['unit'] in checks.get('priority_before', []) and int(d['frame']) < last for d in kills):
+                failures.append('competing target died before priority targets')
     if len(shooters) < checks.get('min_shooters', 1) and cfg['unit'] != 'legvcarry': failures.append('no verified shots')
     if len(shots) > checks.get('max_shots', float('inf')): failures.append('unexpected shots')
     if len(losses) > checks.get('max_losses', 0): failures.append('ranged casualties')

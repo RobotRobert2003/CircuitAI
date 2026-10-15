@@ -1,0 +1,114 @@
+{
+  "name": "thug-repairer-focus",
+  "unit": "corthud",
+  "side": "cortex",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    3800,
+    4300,
+    1500
+  ],
+  "photos": [
+    35,
+    60,
+    110
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4200
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        4050,
+        4200
+      ]
+    },
+    {
+      "unit": "corthud",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3800,
+        3900
+      ],
+      "columns": 6,
+      "spacing": 64,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 1,
+      "position": [
+        3700,
+        4500
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armnanotc",
+      "count": 1,
+      "team": 1,
+      "position": [
+        3820,
+        4500
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armrectr",
+      "count": 1,
+      "team": 1,
+      "position": [
+        4060,
+        4500
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 1,
+      "position": [
+        4180,
+        4500
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "max_friendly_damage": 0,
+    "min_kills": 3,
+    "max_losses": 0,
+    "min_types_assigned": 1,
+    "priority_kills": [
+      "armnanotc",
+      "armrectr"
+    ],
+    "priority_before": [
+      "armarad"
+    ]
+  },
+  "_comment": "D-301: two advanced radar towers (400 M / 500 HP, ordinary score about 0.80) outrank a resurrection bot (0.59) and a construction turret (0.41). All four are unarmed, so the Thugs reach firing range. With repairer_focus the Thugs must kill both repairers before either radar; with it off, a radar is expected to die first."
+}

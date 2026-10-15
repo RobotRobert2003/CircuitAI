@@ -64,6 +64,12 @@ int main()
     assert(std::fabs(EscapeSeconds(0,120,1,true,0)-32768.f/120.f/30.f)<.001f);
     assert(UsefulScore(1000,4000,1000,0,true,true,true,1)>
            UsefulScore(1000,4000,1000,4000,true,true,true,1));
+    // D-301: construction turrets and resurrection units are repairers;
+    // mobile constructors and non-repairing statics are not.
+    assert(RepairerTarget(true,true,false));    // construction turret
+    assert(RepairerTarget(false,true,true));    // resurrection bot
+    assert(!RepairerTarget(false,true,false));  // mobile constructor
+    assert(!RepairerTarget(true,false,false));  // defence turret
     assert(UsefulScore(1000,4000,1000,0,true,true,true,1)>
            UsefulScore(1000,4000,1000,0,true,true,false,1));
     // Spatial lookup has an exact brute-force oracle, including negative

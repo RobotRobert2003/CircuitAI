@@ -506,6 +506,7 @@ void CFactoryManager::ReadConfig()
 			number("sensor_offset", policy.sensorOffset, 32.f, 512.f);
 			number("cloak_reserve_seconds", policy.cloakReserve, 0.f, 30.f);
 			number("repaired_target_penalty", policy.repairedTargetPenalty, .01f, 1.f);
+			number("repairer_focus", policy.repairerFocus, 0.f, 1000.f);  // D-301
 			number("splash_weight", policy.splashWeight, 0.f, 3.f);
 			boolean("cloak_on_reload", policy.cloakOnReload);
 			boolean("allow_mobile", policy.allowMobile);
