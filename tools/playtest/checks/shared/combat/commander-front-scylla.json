@@ -1,0 +1,12 @@
+{
+  "stop_minute": 12,
+  "expect": [
+    {"key": "ready", "pattern": "\\[CommanderFront\\] ready=1", "scope": "any", "by_minute": 6},
+    {"key": "deploy", "pattern": "\\[CommanderFront\\] unit=\\d+ deploy", "scope": "any", "by_minute": 6}
+  ],
+  "forbid": [
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "any"},
+    {"key": "crash", "pattern": "Access violation|has crashed|Fatal:", "scope": "any"}
+  ]
+}

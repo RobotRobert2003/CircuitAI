@@ -768,8 +768,27 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
             AIFloat3 next=F(P(pos)+commander::Normal(delta)*std::min(240.f,commander::Length(delta)));
             next.y=ai->GetMap()->GetElevationAt(next.x,next.z);
             if(!s.route.empty() && s.goal.SqDistance2D(pos)>48*48
-                && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) return true;
+                && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) { s.deployStall=-1; return true; }
+            // INV-219: the deploy task holds the commander, so it must not sit
+            // with an empty command queue. One queue-size read, only on this
+            // path (no live step route); ten continuous seconds is a stall.
+            if(ai->GetUnitAPI()->GetCMDQueueSize(unit->GetId())>0) s.deployStall=-1;
+            else if(s.deployStall<0 || frame-s.deployLast>30) s.deployStall=frame; // continuous only
+            else if(frame-s.deployStall>10*FRAMES_PER_SEC) {
+                ai->LOG("[INVARIANT] INV-219 deploying commander idle with no orders unit=%i x=%.0f z=%.0f goal=%.0f,%.0f",
+                    unit->GetId(),pos.x,pos.z,goal.x,goal.z);
+                s.deployStall=frame;
+            }
+            s.deployLast=frame;
             if(Route(unit,pos,next)) Move(unit,s,next,frame);
+            // D-302: the short straight step is blocked (cliff, water, a
+            // narrow ramp). Previously no order was issued while the task
+            // still held the commander, so it stood idle mid-way. Let the
+            // engine pathfinder detour to the front, which FrontPosition
+            // already proved reachable; otherwise release the task so the
+            // builder offers front work here instead of holding.
+            else if(ai->GetTerrainManager()->CanReachAt(unit,goal,64)) Move(unit,s,goal,frame);
+            else { s.frontYield=frame+60; s.deployStall=-1; task->Resume(unit); }
         }
         return true;
     }

@@ -60,6 +60,9 @@ private:
         // interrupt. timedNext: definition id -> next due frame.
         int lineUntil=-1,lineRetry=0,lineYield=-10000,frontArrived=-1,radarFrame=-10000;
         bool lineDone=false,radarCovered=false,workHeld=false; // workHeld: offered under a fallback
+        // D-302: first frame a deploying commander had no live move intent
+        // (INV-219); -1 while moving. One int per commander, O(1) per tick.
+        int deployStall=-1,deployLast=-10000; // deployLast: last frame in that branch
         springai::AIFloat3 lineAnchor{-1,0,-1},lineThreat,radarPos{-1,0,-1};
         const IUnitTask* workTask=nullptr;
         commander::FallbackBoundary workBoundary; // perimeter when workTask was offered
