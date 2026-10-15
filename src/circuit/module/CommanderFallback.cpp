@@ -54,7 +54,11 @@ void CCommanderControl::PlanFallback(CCircuitUnit* unit,State& s,int frame) {
     for(const auto& [id,ally]:ai->GetFriendlyUnits()) {
         auto* d=ally->GetCircuitDef();
         if(!d || d->IsMobile() || !d->IsAttacker() || d->GetMaxRange()>options.fallbackPorcRange) continue;
-        const AIFloat3& p=ally->GetLastPos();
+        // D-304: GetPos, not GetLastPos: a rebuilt snapshot unit has an unset
+        // (0,0) position until GetPos fills it, so porcs vanished and
+        // reappeared between plans (KI-622). One engine read per static
+        // attacker in range class.
+        const AIFloat3 p=ally->GetPos(frame);
         const float distance=p.distance2D(pos);
         if(distance>options.fallbackSearch) continue;
         // Outer edge of allied territory: furthest along base -> threat, but

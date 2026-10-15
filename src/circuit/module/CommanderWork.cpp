@@ -235,6 +235,15 @@ IUnitTask* CCommanderControl::LineWork(CCircuitUnit* unit,State& s,CCircuitDef* 
     const float side=float((count+1)/2)*(count%2?1.f:-1.f);
     AIFloat3 at=F(P(s.lineAnchor)+lateral*(side*options.lineSpacing)-toThreat*(options.lineSpacing*.5f));
     if(!OnMap(at) || !InsideLine(s,at,frame,0.f)) at=F(P(s.lineAnchor)-toThreat*(options.lineSpacing*.5f));
+    // D-303: the fallback slot (behind the anchor) was not checked; a
+    // commander pushed to the map edge placed a turret 33 elmos off the
+    // map and the reachability check on it crashed the AI. Keep the site
+    // inside the map with room for the footprint; refuse non-finite points.
+    if(!std::isfinite(at.x) || !std::isfinite(at.z)) return nullptr;
+    const float margin=std::max(32.f,buildDef->GetRadius());
+    at.x=std::clamp(at.x,margin,float(AIFloat3::maxxpos)-margin);
+    at.z=std::clamp(at.z,margin,float(AIFloat3::maxzpos)-margin);
+    if(!OnMap(at)) return nullptr;
     at.y=ai->GetMap()->GetElevationAt(at.x,at.z);
     auto* task=builder->Enqueue(TaskB::Common(BT::DEFENCE,IBuilderTask::Priority::HIGH,buildDef,at,32.f,true,30*FRAMES_PER_SEC));
     if(task) ai->LOG("[CommanderWork] unit=%i line turret %i/%i x=%.0f z=%.0f income=%.1f",
@@ -258,7 +267,11 @@ IUnitTask* CCommanderControl::RadarWork(CCircuitUnit* unit,State& s,CCircuitDef*
             CCircuitDef* def=ally->GetCircuitDef();
             if(def==nullptr || def->IsRoleComm()) continue;
             const float radar=DefinitionFor(def).radar*options.radarCoverage;
-            if(radar>0 && ally->GetLastPos().SqDistance2D(pos)<=radar*radar) { covered=true; break; }
+            // D-304: GetPos, not GetLastPos. The snapshot rebuilds its units
+            // with an unset (0,0) position that only GetPos fills, so every
+            // existing radar looked absent and commanders kept planting more.
+            // One engine read per radar-capable ally only.
+            if(radar>0 && ally->GetPos(frame).SqDistance2D(pos)<=radar*radar) { covered=true; break; }
         }
         s.radarCovered=covered; s.radarFrame=frame; s.radarPos=pos;
     }
@@ -270,7 +283,22 @@ IUnitTask* CCommanderControl::RadarWork(CCircuitUnit* unit,State& s,CCircuitDef*
     if((!holding && ai->GetThreatMap()->GetThreatAt(unit,pos)>options.frontThreat)
         || ai->GetEconomyManager()->GetMetalCur()<buildDef->GetCostM()*.5f) return nullptr;
     auto* task=builder->Enqueue(TaskB::Common(BT::RADAR,IBuilderTask::Priority::NORMAL,buildDef,pos,96.f,true,30*FRAMES_PER_SEC));
-    if(task) s.radarFrame=-10000; // the new frame covers us on the next check
+    if(task) {
+        s.radarFrame=-10000; // the new frame covers us on the next check
+        // INV-220 (D-304): no new commander radar where an existing friendly
+        // radar at least as strong already covers. Independent of the
+        // snapshot: one engine area query per radar enqueue (rare).
+        auto* clb=ai->GetCallback();
+        for(int id:clb->GetFriendlyUnitIdsIn(pos,range,false)) {
+            const int defId=clb->Unit_GetDefId(id);
+            CCircuitDef* def=defId>0?ai->GetCircuitDefSafe(defId):nullptr;
+            if(def && !def->IsRoleComm() && !def->IsMobile() && DefinitionFor(def).radar*options.radarCoverage>=range) {
+                ai->LOG("[INVARIANT] INV-220 commander radar inside existing coverage unit=%i radar=%i x=%.0f z=%.0f",
+                    unit->GetId(),id,pos.x,pos.z);
+                break;
+            }
+        }
+    }
     return task;
 }
 

@@ -5371,7 +5371,11 @@ AIFloat3 CTerrainManager::GetMovePosition(SArea* sourceArea, const AIFloat3& pos
 //	CorrectPosition(pos);
 	const int iS = GetSectorIndex(pos);
 
-	return (sourceArea == nullptr) ? pos : GetClosestSector(sourceArea, iS)->S->position;
+	if (sourceArea == nullptr) {
+		return pos;
+	}
+	const SAreaSector* closest = GetClosestSector(sourceArea, iS);  // null when off the map (D-303)
+	return (closest != nullptr) ? closest->S->position : pos;
 }
 
 AIFloat3 CTerrainManager::ShiftPos(CCircuitDef* cdef, const AIFloat3& position, float range, bool isOrtho)
@@ -5448,6 +5452,11 @@ SAreaSector* CTerrainManager::GetClosestSectorWithAltitude(SArea* sourceArea, co
 
 SAreaSector* CTerrainManager::GetClosestSector(SArea* sourceArea, const int destinationSIndex)
 {
+	// D-303: an off-map position gives an index past the sector list (a z
+	// beyond the map edge) and reading it crashed the AI. Callers handle null.
+	if (!terrainData->IsSectorValid(destinationSIndex)) {
+		return nullptr;
+	}
 	auto iAS = sourceArea->sectorClosest.find(destinationSIndex);
 	if (iAS != sourceArea->sectorClosest.end()) {  // It's already been determined
 		return iAS->second;
@@ -5680,11 +5689,17 @@ bool CTerrainManager::CanReachAt(CCircuitUnit* unit, const AIFloat3& destination
 	if (area == nullptr) {  // A flying unit
 		return true;
 	}
+	// D-303: no ground unit reaches a point off the map; an off-map x would
+	// also wrap into the next sector row and give a wrong answer.
+	if (!IsOnMap(destination)) {
+		return false;
+	}
 	const int iS = GetSectorIndex(destination);
 	if (area->sector.find(iS) != area->sector.end()) {
 		return true;
 	}
-	return GetClosestSector(area, iS)->S->position.SqDistance2D(destination) < SQUARE(range);
+	const SAreaSector* closest = GetClosestSector(area, iS);
+	return closest != nullptr && closest->S->position.SqDistance2D(destination) < SQUARE(range);
 }
 
 bool CTerrainManager::CanReachAtSafe(CCircuitUnit* unit, const AIFloat3& destination, const float range, const float threat)
@@ -5708,11 +5723,15 @@ bool CTerrainManager::CanMobileReachAt(SArea* area, const AIFloat3& destination,
 	if (area == nullptr) {  // A flying unit
 		return true;
 	}
+	if (!IsOnMap(destination)) {  // D-303, as CanReachAt
+		return false;
+	}
 	const int iS = GetSectorIndex(destination);
 	if (area->sector.find(iS) != area->sector.end()) {
 		return true;
 	}
-	return GetClosestSector(area, iS)->S->position.SqDistance2D(destination) < SQUARE(range);
+	const SAreaSector* closest = GetClosestSector(area, iS);
+	return closest != nullptr && closest->S->position.SqDistance2D(destination) < SQUARE(range);
 }
 
 bool CTerrainManager::CanMobileReachAtSafe(SArea* area, const AIFloat3& destination, const float range, const float threat)

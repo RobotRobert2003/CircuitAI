@@ -17,6 +17,7 @@
 
 #include "AIFloat3.h"
 
+#include <cmath>
 #include <unordered_map>
 #include <set>
 #include <string>
@@ -558,6 +559,11 @@ public:
 	std::pair<terrain::SArea*, bool> GetCurrentMapArea(CCircuitDef* cdef, const springai::AIFloat3& position);
 	std::pair<terrain::SArea*, bool> GetCurrentMapArea(CCircuitDef* cdef, const int indexSector);
 	int GetSectorIndex(const springai::AIFloat3& position) const { return terrainData->GetSectorIndex(position); }
+	// D-303: finite and inside [0, map size). GetSectorIndex is only valid for these.
+	static bool IsOnMap(const springai::AIFloat3& p) {
+		return std::isfinite(p.x) && std::isfinite(p.z) && (p.x >= 0.f) && (p.z >= 0.f)
+			&& (p.x < springai::AIFloat3::maxxpos) && (p.z < springai::AIFloat3::maxzpos);
+	}
 	bool CanMoveToPos(terrain::SArea* area, const springai::AIFloat3& destination);
 	springai::AIFloat3 GetBuildPosition(CCircuitDef* cdef, const springai::AIFloat3& position);
 	springai::AIFloat3 GetMovePosition(terrain::SArea* sourceArea, const springai::AIFloat3& position);
