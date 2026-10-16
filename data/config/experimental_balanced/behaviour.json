@@ -1659,10 +1659,13 @@
 				"power": 1.0,
 				"retreat": 0
 			},
+			// Owner (2026-10-16): Gremlins sneak like spy bots. CScoutTask attacks any enemy whose local threat
+			// is below the scout's own power (FindTarget); spies' dummy weapon gives them none, so they only path
+			// round threats to scout points. Power 0 gives the Gremlin the same behaviour.
 			"armgremlin": {
 				"role": ["scout"],
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
-				"power": 1.0
+				"power": 0.0
 			},
 			"armbull": {
 				"role": ["assault"],
