@@ -4,6 +4,7 @@
 #include "../../systems/production/factory_production.as"
 #include "../../helpers/construction/owned_economy_helpers.as"
 #include "support_production.as"
+#include "../../systems/construction/front_reclaim.as"
 
 namespace SupportBuild {
     bool transitioned = false;
@@ -204,6 +205,9 @@ namespace SupportBuild {
         TechChain::Init("t2");
         FactoryProduction::Initialize();
         SupportProduction::ConfigureCombat();
+        // Owner (2026-10-16): no wind or solar ordered while FrontReclaim takes them down (off unless
+        // Support::ReclaimT1EnergyAfterFusion; Layout::OnRoleLeave clears it)
+        @Global::energyAllowed = @FrontReclaim::EnergyAllowed;
         GenericHelpers::LogUtil("[SUPPORT][Build] shared layout and T2 opening enabled", 1);
     }
 
@@ -324,6 +328,9 @@ namespace SupportBuild {
             }
         }
         @task = LocalGeothermal::Work(unit);
+        if (task !is null) return task;
+        // Owner (2026-10-16): after a fusion, winds and solars come down, those round the factories first
+        @task = FrontReclaim::Work(unit);
         if (task !is null) return task;
         @task = TechChain::Next(unit);
         if (task !is null) return task;

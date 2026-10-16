@@ -170,6 +170,8 @@ namespace Main {
 		// FRONT (owner, 2026-10-16): after a fusion, reclaim winds and solars (advanced solars too once the
 		// margin allows), those round the factories first (src/settings/roles/front.as, off there)
 		Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion = true;
+		// SUPPORT (owner, 2026-10-16): the same reclaim for SUPPORT (src/settings/roles/support.as, off there)
+		Global::RoleSettings::Support::ReclaimT1EnergyAfterFusion = true;
 	}
 
 }  // namespace Main

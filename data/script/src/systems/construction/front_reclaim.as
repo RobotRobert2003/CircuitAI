@@ -5,10 +5,23 @@
 // pull by Front::ReclaimT1EnergyMargin, advanced solars at Front::ReclaimAdvSolarMargin (or as soon
 // as an advanced fusion stands). Off unless the profile sets Front::ReclaimT1EnergyAfterFusion
 // (experimental_balanced/main.as).
+// SUPPORT (owner, 2026-10-16): the same reclaim for SUPPORT's builders, with its own
+// Support::ReclaimT1EnergyAfterFusion and Support::Reclaim* (SupportBuild::MakeTask). The settings
+// below are read for the AI's current role; log [SUPPORT][Reclaim]. While SUPPORT reclaims,
+// EnergyAllowed() keeps its eco planner from ordering the same winds and solars again.
 #include "../../helpers/math/production_math.as"
 namespace FrontReclaim {
     array<int> targets;          // structures being reclaimed
     array<IUnitTask@> tasks;
+
+    bool IsSupport() { return Global::AISettings::Role == AiRole::SUPPORT; }
+    bool Enabled() { return IsSupport() ? Global::RoleSettings::Support::ReclaimT1EnergyAfterFusion : Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion; }
+    float T1Margin() { return IsSupport() ? Global::RoleSettings::Support::ReclaimT1EnergyMargin : Global::RoleSettings::Front::ReclaimT1EnergyMargin; }
+    float AdvSolarMargin() { return IsSupport() ? Global::RoleSettings::Support::ReclaimAdvSolarMargin : Global::RoleSettings::Front::ReclaimAdvSolarMargin; }
+    float NearFactoryRadius() { return IsSupport() ? Global::RoleSettings::Support::ReclaimNearFactoryRadius : Global::RoleSettings::Front::ReclaimNearFactoryRadius; }
+    float EnergyRadius() { return IsSupport() ? Global::RoleSettings::Support::ReclaimEnergyRadius : Global::RoleSettings::Front::ReclaimEnergyRadius; }
+    int Concurrent() { return IsSupport() ? Global::RoleSettings::Support::ReclaimEnergyConcurrent : Global::RoleSettings::Front::ReclaimEnergyConcurrent; }
+    string Tag() { return IsSupport() ? "SUPPORT" : "FRONT"; }
 
     void Tick()
     {
@@ -40,15 +53,27 @@ namespace FrontReclaim {
         const float adv = Count(UnitHelpers::GetAdvSolarNameForSide(side)) * 75.0f;
         const float income = aiEconomyMgr.energy.income;
         const float pull = aiEconomyMgr.energy.pull;
-        if (!ProductionMath::LowTierEnergyReclaim(afus, income, t1, pull, Global::RoleSettings::Front::ReclaimT1EnergyMargin)) return 0;
-        return ProductionMath::LowTierEnergyReclaim(afus, income - t1, adv, pull, Global::RoleSettings::Front::ReclaimAdvSolarMargin) ? 2 : 1;
+        if (!ProductionMath::LowTierEnergyReclaim(afus, income, t1, pull, T1Margin())) return 0;
+        return ProductionMath::LowTierEnergyReclaim(afus, income - t1, adv, pull, AdvSolarMargin()) ? 2 : 1;
+    }
+    // Global::energyAllowed for SUPPORT while the reclaim is on: no wind or solar while they are
+    // coming down, no advanced solar once those are too (energy defs only; everything else allowed).
+    bool EnergyAllowed(const string &in name)
+    {
+        if (!Enabled()) return true;
+        const string side = Global::AISettings::Side;
+        const bool t1 = name == UnitHelpers::GetWindNameForSide(side) || name == UnitHelpers::GetSolarNameForSide(side);
+        const bool adv = name == UnitHelpers::GetAdvSolarNameForSide(side);
+        if (!t1 && !adv) return true;
+        const int level = Level();
+        return !(t1 && level >= 1) && !(adv && level == 2);
     }
     IUnitTask@ Work(CCircuitUnit@ worker)
     {
-        if (!Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion || worker is null || worker.circuitDef is null
+        if (!Enabled() || worker is null || worker.circuitDef is null
             || !worker.circuitDef.IsMobile() || UnitHelpers::IsCommander(worker.circuitDef)) return null;
         Tick();
-        if (targets.length() >= uint(Global::RoleSettings::Front::ReclaimEnergyConcurrent)) return null;
+        if (targets.length() >= uint(Concurrent())) return null;
         const int level = Level();
         if (level == 0) return null;
         const string side = Global::AISettings::Side;
@@ -62,8 +87,8 @@ namespace FrontReclaim {
             if (u !is null && u.circuitDef !is null && IsFactoryName(u.circuitDef.GetName())) labs.insertLast(u.GetPos(ai.frame));
         }
         const AIFloat3 wp = worker.GetPos(ai.frame);
-        const float nearLab = Global::RoleSettings::Front::ReclaimNearFactoryRadius;
-        const float reach = Global::RoleSettings::Front::ReclaimEnergyRadius;
+        const float nearLab = NearFactoryRadius();
+        const float reach = EnergyRadius();
         CCircuitUnit@ best = null;
         float bestScore = 1e30f;
         bool bestNearLab = false;
@@ -89,8 +114,8 @@ namespace FrontReclaim {
         if (task is null) return null;
         targets.insertLast(best.id);
         tasks.insertLast(task);
-        Lifecycle::Retire(best, "FRONT low-tier energy replaced by a fusion");
-        GenericHelpers::LogUtil("[FRONT][Reclaim] " + best.circuitDef.GetName() + " id=" + best.id + (bestNearLab ? " beside a factory" : "")
+        Lifecycle::Retire(best, Tag() + " low-tier energy replaced by a fusion");
+        GenericHelpers::LogUtil("[" + Tag() + "][Reclaim] " + best.circuitDef.GetName() + " id=" + best.id + (bestNearLab ? " beside a factory" : "")
             + " by " + worker.circuitDef.GetName() + " " + worker.id + " | E +" + int(aiEconomyMgr.energy.income) + " pull " + int(aiEconomyMgr.energy.pull)
             + (level == 2 ? " (advanced solars too)" : ""), 1);
         return task;
