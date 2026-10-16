@@ -759,6 +759,12 @@ namespace Tech {
             // Regular thresholds: used for non-rush nuking policy
             float MinimumMetalIncomeForNuke = 600.0f;
             float MinimumEnergyIncomeForNuke = 10000.0f;
+            // Second nuke call (owner, 2026-10-16): a NUKE_RUSH TECH asks the silo question again from this
+            // game time on, now up to NukeLimit silos, one at a time, on the rush thresholds below. -1 = off
+            // (only the opening silo, as before); 1080 (18 min) in experimental_balanced.
+            int NukeRushSecondCallSeconds = -1;
+            float NukeRushSecondCallMetalIncome = 50.0f;
+            float NukeRushSecondCallEnergyIncome = 2000.0f;
             
             /******************** ANTI-NUKE THRESHOLDS ********************/
             // Minimum economy thresholds to allow building anti-nuke defenses

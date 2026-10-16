@@ -2822,6 +2822,27 @@ namespace RoleTech
 				return tNuke;
 		}
 
+		// Second nuke call (owner, 2026-10-16): a nuke rush asks again after NukeRushSecondCallSeconds,
+		// now up to NukeLimit silos, one at a time (none while one is queued)
+		if (Global::RoleSettings::Tech::NukeRushSecondCallSeconds >= 0
+			&& Global::RoleSettings::Tech::HasStrategy(Strategy::NUKE_RUSH)
+			&& ai.frame >= Global::RoleSettings::Tech::NukeRushSecondCallSeconds * SECOND
+			&& nukeQueued <= 0 && nukeTotal >= 1
+			&& EconomyHelpers::ShouldRushNuke(
+				/*mi*/ metalIncome,
+				/*ei*/ energyIncome,
+				/*queued*/ nukeQueued,
+				/*total*/ nukeTotal,
+				/*rushCount*/ Global::RoleSettings::Tech::NukeLimit,
+				/*reqMi*/ Global::RoleSettings::Tech::NukeRushSecondCallMetalIncome,
+				/*reqEi*/ Global::RoleSettings::Tech::NukeRushSecondCallEnergyIncome))
+		{
+			GenericHelpers::LogUtil("[TECH][NukeRush] second call: silo " + (nukeTotal + 1) + " of " + Global::RoleSettings::Tech::NukeLimit, 1);
+			IUnitTask @tNuke2 = Builder::EnqueueNukeSilo(unitSide, anchor, SQUARE_SIZE * 32, SECOND * 300);
+			if (tNuke2 !is null)
+				return tNuke2;
+		}
+
 		// Anti-nuke decision: ensure at least target number based on income-scaled allowance and minimum
 		int antiNukeTotal = EconomyHelpers::GetAntiNukeCount();
 		int allowedAnti = EconomyHelpers::AllowedAntiNukesFromIncome(

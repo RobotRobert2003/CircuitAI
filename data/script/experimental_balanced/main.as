@@ -160,6 +160,10 @@ namespace Main {
 		// AIR (owner, 2026-10-16): Tyrannus / Dragon heavy air from 175 metal/s, 10 s minimum
 		// (src/settings/roles/air.as T2HeavyAirIncomeThreshold, 250 there)
 		Global::RoleSettings::Air::T2HeavyAirIncomeThreshold = 175.0f;
+		// The nuke rush (owner, 2026-10-16): from 18 min a second call to the silo decision, up to 8 silos in all,
+		// one at a time (src/settings/roles/tech.as NukeRushSecondCallSeconds -1 and NukeLimit 20 there)
+		Global::RoleSettings::Tech::NukeRushSecondCallSeconds = 18 * 60;
+		Global::RoleSettings::Tech::NukeLimit = 8;
 	}
 
 }  // namespace Main
