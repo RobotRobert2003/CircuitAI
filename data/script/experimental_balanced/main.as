@@ -157,6 +157,9 @@ namespace Main {
 	{
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
         Global::RoleSettings::Front::VehicleTankOpenerChance = 0.5f;
+		// AIR (owner, 2026-10-16): Tyrannus / Dragon heavy air from 175 metal/s, 10 s minimum
+		// (src/settings/roles/air.as T2HeavyAirIncomeThreshold, 250 there)
+		Global::RoleSettings::Air::T2HeavyAirIncomeThreshold = 175.0f;
 	}
 
 }  // namespace Main

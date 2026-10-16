@@ -238,7 +238,8 @@ namespace AirProduction {
                 }
             }
         }
-        if (advanced && strike && AirEconomy::MassBombers() && AirEconomy::metal >= 250.0f && aiBattle.EnemyCost(0) >= 1000.0f) {
+        if (advanced && strike && AirEconomy::MassBombers() && AirEconomy::metal >= Global::RoleSettings::Air::T2HeavyAirIncomeThreshold
+            && aiBattle.EnemyCost(0) >= 1000.0f) {
             const string heavy = side == "cortex" ? "corcrwh" : side == "legion" ? "legfort" : "";
             @t = Recruit(u, heavy, 6, "heavy", Task::Priority::NORMAL);
             if (t !is null) return t;

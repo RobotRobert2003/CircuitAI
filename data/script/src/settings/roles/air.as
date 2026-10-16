@@ -443,7 +443,7 @@ namespace Air {
 
             /******************** HEAVY AIR STRIKE POLICY (Legion/Cortex) ********************/
             // Maintain a bounded late-game heavy-air force for Legion/Cortex.
-            float T2HeavyAirIncomeThreshold = 250.0f;
+            float T2HeavyAirIncomeThreshold = 250.0f; // metal/s, 10 s minimum; also gates air_production.as heavy line
             int T2HeavyAirTargetCount = 6;
             int T2HeavyAirBatchPerFactory = 2;
 
