@@ -164,6 +164,9 @@ namespace Main {
 		// one at a time (src/settings/roles/tech.as NukeRushSecondCallSeconds -1 and NukeLimit 20 there)
 		Global::RoleSettings::Tech::NukeRushSecondCallSeconds = 18 * 60;
 		Global::RoleSettings::Tech::NukeLimit = 8;
+		// All roles (owner, 2026-10-16): no Telchines (src/settings/shared/military.as, off there;
+		// behaviour_leg.json also sets legamph "limit": 0)
+		Global::Military::NoTelchines = true;
 	}
 
 }  // namespace Main

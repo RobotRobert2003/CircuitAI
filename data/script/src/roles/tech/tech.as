@@ -1316,7 +1316,8 @@ namespace RoleTech
 			{
 				const bool landLocked = Global::Map::LandLocked;
 				string unitName;
-				if (landLocked)
+				// Owner (2026-10-16): with NoTelchines a Legion land-locked start takes the ground bot instead
+				if (landLocked && !(Global::Military::NoTelchines && UnitHelpers::GetAmphibiousT2BotForSide(side) == "legamph"))
 				{
 					// Amphibious choices per side
 					unitName = UnitHelpers::GetAmphibiousT2BotForSide(side);

@@ -833,6 +833,7 @@
 			},
 			"legamph": {
 				"role": ["raider"],
+				"limit": 0,   // owner 2026-10-16: no Telchines from any role (Global::Military::NoTelchines)
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
