@@ -172,6 +172,9 @@ namespace Main {
 		Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion = true;
 		// SUPPORT (owner, 2026-10-16): the same reclaim for SUPPORT (src/settings/roles/support.as, off there)
 		Global::RoleSettings::Support::ReclaimT1EnergyAfterFusion = true;
+		// All AIs (owner, 2026-10-16): 3 pinpointers in all across the allied SMRTBARbs, built by the richest
+		// (src/settings/shared/pinpointer.as, 0 there; systems/team/pinpointer_pool.as)
+		Global::Team::PinpointerPoolSize = 3;
 	}
 
 }  // namespace Main

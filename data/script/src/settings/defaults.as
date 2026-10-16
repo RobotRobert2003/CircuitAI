@@ -4,6 +4,7 @@
 #include "shared/constructor_assistance.as"
 #include "shared/military.as"
 #include "shared/commander.as"
+#include "shared/pinpointer.as"
 #include "shared/spam.as"
 #include "shared/scout_raid.as"
 #include "shared/construction.as"

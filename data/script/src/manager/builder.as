@@ -2025,7 +2025,8 @@ namespace Builder {
 		}
 
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;
-		@t = SeaCoast::Build(u); // SEA-only lost-water recovery precedes discretionary spam.
+		@t = Team::PinpointerPool::BuilderTask(u); // shared pinpointer pool (owner, 2026-10-16), off unless the profile sets a size
+		if (t is null) @t = SeaCoast::Build(u); // SEA-only lost-water recovery precedes discretionary spam.
 		if (t is null) @t = Spam::BuilderMakeTask(u);
 		if (t is null && MetalEconomy::Active() && !SeaLayout::Active() && Global::AISettings::Role != AiRole::AIR && Global::AISettings::Role != AiRole::TECH
 			&& !UnitHelpers::IsCommander(u.circuitDef) && u.circuitDef.IsMobile()) @t = MetalEconomy::EconomyTask(u);
