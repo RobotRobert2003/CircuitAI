@@ -1519,11 +1519,13 @@
 			"armmark": {
 				"role": ["assault", "radar"],
 				"attribute": ["support"],
+				"limit": 5,   // owner 2026-10-16: radar/jammer bots and vehicles capped at 5
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
 			"armaser": {
 				"role": ["support", "jammer"],
+				"limit": 5,   // owner 2026-10-16: radar/jammer bots and vehicles capped at 5
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1705,6 +1707,7 @@
 			},
 			"armjam": {
 				"role": ["support", "jammer"],
+				"limit": 5,   // owner 2026-10-16: radar/jammer bots and vehicles capped at 5
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -2274,12 +2277,14 @@
 			},
 			"corvrad": {
 				"role": ["assault", "radar"],
+				"limit": 5,   // owner 2026-10-16: radar/jammer bots and vehicles capped at 5
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
 			"coreter": {
 				"role": ["support", "jammer"],
 				"attribute": ["support"],
+				"limit": 5,   // owner 2026-10-16: radar/jammer bots and vehicles capped at 5
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},

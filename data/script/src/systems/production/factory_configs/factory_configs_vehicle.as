@@ -67,8 +67,8 @@ namespace VehicleConfigs {
             cfg.AddRole("support",   array<string> = {"armgremlin"});
             cfg.AddRole("heavy",     array<string> = {});
 
-            cfg.SetTierProbabilities(0, array<float> = {0.18f, 0.10f, 0.18f, 0.10f, 0.10f, 0.10f, 0.08f, 0.08f, 0.06f, 0.02f});
-            cfg.SetTierProbabilities(1, array<float> = {0.14f, 0.08f, 0.18f, 0.10f, 0.10f, 0.14f, 0.08f, 0.08f, 0.06f, 0.04f});
+            cfg.SetTierProbabilities(0, array<float> = {0.18f, 0.02f, 0.18f, 0.10f, 0.10f, 0.10f, 0.08f, 0.08f, 0.06f, 0.02f});
+            cfg.SetTierProbabilities(1, array<float> = {0.14f, 0.02f, 0.18f, 0.10f, 0.10f, 0.14f, 0.08f, 0.08f, 0.06f, 0.04f});
 
             FactoryProduction::factoryConfigs.set("armavp", @cfg);
             GenericHelpers::LogUtil("[FactoryProduction] RegisterVehicleFactories: armavp registered", 3);
@@ -88,8 +88,8 @@ namespace VehicleConfigs {
             cfg.AddRole("support",   array<string> = {});
             cfg.AddRole("heavy",     array<string> = {"corban"});
 
-            cfg.SetTierProbabilities(0, array<float> = {0.18f, 0.10f, 0.18f, 0.10f, 0.10f, 0.10f, 0.08f, 0.04f, 0.04f, 0.08f});
-            cfg.SetTierProbabilities(1, array<float> = {0.14f, 0.08f, 0.18f, 0.10f, 0.10f, 0.12f, 0.08f, 0.04f, 0.04f, 0.08f});
+            cfg.SetTierProbabilities(0, array<float> = {0.18f, 0.02f, 0.18f, 0.10f, 0.10f, 0.10f, 0.08f, 0.04f, 0.04f, 0.08f});
+            cfg.SetTierProbabilities(1, array<float> = {0.14f, 0.02f, 0.18f, 0.10f, 0.10f, 0.12f, 0.08f, 0.04f, 0.04f, 0.08f});
 
             FactoryProduction::factoryConfigs.set("coravp", @cfg);
             GenericHelpers::LogUtil("[FactoryProduction] RegisterVehicleFactories: coravp registered", 3);
