@@ -53,7 +53,9 @@ namespace Spam {
         float EdgeFirstShare = 0.33f;
         float EdgeSecondShare = 0.67f;
         float EdgeMargin = 200.0f;
-        float EdgeMinMetalIncome = 30.0f;    // build and spam from this sustained income
+        // owner, 2026-10-17: start once a T2 factory stands and 65 metal income held 10 s
+        bool EdgeNeedsT2Factory = true;
+        float EdgeMinMetalIncome = 65.0f;    // build and spam from this sustained income
         float EdgeMinEnergyIncome = 500.0f;  // ... and this (ReleaseFraction pauses it)
         bool EdgeVehicleLab = false;         // false: a T1 bot lab; true: a T1 vehicle plant
         int EdgeUnitLanes = 3;               // a narrow band along the edge

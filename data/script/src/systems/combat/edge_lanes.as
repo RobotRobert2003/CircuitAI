@@ -41,9 +41,11 @@ EdgeVehicleLab). Native placement: FRONT has no layout reservations, so the
 lab faces the way native would face it (toward the map centre) and the
 turrets are ordered behind that.
 
-The lab then produces Spam::SpamUnitFor(lab) on repeat (native repeat
-recruit, as Spam::FactoryMakeTask) while the economy holds EdgeMinMetalIncome
-and EdgeMinEnergyIncome. Its units take the lane as their factory route
+The lane starts (cluster, then production) once FRONT has a finished T2
+factory and has held EdgeMinMetalIncome (65) and EdgeMinEnergyIncome for 10 s;
+below ReleaseFraction of them it pauses. The lab produces
+Spam::SpamUnitFor(lab) on repeat (native repeat recruit, as
+Spam::FactoryMakeTask) while the lane is on. Its units take the lane as their factory route
 (CmdFactoryRoute: the first rally, then the next two shift-queued) and join
 the lab's Spam route task (Spam::RouteFor / MilitaryMakeTask), which holds
 them on the lane and at the far corner. The edge lab is not one of Spam's
@@ -225,12 +227,15 @@ namespace EdgeLanes {
         const float mi = Economy::GetMinMetalIncomeLast10s();
         const float ei = Economy::GetMinEnergyIncomeLast10s();
         const float keep = funded ? Global::Spam::ReleaseFraction : 1.0f;
-        const bool now = mi >= Global::Spam::EdgeMinMetalIncome * keep && ei >= Global::Spam::EdgeMinEnergyIncome * keep
+        // owner, 2026-10-17: start only with a finished T2 factory and the
+        // income held for 10 s (the sliding minimum); once on, ReleaseFraction pauses
+        const bool t2 = funded || !Global::Spam::EdgeNeedsT2Factory || HasT2Factory();
+        const bool now = t2 && mi >= Global::Spam::EdgeMinMetalIncome * keep && ei >= Global::Spam::EdgeMinEnergyIncome * keep
             && aiBuilderMgr.GetWorkerCount() >= Global::Spam::MinWorkers;
         if (now != funded) {
             funded = now;
             GenericHelpers::LogUtil("[EdgeLanes] " + (now ? "funded" : "paused") + ": mi=" + int(mi) + "/" + int(Global::Spam::EdgeMinMetalIncome)
-                + " ei=" + int(ei) + "/" + int(Global::Spam::EdgeMinEnergyIncome), 1);
+                + " ei=" + int(ei) + "/" + int(Global::Spam::EdgeMinEnergyIncome) + " T2 factory=" + (HasT2Factory() ? "yes" : "no"), 1);
         }
         CCircuitUnit@ lab = Lab();
         if (repeat !is null && (repeat.IsDead() || lab is null || lab.task !is repeat)) @repeat = null;
@@ -266,6 +271,19 @@ namespace EdgeLanes {
         }
         GenericHelpers::LogUtil("[EdgeLanes] " + Name(lane) + " lane: " + us.length() + " unit(s) on it; nearest the corner at ("
             + int(lead.x) + "," + int(lead.z) + "), " + int(sqrt(best)) + " from it", 1);
+    }
+
+    // A finished T2 bot lab or vehicle plant of ours
+    bool HasT2Factory()
+    {
+        array<string> names = UnitHelpers::GetAllT2BotLabs();
+        array<string> vp = UnitHelpers::GetAllT2VehicleLabs();
+        for (uint i = 0; i < vp.length(); ++i) names.insertLast(vp[i]);
+        for (uint i = 0; i < names.length(); ++i) {
+            CCircuitDef@ d = ai.GetCircuitDef(names[i]);
+            if (d !is null && d.count > aiBuilderMgr.GetUnfinishedCount(d)) return true;
+        }
+        return false;
     }
 
     // ---------------------------------------------------------------- the cluster
