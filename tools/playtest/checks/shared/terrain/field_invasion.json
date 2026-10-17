@@ -1,0 +1,58 @@
+{
+  "_doc": "D-323 battlefield blueprint, invasion series: for each side as the viewer, the map with only theatres, shores, landings and sides on, each sea, and the three best assault landings focused. Stage gui_barb_team_link.lua plus field_watch.lua, pass --shots \"\" --mode visual --modoption field_series=invasion.",
+  "stop_minute": 3,
+  "expect": [
+    {
+      "key": "field analysed",
+      "pattern": "FIELD_PERF",
+      "by_minute": 1.5,
+      "scope": "any"
+    },
+    {
+      "key": "field loaded",
+      "pattern": "\\[FieldCheck\\] PASS loaded",
+      "by_minute": 2.5,
+      "scope": "any"
+    },
+    {
+      "key": "invasion map screenshot",
+      "pattern": "\\[Playtest\\] screenshot field invade_v\\d+_map",
+      "by_minute": 3,
+      "scope": "any"
+    },
+    {
+      "key": "assault landing screenshot",
+      "pattern": "\\[Playtest\\] screenshot field invade_v\\d+_rank1",
+      "by_minute": 3,
+      "scope": "any"
+    },
+    {
+      "key": "screenshot series",
+      "pattern": "\\[FieldCheck\\] PASS screenshots",
+      "by_minute": 3,
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script error",
+      "pattern": ": ERR\\s+:",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "field failure",
+      "pattern": "FIELD: worker failed|FIELD: check failed|\\[FieldCheck\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "widget error",
+      "pattern": "Error in.*BARb team link|Failed to load.*gui_barb_team_link|\\[BARb link\\] message error",
+      "scope": "any"
+    }
+  ]
+}

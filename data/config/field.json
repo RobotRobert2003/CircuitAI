@@ -1,0 +1,25 @@
+// Mono-space font required
+// D-323: the battlefield map analysis ("field"), computed once per process by
+// the first AI whose profile enables it and shared by every AI
+// (src/circuit/terrain/FieldService.h). No value is an absolute width: each is
+// relative to the map or to a movedef slope limit. A profile folder may carry
+// its own field.json. Design: rjm.bar.docs/projects/circuitai/battlefield-analysis-implementation.md.
+{
+"field": {
+	"enabled": true,              // run the analysis and publish the widget file
+	"cell_size": 32,              // analysis grid, elmos (16-elmo slope samples underneath)
+	"region_min_cells": 24,       // smaller land components and regions merge into a neighbour
+	"water_min_cells": 16,        // smaller ship-water components are ignored (D-128 value)
+	"choke_fraction": 0.8,        // BWEM rule: two areas stay apart when their contact is under this share of the narrower seed clearance
+	"high_ground_rise": 128,      // plateau / valley prominence against the neighbours, elmos (D-127 value)
+	"beach_depth": 160,           // inland run a shore's climbing slope is measured over, elmos
+	"crossing_min_length": 2,     // cells; reserved for run merging
+	"landing_merge": 2,           // cells; reserved for landing grouping
+	"avenue_detour": 1.5,         // the next avenue may cost this much more than the cheapest
+	"avenue_max": 6,              // avenues per movement class
+	"sea_reach": 0,               // elmos a start box may lie from a sea to hold it; 0 = a fifth of the map diagonal
+	"pond_max_share": 0.025,      // a water body this small is a pond (D-128 value)
+	"publish_file": true,         // write LuaUI/Config/BARb/field/map.txt once for the team-link widget
+	"dump_input": false           // also write the input snapshot (field/input.bin) for the native replay (tests/field_analysis_test.exe <input.bin>)
+}
+}

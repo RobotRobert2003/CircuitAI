@@ -697,6 +697,9 @@ int CCircuitAI::Init(int skirmishAIId, const struct SSkirmishAICallback* sAICall
 	modules.push_back(economyManager);  // NOTE: Uses unit's manager != nullptr, thus must be last.
 
 	terrainManager->Init();
+	// D-323: the battlefield map analysis, run once per process by the first AI
+	// whose profile enables it and shared by every AI through CGameAttribute.
+	gameAttribute->GetFieldService().Start(this, gameAttribute.get());
 	battle = std::make_shared<CBattleAnalysis>(this);  // D-126
 	economyManager->InitEconomyScores();
 

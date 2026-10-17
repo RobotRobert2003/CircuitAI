@@ -13,6 +13,7 @@
 #include "resource/MetalField.h"
 #include "resource/EnergyData.h"
 #include "terrain/TerrainData.h"
+#include "terrain/FieldService.h"
 #include "util/MaskHandler.h"
 
 #include <unordered_set>
@@ -42,6 +43,7 @@ public:
 	metal_field::Grid& GetMetalField() { return metalField; }
 	CEnergyData& GetEnergyData() { return energyData; }
 	terrain::CTerrainData& GetTerrainData() { return terrainData; }
+	field::CFieldService& GetFieldService() { return fieldService; }  // D-323: one analysis per process
 	CMaskHandler& GetSideMasker() { return sideMasker; }
 	CMaskHandler& GetRoleMasker() { return roleMasker; }
 	CMaskHandler& GetAttrMasker() { return attrMasker; }
@@ -55,6 +57,7 @@ private:
 	metal_field::Grid metalField;
 	CEnergyData energyData;
 	terrain::CTerrainData terrainData;
+	field::CFieldService fieldService;
 	CMaskHandler sideMasker;
 	CMaskHandler roleMasker;
 	CMaskHandler attrMasker;

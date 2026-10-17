@@ -126,7 +126,7 @@ void CSetupManager::CloseConfig()
 		delete scriptConfig;
 		scriptConfig = new Json::Value(Json::objectValue);
 		// Commander policy and the scout-raid switch are read after init too.
-		for (const char* key : {"weapons", "lanes", "commander", "scout_raid"}) {
+		for (const char* key : {"weapons", "lanes", "commander", "scout_raid", "field"}) {
 			if (config->isMember(key)) {
 				(*scriptConfig)[key] = (*config)[key];
 			}
