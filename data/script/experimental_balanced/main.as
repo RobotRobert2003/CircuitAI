@@ -55,11 +55,20 @@ namespace Main {
 
 	void AiMain()
 	{
+		Global::RoleSettings::MexOwnershipEnabled = true;
+		// Also initialize before setupMap (and when reconstructing a saved game).
+		aiEconomyMgr.SetMexOwnership(true, Global::RoleSettings::MexOwnershipSeconds);
+		Global::RoleSettings::Air::FundFirstLab = true;
+        Global::Commander::AfusDefenceRadius = Global::Commander::BaseRadius;
+        Global::Commander::FrontRecovery = true;
+        Global::Commander::FrontMexSeconds = 1.f;
+        Global::RoleSettings::Tech::EcoFlakEnabled = true;
 		GenericHelpers::LogUtil("Running AiMain()", 1);
 
         // The opening Tick must search for gaps and raid just like later scouts.
         Global::ScoutRaid::KeepNativeScouts = 0;
         Global::RoleSettings::Tech::HeavyDeliveryFrontEnabled = true;
+        Global::RoleSettings::Tech::HeavyDeliveryBlockedSeconds = 5.0f;
 
 		// Air-factory gate. Native CEnemyManager::IsAirValid() tests
 		//     GetEnemyThreat(AA) <= maxAAThreat

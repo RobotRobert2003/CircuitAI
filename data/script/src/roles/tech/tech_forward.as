@@ -216,6 +216,9 @@ namespace TechForward {
             float bestSq = 1.0e30f;
             for (uint i = 0; i < cl.length(); ++i) {
                 if (MapHelpers::SqDist(cl[i].c, base) < clear2) continue;   // the base is the eco layout's ground
+                // Expansion economy banks may be outside the original base.
+                // Their perimeter owner also owns flak admission and its cap.
+                if (k == 1 && EcoFlak::OwnsArea(cl[i].c)) continue;
                 if (Stands(cl[i].c, r, d) || RecentlyOrdered(cl[i].c, d.GetName())) continue;
                 const float sq = MapHelpers::SqDist(cl[i].c, from);
                 if (sq < bestSq) { bestSq = sq; best = int(i); }

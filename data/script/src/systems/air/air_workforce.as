@@ -35,10 +35,10 @@ namespace AirWorkforce {
     float ReserveM() {
         // Save a concrete first-lab bank, while allowing an investment above it.
         CCircuitDef@ lab = ai.GetCircuitDef(UnitHelpers::GetT2AirPlantForSide(Global::AISettings::Side));
-        return AiMax(Global::RoleSettings::Air::WorkforceReserveMetal,
+        return AiMax(Global::RoleSettings::Air::WorkforceReserveMetal + AirBuild::LabReserve(false),
             lab !is null && AirEconomy::SavingForFirstLab() ? AiMin(lab.costM, AirEconomy::bankM) : 0.0f);
     }
-    float ReserveE() { return Global::RoleSettings::Air::WorkforceReserveEnergy; }
+    float ReserveE() { return Global::RoleSettings::Air::WorkforceReserveEnergy + AirBuild::LabReserve(true); }
     float Room(bool energy) {
         return BuildPowerMath::Room(energy ? TeamEconomy::OwnEnergy(TeamEconomy::CURRENT) : TeamEconomy::OwnMetal(TeamEconomy::CURRENT),
             energy ? ReserveE() : ReserveM(), energy ? incomeE : incomeM,

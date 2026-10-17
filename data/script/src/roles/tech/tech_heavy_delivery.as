@@ -154,6 +154,11 @@ namespace TechHeavyDelivery {
             if (carrier !is null && carrier.GetCargoId() == unitId && Team::HeavyTransport::Busy(carrier)) return;
             if (carrier !is null && carrier.GetCargoId() == unitId && carrier.GetState() == Team::Ferry::StateDone)
                 delivery.landed = true;
+            // D-318: a terminal/released balanced flight finishes on the
+            // ground, including failed-flight landing recovery. The pool may
+            // already have reset FAILED after native cleared its cargo ID.
+            // Re-loading here repeated the same refused drop in the live game.
+            if (forward) delivery.landed = true;
             // Terminal ferry states guarantee release from the aircraft. A dead
             // carrier is also terminal; never reset another cargo's native task.
             delivery.carrier = -1;
@@ -179,7 +184,8 @@ namespace TechHeavyDelivery {
                 Global::Ferry::DropSurfaceThreat, Global::Ferry::DropAirThreat);
             if (drop.x >= 0.0f && (forward ? carrier.SetCargoRoute(unitId,delivery.frontRoute,
                 Global::Ferry::DropSurfaceThreat,Global::RoleSettings::Tech::HeavyDeliveryAirThreat,
-                Global::RoleSettings::Tech::HeavyDeliveryAirPadding) : carrier.SetCargo(unitId, drop,
+                Global::RoleSettings::Tech::HeavyDeliveryAirPadding,
+                Global::RoleSettings::Tech::HeavyDeliveryBlockedSeconds) : carrier.SetCargo(unitId, drop,
                 Global::Ferry::DropSurfaceThreat, Global::Ferry::DropAirThreat))) {
                 delivery.carrier = available;
                 aiTerrainMgr.SetLayoutInt(TechHeavyRush::StateKey + "carrier." + index, available);

@@ -1,6 +1,10 @@
 // Shared defaults; existing Global namespaces are retained for callers.
 namespace Global {
 namespace RoleSettings {        
+        // Early allocation by reachable walking distance from starting commanders.
+        // At this game time, every ally may take unoccupied reachable spots.
+        bool MexOwnershipEnabled = false;
+        float MexOwnershipSeconds = 600.0f; // 0 disables early protection
         /******************** MEX UPGRADE PRIORITY ********************/
         // A mex upgrade is the best metal-per-metal available and spots are
         // finite, so every role ranks it ahead of its energy ladder. Radius is

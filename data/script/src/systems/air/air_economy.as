@@ -389,6 +389,7 @@ namespace AirEconomy {
     bool SavingForFirstLab()
     {
         if (MetalEconomy::Active()) return false;
+        if (AirBuild::FundedLab() !is null) return !recovery;
         CCircuitDef@ lab = ai.GetCircuitDef(UnitHelpers::GetT2AirPlantForSide(Global::AISettings::Side));
         return lab !is null && !Transition(lab) && AirMath::SaveForLab(t2 > 0,
             Planned(lab, Task::BuildType::FACTORY) > 0, recovery,

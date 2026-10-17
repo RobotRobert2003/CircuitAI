@@ -593,6 +593,7 @@ namespace Commands {
         if (openerScoutQueued) FrontOpener::MarkQueued("scout");
         if (openerBatchQueued) FrontOpener::MarkQueued("batch");
         TechWeapons::OnRoleLeave();   // D-126
+        EcoFlak::Clear();
         Lanes::OnRoleLeave();         // D-127
         NativeState::Restore();
         DefState::Restore();

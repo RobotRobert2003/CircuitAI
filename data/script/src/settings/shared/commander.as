@@ -9,7 +9,11 @@ namespace Global { namespace Commander {
     float FriendlyMargin=12.f, FrontWorkers=2.f;
     float FrontDistance=3200.f, FrontStandoff=650.f, FrontRadius=500.f, FrontThreat=3.f;
     float FrontRadarSpacing=500.f, FrontLaserSpacing=300.f;
+    bool FrontRecovery=false;
+    float FrontMexSeconds=0.f, FrontStallSeconds=10.f;
     float T3Intercept=1.f, T3Health=.2f, T3Distance=1000.f, DetectionMargin=32.f;
+    float AfusDefenceRadius=0.f; // balanced opts into cloaked tier-priority base defence
+    array<string> AfusDefenceUnits={"armafus","corafus","legafus"};
     // D-293: fall back to the backline porc line when an enemy group of units
     // able to attack the commander (members within FallbackGroupRadius of each
     // other) is worth FallbackMetal or more within FallbackRangeScale x the

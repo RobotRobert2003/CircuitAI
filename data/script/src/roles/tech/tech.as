@@ -19,6 +19,7 @@
 #include "../../manager/builder.as"
 #include "../../systems/team/team.as"
 #include "../../systems/construction/layout.as"
+#include "../../systems/construction/eco_flak.as"
 #include "../../systems/construction/eco_planner.as"
 #include "../../systems/construction/lifecycle.as"
 #include "../../systems/diagnostics/invariants.as"
@@ -620,6 +621,7 @@ namespace RoleTech
 		// The native plan owns geometry and slot state; this refreshes restored
 		// state and the optional overlay.
 		Layout::Update(metalIncome, hasT2Lab, t2ConstructionBotCount);
+        EcoFlak::Tick();
 
 		// --- Unlock advanced storages when economy is strong enough ---
 		if (!hasUnlockedAdvancedStorage && metalIncome >= 100.0f)

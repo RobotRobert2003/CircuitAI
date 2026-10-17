@@ -3,6 +3,9 @@
 #include "../../systems/air/air_reclaim.as"
 namespace AirBuild {
     IUnitTask@ starterReclaimTask;
+    // One retained native task, committed only after successful enqueue. Removed
+    // releases it; dead/completed tasks never reserve funds or block assistance.
+    IUnitTask@ fundedFirstLab;
     array<IUnitTask@> projects;
     array<IUnitTask@> pendingOwnership;
     dictionary trace;
@@ -27,16 +30,24 @@ namespace AirBuild {
     }
     void AdoptExisting()
     {
+        @fundedFirstLab = null;
+        bool completedAdvanced = false;
         // A role handoff keeps native tasks alive. Observe their current owners
         // once on entry so old unframed support orders cannot bypass the layout.
         array<Id>@ ids = ai.GetOwnedUnitIds();
         for (uint i = 0; i < ids.length(); ++i) {
             CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
+            if (u !is null && UnitHelpers::IsT2AircraftPlant(u.circuitDef.GetName())
+                && u.GetBuildProgress() >= 1.0f) completedAdvanced = true;
             IBuilderTask@ t = u is null ? null : cast<IBuilderTask>(u.task);
             if (t is null || t.IsDead() || t.GetBuildType() >= int(Task::BuildType::REPAIR)) continue;
+            if (Global::RoleSettings::Air::FundFirstLab && t.buildDef !is null
+                && t.GetBuildType() == int(Task::BuildType::FACTORY)
+                && UnitHelpers::IsT2AircraftPlant(t.buildDef.GetName())) @fundedFirstLab = t;
             Added(t);
             if (t.target !is null && projects.findByRef(t) < 0) projects.insertLast(t);
         }
+        if (completedAdvanced) @fundedFirstLab = null;
         // The previous role can leave orders with no assignee, so a unit-task
         // walk alone is incomplete. On entry, discard reachable unframed nano
         // orders before enabling the native layout-only queue filter. Framed
@@ -176,6 +187,84 @@ namespace AirBuild {
         }
         return cost;
     }
+    IBuilderTask@ FundedLab()
+    {
+        if (!Global::RoleSettings::Air::FundFirstLab || fundedFirstLab is null || fundedFirstLab.IsDead()) return null;
+        IBuilderTask@ task = cast<IBuilderTask>(fundedFirstLab);
+        return task is null || (task.target !is null && task.target.GetBuildProgress() >= 1.0f) ? null : task;
+    }
+    float LabReserve(bool energy)
+    {
+        IBuilderTask@ task = FundedLab();
+        if (task is null || task.buildDef is null) return 0;
+        const float left = task.target is null ? 1.0f : AiMax(0.0f, 1.0f - task.target.GetBuildProgress());
+        return left * (energy ? task.buildDef.costE : task.buildDef.costM);
+    }
+    float LabCommitments(bool energy, CCircuitUnit@ except = null)
+    {
+        // O(P) over owned projects on admission only; investments already live
+        // in the once-per-second workforce ledger, including queued recruits.
+        float cost = energy ? AirWorkforce::committedE + AirWorkforce::admittedE
+            : AirWorkforce::committedM + AirWorkforce::admittedM;
+        for (uint i = 0; i < projects.length(); ++i) {
+            IBuilderTask@ task = cast<IBuilderTask>(projects[i]);
+            if (task is null || task.IsDead() || task.buildDef is null
+                || task.GetBuildType() >= int(Task::BuildType::REPAIR)
+                || AirWorkforce::Investment(task.buildDef) || (except !is null && task.target is except)) continue;
+            const float left = task.target is null ? 1.0f : AiMax(0.0f, 1.0f - task.target.GetBuildProgress());
+            cost += left * (energy ? task.buildDef.costE : task.buildDef.costM);
+        }
+        return cost;
+    }
+    bool LabBudget(const CCircuitDef@ def, float power, float fraction = 1.0f, CCircuitUnit@ target = null)
+    {
+        if (def is null || AirWorkforce::metalRates.length() < 10) return false;
+        return AirMath::LabFunding(TeamEconomy::OwnMetal(TeamEconomy::CURRENT),
+            Global::RoleSettings::Air::WorkforceReserveMetal, AirWorkforce::incomeM,
+            AirWorkforce::usageM + AirWorkforce::admittedUsageM, LabCommitments(false, target),
+            def.costM * fraction, def.GetBuildTime() * fraction, power,
+            Global::RoleSettings::Air::FirstLabFundingSeconds, Global::RoleSettings::Air::FirstLabIncomeShare)
+            && AirMath::LabFunding(TeamEconomy::OwnEnergy(TeamEconomy::CURRENT),
+            Global::RoleSettings::Air::WorkforceReserveEnergy, AirWorkforce::incomeE,
+            AirWorkforce::usageE + AirWorkforce::admittedUsageE, LabCommitments(true, target),
+            def.costE * fraction, def.GetBuildTime() * fraction, power,
+            Global::RoleSettings::Air::FirstLabFundingSeconds, Global::RoleSettings::Air::FirstLabIncomeShare);
+    }
+    bool FirstLabFunded(CCircuitUnit@ worker, CCircuitDef@ def)
+    {
+        return Global::RoleSettings::Air::FundFirstLab && worker !is null && def !is null
+            && AirEconomy::t2 == 0 && !MetalEconomy::Active() && !AirEconomy::recovery
+            && AirEconomy::Planned(def, Task::BuildType::FACTORY) == 0
+            && ai.frame >= Global::RoleSettings::Air::TransitionEarliestSeconds * SECOND
+            && aiTerrainMgr.GetLayoutInt("air.screen.established", 0) != 0
+            && AirWorkforce::incomeM >= Global::RoleSettings::Air::FusionAccessMinMetal
+            && AirWorkforce::incomeE >= Global::RoleSettings::Air::FusionAccessMinEnergy
+            && LabBudget(def, worker.circuitDef.GetBuildSpeed());
+    }
+    IUnitTask@ TransitionMex(CCircuitUnit@ worker)
+    {
+        if (!Global::RoleSettings::Air::FundFirstLab || FundedLab() !is null
+            || UnitHelpers::IsCommander(worker.circuitDef) || AirEconomy::recovery
+            || AirEconomy::MexCount() >= Global::RoleSettings::Air::PreFusionMexLimit
+            || TeamEconomy::OwnMetal(TeamEconomy::CURRENT) < Global::RoleSettings::Air::WorkforceReserveMetal
+            || aiEconomyMgr.GetMexTaskCountWithin(Global::Map::StartPos, Global::RoleSettings::Air::HomeMexRadius) > 0) return null;
+        // Finite pre-fusion mex count and one local claim bound the investment;
+        // native reachability/ownership checks reject unavailable allied spots.
+        IUnitTask@ task = aiEconomyMgr.EnqueueMexWithin(worker, Global::Map::StartPos,
+            Global::RoleSettings::Air::HomeMexRadius, 0, true);
+        IBuilderTask@ build = cast<IBuilderTask>(task);
+        if (build is null || build.buildDef is null) return task;
+        // Inspect the actual native-selected extractor, including content/mod
+        // variants. This cheap growth must fit cash after prior obligations.
+        if (TeamEconomy::OwnMetal(TeamEconomy::CURRENT) < Global::RoleSettings::Air::WorkforceReserveMetal
+                + LabCommitments(false) + build.buildDef.costM
+            || TeamEconomy::OwnEnergy(TeamEconomy::CURRENT) < Global::RoleSettings::Air::WorkforceReserveEnergy
+                + LabCommitments(true) + build.buildDef.costE) {
+            CancelUnstarted(build);
+            return null;
+        }
+        return task;
+    }
     bool Can(CCircuitUnit@ u, CCircuitDef@ d) { return d !is null && d.IsAvailable(ai.frame) && u.circuitDef.CanBuild(d); }
     bool Busy(CCircuitDef@ d, Task::BuildType type)
     {
@@ -238,8 +327,8 @@ namespace AirBuild {
             Invariants::Violation("INV-077", "AIR", "reactor ordered while owned mex upgrades remain");
         if (build !is null && build.GetBuildType() == int(Task::BuildType::FACTORY)
             && build.target is null && build.buildDef !is null && UnitHelpers::IsT2AircraftPlant(build.buildDef.GetName())
-            && !AirEconomy::Transition(build.buildDef))
-            Invariants::Violation("INV-083", "AIR", "T2 air lab ordered below sustained income and full-bank thresholds");
+            && !AirEconomy::Transition(build.buildDef) && t !is fundedFirstLab)
+            Invariants::Violation("INV-083", "AIR", "T2 air lab ordered without income, bank or a funded first-lab admission");
         if (build !is null && build.target is null && build.buildDef !is null && build.GetBuildType() == int(Task::BuildType::FACTORY)
             && UnitHelpers::IsT2AircraftPlant(build.buildDef.GetName()) && !AirEconomy::ExistingT2SupportReady())
             Invariants::Violation("INV-090", "AIR", "additional T2 lab ordered before every existing lab has twenty completed support turrets");
@@ -268,6 +357,7 @@ namespace AirBuild {
     }
     void Removed(IUnitTask@ t)
     {
+        if (t is fundedFirstLab) @fundedFirstLab = null;
         const int i = projects.findByRef(t);
         if (i >= 0) projects.removeAt(i);
         const int p = pendingOwnership.findByRef(t);
@@ -295,6 +385,8 @@ namespace AirBuild {
         CCircuitUnit@ nearest = null;
         const float reach = inReach ? u.circuitDef.GetBuildDistance() : radius;
         float best = reach * reach;
+        IBuilderTask@ lab = FundedLab();
+        bool labChecked = false, labAffordable = false;
         for (uint i = 0; i < projects.length(); ++i) {
             IBuilderTask@ t = cast<IBuilderTask>(projects[i]);
             if (t is null || t.buildDef is null || t.target is null || Lifecycle::IsRetiring(t.target)) continue;
@@ -304,6 +396,18 @@ namespace AirBuild {
             if (!AirHome::EconomySite(t.target.GetPos(ai.frame))) continue;
             const float distance = MapHelpers::SqDist(u.GetPos(ai.frame), t.target.GetPos(ai.frame));
             if (distance > best || !aiTerrainMgr.CanReachAt(u, t.target.GetPos(ai.frame), u.circuitDef.GetBuildDistance())) continue;
+            if (lab !is null && lab.target is t.target) {
+                // Many repair leases can reference one frame. Budget once for
+                // this search, keeping it O(P), not O(P^2), with no stale cache.
+                if (!labChecked) {
+                    const float already = AirWorkforce::Assigned(t.target, u);
+                    labAffordable = already <= 0 || LabBudget(t.buildDef,
+                        already + u.circuitDef.GetBuildSpeed(),
+                        AiMax(0.0f, 1.0f - t.target.GetBuildProgress()), t.target);
+                    labChecked = true;
+                }
+                if (!labAffordable) continue;
+            }
             if (!AirWorkforce::Useful(t.target, u)) continue;
             best = distance; @nearest = t.target;
         }
@@ -469,7 +573,7 @@ namespace AirBuild {
             if (nearby !is null) return nearby;
         }
         if (advanced) {
-            if (!AirEconomy::Transition(d)) return null;
+            if (!AirEconomy::Transition(d) && !FirstLabFunded(u, d)) return null;
             if (!AirEconomy::ExistingT2SupportReady()) return null;
             if (!AirMath::BayAllowed(count, Global::RoleSettings::Air::MaxProductionBays)) return null;
             if (!AirEconomy::BankedLab(d) && count > 0 && (AirEconomy::stableSince < 0 || !ProductionMath::CapacityReady(count, (Global::RoleSettings::Air::MaxProductionBays <= 0 ? count + 1 : Global::RoleSettings::Air::MaxProductionBays),
@@ -495,8 +599,10 @@ namespace AirBuild {
         if (!aiTerrainMgr.CanReachAtSafe(u, aiTerrainMgr.GetReservationPos(bay.slot), u.circuitDef.GetBuildDistance())) return null;
         if (advanced) GenericHelpers::LogUtil("[AIR][LabGate] M10=" + int(Economy::GetMinMetalIncomeLast10s())
             + " window=" + Economy::IncomeWindowReady() + " bank=" + int(aiEconomyMgr.metal.current)
-            + " cost=" + int(d.costM) + " reason=" + (AirEconomy::BankedLab(d) ? "bank" : "income"), 1);
+            + " cost=" + int(d.costM) + " reason=" + (AirEconomy::BankedLab(d) ? "bank" : AirEconomy::Transition(d) ? "income" : "funded-first"), 1);
         IUnitTask@ order = AirLayout::Pinned(Task::BuildType::FACTORY, Task::Priority::HIGH, d, bay.slot);
+        if (order !is null && advanced && count == 0 && Global::RoleSettings::Air::FundFirstLab)
+            @fundedFirstLab = order;
         // Native claims protect queued work; frame adoption commits the bay.
         return order;
     }

@@ -441,6 +441,7 @@ namespace TechWeapons {
         for (uint i = 0; i < TechFactories::clusters.length(); ++i) assets.insertLast(TechFactories::clusters[i].pos);
         for (uint i = 0; i < assets.length(); ++i) {
             const AIFloat3 a = assets[i];
+            if (EcoFlak::OwnsArea(a)) continue; // economy perimeter has one flak owner
             AIFloat3 from = aiBattle.AirCentre(a, 4000.0f);
             if (from.x < 0.0f) from = Layout::FrontTarget();
             Candidate@ c = Candidate();
@@ -979,6 +980,7 @@ namespace TechWeapons {
         for (uint i = 0; i < clusters.length(); ++i) {
             WCluster@ c = clusters[i];
             if (c.stale || mi < Gate(c.kind)) continue;
+            if (c.kind == AIR && EcoFlak::OwnsArea(c.pos)) continue;
             if (!PlacementReleased(c.kind, c.pos)) continue;
             if (c.kind == SUPER && !SuperStartable(c)) continue;
             if (!air && from.distance2D(c.pos) > Global::RoleSettings::Tech::WeaponWorkRadius) continue;

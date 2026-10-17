@@ -4,6 +4,9 @@
 namespace Global {
 namespace RoleSettings {
 namespace Tech {
+            bool EcoFlakEnabled = false;
+            int EcoFlakMinimum = 1, EcoFlakMaximum = 15;
+            float EcoFlakCooldownSeconds = 30.f, EcoFlakBaseRadius = 1000.f;
             // D-306: loss recovery is asked only by idle builders, with bounded
             // native slot queries. Production refill uses the existing event path.
             bool EconomyRecoveryEnabled = true;
@@ -28,6 +31,7 @@ namespace Tech {
             bool HeavyDeliveryFrontEnabled = false;
             float HeavyDeliveryAirPadding = 192.0f;
             float HeavyDeliveryAirThreat = 0.5f;
+            float HeavyDeliveryBlockedSeconds = 90.0f;
             float HeavyDeliveryFrontRadius = 128.0f;
             bool LocalGeothermalEnabled = true;
             float LocalGeothermalRadius = 1200.0f;

@@ -66,6 +66,7 @@ namespace AirRules {
         CCircuitDef@ transitionStore=ai.GetCircuitDef(UnitHelpers::GetMetalStorageNameForSide(side));
         if (nextLab !is null && AirMath::TransitionStorage(AirEconomy::t2>0,
             AirEconomy::bankM,aiEconomyMgr.metal.storage,nextLab.costM)
+            && !AirBuild::FirstLabFunded(u, nextLab)
             && !AirBuild::Busy(transitionStore,Task::BuildType::STORE)) {
             @t=AirBuild::Utility(u,UnitHelpers::GetMetalStorageNameForSide(side),Task::BuildType::STORE,4);
             if (t !is null) return AirBuild::Record(t,"transition.storage",u);
@@ -78,6 +79,8 @@ namespace AirRules {
             @t = AirBuild::Factory(u, true);
             if (t !is null) return AirBuild::Record(t, "transition.bay", u);
             if (AirEconomy::SavingForFirstLab()) {
+                @t = AirBuild::TransitionMex(u);
+                if (t !is null) return AirBuild::Record(t, "transition.mex", u);
                 @t = AirBuild::Nano(u);
                 if (t !is null) return AirBuild::Record(t, "transition.support", u);
                 @t = AirBuild::Assist(u);

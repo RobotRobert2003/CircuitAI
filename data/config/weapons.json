@@ -5,6 +5,7 @@
 // its own weapons.json to override this one. Incomes are metal per second.
 {
 "weapons": {
+    "eco_flak": {"minimum": 1, "cooldown_seconds": 30, "maximum": 15, "base_radius": 1000},
 	"front": {"wall_front_radius": 1100, "ground_front_radius": 1800, "armada_emp_count": 1, "cortex_tactical_count": 1, "legion_perdition_count": 3, "special_spacing": 240, "geo_cluster_radius": 1600},
 	"fortification": {"share": 0.05, "work_radius": 2200, "concurrent": 2, "base_exclusion_radius": 1200}, // AIR/TECH: no walls around allied starts
 	"celebration": {"enabled": true, "letter_height": 220}, // once per Ragnarok/Calamity/Starfall, after its first actual shot
