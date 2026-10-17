@@ -555,6 +555,11 @@ void CFactoryManager::ReadConfig()
                 }
             }
             number("evasion_limit", policy.evasionLimit, 0.f, 10.f);
+            // Owner 2026-10-17: poke cadence; only the coordinated controller reads it.
+            number("poke_in", policy.pokeIn, 0.f, .99f);
+            number("poke_in_dominant", policy.pokeInDominant, .5f, .99f);
+            number("poke_out", policy.pokeOut, 1.f, 1.5f);
+            number("poke_ratio", policy.pokeRatio, 1.f, 10.f);
             // Owner 2026-10-19: the static press.
             number("press_static", policy.pressStatic, 0.f, 3.f);
             // The cohort controller has its own static admission (assault list).

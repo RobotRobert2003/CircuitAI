@@ -109,6 +109,20 @@ inline ranged::Point Arc(ranged::Point target, ranged::Point back, float radius,
     const float a = angle + (rank-(count-1)*.5f)*step;
     return {target.x+std::cos(a)*radius, target.z+std::sin(a)*radius};
 }
+// Owner 2026-10-17: a contact worth poking is one whose own reach would push
+// us out of the inner band, yet which does not outrange the outer band.
+// Shorter weapons keep the ordinary kite; longer weapons keep the full escape.
+inline bool Pokeable(float enemyRange,float enemyReach,float ownRange,float in,float out) {
+    return in>0.f && enemyRange<=ownRange*out && enemyReach>ownRange*in;
+}
+// Local metal well above the opposition earns the deeper firing band.
+inline bool Dominant(float own,float hostile,float ratio) {
+    return hostile>0.f && own>=hostile*ratio;
+}
+// Step in once per reload: in while the weapon is ready, out while reloading.
+inline float PokeFraction(bool reloading,float in,float out) {
+    return reloading ? out : in;
+}
 inline float HealthValue(float cost,float health,float maximum) {
     return cost*std::clamp(health/std::max(1.f,maximum),0.f,1.f);
 }

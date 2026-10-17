@@ -338,10 +338,27 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     const CRangedWorld::Contact* danger=nullptr; float penetration=0.f;
     const CRangedWorld::Contact* incoming=nullptr;
     const CRangedWorld::Contact* objective=nullptr;
+    // Owner 2026-10-17: poke cadence. Any assessed, targeted front cohort pokes
+    // the closest similar-range mobile, whatever the local metal balance; the
+    // band is deeper when our side clearly outweighs the opposition. Sustained
+    // rushes, rush fallback, regrouping and the rear line keep their movement.
+    const bool poking=assessed && policy.pokeIn>0.f && group.target>=0
+        && !group.sustainedRush && !group.rushFallback && !group.formationRear
+        && group.mode!=cohort::Mode::REGROUP;
+    const bool dominant=poking && cohort::Dominant(group.ownValue,group.hostileValue,policy.pokeRatio);
+    const float pokeIn=dominant?policy.pokeInDominant:policy.pokeIn;
+    const auto pokeable=[&](const CRangedWorld::Contact& c) {
+        return poking && c.def && c.mobile && c.armed && !c.def->IsEnemyRoleAny(CCircuitDef::COMM)
+            && !c.def->IsAbleToReclaim()
+            && cohort::Pokeable(c.groundRange,c.hazardRadius+policy.safetyMargin,maxRange,pokeIn,policy.pokeOut);
+    };
+    const CRangedWorld::Contact* closest=nullptr; float closestDistance=std::numeric_limits<float>::max();
     for(int i:nearby) {
         const auto& c=contacts[i];
         if(c.id==group.target) objective=&c;
         if(!c.def || c.def->IsAbleToFly() || c.pos.y< -20.f) continue;
+        const bool poked=pokeable(c);
+        if(poked && pos.SqDistance2D(c.pos)<closestDistance) { closestDistance=pos.SqDistance2D(c.pos); closest=&c; }
         // The local escape decision remains individual: a centroid must not
         // hide a flank being overrun. Mobile exposure is allowed only during
         // an approved rush; sustained commitment deliberately spends against
@@ -378,8 +395,10 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
             && group.mode==cohort::Mode::RUSH && (!assessed || c.groundRange>=maxRange
                 || (policy.supportAllies && group.supporting
                     && distance>c.groundRange+policy.safetyMargin));
+        // A poker accepts the reach of a similar-range mobile; its cadence,
+        // not the escape, takes it back out while the weapon reloads.
         if((c.hazardRadius>0.f || reclaim>0.f) && distance<reach && reach-distance>penetration
-            && (distance<reclaim || !(approvedStatic || approvedMobile))) {
+            && (distance<reclaim || !(approvedStatic || approvedMobile || poked))) {
             danger=&c; penetration=reach-distance;
         }
         // Target permissions never suppress the hazard above. Coordinated
@@ -421,6 +440,20 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
         const float offset=(rank-(group.members.size()-1)*.5f)*(policy.spacing+1.f);
         point+=AIFloat3(-group.back.z,0,group.back.x)*offset;
     }
+    // In to the band while the weapon is ready, out to poke_out while it
+    // reloads: roughly one step in per reload cycle, straight along the line
+    // to the closest pokeable enemy so each step is as short as possible.
+    const bool poke=closest!=nullptr;
+    int phase=-1;
+    if(poke) {
+        const bool reloading=liveWeapon && liveWeapon->GetReloadFrame()>frame;
+        phase=reloading?0:1;
+        const float reach=world.Range(caps.weapons.front(),pos,closest->pos)
+            *cohort::PokeFraction(reloading,pokeIn,policy.pokeOut);
+        AIFloat3 away=pos-closest->pos; away.Normalize2D();
+        if(away.SqLength2D()<.5f) away=group.back;
+        point=closest->pos+away*reach;
+    }
     if(group.sustainedRush) { danger=nullptr; incoming=nullptr; withdrawalUntil=0; }
     if(danger) {
         AIFloat3 away=pos-danger->pos; away.Normalize2D();
@@ -438,13 +471,13 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     } else if(frame<withdrawalUntil && moving) {
         SelectTarget(unit,best>=0?contacts[best].id:-1,weapon,damage,score);
         return;
-    } else if(incoming && !(policy.supportAllies && group.supporting && group.committed)
+    } else if(incoming && !poke && !(policy.supportAllies && group.supporting && group.committed)
         && point.SqDistance2D(incoming->pos)<pos.SqDistance2D(incoming->pos)) {
         // Hold the line when a shorter-ranged enemy is already approaching.
         // Advancing into it doubles closure and spends the entire range
         // advantage turning around. Let it enter our fire before pulling back.
         point=pos;
-    } else if(best>=0 && !group.sustainedRush && !group.rushFallback && !group.formationRear && (assessed || group.mode!=cohort::Mode::REGROUP)
+    } else if(best>=0 && !poke && !group.sustainedRush && !group.rushFallback && !group.formationRear && (assessed || group.mode!=cohort::Mode::REGROUP)
         && world.FreeSlot(id,pos,policy.spacing)
         && !(policy.supportAllies && group.supporting && group.committed
             && (pos.x-group.focus.x)*group.back.x+(pos.z-group.focus.z)*group.back.z>group.screenDepth+policy.spacing)) {
@@ -455,16 +488,19 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
         // still advance to their shared slots until they too can contribute.
         point=pos;
     }
-    if(!danger && best<0 && objective && pos.SqDistance2D(point)<4096.f
-        && (group.mode==cohort::Mode::ADVANCE || group.mode==cohort::Mode::RUSH)) {
-        const float distance=std::sqrt(pos.SqDistance2D(objective->pos));
-        const float reach=world.Range(caps.weapons.front(),pos,objective->pos);
+    // A stepping-in poker takes the same last step onto its closest enemy;
+    // a reloading poker never steps forward.
+    const CRangedWorld::Contact* step=poke?(phase==1?closest:nullptr):objective;
+    if(!danger && best<0 && step && pos.SqDistance2D(point)<4096.f
+        && (phase==1 || group.mode==cohort::Mode::ADVANCE || group.mode==cohort::Mode::RUSH)) {
+        const float distance=std::sqrt(pos.SqDistance2D(step->pos));
+        const float reach=world.Range(caps.weapons.front(),pos,step->pos);
         if(distance>reach && distance-reach<64.f) {
             // Engine arrival can stop 32 elmos before a firing slot. A unit
             // just outside range must take the remaining step, not consider
             // itself settled forever. The next legal shot holds it immediately;
             // mobile danger and static/terrain validation still take precedence.
-            point=pos+(objective->pos-pos)*((distance-reach+32.f)/distance);
+            point=pos+(step->pos-pos)*((distance-reach+32.f)/distance);
         }
     }
     CTerrainManager::CorrectPosition(point);
@@ -508,13 +544,14 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
         && world.FreeSlot(id,pos,policy.spacing)
         && SafeMove(unit,pos,pos,policy.safetyMargin,false);
     if(completedStage) point=pos;
-    if(!completedStage && !danger && group.mode!=cohort::Mode::REGROUP
+    if(!completedStage && !danger && !poke && group.mode!=cohort::Mode::REGROUP
         && destination.SqDistance2D(point)<4.f*policy.spacing*policy.spacing
         && pos.SqDistance2D(destination)<arrival*arrival
         && ((!group.sustainedRush && !group.rushFallback && best>=0) || group.target<0 || (formationStaging
             && SafeMove(unit,pos,destination,policy.safetyMargin,false)))
         && world.FreeSlot(id,destination,policy.spacing)) point=destination;
-    urgentMove=danger || moveObjective!=group.target || moveMode!=int(group.mode);
+    urgentMove=danger || moveObjective!=group.target || moveMode!=int(group.mode) || phase!=pokePhase;
+    pokePhase=phase;
     moveObjective=group.target; moveMode=int(group.mode);
     const bool settled=pos.SqDistance2D(point)<arrival*arrival;
     if(safe && !settled) {
@@ -551,9 +588,10 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     SelectTarget(unit,best>=0?contacts[best].id:-1,weapon,damage,score);
     if(trace && frame>=traceFrame+150) {
         traceFrame=frame;
-        ai->LOG("COHORT: unit=%d members=%u mode=%d target=%d radius=%.0f dest=%.0f,%.0f danger=%d reason=%d loss=%.3f advantage=%.3f committed=%d supporting=%d screen=%.0f",
+        ai->LOG("COHORT: unit=%d members=%u mode=%d target=%d radius=%.0f dest=%.0f,%.0f danger=%d reason=%d loss=%.3f advantage=%.3f committed=%d supporting=%d screen=%.0f poke=%d dominant=%d own=%.0f hostile=%.0f closest=%d",
             id,unsigned(group.members.size()),int(group.mode),group.target,group.radius,point.x,point.z,danger?danger->id:-1,
-            int(group.reason),group.loss,group.advantage,int(group.committed),int(group.supporting),group.screenDepth);
+            int(group.reason),group.loss,group.advantage,int(group.committed),int(group.supporting),group.screenDepth,
+            phase,int(dominant),group.ownValue,group.hostileValue,closest?closest->id:-1);
     }
 }
 
