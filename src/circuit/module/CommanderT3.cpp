@@ -338,7 +338,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         for(const auto& [fid,ally]:ai->GetFriendlyUnits()) {
             auto* d=ally->GetCircuitDef();
             if(d && !d->IsMobile() && d->IsAttacker() && d->GetMaxRange()<=options.fallbackPorcRange
-                && ally->GetLastPos().SqDistance2D(pos)<=SQUARE(options.fallbackSearch)) { s.t3Cornered=false; break; }
+                && ally->GetPos(frame).SqDistance2D(pos)<=SQUARE(options.fallbackSearch)) { s.t3Cornered=false; break; }  // D-304: GetPos fills the snapshot position
         }
         s.t3Splash=0;
         for(const auto& w:tcap.weapons) s.t3Splash=std::max(s.t3Splash,w.splash);
