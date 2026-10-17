@@ -46,6 +46,15 @@ int main() {
     assert(cohort::KiteStep(8,16,true)==192);
     assert(!cohort::ShortKite(380,325,45,1.25)); // narrow Centurion firing band
     assert(cohort::ShortKite(380,180,45,1.25)); // shorter-range light raiders
+    // Owner 2026-10-17 poke cadence (Thug/Mace 380): equal range pokes; Pawn keeps kiting; long range escapes.
+    assert(cohort::Pokeable(380,402,380,.95f,1.05f));
+    assert(cohort::Pokeable(380,402,380,.90f,1.05f));
+    assert(!cohort::Pokeable(180,200,380,.95f,1.05f));
+    assert(!cohort::Pokeable(475,500,380,.95f,1.05f));
+    assert(!cohort::Pokeable(380,402,380,0.f,1.05f)); // off by default
+    assert(cohort::Dominant(2000,1000,2.f) && !cohort::Dominant(1900,1000,2.f) && !cohort::Dominant(500,0,2.f));
+    assert(cohort::PokeFraction(false,.95f,1.05f)==.95f);
+    assert(cohort::PokeFraction(true,.95f,1.05f)==1.05f); // reloading: step out
     assert(cohort::Admit({400,0},{0,0},450));
     assert(!cohort::Admit({800,0},{0,0},450)); // no recruitment through a chain
     assert(!cohort::CanRush(380,325,45,45,840,810,1.75,6,440)); // kite Centurion

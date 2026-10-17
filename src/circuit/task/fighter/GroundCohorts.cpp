@@ -385,6 +385,7 @@ void CRangedWorld::AssessCohort(CCircuitUnit* unit,CohortPlan& g,const Contact& 
     const int now=circuit->GetLastFrame();
     auto* def=unit->GetCircuitDef(); const auto& p=def->GetRangedPolicy();
     const float horizon=p.engagementSeconds, firing=range*p.rangeFraction;
+    g.ownValue=0.f; g.hostileValue=0.f;
     AIFloat3 firingPoint=enemy.pos+g.back*firing;
     const auto* area=circuit->GetTerrainManager()->GetAreaData();
     // KI-571: a valid enemy plus a firing offset can lie beyond any map edge.
@@ -487,6 +488,7 @@ void CRangedWorld::AssessCohort(CCircuitUnit* unit,CohortPlan& g,const Contact& 
             if(weight>0.f) own.hullHealth=own.hullHealth>0.f?std::min(own.hullHealth,f.combatHealth):f.combatHealth;
         }
     });
+    g.ownValue=own.value; g.hostileValue=hostile.value;
     const float distance=std::sqrt(g.center.SqDistance2D(enemy.pos));
     AIFloat3 pursuit=enemy.pos-g.center; pursuit.Normalize2D();
     const float fleeing=std::max(0.f,Projection(enemy.velocity,pursuit));

@@ -69,6 +69,14 @@ struct RangedPolicy {
     // D-294: 0 = off. Penalise a mobile target whose drift during projectile
     // flight exceeds evasionLimit*(splash+target radius); see ranged::Evasive.
     float evasionLimit = 0.f;
+    // Owner 2026-10-17: 0 = off. Coordinated firing cadence against the
+    // closest mobile enemy of about our range. With a ready weapon a hull steps
+    // in to pokeIn*range (pokeInDominant*range once the local metal ratio
+    // reaches pokeRatio), and out to pokeOut*range while reloading. Shorter-
+    // ranged enemies keep the kite; longer-ranged ones, static coverage,
+    // commanders and reclaimers keep the full escape. Sustained rushes, rush
+    // fallback, regrouping and the rear line are unchanged.
+    float pokeIn = 0.f, pokeInDominant = .90f, pokeOut = 1.05f, pokeRatio = 2.f;
     // Owner 2026-10-19: 0 = off. Armed static defences of this tech level or
     // lower (BAR customparams.techlevel, 1 when absent) are not coverage this
     // hull avoids: it picks firing sites, paths and stays inside their reach

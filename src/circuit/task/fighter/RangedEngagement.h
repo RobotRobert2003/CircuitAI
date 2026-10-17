@@ -46,6 +46,7 @@ private:
     bool urgentMove=false;
     bool completedMove=false;
     int moveObjective=-1, moveMode=-1;
+    int pokePhase=-1; // owner 2026-10-17: -1 not poking, 1 stepping in, 0 stepping out
     bool moving=false, issuing=false, released=false, cloakWanted=false, reorient=false;
     float reservedDamage=0.f;
     float heldScore=0.f; int heldScoreFrame=-1; // current target's score, the tick it last passed the candidate filters
