@@ -1,0 +1,67 @@
+{
+  "stop_minute": 3,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "tier3",
+      "pattern": "\\[CommanderBase\\] unit=(?P<unit>\\d+) afus=\\d+ target=\\d+ tier=3 action=fire concealed=1",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "tier2",
+      "pattern": "\\[CommanderBase\\] unit=(?P<unit>\\d+) afus=\\d+ target=\\d+ tier=2 action=fire concealed=1",
+      "scope": "any",
+      "by_minute": 3,
+      "after_key": "tier3",
+      "same_as": "tier3"
+    },
+    {
+      "key": "tier1",
+      "pattern": "\\[CommanderBase\\] unit=(?P<unit>\\d+) afus=\\d+ target=\\d+ tier=1 action=fire concealed=1",
+      "scope": "any",
+      "by_minute": 3,
+      "after_key": "tier2",
+      "same_as": "tier3"
+    },
+    {
+      "key": "complete",
+      "pattern": "\\[RangedArena\\].* scenario_complete",
+      "scope": "any",
+      "by_minute": 3
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ],
+  "complete_on": {
+    "key": "complete",
+    "pattern": "\\[RangedArena\\].* scenario_complete",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 10
+}

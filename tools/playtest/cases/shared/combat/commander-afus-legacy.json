@@ -1,0 +1,84 @@
+{
+  "name": "commander-afus-legacy",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "SUPPORT",
+  "description": "Ordinary T3 combat remains active without the AFUS defence context.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4300,
+      4000
+    ],
+    [
+      2500,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "ally_spots": "1,2",
+  "enemy_team": 2,
+  "camera": [
+    4300,
+    4200,
+    1600
+  ],
+  "photos": [
+    25,
+    45,
+    65
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "commander_initial": true,
+  "enemy_commander_home": true,
+  "groups": [
+    {
+      "unit": "corafus",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4300,
+        3000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4300,
+        4600
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmar",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4300,
+        4500
+      ],
+      "after_seconds": 23
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "min_kills": 1,
+    "max_losses": 0,
+    "min_damage": 1000,
+    "max_first_shot_seconds": 55
+  },
+  "checks": "commander-afus-control",
+  "completion_targets": [
+    "armmar"
+  ],
+  "observation_frames": 3
+}

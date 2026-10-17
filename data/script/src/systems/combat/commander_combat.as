@@ -65,9 +65,18 @@ namespace CommanderCombat {
             Option("front_standoff",Global::Commander::FrontStandoff);
             Option("front_radius",Global::Commander::FrontRadius);
             Option("front_threat",Global::Commander::FrontThreat);
+            Option("front_recovery",Global::Commander::FrontRecovery?1.f:0.f);
+            Option("front_mex_seconds",Global::Commander::FrontMexSeconds);
+            Option("front_stall_seconds",Global::Commander::FrontStallSeconds);
             Option("t3_intercept",Global::Commander::T3Intercept);
             Option("t3_health",Global::Commander::T3Health);
             Option("t3_distance",Global::Commander::T3Distance);
+            Option("afus_defence_radius",Global::Commander::AfusDefenceRadius);
+            aiBuilderMgr.SetCommanderCombatOption("afus_def",-1.f);
+            for(uint i=0;i<Global::Commander::AfusDefenceUnits.length();++i) {
+                CCircuitDef@ afus=ai.GetCircuitDef(Global::Commander::AfusDefenceUnits[i]);
+                if(afus !is null) aiBuilderMgr.SetCommanderCombatOption("afus_def",float(afus.id));
+            }
             Option("detection_margin",Global::Commander::DetectionMargin);
             Option("fallback",Global::Commander::Fallback?1.f:0.f);
             Option("fallback_metal",Global::Commander::FallbackMetal);

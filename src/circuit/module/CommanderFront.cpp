@@ -94,6 +94,7 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
     if(pos.SqDistance2D(anchor)>options.frontRadius*options.frontRadius*.25f) {
         // Not while the last fallback line still wants turrets (D-299).
         if(kind!=4 || (frame<s.lineUntil && !s.lineDone)) return nullptr;
+        s.frontProgressFrame=frame; s.frontProgressPos=pos;
         return builder->EnqueueCommander(nullptr);
     }
     if(s.frontArrived<0) s.frontArrived=frame; // D-299 timed defence clock

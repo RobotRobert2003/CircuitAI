@@ -48,7 +48,15 @@ struct Contact {
     float height=0;
     bool blocker=false, friendly=false, targetable=true, reserved=false, stopAfter=false;
     bool t3=false; // D-294: tagged once by the observer (in-LOS T3 definition)
+    int combatTier=0; // mobile combatant: 1/2/3; zero is not a defence target
 };
+// D-319: a higher tier preempts, an equal tier retains the current target.
+// Remaining ties use distance then ID, independent of spatial query order.
+inline bool PreferDefenceTarget(int tier,int id,float distance,int bestTier,int bestId,float bestDistance,int current) {
+    if(tier!=bestTier) return tier>bestTier;
+    if(id==current || bestId==current) return id==current;
+    return distance==bestDistance?id<bestId:distance<bestDistance;
+}
 struct Line { float value=0; int kills=0, target=-1; bool blocked=false; Point direction; bool requiredHit=false; };
 // Exposure counts impacts inside the decision window, not launches. Reload
 // evidence also bounds salvos already in flight; beams use zero flight time.

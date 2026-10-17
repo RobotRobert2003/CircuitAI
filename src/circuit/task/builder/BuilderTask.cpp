@@ -131,6 +131,8 @@ bool IBuilderTask::CanAssignTo(CCircuitUnit* unit) const
 	}
 	// is extra buildpower required?
 	CEconomyManager* economyMgr = manager->GetCircuit()->GetEconomyManager();
+	if (buildType == BuildType::MEXUP && economyMgr->IsMexNavigationEnabled()
+			&& !economyMgr->CanReachMex(unit, position)) return false;
 	if (cost.metal < buildPower.metal * buildDef->GetGoalBuildTime(economyMgr->GetAvgMetalIncome())) {  // upper metal bound
 		return false;
 	}

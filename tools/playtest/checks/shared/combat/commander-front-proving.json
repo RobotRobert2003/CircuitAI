@@ -1,0 +1,63 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {
+      "key": "ready",
+      "pattern": "\\[CommanderFront\\] ready=1",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "deploy",
+      "pattern": "\\[CommanderFront\\].*deploy",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "mex on route",
+      "pattern": "\\[CommanderFront\\].*enroute_mex",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "two mexes completed",
+      "pattern": "\\[RangedArena\\].*front_mexes=2",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "terrain detour",
+      "pattern": "\\[CommanderFront\\].*detour",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "physical arrival",
+      "pattern": "\\[RangedArena\\].*front_arrived",
+      "scope": "any",
+      "by_minute": 4
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

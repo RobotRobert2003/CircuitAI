@@ -64,7 +64,7 @@ public:
 	bool CanCarry(int cargoId) const;
     // Opt-in route mission. Old SetCargo callers retain direct ferry behavior.
     bool SetCargoRoute(int cargoId, const std::vector<springai::AIFloat3>& points,
-        float surfaceThreat, float airThreat, float padding);
+        float surfaceThreat, float airThreat, float padding, float blockedSeconds = 90.f);
 	int GetState() const { return int(state_); }
 	int GetCargoId() const { return cargoId; }
 	// Back to IDLE and home. Safe to call in any state; the cargo is released.
@@ -83,10 +83,12 @@ private:
     float flightPadding = 0.f;
     std::vector<springai::AIFloat3> mission, flight;
     size_t missionIndex = 0, flightIndex = 0;
-    springai::AIFloat3 flightGoal;
+    springai::AIFloat3 flightGoal{-1.f, -1.f, -1.f};
     int flightRetry = -1;
     bool flightOrdered = false;
     int flightExpiry = -1;
+    int flightBlockedFrame = -1; // diagnostic episode, cleared on a solved leg/new mission
+    int flightBlockedTimeout = 90 * FRAMES_PER_SEC;
 	// The engine refuses an unload onto occupied ground and says nothing; a
 	// recipient's start position is its base. Ask the engine for the nearest
 	// clear footprint for the cargo instead; `around` when it finds none.

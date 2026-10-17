@@ -1,5 +1,8 @@
 function widget:GetInfo() return {name="Ranged combat arena",layer=125,enabled=true,handler=true} end
 local cfg=VFS.Include("LuaUI/Config/ranged_arena.lua")
+-- Correctness-only opt-in: a one-second poll can miss the entire D-gun
+-- reload. Keep existing fixtures/cost controls at their declared cadence.
+local observationFrames=math.max(1,math.min(30,math.floor(tonumber(cfg.observation_frames) or 30)))
 local tracked,queue,pending,seen,orders,lastReload={}, {}, nil, {}, {}, {}
 local batchPending,batchCount,batchFrame={},0,0
 local priorDamage,damageHook
@@ -10,6 +13,7 @@ local completed=false
 local fixtureReady=false
 local commanderShooters,commanderShooterCount={},0
 local combatInputs,combatInputCount={},0
+local frontArrived,frontMexes=false,0
 local function log(s) Spring.Echo("[RangedArena] frame="..Spring.GetGameFrame().." "..s) end
 -- Opt-in census fixtures (D-294/D-295/D-296). Observation only, no orders.
 -- caseUnits: cfg.units (list) or cfg.unit. Tallies are logged as one summary
@@ -171,6 +175,9 @@ end
 function widget:UnitFinished(id,def,team)
     if (cfg.production or cfg.natural or cfg.commander_front_work) and tracked[id] then
         log("finished id="..id.." team="..team.." unit="..UnitDefs[def].name.." cost="..UnitDefs[def].metalCost)
+        if cfg.front_arrival and team==0 and tracked[id].child and (UnitDefs[def].extractsMetal or 0)>0 then
+            frontMexes=frontMexes+1;log("front_mexes="..frontMexes)
+        end
     end
 end
 function widget:GameFrame(f)
@@ -319,7 +326,7 @@ function widget:GameFrame(f)
         end
         if ready then completed=true;log("scenario_complete") end
     end
-    if f%30==0 then
+    if f%observationFrames==0 then
         for id,u in pairs(tracked) do
             local d=UnitDefs[u.def]
             if u.team==1 and not seen[id] then
@@ -340,6 +347,12 @@ function widget:GameFrame(f)
                         log("commander_combat_inputs="..combatInputCount.." team="..u.team)
                     end
                     local x,y,z=Spring.GetUnitPosition(id)
+                    if cfg.front_arrival and not frontArrived and x then
+                        local goal=cfg.front_arrival
+                        if (x-goal[1])^2+(z-goal[2])^2<=goal[3]^2 then
+                            frontArrived=true;log("front_arrived id="..id)
+                        end
+                    end
                     local hp=Spring.GetUnitHealth(id)
                     local state=Spring.GetUnitStates(id) or {}
                     if cfg.commander_geometry then log("commander_geometry id="..id.." y="..tostring(y).." ground="..Spring.GetGroundHeight(x,z).." radius="..Spring.GetUnitRadius(id)) end

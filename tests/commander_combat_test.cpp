@@ -10,6 +10,16 @@ static Contact Enemy(int id,float x,float z,float cost=100) {
     Contact c; c.id=id; c.pos={x,z}; c.radius=12; c.cost=cost; c.health=500; c.damage=99999; return c;
 }
 int main(int argc,char** argv) {
+    // AFUS defence: tier outranks distance/cost/retained lower-tier ownership;
+    // stable equal-tier ownership, then deterministic distance/ID ties.
+    assert(PreferDefenceTarget(3,9,900,2,1,100,1));
+    assert(PreferDefenceTarget(2,9,900,1,1,100,1));
+    assert(!PreferDefenceTarget(1,1,10,3,9,900,1));
+    assert(!PreferDefenceTarget(2,9,100,2,1,900,1));
+    assert(PreferDefenceTarget(2,1,900,2,9,100,1));
+    assert(PreferDefenceTarget(1,2,100,1,9,101,-1));
+    assert(PreferDefenceTarget(1,2,100,1,9,100,-1));
+    assert(!PreferDefenceTarget(1,9,100,1,2,100,-1));
     const auto onMap=[](Point p) {
         return std::isfinite(p.x) && std::isfinite(p.z)
             && p.x>=0 && p.z>=0 && p.x<6144 && p.z<10240;

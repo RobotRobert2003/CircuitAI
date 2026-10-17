@@ -1,0 +1,126 @@
+{
+  "name": "commander-afus-owned",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "SUPPORT",
+  "description": "Owned AFUS: a commander chooses cloaked D-guns against mixed mobile tiers in T3, T2, T1 order.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4300,
+      4000
+    ],
+    [
+      2500,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "ally_spots": "1,2",
+  "enemy_team": 2,
+  "camera": [
+    4300,
+    4200,
+    1600
+  ],
+  "photos": [
+    25,
+    45,
+    65
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "commander_initial": true,
+  "enemy_commander_home": true,
+  "groups": [
+    {
+      "unit": "armafus",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4100,
+        3400
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4300,
+        4600
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4900,
+        4380
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        5050
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmar",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4300,
+        4500
+      ],
+      "after_seconds": 23
+    },
+    {
+      "unit": "armzeus",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4900,
+        4000
+      ],
+      "after_seconds": 23
+    },
+    {
+      "unit": "corak",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4250,
+        4700
+      ],
+      "after_seconds": 23
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "min_kills": 3,
+    "max_losses": 0,
+    "min_damage": 1000,
+    "max_first_shot_seconds": 55
+  },
+  "checks": "commander-afus-defence",
+  "completion_targets": [
+    "armmar",
+    "armzeus",
+    "corak"
+  ],
+  "observation_frames": 3
+}

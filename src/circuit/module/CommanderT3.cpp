@@ -124,7 +124,7 @@ void CCommanderControl::EndT3(CCircuitUnit* unit,State& s,int frame,const char* 
     s.fundingBudget=0;
     ai->LOG("[CommanderT3] unit=%i target=%i action=done reason=%s shots=%i frame=%i",
         unit->GetId(),s.t3Target,reason,s.t3Shots,frame);
-    s.t3Target=-1; s.t3Shots=0; s.t3JukeUntil=-1; s.t3Started=-1;
+    s.t3Target=-1; s.t3Shots=0; s.t3JukeUntil=-1; s.t3Started=-1; s.afusEngagement=false;
 }
 
 bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
@@ -176,6 +176,23 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
     }
     if(options.t3Intercept<=0 || !cap.cloak) { s.fundingBudget=0; EndT3(unit,s,frame,"disabled"); return false; }
 
+    const bool baseDefence=protectedAfus>=0;
+    if(s.afusEngagement && !baseDefence) {
+        // Fresh observation handles AFUS destruction, transfer and leaving its
+        // radius. Do not let lost-contact memory pursue a T1/T2 outside scope.
+        EndT3(unit,s,frame,"afus_scope");
+        ai->GetAllyTeam()->GetCommanderShots().Release(ai->GetTeamId(),unit->GetId());
+        if(task && ai->GetUnitAPI()->HasQueuedCommand(unit->GetId(),CMD_MOVE)) {
+            TRY_UNIT(ai,unit,unit->CmdStop();)
+            s.route.clear();
+        }
+    }
+    if(!baseDefence && s.t3Declined>=0) {
+        auto* declined=ai->GetEnemyInfo(s.t3Declined);
+        if(declined && declined->GetCircuitDef() && !DefinitionFor(declined->GetCircuitDef()).t3)
+            s.t3Declined=-1;
+    }
+
     // Target: keep the engaged T3 while it is observed, else the nearest one.
     const commander::Contact* target=nullptr;
     const commander::Contact* standoffThreat=nullptr;
@@ -184,7 +201,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
     const float engage=std::min(options.scan,options.t3Distance);
     float nearest=std::numeric_limits<float>::max();
     for(const auto& c:contacts) {
-        if(c.friendly || c.blocker || !c.t3) continue; // tagged by Observe (in-LOS T3)
+        if(c.friendly || c.blocker || (!c.t3 && !(baseDefence && c.combatTier>0 && c.targetable))) continue;
         auto* enemy=ai->GetEnemyInfo(c.id);
         if(!enemy || !enemy->GetCircuitDef()) continue;
         // A surface-only D-gun cannot hit aircraft or a definition outside
@@ -195,7 +212,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         // No-disrupt work yields only to an imminent local threat. An already
         // owned combat task is not interrupted construction.
         if(!task && def->IsAttrNoDisrupt() && distance>def->GetMaxRange(CCircuitDef::RangeType::LAND)+c.radius) continue;
-        if(c.id==s.t3Target) { target=&c; nearest=distance; break; }
+        if(c.id==s.t3Target && !baseDefence) { target=&c; nearest=distance; break; }
         // Artillery that outranges the commander's distance is hunted out to
         // t3_hunt_leash; everything else is engaged within t3_distance.
         float limit=engage;
@@ -226,7 +243,11 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         if(artillery && options.t3Hunt<=0 && distance>=limit && inReach && distance<standoffDistance) {
             standoffThreat=&c;standoffDistance=distance;standoffReach=reach;
         }
-        if(!c.reserved && distance<limit && distance<nearest) { nearest=distance; target=&c; }
+        const bool preferred=baseDefence
+            ?(!target || commander::PreferDefenceTarget(c.combatTier,c.id,distance,
+                target->combatTier,target->id,nearest,s.t3Target))
+            :distance<nearest;
+        if(!c.reserved && distance<limit && preferred) { nearest=distance; target=&c; }
     }
     if(!target && standoffThreat) {
         s.t3Reach=standoffReach;
@@ -308,7 +329,11 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
     const float range=unit->GetDGunRange()-12;
 
     // Resolve the plan once per engagement (profile, else target stats).
-    if(s.t3Target!=target->id) {
+    if(s.t3Target!=target->id || s.afusEngagement!=baseDefence) {
+        if(baseDefence && s.t3Target>=0 && s.t3Target!=target->id) {
+            EndT3(unit,s,frame,"base_target");
+            ai->GetAllyTeam()->GetCommanderShots().Release(ai->GetTeamId(),unit->GetId());
+        }
         const auto& tcap=ai->GetMilitaryManager()->GetRangedWorld()->CapabilitiesFor(targetDef);
         float reach=0; bool artillery=false;
         for(const auto& w:tcap.weapons) {
@@ -320,6 +345,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         const int shots=std::max(1,int(std::ceil(target->health/std::max(1.f,target->damage))));
         s.t3Approach=profile.approach>0?int(profile.approach)
             :(artillery || reach>=1200.f)?T3_HUNT:targetDef->GetSpeed()>=70.f?T3_HOLD:T3_FLANK;
+        if(baseDefence && !target->t3) s.t3Approach=T3_FLANK;
         s.t3Artillery=artillery || reach>=1200.f || s.t3Approach==T3_HUNT;
         if(s.t3Artillery && options.t3Hunt<=0) s.t3Approach=T3_HOLD;
         s.t3Commit=profile.commit>=0?int(profile.commit):shots;
@@ -348,6 +374,9 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         s.t3Heading=F(commander::Normal(P(pos)-target->pos)); s.t3Cost=target->cost; s.t3Screens=0; s.t3ScreenUntil=0;
         s.t3Target=target->id; s.t3Shots=0; s.t3LastShot=s.fired; s.t3Started=frame;
         s.t3Closest=nearest; s.t3Progress=frame; s.t3Anchor=pos;
+        s.afusEngagement=baseDefence;
+        if(baseDefence) ai->LOG("[CommanderBase] unit=%i afus=%i target=%i tier=%i action=plan frame=%i",
+            unit->GetId(),protectedAfus,target->id,target->combatTier,frame);
         ai->LOG("[CommanderT3] unit=%i target=%i def=%s plan approach=%s shots=%i commit=%i juke=%.0f standoff=%.0f distance=%.0f",
             unit->GetId(),target->id,targetDef->GetDef()->GetName(),ApproachName(s.t3Approach),shots,s.t3Commit,s.t3Juke,s.t3Standoff,nearest);
     }
@@ -516,7 +545,11 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
     const float targetSpeed=commander::Length(target->velocity);
     if(targetSpeed>5.f) s.t3Heading=F(target->velocity*(1.f/targetSpeed));
     const float front=commander::Dot(commander::Normal(P(pos)-target->pos),P(s.t3Heading));
-    const bool surpriseStation=s.t3Approach==T3_REAR?front<=-.5f:s.t3Approach==T3_FLANK?front<=.5f:true;
+    // Lower-tier base defence needs concealment, not a heavy's rear/flank
+    // bearing. A safe direct lane can already be in reach when the lateral
+    // station exceeds the engagement leash (commander-afus-owned arena).
+    const bool surpriseStation=(baseDefence && !target->t3)
+        || (s.t3Approach==T3_REAR?front<=-.5f:s.t3Approach==T3_FLANK?front<=.5f:true);
     const bool penetrates=nearest<=range+target->radius-24.f;
     const float shotSeconds=range/projectile+.3f+(hiddenAim?0.f:1.f);
     const float commitSeconds=float(remaining-1)*reload+shotSeconds;
@@ -562,7 +595,11 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
             && (cloaked || commit || (revealed && !engaged))) {
             ai->LOG("[CommanderT3] unit=%i target=%i action=fire shot=%i remaining=%i concealed=%i commit=%.1fs escape=%.1fs",
                 unit->GetId(),target->id,s.t3Shots+1,remaining,int(cloaked),commitSeconds,escapeSeconds);
-            if(Fire(unit,s,line,frame)) return true;
+            if(Fire(unit,s,line,frame)) {
+                if(s.afusEngagement) ai->LOG("[CommanderBase] unit=%i afus=%i target=%i tier=%i action=fire concealed=%i frame=%i",
+                    unit->GetId(),protectedAfus,target->id,target->combatTier,int(cloaked),frame);
+                return true;
+            }
             Decline(unit,s,*target,frame,"shot_safety"); return false;
         }
     }

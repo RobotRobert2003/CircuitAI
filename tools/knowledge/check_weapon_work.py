@@ -12,8 +12,11 @@ import subprocess
 from check_performance_policy import ROOT, function
 
 COMMON = r'''
-const int SECOND=30, SUPER=3;
+const int SECOND=30, SUPER=3, AIR=1;
 class AIFloat3 { int x; float distance2D(const AIFloat3 &in p) const { return float(x>p.x?x-p.x:p.x-x); } }
+// Dedicated economy flak admission is outside the cache-equivalence domain.
+// Its enabled behavior is checked by the physical eco-flak arena.
+namespace EcoFlak { bool OwnsArea(const AIFloat3 &in p) { return false; } }
 class CCircuitDef { int id; float costM; bool air; bool CanBuild(CCircuitDef@ d) { return d.id!=4; } }
 class CCircuitUnit { CCircuitDef@ circuitDef; AIFloat3 GetPos(int f) { return AIFloat3(); } }
 class IUnitTask { int id; }

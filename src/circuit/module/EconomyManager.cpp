@@ -13,6 +13,7 @@
 #include "script/EconomyScript.h"
 #include "setup/SetupManager.h"
 #include "resource/MetalManager.h"
+#include "resource/MexNavigation.h"
 #include "resource/EnergyManager.h"
 #include "resource/EnergyGrid.h"
 #include "task/builder/FactoryTask.h"
@@ -985,8 +986,41 @@ int CEconomyManager::GetClaimedMexCountWithin(
 	return count;
 }
 
-bool CEconomyManager::IsOwnSpot(const springai::AIFloat3& pos) const
+bool CEconomyManager::IsOwnSpot(const springai::AIFloat3& pos)
 {
+	if (mexNavigationEnabled) {
+		if (!IsMexOwnershipActive()) return true;
+		auto* terrain = circuit->GetTerrainManager();
+		if (!std::isfinite(pos.x) || !std::isfinite(pos.z) || pos.x < 0 || pos.z < 0
+				|| pos.x >= terrain->GetTerrainWidth() || pos.z >= terrain->GetTerrainHeight()) return false;
+		const int ownTeam = circuit->GetTeamId();
+		if (mexStarts.find(ownTeam) == mexStarts.end()) {
+			SMexStart own;
+			own.pos = circuit->GetSetupManager()->GetStartPos();
+			const auto* def = circuit->GetSetupManager()->GetCommChoice();
+			if (def) own.definition = def->GetId();
+			mexStarts.emplace(ownTeam, std::move(own));
+			mexOwnersDirty = true;
+		}
+		const auto revision = terrain->GetAreaData()->heightRevision;
+		const auto& spots = circuit->GetMetalManager()->GetSpots();
+		if (mexOwnersDirty || mexOwnerRevision != revision || mexOwners.size() != spots.size()) {
+			mexOwners.assign(spots.size(), -2); // -2 unknown, -1 no ground owner (air may claim)
+			mexOwnerRevision = revision;
+			mexOwnersDirty = false;
+		}
+		const int index = metalMap ? -1 : circuit->GetMetalManager()->FindNearestSpot(pos);
+		const bool indexed = index >= 0 && std::size_t(index) < spots.size() && spots[index].position.SqDistance2D(pos) < 1.f;
+		if (indexed && mexOwners[index] != -2) return mexOwners[index] < 0 || mexOwners[index] == ownTeam;
+		int owner = -1;
+		float best = mex_navigation::Unreachable;
+		for (auto& [team, start] : mexStarts) {
+			const float distance = MexStartDistance(start, pos);
+			if (mex_navigation::Better(distance, team, best, owner)) { best = distance; owner = team; }
+		}
+		if (indexed) mexOwners[index] = owner;
+		return owner < 0 || owner == ownTeam;
+	}
 	// D-072: the spot is ours when no ally's start position is nearer to it
 	// than our own (a Voronoi split of the map by start positions).
 	const float own = circuit->GetSetupManager()->GetStartPos().SqDistance2D(pos);
@@ -1038,7 +1072,8 @@ IBuilderTask* CEconomyManager::EnqueueMexWithin(
 			}
 			const AIFloat3& pos = task->GetPosition();
 			if ((pos.SqDistance2D(center) > radiusSq) || excludedSpot(pos)
-					|| !terrainMgr->CanReachAtSafe(builder, pos, builder->GetCircuitDef()->GetBuildDistance())) {
+					|| !CanReachMex(builder, pos)
+					|| (mexNavigationEnabled && task->GetTarget() == nullptr && !IsOwnSpot(pos))) {
 				continue;
 			}
 			const float sq = from.SqDistance2D(pos);
@@ -1063,8 +1098,8 @@ IBuilderTask* CEconomyManager::EnqueueMexWithin(
 		}
 		const AIFloat3& pos = metalMgr->GetSpots()[spot.first].position;
 		if (excludedSpot(pos) || !metalMgr->IsOpenSpot(spot.first) || !IsOpenMexSpot(spot.first)
-				|| !terrainMgr->CanReachAtSafe(builder, pos, builder->GetCircuitDef()->GetBuildDistance())
-				|| (allyAware && (terrainMgr->IsZoneAlly(pos) || !IsOwnSpot(pos)))) {  // D-066/D-072: the allies' ground and the allies' spots are theirs
+				|| !CanReachMex(builder, pos)
+				|| !IsMexExpansionAllowed(pos, allyAware)) {
 			continue;
 		}
 		open.emplace_back(spot.first, from.SqDistance2D(pos));
@@ -1083,6 +1118,11 @@ IBuilderTask* CEconomyManager::EnqueueMexWithin(
 					IBuilderTask::BuildType::MEX, IBuilderTask::Priority::NOW, mexDef, pos, spot.first));
 			if ((task != nullptr) && (task->GetBuildType() == IBuilderTask::BuildType::MEX)) {
 				static_cast<CBMexTask*>(task)->SetIgnoreAlly(!allyAware);
+				// Task-added callbacks are a mutation boundary. Audit territorial
+				// admission once per new order; this is a warm cached spot query.
+				if (mexNavigationEnabled && !IsOwnSpot(pos))
+					circuit->LOG("[INVARIANT] INV-227 mex admitted outside protected ownership team=%i x=%.0f z=%.0f",
+						circuit->GetTeamId(), pos.x, pos.z);
 			}
 			return task;
 		}
@@ -1463,7 +1503,7 @@ IBuilderTask* CEconomyManager::UpdateMetalTasks(const AIFloat3& position, CCircu
 				const AIFloat3& pos = spots[index].position;
 				if (true/*!IsOpenMexSpot(index)*/
 					&& !IsUpgradingMexSpot(index)
-					&& terrainMgr->CanReachAtSafe(unit, pos, unit->GetCircuitDef()->GetBuildDistance()))  // hostile environment
+					&& CanReachMex(unit, pos))  // hostile environment
 				{
 					const auto& unitIds = circuit->GetCallback()->GetFriendlyUnitIdsIn(pos, maxRange, false);
 					float curExtract = -1.f;
@@ -1521,8 +1561,8 @@ IBuilderTask* CEconomyManager::UpdateMetalTasks(const AIFloat3& position, CCircu
 			// NOTE: threatmap type is set outside
 			CMetalData::PointPredicate predicate = [this, &spots, map, &mexDefs, terrainMgr, unit, &mexDef](int index) {
 				const AIFloat3& pos = spots[index].position;
-				if (IsAllyOpenMexSpot(index) && !terrainMgr->IsZoneAlly(pos)
-					&& terrainMgr->CanReachAtSafe(unit, pos, unit->GetCircuitDef()->GetBuildDistance()))  // hostile environment
+				if (IsAllyOpenMexSpot(index) && (mexNavigationEnabled ? IsOwnSpot(pos) : !terrainMgr->IsZoneAlly(pos))
+					&& CanReachMex(unit, pos))  // hostile environment
 				{
 					for (CCircuitDef* mDef : mexDefs) {
 						if (terrainMgr->CanBeBuiltAt(mDef, pos)

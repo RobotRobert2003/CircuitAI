@@ -3117,6 +3117,14 @@ void CTerrainManager::OnStructureGone(CCircuitDef* cdef, const AIFloat3& pos)
 	circuit->LOG("RESERVE: %s at (%.0f, %.0f) lost; slot restored (id %i)", cdef->GetDef()->GetName(), pos.x, pos.z, id);
 }
 
+AIFloat3 CTerrainManager::GetZoneCorner(int id, bool upper) const
+{
+    const auto found = zones.find(id);
+    if (found == zones.end()) return {-1.f, 0.f, -1.f};
+    const int2& cell = upper ? found->second.c2 : found->second.c1;
+    return {float(cell.x * SQUARE_SIZE * 2), 0.f, float(cell.y * SQUARE_SIZE * 2)};
+}
+
 int CTerrainManager::ReserveZone(const AIFloat3& centre, int facing, float halfAcross, float halfAlong, bool corridor)
 {
 	return ReserveZoneMasked(centre,facing,halfAcross,halfAlong,corridor,static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL));

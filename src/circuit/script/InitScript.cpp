@@ -142,13 +142,13 @@ static CScriptArray* CBattleAnalysis_GetLaneRoute(CBattleAnalysis* battle, int l
 }
 
 static bool CFerryTask_SetCargoRoute(CFerryTask* task, int id, const CScriptArray* array,
-        float surfaceThreat, float airThreat, float padding)
+        float surfaceThreat, float airThreat, float padding, float blockedSeconds)
 {
     if (array==nullptr || array->GetSize()>32) return false;
     F3Vec points;
     points.reserve(array->GetSize());
     for (asUINT i=0; i<array->GetSize(); ++i) points.push_back(*static_cast<const AIFloat3*>(array->At(i)));
-    return task->SetCargoRoute(id,points,surfaceThreat,airThreat,padding);
+    return task->SetCargoRoute(id,points,surfaceThreat,airThreat,padding,blockedSeconds);
 }
 
 static CScriptArray* CBattleAnalysis_GetTerrainRoute(CBattleAnalysis* battle, const AIFloat3& from,
@@ -1358,6 +1358,7 @@ void CInitScript::RegisterMgr()
 	r = engine->RegisterObjectMethod("CTerrainManager", "AIFloat3 GetLayoutGroupCenter(const string& in) const", asMETHOD(CTerrainManager, GetLayoutGroupCenter), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "int ReserveZone(const AIFloat3& in centre, int facing, float halfAcross, float halfAlong, bool corridor)", asMETHOD(CTerrainManager, ReserveZone), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "void ReleaseZone(int)", asMETHOD(CTerrainManager, ReleaseZone), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CTerrainManager", "AIFloat3 GetZoneCorner(int, bool) const", asMETHOD(CTerrainManager, GetZoneCorner), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "int ReserveExitCone(CCircuitUnit@ factory, float length, float margin)", asMETHOD(CTerrainManager, ReserveExitCone), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool IsZoneClear(int) const", asMETHOD(CTerrainManager, IsZoneClear), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "int LayBand(int zone, const CCircuitDef@, const AIFloat3& in frontCentre, int facing, int cols, int rows, int gap, bool armed, bool anyReach, bool tenant, int group = 0)", asFUNCTION(CTerrainManager_LayBand), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
@@ -1756,7 +1757,7 @@ void CInitScript::RegisterCFerryTask(asIScriptEngine* engine)
 	int r = engine->RegisterObjectMethod("CFerryTask", "void SetHoldPos(const AIFloat3& in)", asMETHOD(CFerryTask, SetHoldPos), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFerryTask", "bool SetCargo(int, const AIFloat3& in, float surfaceThreat = -1, float airThreat = -1)", asMETHOD(CFerryTask, SetCargo), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFerryTask", "bool CanCarry(int) const", asMETHOD(CFerryTask, CanCarry), asCALL_THISCALL); ASSERT(r >= 0);
-    r = engine->RegisterObjectMethod("CFerryTask", "bool SetCargoRoute(int, const array<AIFloat3>& in, float, float, float)", asFUNCTION(CFerryTask_SetCargoRoute), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CFerryTask", "bool SetCargoRoute(int, const array<AIFloat3>& in, float, float, float, float = 90.0f)", asFUNCTION(CFerryTask_SetCargoRoute), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFerryTask", "int GetState() const", asMETHOD(CFerryTask, GetState), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFerryTask", "int GetCargoId() const", asMETHOD(CFerryTask, GetCargoId), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFerryTask", "void Reset()", asMETHOD(CFerryTask, Reset), asCALL_THISCALL); ASSERT(r >= 0);

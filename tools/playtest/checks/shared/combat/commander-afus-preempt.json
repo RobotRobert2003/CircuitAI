@@ -1,0 +1,69 @@
+{
+  "stop_minute": 3,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "plan1",
+      "pattern": "\\[CommanderBase\\] unit=(?P<unit>\\d+).*tier=1 action=plan",
+      "scope": "any",
+      "by_minute": 0.5
+    },
+    {
+      "key": "plan2",
+      "pattern": "\\[CommanderBase\\] unit=(?P<unit>\\d+).*tier=2 action=plan",
+      "scope": "any",
+      "by_minute": 0.5,
+      "after_key": "plan1",
+      "same_as": "plan1"
+    },
+    {
+      "key": "plan3",
+      "pattern": "\\[CommanderBase\\] unit=(?P<unit>\\d+).*tier=3 action=plan",
+      "scope": "any",
+      "by_minute": 0.5,
+      "after_key": "plan2",
+      "same_as": "plan1"
+    },
+    {
+      "key": "fire3",
+      "pattern": "\\[CommanderBase\\] unit=(?P<unit>\\d+).*tier=3 action=fire concealed=1",
+      "scope": "any",
+      "by_minute": 2,
+      "after_key": "plan3",
+      "same_as": "plan1"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ],
+  "complete_on": {
+    "key": "complete",
+    "pattern": "\\[RangedArena\\].* scenario_complete",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 10
+}

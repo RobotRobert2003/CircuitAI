@@ -35,7 +35,7 @@ const CCommanderControl::Definition& CCommanderControl::DefinitionFor(CCircuitDe
         const auto level=params.find("techlevel");
         d.t3=level!=params.end() && std::atoi(level->second.c_str())>=3 && def->IsMobile() && def->IsAttacker();
         d.tech=level!=params.end()?float(std::atof(level->second.c_str())):1.f;
-        if(d.t3) {
+        if(def->IsMobile() && def->IsAttacker()) {
             const std::unique_ptr<springai::WeaponDef> blast(ud->GetDeathExplosion());
             if(blast) {
                 d.blastRadius=blast->GetAreaOfEffect(); d.blastEdge=blast->GetEdgeEffectiveness();
@@ -110,6 +110,10 @@ bool CCommanderControl::CloakSafe(CCircuitUnit* unit,Point from,Point to,float s
 bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& line,int frame) {
     const auto pos=unit->GetPos(frame); const float range=unit->GetDGunRange()-12;
     auto* def=unit->GetCircuitDef();
+    if(s.afusEngagement && protectedAfus<0) {
+        ai->LOG("[INVARIANT] INV-225 commander AFUS shot outside observed protection scope unit=%i",unit->GetId());
+        return false;
+    }
     // INV-216: BAR D-guns have firesubmersed=false; a submerged order would
     // only waste the lease. Every caller filters water; this is the backstop.
     if(pos.y<0.f) {
@@ -127,7 +131,7 @@ bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& 
         const int armor=std::max(0,def->GetDef()->GetArmorType());
         float blast=0; bool t3=false;
         for(const auto& c:contacts) {
-            if(c.friendly || c.blocker || !c.targetable || !c.t3) continue;
+            if(c.friendly || c.blocker || !c.targetable || (!c.t3 && !(s.afusEngagement && c.combatTier>0))) continue;
             const float along=commander::Dot(c.pos-P(pos),line.direction);
             const Point hit=c.pos+c.velocity*(std::max(0.f,along)/speed);
             if(commander::Dot(hit-P(pos),line.direction)<0
@@ -136,7 +140,7 @@ bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& 
             auto* targetDef=enemy?enemy->GetCircuitDef():nullptr;
             if(!targetDef) continue;
             const auto& explosion=DefinitionFor(targetDef);
-            if(!explosion.t3) continue;
+            if(!explosion.t3 && !s.afusEngagement) continue;
             t3=true;
             if(!explosion.blastDamage.empty()) blast+=commander::BlastDamage(
                 explosion.blastDamage[std::min(size_t(armor),explosion.blastDamage.size()-1)],

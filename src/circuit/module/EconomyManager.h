@@ -18,6 +18,7 @@
 #include <map>
 #include <vector>
 #include <memory>
+#include <cstdint>
 
 namespace springai {
 	class Resource;
@@ -123,7 +124,13 @@ public:
 	// mex enqueue leaves the others' spots alone.
 	void ClearAllyStarts() { allyStarts.clear(); }
 	void AddAllyStart(const springai::AIFloat3& pos) { allyStarts.push_back(pos); }
-	bool IsOwnSpot(const springai::AIFloat3& pos) const;
+	bool IsOwnSpot(const springai::AIFloat3& pos);
+	void SetMexOwnership(bool enabled, float seconds);
+	void SetMexAllyStart(int team, const springai::AIFloat3& pos, int commander);
+	bool CanReachMex(CCircuitUnit* builder, const springai::AIFloat3& pos);
+	bool IsMexExpansionAllowed(const springai::AIFloat3& pos, bool allyAware);
+	bool IsMexNavigationEnabled() const { return mexNavigationEnabled; }
+	bool IsMexOwnershipActive() const;
 	// Live mex tasks (assigned or queued) whose spot lies within radius of center (D-063).
 	int GetMexTaskCountWithin(const springai::AIFloat3& center, float radius) const;
 	CCircuitDef* GetLowEnergy(const springai::AIFloat3& pos, float& outMake, const CCircuitUnit* builder = nullptr) const;
@@ -390,6 +397,21 @@ private:
 	std::shared_ptr<IMainJob> morph;
 	std::set<CCircuitUnit*> morphees;
 	std::vector<springai::AIFloat3> allyStarts;  // D-072
+	bool mexNavigationEnabled = false;
+	int mexOwnershipUntil = 0;
+	struct SMexStart {
+		springai::AIFloat3 pos;
+		int definition = -1;
+		std::uint64_t revision = 0;
+		std::vector<float> distance;
+	};
+	// Stable start/definition values survive commander loss; never retain SArea
+	// pointers across a terrain publication. Roster reconstructs these after load.
+	std::map<int, SMexStart> mexStarts;
+	std::vector<int> mexOwners;
+	std::uint64_t mexOwnerRevision = 0;
+	bool mexOwnersDirty = true;
+	float MexStartDistance(SMexStart& start, const springai::AIFloat3& pos);
 };
 
 } // namespace circuit

@@ -95,6 +95,10 @@ static float CEconomyManager_GetMetalStorageOf(CEconomyManager* mgr, const CCirc
 
 static void CEconomyManager_ClearAllyStarts(CEconomyManager* mgr) { mgr->ClearAllyStarts(); }
 static void CEconomyManager_AddAllyStart(CEconomyManager* mgr, const AIFloat3& pos) { mgr->AddAllyStart(pos); }
+static void SetMexOwnership(CEconomyManager* mgr, bool enabled, float seconds) { mgr->SetMexOwnership(enabled, seconds); }
+static void SetMexAllyStart(CEconomyManager* mgr, int team, const AIFloat3& pos, int commander) { mgr->SetMexAllyStart(team, pos, commander); }
+static bool CanReachMex(CEconomyManager* mgr, CCircuitUnit* unit, const AIFloat3& pos) { return mgr->CanReachMex(unit, pos); }
+static bool IsOwnMex(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->IsOwnSpot(pos); }
 
 static IUnitTask* CEconomyManager_EnqueueMexWithinAware(
 		CEconomyManager* mgr, CCircuitUnit* builder, const AIFloat3& center, float radius, int maxSpots, bool allyAware)
@@ -133,7 +137,7 @@ static bool CEconomyManager_IsMexTaskUsable(CEconomyManager* mgr, IUnitTask* tas
     auto* circuit=mgr->GetCircuit();
     auto* terrain=circuit->GetTerrainManager();
     const auto& pos=mex->GetPosition();
-    if (!geom::is_valid(pos) || terrain->IsZoneAlly(pos)
+    if (!geom::is_valid(pos) || (mgr->IsMexNavigationEnabled() ? !mgr->IsOwnSpot(pos) : terrain->IsZoneAlly(pos))
         || terrain->IsAllyLayoutBlocked(mex->GetBuildDef(),pos,mex->GetFacing())) return false;
     const auto& ids=circuit->GetCallback()->GetFriendlyUnitIdsIn(pos,mex->GetBuildDef()->GetExtrRangeM(),false);
     for (int id:ids) {
@@ -203,6 +207,10 @@ CEconomyScript::CEconomyScript(CScriptManager* scr, CEconomyManager* mgr)
 	r = engine->RegisterObjectMethod("CEconomyManager", "IUnitTask@+ EnqueueMexWithin(CCircuitUnit@, const AIFloat3& in, float, int, bool allyAware)", asFUNCTION(CEconomyManager_EnqueueMexWithinAware), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "void ClearAllyStarts()", asFUNCTION(CEconomyManager_ClearAllyStarts), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "void AddAllyStart(const AIFloat3& in)", asFUNCTION(CEconomyManager_AddAllyStart), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexOwnership(bool, float)", asFUNCTION(SetMexOwnership), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexAllyStart(int, const AIFloat3& in, int)", asFUNCTION(SetMexAllyStart), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool CanReachMex(CCircuitUnit@, const AIFloat3& in)", asFUNCTION(CanReachMex), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool IsOwnMex(const AIFloat3& in)", asFUNCTION(IsOwnMex), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "int GetMexTaskCountWithin(const AIFloat3& in, float) const", asMETHOD(CEconomyManager, GetMexTaskCountWithin), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "IUnitTask@+ EnqueueMexAvoiding(CCircuitUnit@, const AIFloat3& in, float, bool, array<AIFloat3>@)", asFUNCTION(CEconomyManager_EnqueueMexAvoiding), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "bool IsMexTaskUsable(IUnitTask@)", asFUNCTION(CEconomyManager_IsMexTaskUsable), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);

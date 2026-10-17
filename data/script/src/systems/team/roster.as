@@ -262,6 +262,8 @@ namespace Roster {
         const string key = "" + e.teamId;
         const bool isNew = !entries.exists(key);
         entries.set(key, @e);
+        if (e.teamId != ai.teamId && Global::RoleSettings::MexOwnershipEnabled)
+            aiEconomyMgr.SetMexAllyStart(e.teamId, e.startPos, e.commanderId);
         if (isNew && e.teamId != ai.teamId) {
             // D-072: a metal spot belongs to the team whose start is nearest; the
             // ally-aware mex enqueue needs the allies' starts

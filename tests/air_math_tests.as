@@ -20,6 +20,20 @@ void test_air_continuous_incursion_cannot_starve_workforce() { Check(AirMath::Wo
 void test_air_unfunded_workforce_does_not_interrupt_defense() { Check(!AirMath::WorkforceTurn(true,false,false,10,2)); }
 void test_air_met_workforce_does_not_expand_without_bound() { Check(!AirMath::WorkforceTurn(false,true,true,10,2)); }
 void test_air_low_income_can_save_first_lab_capital() { Check(AirMath::SaveForLab(false,false,false,true,600,480,20,1500,12,1200,900,2900)); }
+void test_first_lab_low_income_partial_bank() { Check(AirMath::LabFunding(1500,100,13,0,0,2900,20000,60,180,.75f)); }
+void test_first_lab_committed_projects_are_reserved() { Check(!AirMath::LabFunding(1500,100,13,0,500,2900,20000,60,180,.75f)); }
+void test_first_lab_production_usage_is_not_free_income() { Check(!AirMath::LabFunding(1500,100,13,5,0,2900,20000,60,180,.75f)); }
+void test_first_lab_faster_builder_shortens_forecast() { Check(!AirMath::LabFunding(1500,100,13,0,0,2900,20000,300,180,.75f)); }
+void test_first_lab_weak_energy_blocks_admission() { Check(!AirMath::LabFunding(200,200,50,0,0,30000,20000,60,180,.75f)); }
+void test_first_lab_emergency_bank_is_preserved() { Check(!AirMath::LabFunding(99,100,1000,0,0,2900,20000,60,180,.75f)); }
+void test_first_lab_complete_cost_must_fit_bounded_horizon() { Check(!AirMath::LabFunding(100,100,13,0,0,2900,20000,1,180,.75f)); }
+void test_first_lab_unfunded_usage_rejected_even_with_full_price() { Check(!AirMath::LabFunding(3000,100,13,20,0,2900,20000,60,180,.75f)); }
+void test_first_lab_invalid_inputs_fail_closed() {
+    Check(!AirMath::LabFunding(1500,100,13,0,0,2900,20000,0,180,.75f));
+    Check(!AirMath::LabFunding(1500,100,13,0,0,2900,20000,60,0,.75f));
+    Check(!AirMath::LabFunding(1500,100,13,0,0,2900,20000,60,180,1.1f));
+    Check(!AirMath::LabFunding(1500,100,13,0,0,2900,20000,60,180,-1));
+}
 void test_air_energy_recovery_never_saves_lab_capital() { Check(!AirMath::SaveForLab(false,false,true,true,600,480,20,1500,12,1200,900,2900)); }
 void test_air_weak_energy_does_not_start_capital_budget() { Check(!AirMath::SaveForLab(false,false,false,true,600,480,20,1100,12,1200,900,2900)); }
 void test_air_queued_lab_ends_capital_saving() { Check(!AirMath::SaveForLab(false,true,false,true,600,480,20,1500,12,1200,900,2900)); }

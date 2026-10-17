@@ -37,11 +37,27 @@ namespace HeavyFrontProbe {
             const int index=TechHeavyRush::completed;
             aiTerrainMgr.SetLayoutInt(TechHeavyRush::StateKey+"gift."+index,id);
             aiTerrainMgr.SetLayoutInt(TechHeavyRush::StateKey+"sent."+index,0);
-            TechHeavyDelivery::Record(index,id);
+            TechHeavyDelivery::Delivery@ delivery=TechHeavyDelivery::Record(index,id);
             ++TechHeavyRush::completed;
             aiTerrainMgr.SetLayoutInt(TechHeavyRush::StateKey+"completed",TechHeavyRush::completed);
             array<AIFloat3> lane=Spam::DeliveryLane();
             GenericHelpers::LogUtil("[HeavyFrontTest] "+(lane.length()>1 && abs(lane[lane.length()-1].z-4000)<2?"PASS":"FAIL")+" central lane",1);
+            if (f.length()>3 && f[3]=="turns") {
+                array<AIFloat3> route; AIFloat3 destination;
+                if (!TechDeliveryFront::Plan(cargo,route,destination)) {
+                    GenericHelpers::LogUtil("[HeavyFrontTest] FAIL supplied turns planning",1); return true;
+                }
+                route={AIFloat3(1800,0,2800),AIFloat3(4400,0,2800),destination};
+                const int aircraft=Team::HeavyTransport::Available(cargo);
+                if (!carrier.SetCargoRoute(id,route,Global::Ferry::DropSurfaceThreat,
+                    Global::RoleSettings::Tech::HeavyDeliveryAirThreat,Global::RoleSettings::Tech::HeavyDeliveryAirPadding)) {
+                    GenericHelpers::LogUtil("[HeavyFrontTest] FAIL supplied turns admission",1); return true;
+                }
+                delivery.frontRoute=route;delivery.frontDestination=destination;
+                delivery.carrier=aircraft;
+                delivery.recipient=TechHeavyRush::Recipient();
+                aiTerrainMgr.SetLayoutInt(TechHeavyRush::StateKey+"carrier."+index,aircraft);
+            }
         }
         return true;
     }

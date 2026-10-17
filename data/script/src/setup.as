@@ -270,6 +270,8 @@ namespace Setup {
 		if (Global::Map::MapResolved) return;
 
 		CheckModOptions();
+		aiEconomyMgr.SetMexOwnership(Global::RoleSettings::MexOwnershipEnabled,
+			Global::RoleSettings::MexOwnershipSeconds);
 		// Role masks used by Military's threat/cost caches. FactoryProduction owns
 		// the table but only builds it when a role enables dynamic production, and
 		// no role does; without this every cached enemy threat and cost stays 0.

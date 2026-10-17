@@ -218,6 +218,8 @@ public:
 	// halfAlong forward and back. Free cells are marked, blocked ones are
 	// holes. Returns the zone id, 0 when nothing could be marked.
 	int ReserveZone(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong, bool corridor);
+    // Read-only world-space bounds; upper corner is exclusive, -1 if absent.
+    springai::AIFloat3 GetZoneCorner(int id, bool upper) const;
 	// D-072: would this footprint cut the zone's free cells into a pocket no unit could leave?
 	bool LeavesPocket(int zone, CCircuitDef* cdef, const springai::AIFloat3& pos, int facing) const;
 	// A corridor in front of a standing factory: its width plus `margin` each

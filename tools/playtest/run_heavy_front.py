@@ -14,7 +14,8 @@ def main():
     p.add_argument('--dll',type=Path,required=True)
     p.add_argument('--data',type=Path,required=True)
     p.add_argument('--side',choices=('armada','cortex','legion'),default='cortex')
-    p.add_argument('--mode',choices=('aa','clear','fallback'),default='aa')
+    p.add_argument('--mode',choices=('aa','clear','fallback','turns','blocked'),default='aa')
+    p.add_argument('--deliveries',type=int,choices=(1,2),default=1)
     p.add_argument('--profile',default='experimental_balanced')
     p.add_argument('--visual',action='store_true')
     a=p.parse_args()
@@ -49,14 +50,25 @@ def main():
     inject_entry(source/'systems/diagnostics/invariants.as','void Tick()','if (ai.frame>=0) return;')
     widget=directory/'LuaUI/Widgets/heavy_front_fixture.lua'
     widget.write_text(widget.read_text().replace('__SIDE__',a.side).replace('__MODE__',a.mode)
-        .replace('__FORWARD__','true' if a.profile=='experimental_balanced' else 'false'))
+        .replace('__FORWARD__','true' if a.profile=='experimental_balanced' else 'false')
+        .replace('__DELIVERIES__',str(a.deliveries)))
     checks=directory/'heavy-front-checks.json'
     checks.write_text(json.dumps({'stop_minute':5,'expect':[
         {'key':label,'pattern':r'\[HeavyFrontTest\] PASS '+label,'scope':'any','by_minute':5}
         for label in ('geometry','admission','central lane','arrival','final delivery')],
         'forbid':[{'key':'failure','scope':'any','pattern':
         r'\[HeavyFrontTest\] FAIL|\[INVARIANT\]|: ERR\s+:|\.as \(\d+,\s*\d+\)\s*:\s*WARN\s*:|SCRIPT CRASH|Lib exception|Access violation|has crashed|Fatal:|Error in.*heavy_front'}]},indent=2))
-    storage.write_json(directory/'heavy-front-inputs.json',dict(side=a.side,mode=a.mode,profile=a.profile,
+    if a.mode=='blocked':
+        check_data=json.loads(checks.read_text())
+        check_data['expect'].extend([
+            {'key':'blocked route recovery','pattern':r'FERRY: routed run failed \(blocked flight corridor\)',
+             'scope':'any','by_minute':2},
+            {'key':'blocked fixture','pattern':r'\[HeavyFrontTest\] blocked goal observed',
+             'scope':'any','by_minute':2},
+            {'key':'AA removed after unload','pattern':r'\[HeavyFrontTest\] PASS blocking AA removed',
+             'scope':'any','by_minute':2}])
+        checks.write_text(json.dumps(check_data,indent=2))
+    storage.write_json(directory/'heavy-front-inputs.json',dict(side=a.side,mode=a.mode,profile=a.profile,deliveries=a.deliveries,
         overrides=['supplied cargo, aircraft, factory lanes, allied ground sight and enemy AA',
             'ordinary builder/production/commander deployment and periodic base invariants suspended',
             'real heavy ledger, selection, ferry, load/unload/transfer; event invariant retained'],

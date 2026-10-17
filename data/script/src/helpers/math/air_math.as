@@ -106,6 +106,20 @@ namespace AirMath {
         return !advancedPlant && Valid(bank) && Valid(capacity) && Valid(factoryMetalCost)
             && capacity>Zero && factoryMetalCost>capacity && bank>capacity*TransitionStorageFullFraction;
     }
+    // Reserve all existing obligations and the complete new order within a
+    // bounded forecast, shortened for faster builders. No future gifts assumed.
+    bool LabFunding(float bank, float reserve, float income, float usage,
+        float committed, float cost, float work, float power, float horizon, float share)
+    {
+        if (!Valid(bank) || !Valid(reserve) || !Valid(income) || !Valid(usage)
+            || !Valid(committed) || !Valid(cost) || !Valid(work) || !Valid(power)
+            || !Valid(horizon) || !Valid(share) || cost <= Zero || work <= Zero
+            || power <= Zero || horizon <= Zero || share <= Zero || share > One) return false;
+        const float finish = work / power;
+        const float seconds = finish < horizon ? finish : horizon;
+        const float available = bank - reserve - committed;
+        return available >= Zero && available + (income * share - usage) * seconds >= cost;
+    }
     // Snapshot indexes can change while the same enemy is still alive.
     int RetainedContact(int current, const array<int> &in unitIdentifiers, const array<float> &in remaining)
     {

@@ -109,6 +109,14 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
     }
     if(name=="front_ready") { options.frontReady=value>0; return true; }
     if(name=="work") { options.work=value>0; return true; }
+    if(name=="front_recovery") { options.frontRecovery=value>0; return true; }
+    if(name=="afus_def") {
+        if(value<0) afusDefs.clear();
+        else if(value>100000 || value!=std::floor(value)) return false;
+        else if(auto* def=ai->GetCircuitDefSafe(int(value)); def && !def->IsMobile()) afusDefs.insert(def->GetId());
+        else return false;
+        return true;
+    }
     if(name.rfind("t3.",0)==0) return SetProfileOption(name,value);
     if(name.rfind("reset.t3.",0)==0) return SetProfileOption(name.substr(6),value,true);
     if(name=="fallback") {
@@ -131,8 +139,10 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"front_workers",&options.frontWorkers,1,20},
         {"front_distance",&options.frontDistance,200,10000},{"front_standoff",&options.frontStandoff,200,1500},
         {"front_radius",&options.frontRadius,100,1000},{"front_threat",&options.frontThreat,0,50},
+        {"front_mex_seconds",&options.frontMexSeconds,0,30},{"front_stall_seconds",&options.frontStallSeconds,3,60},
         {"t3_intercept",&options.t3Intercept,0,1},{"t3_health",&options.t3Health,.1f,.5f},
         {"t3_distance",&options.t3Distance,250,2000},{"detection_margin",&options.detectionMargin,8,200},
+        {"afus_defence_radius",&options.afusDefenceRadius,0,5000},
         {"fallback_metal",&options.fallbackMetal,0,20000},{"fallback_range_scale",&options.fallbackRangeScale,.5f,6},
         {"fallback_group_radius",&options.fallbackGroupRadius,50,2000},{"fallback_offset",&options.fallbackOffset,0,600},
         {"fallback_search",&options.fallbackSearch,300,10000},{"fallback_hold_seconds",&options.fallbackHoldSeconds,0,30},
@@ -163,7 +173,7 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
 
 void CCommanderControl::Observe(CCircuitUnit* unit,int frame) {
     performance::Scope measured(ai,performance::COMMANDER_OBSERVE);
-    contacts.clear(); threats.clear(); seeds.clear(); attackers.clear(); submergedContact=false;
+    contacts.clear(); threats.clear(); seeds.clear(); attackers.clear(); submergedContact=false; protectedAfus=-1;
     auto& claims=ai->GetAllyTeam()->GetCommanderShots(); claims.Prune(frame);
     auto world=ai->GetMilitaryManager()->GetRangedWorld();
     auto* api=ai->GetUnitAPI(); auto* def=unit->GetCircuitDef();
@@ -234,7 +244,10 @@ void CCommanderControl::Observe(CCircuitUnit* unit,int frame) {
         c.id=id; c.pos=P(ep); c.velocity={raw[0]*30,raw[2]*30};
         c.radius=cap.radius; c.cost=ed->GetCostM(); c.health=enemy->GetUnit()->GetHealth(); c.height=ep.y;
         c.blocker=ed->IsRoleComm() && !ActualDecoy(ed);
-        c.t3=DefinitionFor(ed).t3; // one lookup here instead of two per contact per tick
+        const auto& metadata=DefinitionFor(ed);
+        c.t3=metadata.t3;
+        c.combatTier=ed->IsMobile() && ed->IsAttacker() && !ed->IsAbleToFly() && !c.blocker
+            ?std::clamp(int(metadata.tech),1,3):0;
         c.targetable=!ed->IsAbleToFly() && ep.y>=-c.radius*.4f
             && (ed->GetCategory() & def->GetTargetCategoryDGun())!=0;
         // Default D-gun damage is deliberately conservative for repeat-hit T3.
@@ -272,13 +285,24 @@ void CCommanderControl::Observe(CCircuitUnit* unit,int frame) {
         && (self->second.t3Target>=0 || self->second.t3Declined>=0 || self->second.fallback);
     const bool needFriends=!contacts.empty() || !threats.empty() || !attackers.empty() || deployDue || farT3 || engagedT3;
     static const std::vector<int> none;
-    const auto& friends=needFriends?ai->GetCallback()->GetFriendlyUnitIdsIn(pos,options.scan,false):none;
+    // D-319: share the existing combat-only friendly query. Extra-radius IDs
+    // need definition/position checks, not velocity/health; they never enter
+    // ordinary support/shot scoring. No idle census or cached unit lifetime.
+    const bool protect=options.afusDefenceRadius>0 && !afusDefs.empty();
+    const float friendRadius=protect?std::max(options.scan,options.afusDefenceRadius):options.scan;
+    float afusDistance=SQUARE(options.afusDefenceRadius);
+    const auto& friends=needFriends?ai->GetCallback()->GetFriendlyUnitIdsIn(pos,friendRadius,false):none;
     for(int id:friends) {
         if(id==unit->GetId()) continue;
         auto* fd=ai->GetCircuitDefSafe(ai->GetCallback()->Unit_GetDefId(id));
         if(!fd) continue;
         float raw[3]={NAN,NAN,NAN}; api->GetPosition(id,raw); const float y=raw[1];
         if(!OnMap(AIFloat3(raw[0],raw[1],raw[2]))) continue;
+        const float distance=AIFloat3(raw[0],raw[1],raw[2]).SqDistance2D(pos);
+        if(protect && afusDefs.count(fd->GetId()) && distance<=afusDistance) {
+            protectedAfus=id; afusDistance=distance;
+        }
+        if(distance>SQUARE(options.scan)) continue;
         commander::Contact c; c.id=id; c.pos={raw[0],raw[2]}; c.height=y;
         api->GetVelocity(id,raw); c.velocity={raw[0]*30,raw[2]*30};
         c.radius=fd->GetRadius(); c.friendly=true; c.blocker=fd->IsRoleComm();
@@ -320,6 +344,7 @@ void CCommanderControl::Observe(CCircuitUnit* unit,int frame) {
         c.stopAfter=ed->GetShieldMount()!=nullptr;
         c.reserved=claims.Reserved(id,ai->GetTeamId(),unit->GetId())>=c.health;
         c.t3=true; // the far query keeps T3 definitions only
+        c.combatTier=3;
         contacts.push_back(c);
         // Same legal LOS-only weapon observation as the near scan. The distance
         // exclusion above makes crossing the boundary count each weapon once.
@@ -749,13 +774,34 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         // deployment forever. Front work has its own bounded area and owner.
         // A ladder task (repair, reclaim, radar on the way) is local by
         // construction; finish it before walking on (D-299).
-        if(build && (build->GetNextTask() || build->GetTarget() || build==s.workTask
+        if(build && !build->IsDead() && (build->GetNextTask() || build->GetTarget() || build==s.workTask
             || build->GetPosition().SqDistance2D(goal)<=options.frontRadius*options.frontRadius)) return true;
+        // The deploy owner otherwise never asks the idle builder's work ladder.
+        // Script opts into en-route mex work. Reuse the same local safe/ally-aware
+        // selector and spot claims, at most once per configured interval. Cost:
+        // outstanding mex tasks plus the metal index's local candidates, not an
+        // army scan. Never interrupt a productive frame or a combat/fallback.
+        if(options.work && options.frontMexSeconds>0
+            && frame>=s.frontMexFrame+int(std::max(1.f,options.frontMexSeconds)*FRAMES_PER_SEC)) {
+            s.frontMexFrame=frame;
+            if(auto* mex=FrontWork(unit,WORK_MEX,nullptr,0)) {
+                ai->GetBuilderManager()->AssignTask(unit,mex);
+                if(unit->GetTask()==mex) {
+                    s.route.clear();
+                    ai->LOG("[CommanderFront] unit=%i enroute_mex frame=%i",unit->GetId(),frame);
+                    return true;
+                }
+                // Assignment can synchronously change ownership; the old
+                // deploy pointer must not be used after that hand-over.
+                return true;
+            }
+        }
         if(!task) {
             task=ai->GetBuilderManager()->EnqueueCommander(nullptr);
             ai->GetBuilderManager()->AssignTask(unit,task);
             if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return false; }
             s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); ++operation;
+            s.frontProgressFrame=frame; s.frontProgressPos=pos;
             ai->LOG("[CommanderFront] unit=%i deploy x=%.0f z=%.0f",unit->GetId(),goal.x,goal.z);
         }
         s.deployed=true; Conceal(unit,s,false); Transition(unit,s,Mode::SUPPORT,frame);
@@ -764,12 +810,40 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
             if(s.frontArrived<0) s.frontArrived=frame; // D-299 timed defence clock
             task->Resume(unit); // next builder callback selects front work
         } else {
+            if(options.frontRecovery) {
+                if(pos.SqDistance2D(s.frontProgressPos)>=16.f*16.f) {
+                    s.frontProgressPos=pos; s.frontProgressFrame=frame;
+                } else if(frame>=s.frontProgressFrame+int(options.frontStallSeconds*FRAMES_PER_SEC)) {
+                    // A live MOVE can still be stuck behind dynamic blockers.
+                    // Yield to local work, then retry a fresh reachable front.
+                    s.frontYield=frame+2*FRAMES_PER_SEC;
+                    s.frontFrame=-10000; s.route.clear();
+                    ai->LOG("[CommanderFront] unit=%i stalled yield frame=%i",unit->GetId(),frame);
+                    task->Resume(unit);
+                    if(dynamic_cast<CCommanderTask*>(unit->GetTask()))
+                        ai->LOG("[INVARIANT] INV-219 commander deploy failed to release after stalled movement unit=%i",unit->GetId());
+                    return true;
+                }
+            }
             const Point delta=P(goal)-P(pos);
             AIFloat3 next=F(P(pos)+commander::Normal(delta)*std::min(240.f,commander::Length(delta)));
             next.y=ai->GetMap()->GetElevationAt(next.x,next.z);
             if(!s.route.empty() && s.goal.SqDistance2D(pos)>48*48
                 && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) return true;
             if(Route(unit,pos,next)) Move(unit,s,next,frame);
+            else if(options.frontRecovery) {
+                // A blocked straight step is not an unreachable destination.
+                // Let Recoil route around terrain; local combat still preempts
+                // at the ordinary cadence. Recheck fresh reach before issuing.
+                if(ai->GetTerrainManager()->CanReachAt(unit,goal,64)) {
+                    ai->LOG("[CommanderFront] unit=%i detour x=%.0f z=%.0f frame=%i",unit->GetId(),goal.x,goal.z,frame);
+                    Move(unit,s,goal,frame);
+                } else {
+                    s.frontYield=frame+2*FRAMES_PER_SEC;
+                    s.front={-1,0,-1}; s.frontFrame=-10000; s.route.clear();
+                    task->Resume(unit);
+                }
+            }
         }
         return true;
     }
