@@ -1,0 +1,13 @@
+{
+  "_doc": "D-307/D-313: experimental_balanced TECH opening, optional explicit nuke objective and reported start. Run either Coastlines start/faction as team 0; the standard observer only records team 0 completions and strips AI prefixes. Proves an independent bank and physical turrets. Preserve strict failures even when a bounded diagnostic continues. Not a late-game economy or performance check.",
+  "stop_minute": 12,
+  "expect": [
+    {"key": "observer initialized", "pattern": "\\[Playtest\\] widget loaded", "by_minute": 0.5, "scope": "any"},
+    {"key": "compact bank", "pattern": "\\[Layout\\]\\[Compact\\] cluster=1", "by_minute": 12, "scope": "tech"},
+    {"key": "turret completed", "pattern": "\\[Playtest\\] finished (cor|arm|leg)nanotc team 0", "by_minute": 12, "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "any"},
+    {"key": "runtime failure", "pattern": ": ERR\\s+:|: WARN\\s+:|SCRIPT CRASH|Lib exception|Access violation|has crashed", "scope": "any"}
+  ]
+}

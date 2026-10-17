@@ -231,10 +231,12 @@ IUnitTask* CCommanderControl::LineWork(CCircuitUnit* unit,State& s,CCircuitDef* 
     // behind the anchor: 0, +1, -1, +2, -2, ... slots by the current count.
     Point toThreat=commander::Normal(P(s.lineThreat)-P(s.lineAnchor));
     if(commander::Length(toThreat)<.5f) toThreat=commander::Normal(P(s.lineAnchor)-P(ai->GetSetupManager()->GetBasePos()));
-    const Point lateral{-toThreat.z,toThreat.x};
-    const float side=float((count+1)/2)*(count%2?1.f:-1.f);
-    AIFloat3 at=F(P(s.lineAnchor)+lateral*(side*options.lineSpacing)-toThreat*(options.lineSpacing*.5f));
-    if(!OnMap(at) || !InsideLine(s,at,frame,0.f)) at=F(P(s.lineAnchor)-toThreat*(options.lineSpacing*.5f));
+    const auto site=commander::LineBuildSite(P(s.lineAnchor),toThreat,options.lineSpacing,count,[&](Point p) {
+        const AIFloat3 at=F(p);
+        return OnMap(at) && InsideLine(s,at,frame,0.f);
+    });
+    if(!site) return nullptr;
+    AIFloat3 at=F(*site);
     at.y=ai->GetMap()->GetElevationAt(at.x,at.z);
     auto* task=builder->Enqueue(TaskB::Common(BT::DEFENCE,IBuilderTask::Priority::HIGH,buildDef,at,32.f,true,30*FRAMES_PER_SEC));
     if(task) ai->LOG("[CommanderWork] unit=%i line turret %i/%i x=%.0f z=%.0f income=%.1f",
@@ -242,13 +244,16 @@ IUnitTask* CCommanderControl::LineWork(CCircuitUnit* unit,State& s,CCircuitDef* 
     return task;
 }
 
-IUnitTask* CCommanderControl::RadarWork(CCircuitUnit* unit,State& s,CCircuitDef* buildDef,int frame) {
-    if(buildDef==nullptr || !unit->GetCircuitDef()->CanBuild(buildDef)) return nullptr;
+bool CCommanderControl::CanStartRadar(CCircuitUnit* unit) {
+    // Ordinary defence-queue jobs must obey the same script-selected FRONT
+    // coverage policy as the ladder. Other roles/openings keep their policy.
+    if(!options.work || !options.frontDuty || !options.frontReady || !Handles(unit)) return true;
+    auto found=commanders.find(unit->GetId());
+    return found==commanders.end() || !RadarCovered(unit,found->second,ai->GetLastFrame());
+}
+
+bool CCommanderControl::RadarCovered(CCircuitUnit* unit,State& s,int frame) {
     const AIFloat3 pos=unit->GetPos(frame);
-    const bool holding=FallbackActive(s,frame);
-    if(!InsideLine(s,pos,frame,0.f)) return nullptr;
-    const float range=DefinitionFor(buildDef).radar*options.radarCoverage;
-    if(range<=0) return nullptr;
     if(frame>=s.radarFrame+FRAMES_PER_SEC || pos.SqDistance2D(s.radarPos)>200.f*200.f) {
         // Coverage by any friendly radar except commanders (its own radar
         // does not count). O(N) over the ally snapshot, cached for a second
@@ -258,11 +263,23 @@ IUnitTask* CCommanderControl::RadarWork(CCircuitUnit* unit,State& s,CCircuitDef*
             CCircuitDef* def=ally->GetCircuitDef();
             if(def==nullptr || def->IsRoleComm()) continue;
             const float radar=DefinitionFor(def).radar*options.radarCoverage;
-            if(radar>0 && ally->GetLastPos().SqDistance2D(pos)<=radar*radar) { covered=true; break; }
+            // Ally snapshots recreate wrappers with an unset last position.
+            // Only radar candidates need a live, frame-cached position read;
+            // do not populate positions for the entire allied army (D-310).
+            if(radar>0 && ally->GetPos(frame).SqDistance2D(pos)<radar*radar) { covered=true; break; }
         }
         s.radarCovered=covered; s.radarFrame=frame; s.radarPos=pos;
     }
-    if(s.radarCovered) return nullptr;
+    return s.radarCovered;
+}
+
+IUnitTask* CCommanderControl::RadarWork(CCircuitUnit* unit,State& s,CCircuitDef* buildDef,int frame) {
+    if(buildDef==nullptr || !unit->GetCircuitDef()->CanBuild(buildDef)) return nullptr;
+    const AIFloat3 pos=unit->GetPos(frame);
+    const bool holding=FallbackActive(s,frame);
+    if(!InsideLine(s,pos,frame,0.f)) return nullptr;
+    const float range=DefinitionFor(buildDef).radar*options.radarCoverage;
+    if(range<=0 || RadarCovered(unit,s,frame)) return nullptr;
     auto* builder=ai->GetBuilderManager();
     for(IBuilderTask* task:builder->GetTasks(BT::RADAR))
         if(!task->IsDead() && task->GetBuildDef()==buildDef && task->GetPosition().SqDistance2D(pos)<=range*range)

@@ -22,14 +22,14 @@ namespace Invariants {
     // Event-time check only: heavy combat gifts remain TECH-owned through travel.
     // Re-resolve the anchor at handover, including a commander lost mid-flight.
     bool HeavyDeliveryArrival(CCircuitUnit@ unit, int recipient, int carrierId) {
-        const AIFloat3 anchor = Team::Roster::DeliveryAnchor(Team::Roster::Get(recipient));
-        const float radius = Global::RoleSettings::Tech::HeavyDeliveryArrivalRadius;
+        const AIFloat3 anchor = TechHeavyDelivery::ArrivalAnchor(unit is null ? -1 : unit.id,recipient);
+        const float radius = TechHeavyDelivery::ArrivalRadius();
         const bool valid = unit !is null && carrierId < 0 && Team::IsAlly(recipient)
             && recipient != ai.teamId && anchor.x >= 0.0f && anchor.z >= 0.0f
             && anchor.x < AiTerrainWidth() && anchor.z < AiTerrainHeight()
             && MapHelpers::SqDist(unit.GetPos(ai.frame), anchor) <= radius * radius;
         if (!valid) Violation("INV-189", unit is null ? "missing" : "" + unit.id,
-            "heavy delivery attempted outside recipient anchor or before carrier release");
+            "heavy delivery attempted outside authorized arrival area or before carrier release");
         return valid;
     }
     dictionary inv53Idle;     // D-123: air constructor id -> samples in a row it did nothing
@@ -774,6 +774,18 @@ namespace Invariants {
                 CCircuitUnit@ du = (id < 0) ? null : ai.GetTeamUnit(id);
                 IBuilderTask@ bt = (du is null || du.task is null) ? null : cast<IBuilderTask>(du.task);
                 if (bt is null || bt.buildDef is null || bt.buildDef.GetName() == own) continue;
+                // D-306: dedicated workers may finish pinned economy recovery;
+                // the AFUS worker may also build/assist admitted conversion.
+                if (Global::AISettings::Role == AiRole::TECH) {
+                    if (r == 2 && bt.buildDef.GetName() == UnitHelpers::GetAdvEnergyConverterNameForSide(aSide)) continue;
+                    bool recovery = false;
+                    if (Global::RoleSettings::Tech::EconomyRecoveryEnabled && AiTaskOwnsLayout(du.task)) {
+                        for (uint k = 0; k < TechBuild::recoveryKeys.length(); ++k) {
+                            if (EcoPlanner::DefOf(TechBuild::recoveryKeys[k]) is bt.buildDef) { recovery = true; break; }
+                        }
+                    }
+                    if (recovery) continue;
+                }
                 // A capacity-saturated converter worker may finish helping the
                 // reactor it joined; do not interrupt when headroom later rises.
                 if (Global::AISettings::Role == AiRole::TECH && r == 1

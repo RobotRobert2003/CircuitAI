@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <vector>
 
 namespace circuit::commander {
@@ -15,6 +16,19 @@ inline Point operator*(Point a, float s) { return {a.x*s,a.z*s}; }
 inline float Dot(Point a, Point b) { return a.x*b.x+a.z*b.z; }
 inline float Length(Point a) { return std::sqrt(Dot(a,a)); }
 inline Point Normal(Point a) { const float n=Length(a); return n>0.001f?a*(1.f/n):Point{}; }
+// Both sites must satisfy the same map/perimeter admission. D-314: the rear
+// fallback can itself leave the map. O(1), no allocation or retained state;
+// commander_combat_test covers every edge and preserves valid-site ordering.
+template<typename Admit>
+std::optional<Point> LineBuildSite(Point anchor,Point toThreat,float spacing,int count,Admit admit) {
+    const Point lateral{-toThreat.z,toThreat.x};
+    const float side=float((count+1)/2)*(count%2?1.f:-1.f);
+    const Point candidate=anchor+lateral*(side*spacing)-toThreat*(spacing*.5f);
+    if(admit(candidate)) return candidate;
+    const Point rear=anchor-toThreat*(spacing*.5f);
+    if(admit(rear)) return rear;
+    return std::nullopt;
+}
 struct FallbackBoundary {
     // One value snapshot: another unit can relocate the shared base between
     // the commander's 1 Hz plans. Never pair this radius with that live base.

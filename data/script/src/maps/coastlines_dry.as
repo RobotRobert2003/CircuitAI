@@ -46,7 +46,12 @@ namespace CoastlinesDry {
 	// Base per-map unit limits
 	dictionary mapUnitLimits; // add per-map unit restrictions here if needed
 
-	MapConfig config = MapConfig("Coastlines_Dry", mapUnitLimits, spots, getFactoryWeights());
+	MapConfig config = MakeConfig();
+	MapConfig MakeConfig() {
+		MapConfig result("Coastlines_Dry", mapUnitLimits, spots, getFactoryWeights());
+		result.TechCompactEconomy = true;
+		return result;
+	}
 
 	// Factory weights per role (higher weight = more likely).
 	// Schema: role -> ( side -> (factory -> weight) )

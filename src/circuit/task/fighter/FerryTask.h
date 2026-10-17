@@ -62,18 +62,31 @@ public:
 	// already in flight or the cargo id is not one of our units.
 	bool SetCargo(int cargoId, const springai::AIFloat3& dropPos, float surfaceThreat = -1.f, float airThreat = -1.f);
 	bool CanCarry(int cargoId) const;
+    // Opt-in route mission. Old SetCargo callers retain direct ferry behavior.
+    bool SetCargoRoute(int cargoId, const std::vector<springai::AIFloat3>& points,
+        float surfaceThreat, float airThreat, float padding);
 	int GetState() const { return int(state_); }
 	int GetCargoId() const { return cargoId; }
 	// Back to IDLE and home. Safe to call in any state; the cargo is released.
 	void Reset();
 
 private:
+    bool BeginCargo(int id, const springai::AIFloat3& pos, float surfaceThreat, float airThreat);
 	CCircuitUnit* GetTransport() const;
 	CCircuitUnit* GetCargo() const;
 	// Off the ground by more than FERRY_LIFT_HEIGHT: the only observable that
 	// separates "carried" from "stood under the transport".
 	bool IsLifted(CCircuitUnit* cargo, int frame) const;
 	void GoTo(CCircuitUnit* unit, const springai::AIFloat3& pos);
+    void FlyDrop(CCircuitUnit* unit);
+    bool routed = false;
+    float flightPadding = 0.f;
+    std::vector<springai::AIFloat3> mission, flight;
+    size_t missionIndex = 0, flightIndex = 0;
+    springai::AIFloat3 flightGoal;
+    int flightRetry = -1;
+    bool flightOrdered = false;
+    int flightExpiry = -1;
 	// The engine refuses an unload onto occupied ground and says nothing; a
 	// recipient's start position is its base. Ask the engine for the nearest
 	// clear footprint for the cargo instead; `around` when it finds none.

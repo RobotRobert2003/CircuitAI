@@ -371,12 +371,69 @@ std::vector<AIFloat3> CBattleAnalysis::GetUnitTerrainRoute(const CCircuitDef* de
     return UnitTerrainRoute(def, from, to, dry, landCost, waterCost, threatWeight, maxWaterThreat, nullptr, 0.f);
 }
 
+std::vector<AIFloat3> CBattleAnalysis::SafeAirRoute(const AIFloat3& from, const AIFloat3& to,
+        float maxThreat, float padding)
+{
+    if (!std::isfinite(maxThreat) || maxThreat < 0.f || !std::isfinite(padding) || padding < 0.f) return {};
+    // D-312: the common clear leg needs no grid solve. The same corridor check
+    // validates every shortcut and each live flight leg, including endpoint joins.
+    if (AirThreatAlong(from, to, padding) <= maxThreat) return {to};
+    EnsureGrid();
+    auto inside = [this](const AIFloat3& p) {
+        return std::isfinite(p.x) && std::isfinite(p.z) && p.x >= 0 && p.z >= 0
+            && p.x < gw * cellSize && p.z < gh * cellSize;
+    };
+    if (!inside(from) || !inside(to)) return {};
+    if (!laneTerrain) CaptureLaneRequest(1, 0.f, 0.f, 1.f, 0.f, 1.f, 0);
+    if (!laneTerrain) return {};
+    // On-demand only: O(G*r^2 + sum weapon-disc cells) mask, O(G log G)
+    // search. Scratch belongs to this AI and is overwritten on each solve;
+    // no stale visibility cache or engine callbacks on a worker. r is padding
+    // in grid cells. Refuse a covered origin rather than waive the AA rule.
+    ferryAirThreat.assign(height.size(), 0.f);
+    ferryAirBlocked.assign(height.size(), 0);
+    const int radius = int(std::ceil(std::min(padding, 512.f) / cellSize)) + 1;
+    for (int z = 0; z < gh; ++z) for (int x = 0; x < gw; ++x) {
+        if (AirThreat(CellPos(z * gw + x)) <= maxThreat) continue;
+        for (int dz = -radius; dz <= radius; ++dz) for (int dx = -radius; dx <= radius; ++dx)
+            if (x+dx >= 0 && x+dx < gw && z+dz >= 0 && z+dz < gh)
+                ferryAirBlocked[(z+dz)*gw+x+dx] = 1;
+    }
+    RefreshAirWeapons();
+    for (const auto& weapon : airWeapons) {
+        const float r = weapon.range + padding + 2.f*circuit->GetThreatMap()->GetSquareSize() + cellSize;
+        const int x0 = std::max(0, int((weapon.pos.x-r)/cellSize));
+        const int x1 = std::min(gw-1, int((weapon.pos.x+r)/cellSize));
+        const int z0 = std::max(0, int((weapon.pos.z-r)/cellSize));
+        const int z1 = std::min(gh-1, int((weapon.pos.z+r)/cellSize));
+        for (int z=z0; z<=z1; ++z) for (int x=x0; x<=x1; ++x)
+            if (CellPos(z*gw+x).SqDistance2D(weapon.pos) <= r*r) ferryAirBlocked[z*gw+x] = 1;
+    }
+    const auto cells = lane::Solver(*laneTerrain,laneSettings).PointRoute(
+        {from.x,from.y,from.z},{to.x,to.y,to.z},L_AIR,ferryAirThreat,
+        1.f,1.f,0.f,1e9f,&ferryAirBlocked,&ferryAirWorkspace,0);
+    if (cells.empty()) return {};
+    // Linear shortcut pass; never cut a corner through known weapon coverage.
+    std::vector<AIFloat3> result;
+    AIFloat3 anchor=from, previous=from;
+    for (size_t i=0; i<=cells.size(); ++i) {
+        const AIFloat3 next=i<cells.size()?CellPos(cells[i]):to;
+        if (AirThreatAlong(anchor,next,padding)>maxThreat) {
+            if (anchor.SqDistance2D(previous)<1.f || AirThreatAlong(previous,next,padding)>maxThreat) return {};
+            result.push_back(previous); anchor=previous;
+        }
+        previous=next;
+    }
+    result.push_back(to);
+    return result;
+}
+
 std::vector<AIFloat3> CBattleAnalysis::GetUnitRaidRoute(const CCircuitDef* def,
-        const AIFloat3& from, const AIFloat3& to, float hazardMargin, float hazardWeight)
+        const AIFloat3& from, const AIFloat3& to, float hazardMargin, float hazardWeight, bool avoidHazards)
 {
     // D-296: a dry land route whose cells inside observed armed-ground
-    // coverage (+margin) cost hazardWeight extra each, on top of the legacy
-    // surface threat. Same synchronous search and UNIT_ROUTE accounting as
+    // coverage (+margin) have a hazardWeight cost floor over the legacy
+    // surface threat, or are blocked on request. Same UNIT_ROUTE accounting as
     // GetUnitTerrainRoute; the overlay adds O(1) per cell to its threat fill.
     if (def == nullptr || !std::isfinite(hazardWeight) || hazardWeight < 0.f) return {};
     performance::Scope routeScope(circuit, performance::UNIT_ROUTE);
@@ -411,17 +468,25 @@ std::vector<AIFloat3> CBattleAnalysis::GetUnitRaidRoute(const CCircuitDef* def,
         raidBaseVersion = version;
     }
     raidRouteThreat.resize(height.size());
-    for (size_t c = 0; c < raidRouteThreat.size(); ++c)
+    // Script chooses hard avoidance for a clear start, soft costs for escape.
+    // D-311: O(G) bytes retained per AI, filled in the existing O(G) overlay;
+    // no new world scan/cache epoch. Tests: single-tick-backline arena and
+    // terrain_route_test's live obstacle/blocked-origin differential cases.
+    if (avoidHazards) raidRouteBlocked.resize(height.size());
+    for (size_t c = 0; c < raidRouteThreat.size(); ++c) {
         raidRouteThreat[c] = observedGroundHazard[c] > 0.f ? std::max(raidBaseThreat[c], weight) : raidBaseThreat[c];
+        if (avoidHazards) raidRouteBlocked[c] = observedGroundHazard[c] > 0.f;
+    }
     }
     std::vector<int> cells;
     {
     performance::Scope searchScope(circuit, performance::UNIT_ROUTE_SEARCH);
     // threatVersion 0: penalties are rebuilt per solve (the overlay changes);
     // the route cache is bypassed for the same reason. Water cells cost like
-    // land; the ceiling only blocks water cells, never covered land.
+    // land; requested hazard obstacles additionally block covered land.
     cells = lane::Solver(*laneTerrain, laneSettings).PointRoute({from.x, from.y, from.z}, {to.x, to.y, to.z},
-        cls, raidRouteThreat, 1.f, 1.f, 1.f, 1e9f, nullptr, &raidRouteWorkspace, 0);
+        cls, raidRouteThreat, 1.f, 1.f, 1.f, 1e9f,
+        avoidHazards ? &raidRouteBlocked : nullptr, &raidRouteWorkspace, 0);
     }
     if (cells.empty()) return {};
     std::vector<AIFloat3> result;

@@ -57,6 +57,10 @@ namespace Main {
 	{
 		GenericHelpers::LogUtil("Running AiMain()", 1);
 
+        // The opening Tick must search for gaps and raid just like later scouts.
+        Global::ScoutRaid::KeepNativeScouts = 0;
+        Global::RoleSettings::Tech::HeavyDeliveryFrontEnabled = true;
+
 		// Air-factory gate. Native CEnemyManager::IsAirValid() tests
 		//     GetEnemyThreat(AA) <= maxAAThreat
 		// and CFactoryManager/CFactoryData use it to suspend air production.
@@ -143,6 +147,7 @@ namespace Main {
 	void ApplyProfileSettings()
 	{
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
+        Global::RoleSettings::Front::VehicleTankOpenerChance = 0.5f;
 	}
 
 }  // namespace Main

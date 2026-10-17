@@ -8,6 +8,7 @@
 #include "../../helpers/spatial/map_helpers.as"
 #include "../../helpers/spatial/layout_helpers.as"
 #include "../presentation/widget_link.as"
+#include "compact_eco.as"
 
 /******************************************************************************
 
@@ -97,6 +98,7 @@ namespace Layout {
 
     void ClearScriptState()
     {
+        CompactEco::Clear();
         planned = false;
         fallback = false;
         facing = 0;
@@ -730,6 +732,16 @@ namespace Layout {
     void Plan(const string& in side, bool sharedSequence = false)
     {
         if ((!sharedSequence && !Global::RoleSettings::Tech::ExperimentalBuild) || !Global::RoleSettings::Tech::LayoutEnabled || !Enable(true)) return;
+        if (CompactEco::Active()) {
+            // This map cannot fit the atomic pair. Keep the existing cramped
+            // factory/exit policy, but give economy its own small pinned banks.
+            ResolveDefs(side);
+            fallback = true;
+            CompactEco::Adopt();
+            GenericHelpers::LogUtil("[Layout] compact economy enabled: adaptive single-footprint banks, up to "
+                + (Global::RoleSettings::Tech::CompactEcoColumns * Global::RoleSettings::Tech::CompactEcoRows) + " turrets each", 1);
+            return;
+        }
         if (Adopt(side)) return;
         if (!ResolveDefs(side) || !PlanFactories(side)) {
             fallback = true;
@@ -783,6 +795,7 @@ namespace Layout {
     // or a box slot? The planner asks before it names a turret.
     bool CanPlaceTurret()
     {
+        if (CompactEco::Active()) return true; // admission only; placement checks reach and capacity
         if (fallback && aiTerrainMgr.IsLayoutEnabled()) return true;   // D-121: cramped ground: CrampedNanoTask decides how many
         if (!HasComplex()) return false;
         if (aiTerrainMgr.GetFactoryNanoAvailable() > 0) return true;
@@ -1153,6 +1166,25 @@ namespace Layout {
         return false;
     }
 
+    IUnitTask@ ReplaceLost(Task::BuildType type, CCircuitDef@ def, CCircuitUnit@ builder)
+    {
+        if (!Global::RoleSettings::Tech::EconomyRecoveryEnabled || builder is null || def is null
+            || !def.IsAvailable(ai.frame) || !builder.circuitDef.CanBuild(def)) return null;
+        const int id = aiTerrainMgr.NextLostReservation(builder, def, Global::RoleSettings::Tech::RecoverySlotBudget);
+        if (id < 0) return null;
+        // INV-223: recovery must reuse a free lost slot, never reserve new ground.
+        if (aiTerrainMgr.GetReservationState(id) != 0 || aiTerrainMgr.GetLostReservationCount(def) <= 0) {
+            Invariants::Violation("INV-223", def.GetName(), "recovery selected an owned or non-lost slot " + id);
+            return null;
+        }
+        IUnitTask@ task = aiBuilderMgr.Enqueue(TaskB::Common(type, Task::Priority::HIGH, def,
+            aiTerrainMgr.GetReservationPos(id), 0.0f, true, 300 * SECOND));
+        if (task is null) return null; // the loss remains owned by the reservation
+        if (!AiPinReservation(task, id)) { aiBuilderMgr.AbortTask(task); return null; }
+        GenericHelpers::LogUtil("[TECH][Recovery] " + def.GetName() + " slot=" + id + " worker=" + builder.id, 1);
+        return task;
+    }
+
     IUnitTask@ Place(Task::BuildType type, Task::Priority priority, CCircuitDef@ def, int timeout, CCircuitUnit@ builder = null)
     {
         if (AiPerfEnabled) AiPerfBegin(4);
@@ -1164,6 +1196,15 @@ namespace Layout {
     IUnitTask@ PlaceMeasured(Task::BuildType type, Task::Priority priority, CCircuitDef@ def, int timeout, CCircuitUnit@ builder)
     {
         if (def is null) return null;
+        if (Global::AISettings::Role == AiRole::TECH) {
+            IUnitTask@ replacement = ReplaceLost(type, def, builder);
+            if (replacement !is null) return replacement;
+            // The replacement-only income exemption cannot spill into expansion
+            // if the destroyed footprint is unsafe, blocked, or already claimed.
+            if (def.GetName() == UnitHelpers::GetAdvEnergyConverterNameForSide(Global::AISettings::Side)
+                && Economy::GetMinMetalIncomeLast10s() < Global::RoleSettings::Tech::MinimumMetalIncomeForAdvConverter) return null;
+        }
+        if (CompactEco::Active()) return CompactEco::Place(type, priority, def, timeout, builder);
         // Among the cells equally close to a turret, the one nearest the
         // builder that asked: the less it walks, the sooner it builds (D-064).
         AIFloat3 anchor = factoryCentre;
@@ -1367,6 +1408,15 @@ namespace Layout {
 
     AIFloat3 TurretSeed()
     {
+        if (CompactEco::Active()) {
+            // A cramped lab can be farther than the rush's local-worker limit
+            // from the economy. Its independent bank is the support centre.
+            if (CompactEco::seeds.length() > 0) {
+                const AIFloat3 seed = aiTerrainMgr.GetReservationPos(CompactEco::seeds[0]);
+                if (seed.x >= 0.0f) return seed;
+            }
+            return HomeCentre();
+        }
         // D-088: the block fills from the advanced lab's footprint, so the first
         // turrets stand flush with the lab, as the pair's nanos do with the T1 lab
         if (Global::RoleSettings::Tech::LayoutBoxAtStart) {
@@ -1522,6 +1572,7 @@ namespace Layout {
         }
         // Cramped geometry changes where a turret fits, not whether another
         // concurrent project is affordable. Keep its admission gate shared.
+        if (CompactEco::Active()) return CompactEco::NanoTask(unit, priority);
         if (crampedLayout) return CrampedNanoTask(unit, priority);
         for (uint index = 0; index < overflowSupportGroups.length(); ++index) {
             const int slot = aiTerrainMgr.NextSlotAny(overflowSupportGroups[index], unit.GetPos(ai.frame));

@@ -899,6 +899,32 @@ IFighterTask* CMilitaryManager::Enqueue(const TaskF::SFightTask& ti)
 	return task;
 }
 
+// Opt-in mechanism: precise power, no merging or unrelated-squad promotion.
+// Policy owns admission, rally, deadline and cancellation. Ordinary Enqueue is
+// unchanged, including its random draws. One cohort task uses the existing
+// scheduler; no per-unit polling or new world scans (D-309).
+IFighterTask* CMilitaryManager::EnqueueGather(const TaskF::SFightTask& ti, const AIFloat3& pos, int deadline)
+{
+    using FT = IFighterTask::FightType;
+    if (ti.type != FT::DEFEND || (ti.promote != FT::RAID && ti.promote != FT::ATTACK)
+        || !std::isfinite(ti.power) || ti.power <= 0.f || deadline < circuit->GetLastFrame()
+        || !geom::is_valid(pos)) return nullptr;
+    auto* task = new CDefendTask(this, pos, ti.promote, ti.promote, ti.power, 1.f, deadline);
+    fightTasks[static_cast<IFighterTask::FT>(FT::DEFEND)].insert(task);
+    updateTasks.push_back(task);
+    TaskAdded(task);
+    return task;
+}
+
+bool CMilitaryManager::SetGatherPower(IUnitTask* task, float power)
+{
+    auto* gather = dynamic_cast<CDefendTask*>(task);
+    if (gather == nullptr || gather->IsDead() || gather->GetManager() != this
+        || !gather->IsGather() || !std::isfinite(power) || power < 0.f) return false;
+    gather->SetMaxPower(power); // zero releases survivors on their next promotion check
+    return true;
+}
+
 // A transport owns this hold, not a builder manager or a combat squad. One
 // constant-time owner lookup per existing task update; no repeated STOP orders.
 // Carrier destruction, transfer and Reset all release the hold on that update.
@@ -1775,7 +1801,7 @@ void CMilitaryManager::UpdateDefenceTasks()
 //			dt->SetPosition(clusters[index].position);
 //		}
 
-		if (dt->GetPromote() != IFighterTask::FightType::ATTACK) {
+		if (dt->IsGather() || dt->GetPromote() != IFighterTask::FightType::ATTACK) {
 			continue;
 		}
 //		int groupIdx = -1;

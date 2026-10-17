@@ -99,6 +99,9 @@ public:
 	float SurfThreat(const springai::AIFloat3& pos) const;
 	float AirThreat(const springai::AIFloat3& pos) const;
     float AirThreatAlong(const springai::AIFloat3& from, const springai::AIFloat3& to, float padding) const;
+    bool InLos(const springai::AIFloat3& pos) const;
+    std::vector<springai::AIFloat3> SafeAirRoute(const springai::AIFloat3& from,
+        const springai::AIFloat3& to, float maxThreat, float padding);
     // Opt-in completed combat navy/factory snapshot. Flags: allied=1,
     // submerged=2, anti-sub weapon=4, factory=8. No role decisions here.
     int GetNavalForceCount();
@@ -140,12 +143,13 @@ public:
     float GroundHazard(const springai::AIFloat3& pos, float margin);
     // D-296: a route for the unit's movement class on the shared lane grid
     // (bots L_BOT, vehicles L_LAND, hovers L_HOVER) with that hazard layer as an
-    // additive cell penalty (hazardWeight per covered cell). Soft, not a block:
-    // a hard block would leave no route out of a covered start or to a ringed
-    // base. The per-definition fine grid was rejected: it found no connection
+    // cell penalty floor (hazardWeight per covered cell). Optional hard
+    // avoidance blocks covered cells; callers use soft escape from a covered
+    // starting region. The per-definition fine grid was rejected: it found no connection
     // across glitters for a Tick the engine walks, and cost ~255 ms per build.
     std::vector<springai::AIFloat3> GetUnitRaidRoute(const CCircuitDef* def,
-        const springai::AIFloat3& from, const springai::AIFloat3& to, float hazardMargin, float hazardWeight);
+        const springai::AIFloat3& from, const springai::AIFloat3& to, float hazardMargin, float hazardWeight,
+        bool avoidHazards = false);
     int GetNavalContactCount() const { return static_cast<int>(navalContacts.size()); }
     springai::AIFloat3 GetNavalContactPos(int index) const;
     // Completed allied extractors, geothermal plants and factories. Lazy value
@@ -277,6 +281,10 @@ private:
     // terrain build). Base surface threat is cached by ThreatMap publication;
     // the hazard overlay is applied per solve, so a new dot is seen at once.
     Grid raidBaseThreat, raidRouteThreat;
+    std::vector<char> raidRouteBlocked; // rebuilt with the hazard overlay, retained per AI
+    Grid ferryAirThreat;
+    std::vector<char> ferryAirBlocked;
+    lane::PointWorkspace ferryAirWorkspace;
     std::uint64_t raidBaseVersion = 0;
     lane::PointWorkspace raidRouteWorkspace;
     lane::Settings laneSettings;

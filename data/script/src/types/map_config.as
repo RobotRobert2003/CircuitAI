@@ -28,6 +28,7 @@ class MapConfig {
     float TechOpeningMexRadius = 0.0f;   // D-063: radius of the mex-first opening
     int TechOpeningMexCap = 0;           // 0 = every spot inside the radius
     int TechLayoutNanoRows = 0;          // turret rows in the box
+    bool TechCompactEconomy = false;     // independent small clusters on constrained terrain
 
     MapConfig(string mapNameMatch, dictionary unitLimits) {
         _mapNameMatch = mapNameMatch;

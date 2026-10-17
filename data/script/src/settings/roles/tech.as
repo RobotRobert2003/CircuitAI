@@ -4,6 +4,11 @@
 namespace Global {
 namespace RoleSettings {
 namespace Tech {
+            // D-306: loss recovery is asked only by idle builders, with bounded
+            // native slot queries. Production refill uses the existing event path.
+            bool EconomyRecoveryEnabled = true;
+            int RecoverySlotBudget = 8;
+            bool ContinuousGantryProduction = true;
             bool HeavyRushEnabled = true;
             // Inclusive one-time batch roll; an active rush retains its saved target.
             int HeavyRushCountMin = 3;
@@ -20,6 +25,10 @@ namespace Tech {
             float HeavyDeliveryArrivalRadius = 240.0f;
             float HeavyDeliveryDestinationMove = 192.0f;
             float HeavyDeliveryRouteRetrySeconds = 10.0f;
+            bool HeavyDeliveryFrontEnabled = false;
+            float HeavyDeliveryAirPadding = 192.0f;
+            float HeavyDeliveryAirThreat = 0.5f;
+            float HeavyDeliveryFrontRadius = 128.0f;
             bool LocalGeothermalEnabled = true;
             float LocalGeothermalRadius = 1200.0f;
             float LocalGeothermalBudgetSeconds = 90.0f;
@@ -383,6 +392,16 @@ namespace Tech {
             float EcoMexExpandRadius = 2500.0f;             // constructors expand to the nearest open spot within this ...
             float EcoMexExpandUntilIncome = 60.0f;          // ... while metal income is under this
             bool LayoutEnabled = true;                      // the planned base (needs ExperimentalBuild)
+            int CompactEcoColumns = 2;
+            int CompactEcoRows = 2;
+            int CompactEcoGapCells = 1;                     // leave room for adjacent footprint levelling
+            int CompactEcoMaxClusters = 24;
+            int CompactEcoSearchRings = 16;                  // resumable square spiral, 1024-elmo radius
+            float CompactEcoSearchStep = 64.0f;
+            int CompactEcoSearchBudget = 128;                // individual footprints per growth ask
+            float CompactEcoTurretSpread = 128.0f;           // individual additions, up to columns * rows
+            float CompactEcoRetrySeconds = 60.0f;            // failed searches only
+            int CompactEcoPackingAttempts = 8;              // expensive building fits per search
             float LayoutForwardRetrySeconds = 30.0f;
             float LayoutForwardBlockedRetrySeconds = 300.0f;
             int CrampedSupportColumns = 2;
@@ -643,6 +662,11 @@ namespace Tech {
             int MinimumT2ConstructorBots = 1;
             int T2BotConstructorCap = 10;                   // D-119 (owner): T2 construction bots at most this many for TECH (the T2 air constructors keep T2ConstructorCap)
             int FastAssistBotCap = 10;                      // D-119 (owner): fast assist bots (Fark, Freaker, legaceb) at most this many
+            float FastAssistMetalReserve = 2000.0f;
+            // D-308: compact banks need mobile support sooner; retain the hard
+            // cap and rush budget, with no extra polling or recruit batches.
+            float CompactFastAssistIncomeScale = 2.0f;
+            float CompactFastAssistMetalReserve = 1000.0f;
             int T2ConstructorCap = 60;                      // D-103: T2 constructors (bot and air) produced up to this while the metal bank is over T2ConstructorBankShare
             float T2ConstructorBankShare = 0.5f;            // D-103: the metal bank share of storage above which the advanced lab makes T2 constructors
             // T2 constructors TECH keeps before it builds any for an ally's

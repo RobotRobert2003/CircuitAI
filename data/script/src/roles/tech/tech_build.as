@@ -454,16 +454,51 @@ namespace TechBuild {
         if (fr is null) return null;
         return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, fr, 60 * SECOND));
     }
+    // Restore actual layout losses before discretionary expansion. Fixed roster,
+    // live pending counts and bounded native candidate traversal; no unit scan.
+    const array<string> recoveryKeys = {"nano", "advconv", "t1conv", "afus", "fusion", "advsolar", "solar", "wind", "estor", "mstor"};
+    IUnitTask@ RecoverEconomy(CCircuitUnit@ u)
+    {
+        if (!Global::RoleSettings::Tech::EconomyRecoveryEnabled || MetalEconomy::Active()) return null;
+        for (uint i = 0; i < recoveryKeys.length(); ++i) {
+            const string key = recoveryKeys[i];
+            CCircuitDef@ def = EcoPlanner::DefOf(key);
+            if (def is null || aiTerrainMgr.GetLostReservationCount(def) == 0 || !u.circuitDef.CanBuild(def)) continue;
+            const Task::BuildType type = EcoPlanner::TypeOf(key);
+            const int pending = aiBuilderMgr.GetQueuedBuildCount(int(type), def) + aiBuilderMgr.GetUnfinishedCount(def);
+            if (type == Task::BuildType::CONVERT) {
+                if (EcoPlanner::TechConversionAdmission(def, u) != EcoPlanner::READY) continue;
+            } else {
+                if (pending >= 2) continue;
+                if (type == Task::BuildType::NANO && Layout::TurretsCapped()) continue;
+                if (type == Task::BuildType::ENERGY && !EnergyAllowed(def.GetName())) continue;
+                if (type == Task::BuildType::ENERGY && Builder::EnergyBuildTask !is null && !Builder::EnergyBuildTask.IsDead()) continue;
+            }
+            IUnitTask@ task = Layout::ReplaceLost(type, def, u);
+            if (task is null) continue;
+            if (type == Task::BuildType::ENERGY) Builder::_SetEnergyBuildTask(task);
+            if (type == Task::BuildType::CONVERT && EcoPlanner::conversionDecision !is null) EcoPlanner::conversionDecision.read = false;
+            return task;
+        }
+        return null;
+    }
+
     IUnitTask@ BuildByLayout(CCircuitUnit@ u, const string &in defName, Task::BuildType type)
     {
         CCircuitDef@ d = ai.GetCircuitDef(defName);
         if (d is null || !d.IsAvailable(ai.frame) || !u.circuitDef.CanBuild(d)) return null;
+        if (type == Task::BuildType::ENERGY && Global::AISettings::Role == AiRole::TECH) {
+            if (!EnergyAllowed(defName)) return null;
+            if (Builder::EnergyBuildTask !is null && !Builder::EnergyBuildTask.IsDead())
+                return Builder::EnqueueAssistEnergy(Task::Priority::HIGH, 60 * SECOND, Global::RoleSettings::Tech::EnergyFocusMaxAssists);
+        }
         const bool converter = type==Task::BuildType::CONVERT && Global::AISettings::Role==AiRole::TECH;
         if (converter) {
             const EcoPlanner::ConversionReason reason = EcoPlanner::TechConversionAdmission(d, u);
             if (reason != EcoPlanner::READY) { EcoPlanner::TraceConversion(u, reason); return null; }
         }
         IUnitTask@ task = Layout::Place(type, Task::Priority::HIGH, d, 300 * SECOND, u);
+        if (task !is null && type == Task::BuildType::ENERGY) Builder::_SetEnergyBuildTask(task);
         if (converter) {
             if (EcoPlanner::conversionDecision !is null) {
                 EcoPlanner::conversionDecision.read = false;
@@ -497,6 +532,18 @@ namespace TechBuild {
         const string side = Global::AISettings::Side;
         const int role = AirConRole(u);
         if (role == 0) return null;
+        // A new reactor cannot bypass converter admission. KeepCurrent retains
+        // productive construction; an idle reactor worker can restore/assist
+        // conversion while surplus energy can support it. Failed placement
+        // releases the shared gate, avoiding a permanent converter/AFUS wait.
+        if (role == 2 && Global::AISettings::Role == AiRole::TECH && TechChain::EnergyBankFloats()) {
+            const string converterName = UnitHelpers::GetAdvEnergyConverterNameForSide(side);
+            LiftCapForRole(converterName);
+            IUnitTask@ conversion = BuildByLayout(u, converterName, Task::BuildType::CONVERT);
+            if (conversion is null && EcoPlanner::TechConversionAdmission(ai.GetCircuitDef(converterName), u) == EcoPlanner::PENDING)
+                @conversion = AssistNearestOf(u, converterName);
+            if (conversion !is null) return conversion;
+        }
         const string name = (role == 1) ? UnitHelpers::GetAdvEnergyConverterNameForSide(side) : UnitHelpers::GetAdvFusionNameForSide(side);
         if (role==1 && Global::AISettings::Role==AiRole::TECH) {
             CCircuitDef@ converter=ai.GetCircuitDef(name);

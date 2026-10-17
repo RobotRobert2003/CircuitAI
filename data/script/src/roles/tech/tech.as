@@ -27,6 +27,7 @@
 #include "tech_chain.as"
 #include "tech_plan.as"
 #include "tech_heavy_rush.as"
+#include "tech_transport.as"
 
 namespace RoleTech
 {
@@ -1020,6 +1021,10 @@ namespace RoleTech
 		// (no custom gantry build queue here by design)
 		if (UnitHelpers::IsGantryLab(facDef.GetName()))
 		{
+            // Finish the admitted batch before selecting another. Completion
+            // refill re-enters this policy after every product, not every batch.
+            IUnitTask@ pending = aiFactoryMgr.GetPendingFactoryTask(u);
+            if (pending !is null) return pending;
 			GenericHelpers::LogUtil("[TECH][Factory] Gantry detected ('" + facDef.GetName() + "')", 3);
             IUnitTask@ amphib = AmphibiousOps::Produce(u, botLabGate);
             if (amphib !is null) return amphib;
@@ -1140,19 +1145,18 @@ namespace RoleTech
 				}
 			}
 
-			// If fast-assist bots are below their dynamic cap and we have high metal reserves, queue one.
-			// Cap mirrors Tech_IncomeBuilderLimits: fastAssistBotCap = 5 * int(metalIncome / 45.0f)
-			//
-			// PRIMARY lab only. This branch returns, so without the guard it starves the T2
-			// combat batch further down: g_fastAssistBotCap scales with income without bound,
-			// so haveAssist never catches it and the rush never starts. Additional T2 bot labs,
-			// unlocked by economy in Tech_EconomyUpdate, carry the rush instead. Mirrors the
-			// primary-plant guard used for air constructor upkeep below.
+			// PRIMARY lab only: fill the income-scaled target, bounded by D-119's
+			// hard cap. Other labs remain available for combat. Compact layouts
+			// admit mobile support with a smaller bank; opening priorities above
+			// and the one-at-a-time recruit path remain unchanged (D-308).
 			if (Factory::primaryT2BotLab !is null && u.id == Factory::primaryT2BotLab.id)
 			{
 				array<string> fastAssist = UnitHelpers::GetFastAssistBots(side);
 				int haveAssist = UnitDefHelpers::SumUnitDefCounts(fastAssist);
 				float metalCurrent = aiEconomyMgr.metal.current;
+				const float assistReserve = CompactEco::Active()
+					? Global::RoleSettings::Tech::CompactFastAssistMetalReserve
+					: Global::RoleSettings::Tech::FastAssistMetalReserve;
 				GenericHelpers::LogUtil(
 					"[TECH][Factory] Fast-assist check: have=" + haveAssist + " cap=" + g_fastAssistBotCap +
 						" metalCurrent=" + metalCurrent + " side=" + side,
@@ -1165,11 +1169,11 @@ namespace RoleTech
 				{
 					GenericHelpers::LogUtil("[TECH][Factory] Fast-assist cap is 0 at current income, skipping", 4);
 				}
-				if (metalCurrent <= 2000.0f)
+				if (metalCurrent <= assistReserve)
 				{
-					GenericHelpers::LogUtil("[TECH][Factory] Metal reserve below 2000, skipping fast-assist enqueue", 4);
+					GenericHelpers::LogUtil("[TECH][Factory] Metal reserve at/below " + assistReserve + ", skipping fast-assist enqueue", 4);
 				}
-				if (fastAssist.length() > 0 && haveAssist < g_fastAssistBotCap && metalCurrent > 2000.0f)
+				if (fastAssist.length() > 0 && haveAssist < g_fastAssistBotCap && metalCurrent > assistReserve)
 				{
 					string assistName = fastAssist[0];
 					CCircuitDef @assistDef = ai.GetCircuitDef(assistName);
@@ -1919,22 +1923,12 @@ namespace RoleTech
 		int rezCount = UnitDefHelpers::SumUnitDefCounts(rezList);
 		GenericHelpers::LogUtil("[TECH][Limits] RezBots cap=" + rezBotCap + " current=" + rezCount + " side=" + side, 4);
 
-		// Fast-assist cap scaling (stored globally for reuse in factory logic):
-		// - Below 100 metal income: original behaviour (5 bots per 45 income)
-		// - At/above 100 metal income: more aggressive scaling (5 bots per 20 income)
-		if (metalIncome < 100.0f)
-		{
-			g_fastAssistBotCap = 5 * int(metalIncome / 45.0f);
-		}
-		else
-		{
-			g_fastAssistBotCap = 5 * int(metalIncome / 20.0f);
-		}
-		// if (g_fastAssistBotCap < 5) g_fastAssistBotCap = 1;
-		// A rush chain spends its energy on the chain, not on assist bots (D-070)
-		if (TechChain::Active() && g_fastAssistBotCap > 2) g_fastAssistBotCap = 2;
-		// D-119 (owner): never more than FastAssistBotCap (the T2 lab makes fast assault bots instead)
-		if (g_fastAssistBotCap > Global::RoleSettings::Tech::FastAssistBotCap) g_fastAssistBotCap = Global::RoleSettings::Tech::FastAssistBotCap;
+		// D-308: compact banks need mobile support sooner. Scalar work only in
+		// the existing economy callback; no new scans, timers or cached state.
+		const float assistIncomeScale = CompactEco::Active()
+			? Global::RoleSettings::Tech::CompactFastAssistIncomeScale : 1.0f;
+		g_fastAssistBotCap = TechEconomyMath::FastAssistTarget(metalIncome, assistIncomeScale,
+			TechChain::Active(), Global::RoleSettings::Tech::FastAssistBotCap);
 
 		array<string> faList = UnitHelpers::GetFastAssistBots(side);
 		UnitHelpers::BatchApplyUnitCaps(faList, g_fastAssistBotCap);

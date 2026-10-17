@@ -287,6 +287,8 @@ namespace TechRules {
     bool GantryScaleDue(Ctx@ c)        { return TechGantryScale::Due(); }        // D-288: O(1), set at 1 Hz
     IUnitTask@ DoGantryScale(Ctx@ c)   { return TechGantryScale::Work(c.u); }    // D-288
     IUnitTask@ DoKeepCurrent(Ctx@ c)    { return TechBuild::KeepCurrent(c.u); }
+    IUnitTask@ DoRecovery(Ctx@ c)       { return TechBuild::RecoverEconomy(c.u); }
+    IUnitTask@ DoCompactSupport(Ctx@ c) { return c.draining ? null : CompactEco::SupportTask(c.u); }
     IUnitTask@ DoLocalGeo(Ctx@ c) {
         // Keep the committed silo/first-stockpile budget intact. Geothermal
         // remains available before the silo phase and after the first missile.
@@ -480,6 +482,9 @@ namespace TechRules {
         table.insertLast(Rule("land.recall",       CONSTRUCTORS, W0(), @DoLandRecall,   "D-109: a tier whose air constructors went down: its land constructors drop a forward job for the eco rows"));
         table.insertLast(Rule("weapons.super",     CONSTRUCTORS, W0(), @DoWeaponsSuper, "D-126 (owner): a super cannon framed or startable: every air constructor builds it"));
         table.insertLast(Rule("keep.current",      MOBILE,       W0(), @DoKeepCurrent,  "the construction the builder is on, when native re-asks"));
+        table.insertLast(Rule("eco.recover",       MOBILE,       W0(), @DoRecovery, "D-306: restore safe lost layout capacity before discretionary growth"));
+        if (Global::Map::Config.TechCompactEconomy)
+            table.insertLast(Rule("eco.compact.support", CON_T1, W0(), @DoCompactSupport, "D-307: one local turret for an active compact economy bank"));
         table.insertLast(Rule("gantry.support", CON_T1, W0(), @DoGantrySupport, "D-281: capable constructors carry an admitted gantry turret assignment before discretionary forward work"));
         table.insertLast(Rule("air.dedicated",     CON_T2,       W0(), @DoAirDedicated, "D-107: the first two T2 air constructors: one only advanced energy converters, the other only advanced fusions, always"));
         table.insertLast(Rule("gantry.scale",      CON_T2,       W1(@GantryScaleDue), @DoGantryScale, "D-288 (owner): one gantry per GantryScaleMetalStep of 10 s minimum metal income: opens and feeds the front T3 cluster; lab.front and gantry.support also finish it"));
@@ -587,6 +592,7 @@ namespace TechRules {
             // budget. Once its silo stands this gate disappears; the shared
             // economic policy and its placement sequence are unchanged.
             if (nukeRush) {
+                if (r.key == "eco.recover" || r.key == "eco.compact.support") continue;
                 if (r.key == "defence.fortify" || r.key == "mex.upgrade" || r.key == "mex.expand"
                     || r.key == "energy.reclaim" || r.key == "lab.t2" || r.key == "defence.base"
                     || r.key == "power.t1" || r.key == "power.turret" || r.key == "turret.build"

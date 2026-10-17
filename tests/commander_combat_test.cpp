@@ -10,6 +10,35 @@ static Contact Enemy(int id,float x,float z,float cost=100) {
     Contact c; c.id=id; c.pos={x,z}; c.radius=12; c.cost=cost; c.health=500; c.damage=99999; return c;
 }
 int main(int argc,char** argv) {
+    const auto onMap=[](Point p) {
+        return std::isfinite(p.x) && std::isfinite(p.z)
+            && p.x>=0 && p.z>=0 && p.x<6144 && p.z<10240;
+    };
+    // Reported F30917 crash: both the spread site and rear fallback leave
+    // Glitters. Also exercise each other edge and a legal fallback.
+    assert(!LineBuildSite({409,10224},{0,-1},96,2,onMap));
+    assert(!LineBuildSite({409,32},{0,1},96,2,onMap));
+    assert(!LineBuildSite({32,409},{1,0},96,2,onMap));
+    assert(!LineBuildSite({6128,409},{-1,0},96,2,onMap));
+    auto fallback=LineBuildSite({16,100},{0,1},96,1,onMap);
+    assert(fallback && fallback->x==16 && fallback->z==52);
+    assert(!LineBuildSite({16,100},{0,1},96,1,[&](Point p) { return onMap(p) && p.x>=32; }));
+    // Same two candidates, order and float arithmetic as the old selector;
+    // the only difference is rejecting its inadmissible fallback.
+    std::mt19937 lineRng(314);
+    std::uniform_real_distribution<float> xSite(0,6144),zSite(0,10240),angle(-3.14f,3.14f);
+    for(int trial=0;trial<20000;++trial) {
+        const Point anchor{xSite(lineRng),zSite(lineRng)};
+        const float a=angle(lineRng),spacing=96.f;
+        const Point threat{std::cos(a),std::sin(a)},lateral{-threat.z,threat.x};
+        const int count=trial%12;
+        const float side=float((count+1)/2)*(count%2?1.f:-1.f);
+        Point old=anchor+lateral*(side*spacing)-threat*(spacing*.5f);
+        if(!onMap(old)) old=anchor-threat*(spacing*.5f);
+        const auto site=LineBuildSite(anchor,threat,spacing,count,onMap);
+        assert(bool(site)==onMap(old));
+        if(site) assert(site->x==old.x && site->z==old.z);
+    }
     std::vector<Contact> contacts={Enemy(1,80,0),Enemy(2,150,0),Enemy(3,220,0),Enemy(4,150,100,200)};
     auto line=ScoreLine(contacts,{}, {1,0},250,500,8,40,12);
     assert(line.kills==3 && line.value==420 && line.target==1);

@@ -492,10 +492,15 @@ public:
     // Scoped, bounded round-robin traversal. A rejected slot remains free for
     // other movement classes. -2 means budget exhausted, -1 no free candidates.
     int NextReachableSlot(CCircuitUnit* builder, const CCircuitDef* cdef, int zone, int group, int budget);
+    // Physical losses only; queued replacement claims remain losses until a frame exists.
+    int GetLostReservationCount(const CCircuitDef* cdef) const;
+    int NextLostReservation(CCircuitUnit* builder, const CCircuitDef* cdef, int budget);
 private:
     using SlotScope = std::pair<int, int>; // positive zone / negative group, def ID
     struct SlotCandidates { std::set<int> ids; int after = -1, visited = 0; bool sawFree = false; };
     std::map<SlotScope, SlotCandidates> scopedSlots;
+    std::map<int, SlotCandidates> lostSlots;
+    void ClearLostReservation(int id);
     void IndexReservation(int id);
     void EraseReservation(int id);
 public:

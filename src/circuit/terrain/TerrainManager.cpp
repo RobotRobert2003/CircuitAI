@@ -48,6 +48,16 @@
 // cost, so a sim stall names the function that caused it.
 namespace {
 inline circuit::layout_rank::Pt ToPt(const springai::AIFloat3& p) { return circuit::layout_rank::Pt{p.x, p.z}; }  // D-094
+// D-314 / KI-591: reject before float-to-int conversion, threat/influence
+// indexing or the flying-unit shortcut. An index-only guard lets x wrap into
+// an adjacent row. These O(1) checks allocate nothing and do not clamp a bad
+// request into a different job. Actual-VM coverage: run_terrain_reachability.py.
+bool ValidReachDestination(const springai::AIFloat3& p, float range = 0.f) {
+    return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z)
+        && p.x >= 0.f && p.z >= 0.f
+        && p.x < springai::AIFloat3::maxxpos && p.z < springai::AIFloat3::maxzpos
+        && std::isfinite(range) && range >= 0.f;
+}
 constexpr double SLOW_CALL_MS = 20.0;
 struct SSlowCall {
 	const char* name; circuit::CCircuitAI* ai; std::chrono::steady_clock::time_point t0;
@@ -2160,6 +2170,7 @@ void CTerrainManager::FinishReservation(int id, int unitId)
 	}
 	it->second.claimed = false;
 	it->second.unitId = unitId;  // a zone slot remembers its structure (restore or forget when it goes)
+    ClearLostReservation(id);
 }
 
 bool CTerrainManager::CanNavalRoute(CCircuitDef* cdef, const AIFloat3& from, const AIFloat3& to)
@@ -2928,6 +2939,10 @@ void CTerrainManager::IndexReservation(int id)
 {
     ++packingRevision; // invalidate exact empty-geometry reuse on mutation
     const auto& r = reservations.at(id);
+    // Persist in the existing named-int section: no binary layout change.
+    // Load reads that section before indexing slots; the index itself is derived.
+    if (GetLayoutInt("native.lost." + std::to_string(id), 0) != 0)
+        lostSlots[r.def->GetId()].ids.insert(id);
     for (int scope : {r.zone, -r.group}) {
         if (!scope) continue;
         auto& bucket = scopedSlots[{scope, r.def->GetId()}];
@@ -2941,6 +2956,7 @@ void CTerrainManager::EraseReservation(int id)
     auto found = reservations.find(id);
     if (found == reservations.end()) return;
     const auto& r = found->second;
+    ClearLostReservation(id);
     for (int scope : {r.zone, -r.group}) {
         if (!scope) continue;
         auto bucket = scopedSlots.find({scope, r.def->GetId()});
@@ -2979,6 +2995,47 @@ int CTerrainManager::NextReachableSlot(CCircuitUnit* builder, const CCircuitDef*
     return free ? -2 : -1;
 }
 
+void CTerrainManager::ClearLostReservation(int id)
+{
+    const auto found = reservations.find(id);
+    if (found != reservations.end()) {
+        auto bucket = lostSlots.find(found->second.def->GetId());
+        if (bucket != lostSlots.end()) {
+            bucket->second.ids.erase(id);
+            if (bucket->second.ids.empty()) lostSlots.erase(bucket);
+        }
+    }
+    layoutInts.erase("native.lost." + std::to_string(id));
+}
+
+int CTerrainManager::GetLostReservationCount(const CCircuitDef* cdef) const
+{
+    if (cdef == nullptr) return 0;
+    const auto bucket = lostSlots.find(cdef->GetId());
+    return bucket == lostSlots.end() ? 0 : int(bucket->second.ids.size());
+}
+
+int CTerrainManager::NextLostReservation(CCircuitUnit* builder, const CCircuitDef* cdef, int budget)
+{
+    if (builder == nullptr || cdef == nullptr) return -1;
+    auto bucket = lostSlots.find(cdef->GetId());
+    if (bucket == lostSlots.end()) return -1;
+    // Lifecycle maintained IDs, O(log D + B log R), at most B reach/build
+    // queries per decision (B <= 32). No unit scan or recurring polling. A
+    // wreck can outlive three failed starts: only lost capacity gets a fresh
+    // failure budget once its original footprint is safe and buildable again.
+    return reservation_candidates::Next(bucket->second.ids, bucket->second.after, budget, [&](int id) {
+        auto& r = reservations.at(id);
+        if (r.consumed || r.claimed || r.unitId != 0) return false;
+        if (!CanReachAtSafe(builder, r.pos, builder->GetCircuitDef()->GetBuildDistance())) return false;
+        const int failures = r.serveFails;
+        r.serveFails = 0;
+        if (IsReservationBuildable(id)) return true;
+        r.serveFails = failures;
+        return false;
+    });
+}
+
 int CTerrainManager::NextSetSlot(CCircuitDef* cdef) const
 {
 	int best = -1, bestOrder = 1 << 20;
@@ -3002,7 +3059,8 @@ int CTerrainManager::ReleaseSetSlots(CCircuitDef* cdef)
 	std::vector<int> ids;
 	for (const auto& kv : reservations) {
 		const SReservation& r = kv.second;
-		if ((r.def == cdef) && !r.consumed && !r.claimed && (setGroups.count(r.group) > 0) && (r.serveFails < kDeadSlotFails)) {
+		if ((r.def == cdef) && !r.consumed && !r.claimed && (setGroups.count(r.group) > 0) && (r.serveFails < kDeadSlotFails)
+            && GetLayoutInt("native.lost." + std::to_string(r.id), 0) == 0) {
 			ids.push_back(r.id);
 		}
 	}
@@ -3048,6 +3106,9 @@ void CTerrainManager::OnStructureGone(CCircuitDef* cdef, const AIFloat3& pos)
 	}
 	r.unitId = 0;
 	r.consumed = false;
+    r.claimed = false;
+    layoutInts["native.lost." + std::to_string(id)] = 1;
+    lostSlots[cdef->GetId()].ids.insert(id);
 	IndexLocalSlot(r.id);
 	int2 c1, c2;
 	if (ReservationCells(cdef, pos, r.facing, c1, c2)) {
@@ -4293,6 +4354,7 @@ void CTerrainManager::LoadLayout(std::istream& is)
 	zones.clear();
 	reservations.clear();
 	scopedSlots.clear();
+    lostSlots.clear();
 	localReservations.Clear();
 	uint32_t groupNameCount = 0;
 	utils::binary_read(is, groupNameCount);
@@ -5329,6 +5391,7 @@ std::pair<SArea*, bool> CTerrainManager::GetCurrentMapArea(CCircuitDef* cdef, co
 
 bool CTerrainManager::CanMoveToPos(SArea* area, const AIFloat3& destination)
 {
+	if (!ValidReachDestination(destination)) return false;
 	const int iS = GetSectorIndex(destination);
 	if (!terrainData->IsSectorValid(iS)) {
 		return false;
@@ -5448,12 +5511,15 @@ SAreaSector* CTerrainManager::GetClosestSectorWithAltitude(SArea* sourceArea, co
 
 SAreaSector* CTerrainManager::GetClosestSector(SArea* sourceArea, const int destinationSIndex)
 {
+	if (sourceArea == nullptr) return nullptr;
+	std::vector<SAreaSector>& TMSectors = GetSectorList(sourceArea);
+	if (destinationSIndex < 0 || size_t(destinationSIndex) >= TMSectors.size()
+			|| TMSectors[destinationSIndex].S == nullptr) return nullptr;
 	auto iAS = sourceArea->sectorClosest.find(destinationSIndex);
 	if (iAS != sourceArea->sectorClosest.end()) {  // It's already been determined
 		return iAS->second;
 	}
 
-	std::vector<SAreaSector>& TMSectors = GetSectorList(sourceArea);
 	if (sourceArea == TMSectors[destinationSIndex].area) {
 		sourceArea->sectorClosest[destinationSIndex] = &TMSectors[destinationSIndex];
 		return &TMSectors[destinationSIndex];
@@ -5673,6 +5739,7 @@ bool CTerrainManager::CanBeBuiltAtSafe(CCircuitDef* cdef, const AIFloat3& positi
 
 bool CTerrainManager::CanReachAt(CCircuitUnit* unit, const AIFloat3& destination, const float range)
 {
+	if (unit == nullptr || !ValidReachDestination(destination, range)) return false;
 	if (unit->GetCircuitDef()->GetImmobileId() != -1) {  // A hub or factory
 		return unit->GetPos(circuit->GetLastFrame()).SqDistance2D(destination) < SQUARE(range);
 	}
@@ -5684,11 +5751,14 @@ bool CTerrainManager::CanReachAt(CCircuitUnit* unit, const AIFloat3& destination
 	if (area->sector.find(iS) != area->sector.end()) {
 		return true;
 	}
-	return GetClosestSector(area, iS)->S->position.SqDistance2D(destination) < SQUARE(range);
+	const SAreaSector* closest = GetClosestSector(area, iS);
+	return closest != nullptr && closest->S != nullptr
+		&& closest->S->position.SqDistance2D(destination) < SQUARE(range);
 }
 
 bool CTerrainManager::CanReachAtSafe(CCircuitUnit* unit, const AIFloat3& destination, const float range, const float threat)
 {
+	if (unit == nullptr || !ValidReachDestination(destination, range)) return false;
 	if (circuit->GetThreatMap()->GetThreatAt(destination) > threat) {
 		return false;
 	}
@@ -5697,6 +5767,7 @@ bool CTerrainManager::CanReachAtSafe(CCircuitUnit* unit, const AIFloat3& destina
 
 bool CTerrainManager::CanReachAtSafe2(CCircuitUnit* unit, const AIFloat3& destination, const float range)
 {
+	if (unit == nullptr || !ValidReachDestination(destination, range)) return false;
 	if (circuit->GetInflMap()->GetInfluenceAt(destination) < -INFL_EPS) {
 		return false;
 	}
@@ -5705,6 +5776,7 @@ bool CTerrainManager::CanReachAtSafe2(CCircuitUnit* unit, const AIFloat3& destin
 
 bool CTerrainManager::CanMobileReachAt(SArea* area, const AIFloat3& destination, const float range)
 {
+	if (!ValidReachDestination(destination, range)) return false;
 	if (area == nullptr) {  // A flying unit
 		return true;
 	}
@@ -5712,11 +5784,14 @@ bool CTerrainManager::CanMobileReachAt(SArea* area, const AIFloat3& destination,
 	if (area->sector.find(iS) != area->sector.end()) {
 		return true;
 	}
-	return GetClosestSector(area, iS)->S->position.SqDistance2D(destination) < SQUARE(range);
+	const SAreaSector* closest = GetClosestSector(area, iS);
+	return closest != nullptr && closest->S != nullptr
+		&& closest->S->position.SqDistance2D(destination) < SQUARE(range);
 }
 
 bool CTerrainManager::CanMobileReachAtSafe(SArea* area, const AIFloat3& destination, const float range, const float threat)
 {
+	if (!ValidReachDestination(destination, range)) return false;
 	if (circuit->GetThreatMap()->GetBuilderThreatAt(destination) > threat) {
 		return false;
 	}

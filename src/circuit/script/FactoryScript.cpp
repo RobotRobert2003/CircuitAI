@@ -54,6 +54,7 @@ CFactoryScript::CFactoryScript(CScriptManager* scr, CFactoryManager* mgr)
 	r = engine->RegisterObjectMethod("CFactoryManager", "CCircuitDef@ DefaultGetFactoryToBuild(const AIFloat3& in, bool, bool)", asMETHOD(CFactoryManager, DefaultGetFactoryToBuild), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ DefaultMakeTask(CCircuitUnit@)", asMETHOD(CFactoryManager, DefaultMakeTask), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ MakeFactoryTask(CCircuitUnit@, bool keepActive, bool keepQueued = false)", asMETHOD(CFactoryManager, MakeFactoryTask), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ GetPendingFactoryTask(CCircuitUnit@) const", asMETHOD(CFactoryManager, GetPendingFactoryTask), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "void AbortTask(IUnitTask@)", asMETHODPR(CFactoryManager, AbortTask, (IUnitTask*), void), asCALL_THISCALL); ASSERT(r >= 0);  // D-076: a retiring factory drops its task
 	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ Enqueue(const SRecruitTask& in)", asMETHODPR(CFactoryManager, Enqueue, (const TaskS::SRecruitTask&), CRecruitTask*), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ Enqueue(const SServSTask& in)", asMETHODPR(CFactoryManager, Enqueue, (const TaskS::SServSTask&), IUnitTask*), asCALL_THISCALL); ASSERT(r >= 0);

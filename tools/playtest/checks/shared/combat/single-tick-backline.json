@@ -1,0 +1,102 @@
+{
+  "stop_minute": 11,
+  "_doc": "D-311 single opening Tick: must be admitted, reach z>=8800, kill mex and wind, survive the supplied screen. Full eleven-minute horizon retains post-raid survival.",
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "spawn",
+      "pattern": "\\[RangedArena\\].* spawn",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "admitted",
+      "pattern": "\\[ScoutRaid\\] admit unit=",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "routed",
+      "pattern": "\\[ScoutRaid\\] route unit=\\d+ target=",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "first economy kill",
+      "pattern": "\\[RangedArena\\].* killed def=(cormex|corwin|cornanotc|armmex|armwin|armnanotc) team=1 by=(armflea|corfav|legscout)",
+      "scope": "any",
+      "by_minute": 8
+    },
+    {
+      "key": "three economy kills",
+      "pattern": "\\[RangedArena\\].* kill_census econ=([3-9]|\\d\\d+)",
+      "scope": "any",
+      "by_minute": 10
+    },
+    {
+      "key": "backline reached",
+      "pattern": "\\[RangedArena\\].* scout_depth max_z=(8[89]\\d\\d|9\\d\\d\\d|1\\d{4})",
+      "scope": "any",
+      "by_minute": 8
+    },
+    {
+      "key": "mex killed",
+      "pattern": "\\[RangedArena\\].* killed def=armmex team=1 by=armflea",
+      "scope": "any",
+      "by_minute": 10
+    },
+    {
+      "key": "wind killed",
+      "pattern": "\\[RangedArena\\].* killed def=armwin team=1 by=armflea",
+      "scope": "any",
+      "by_minute": 10
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena|Removed widget: Ranged combat arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "policy",
+      "pattern": "has invalid ranged policy",
+      "scope": "any"
+    },
+    {
+      "key": "raider lost to statics",
+      "pattern": "\\[RangedArena\\].* kill_census .*static_losses=([3-9]|\\d\\d+)",
+      "scope": "any"
+    },
+    {
+      "key": "raider fought the front",
+      "pattern": "\\[RangedArena\\].* killed def=(corthud|armham) team=1 by=(armflea|corfav|legscout)",
+      "scope": "any"
+    },
+    {
+      "key": "opening Tick survived",
+      "pattern": "\\[RangedArena\\].* killed def=armflea team=0",
+      "scope": "any"
+    }
+  ]
+}

@@ -90,6 +90,9 @@ namespace Front {
 
             // Misc Logic Settings
             int RaiderOpenerCount = 10;
+            // Opt-in profile policy: retain the first scout, then choose tanks.
+            float VehicleTankOpenerChance = 0.0f;
+            int VehicleTankGatherSeconds = 300; // release a disrupted/incomplete batch
             float SwitchFactoryCostMultiplier = 1.2f;
             int ScoutAssignmentLimit = 5;
             float BuilderCostThresholdForBase = 200.0f;

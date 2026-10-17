@@ -149,7 +149,48 @@ static void ExactResultCache() {
     const double uncached=measure(false), cached=measure(true);
     std::cout<<"Exact route cache 2000 queries: uncached_ms="<<uncached<<" cached_ms="<<cached<<"\n";
 }
+static void ScoutCoverage() {
+    Terrain terrain; terrain.gw=20; terrain.gh=12;
+    terrain.height.assign(240,10); terrain.surfaceSlope.assign(240,0); terrain.body8.assign(240,0);
+    for (auto& pass:terrain.pass) pass.assign(240,1);
+    Grid threat(240,0); std::vector<char> coverage(240,0); PointWorkspace workspace;
+    const Point from(96,0,352), to(1184,0,352);
+    // The only opening is at the end of a broad, two-cell-thick screen.
+    for (int z=1;z<11;++z) for (int x=9;x<=10;++x) coverage[z*20+x]=1;
+    auto route=Solver(terrain).PointRoute(from,to,L_BOT,threat,1,1,1,1e9f,&coverage,&workspace,0);
+    Check(!route.empty(),"scout finds opening around broad weapon coverage");
+    for (int cell:route) Check(!coverage[cell],"scout never crosses masked weapon coverage");
+    for (int z=0;z<12;++z) for (int x=9;x<=10;++x) coverage[z*20+x]=1;
+    Check(Solver(terrain).PointRoute(from,to,L_BOT,threat,1,1,1,1e9f,&coverage,&workspace,0).empty(),
+          "fully screened backline has no safe crossing");
+    coverage.assign(240,0);
+    coverage[5*20+1]=coverage[5*20+2]=1;
+    threat[5*20+1]=threat[5*20+2]=50;
+    route=Solver(terrain).PointRoute(from,to,L_BOT,threat,1,1,1,1e9f,nullptr,&workspace,0);
+    Check(!route.empty(),"soft escape can leave a covered starting region");
+    Check(coverage[5*20+1] && coverage[5*20+2],"escape never mutates shared coverage");
+    std::cout<<"scout hard-coverage and soft-escape contracts passed\n";
+}
 int main() {
+    // D-312: air routing must treat known AA as an obstacle even over dry
+    // ground, and retained solver scratch must observe a newly closed gap.
+    {
+        Terrain air; air.gw=20; air.gh=12;
+        air.height.assign(240,10); air.surfaceSlope.assign(240,0); air.body8.assign(240,0);
+        for (auto& pass:air.pass) pass.assign(240,1);
+        Grid costs(240,0); std::vector<char> aa(240,0); PointWorkspace workspace;
+        for (int z=1;z<11;++z) for (int x=8;x<12;++x) aa[z*20+x]=1;
+        const Point start(96,0,352), end(1184,0,352);
+        const auto detour=Solver(air).PointRoute(start,end,L_AIR,costs,1,1,0,1e9f,&aa,&workspace,0);
+        Check(!detour.empty(),"carrier detours around AA on dry terrain");
+        for (int cell:detour) Check(!aa[cell],"carrier excludes known AA cells");
+        for (int z=0;z<12;++z) for (int x=8;x<12;++x) aa[z*20+x]=1;
+        Check(Solver(air).PointRoute(start,end,L_AIR,costs,1,1,0,1e9f,&aa,&workspace,0).empty(),"new AA closes flight route");
+        aa.assign(240,0);
+        Check(!Solver(air).PointRoute(start,end,L_AIR,costs,1,1,0,1e9f,&aa,&workspace,0).empty(),"destroyed AA releases route");
+        std::cout<<"carrier AA obstacle lifetime passed\n";
+    }
+    ScoutCoverage();
     PublicationRevision();
     ExactResultCache();
     Differential();

@@ -826,6 +826,11 @@ int CBattleAnalysis::EnemyCount(int kind) const { return ((kind >= 0) && (kind <
 
 float CBattleAnalysis::SurfThreat(const AIFloat3& pos) const { return circuit->GetThreatMap()->GetSurfThreatAtPos(pos); }
 float CBattleAnalysis::AirThreat(const AIFloat3& pos) const { return circuit->GetThreatMap()->GetAirThreatAtPos(pos); }
+bool CBattleAnalysis::InLos(const AIFloat3& pos) const {
+    return std::isfinite(pos.x) && std::isfinite(pos.z) && pos.x >= 0.f && pos.z >= 0.f
+        && pos.x < CTerrainManager::GetTerrainWidth() && pos.z < CTerrainManager::GetTerrainHeight()
+        && circuit->GetMapManager()->IsInLOS(AIFloat3(pos.x, 0.f, pos.z));
+}
 float CBattleAnalysis::AirThreatAlong(const AIFloat3& from, const AIFloat3& to, float padding) const {
     const auto* threat = circuit->GetThreatMap();
     float result = air::CorridorThreat(from.x, from.z, to.x, to.z, padding,

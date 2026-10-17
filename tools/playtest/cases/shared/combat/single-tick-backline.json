@@ -1,0 +1,121 @@
+{
+  "name": "single-tick-backline",
+  "unit": "armflea",
+  "units": [
+    "armflea"
+  ],
+  "checks": "single-tick-backline",
+  "description": "One opening Tick must bypass a defended front and destroy exposed mexes and wind in the backline. No second scout masks a native-first exemption. Radar reveals only unidentified front contacts; no omniscient target injection.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    8200,
+    3200
+  ],
+  "photos": [
+    60,
+    150,
+    240
+  ],
+  "kill_census": true,
+  "depth_units": true,
+  "econ_targets": [
+    "armmex",
+    "armwin",
+    "armnanotc"
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        4000,
+        4300
+      ]
+    },
+    {
+      "unit": "armllt",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7200
+      ],
+      "spacing": 530,
+      "columns": 4
+    },
+    {
+      "unit": "armham",
+      "count": 6,
+      "team": 1,
+      "position": [
+        3700,
+        7400
+      ],
+      "spacing": 120,
+      "columns": 6
+    },
+    {
+      "unit": "armmex",
+      "count": 8,
+      "team": 1,
+      "position": [
+        3300,
+        9200
+      ],
+      "spacing": 200,
+      "columns": 4
+    },
+    {
+      "unit": "armwin",
+      "count": 8,
+      "team": 1,
+      "position": [
+        3400,
+        9700
+      ],
+      "spacing": 160,
+      "columns": 4
+    },
+    {
+      "unit": "armnanotc",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4500,
+        9400
+      ],
+      "spacing": 200,
+      "columns": 2
+    },
+    {
+      "unit": "armflea",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3800,
+        4000
+      ],
+      "spacing": 96,
+      "columns": 1,
+      "after_seconds": 30
+    }
+  ],
+  "assertions": {
+    "min_kills": 3,
+    "max_losses": 0
+  }
+}

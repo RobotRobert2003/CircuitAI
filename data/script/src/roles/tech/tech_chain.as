@@ -724,9 +724,14 @@ namespace TechChain
             return null;
         }
         powerSiteRetry = ai.frame + 5 * SECOND;
-        for (int z = 0; z < Layout::ZoneCount(); ++z) {
-            const int slot = aiTerrainMgr.PackNearBuiltPower(Layout::ZoneAt(z), d, Layout::nanoGroup,
-                Layout::facing, Layout::TurretSeed(), 16.0f);
+        // Compact maps have independent banks instead of the large box zones.
+        // Keep the completed-power query, resource gates and five-second retry.
+        const bool compact = CompactEco::Active();
+        const int zoneCount = compact ? int(CompactEco::groups.length()) : Layout::ZoneCount();
+        for (int z = 0; z < zoneCount; ++z) {
+            const int slot = aiTerrainMgr.PackNearBuiltPower(compact ? CompactEco::zones[z] : Layout::ZoneAt(z), d,
+                compact ? CompactEco::groups[z] : Layout::nanoGroup,
+                compact ? Layout::LabFacing() : Layout::facing, Layout::TurretSeed(), 16.0f);
             if (slot < 0) continue;
             IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Common(type, Task::Priority::HIGH, d,
                 aiTerrainMgr.GetReservationPos(slot), 0.0f, true, 300 * SECOND));
@@ -781,7 +786,12 @@ namespace TechChain
             // A distant mex worker must not own a no-frame turret reservation
             // while local workers wait for the completed bank. It can assist
             // a real frame, but only local builders reserve new rush turrets.
-            if (NukeRush() && MapHelpers::SqDist(u.GetPos(ai.frame), Layout::TurretSeed()) > 800.0f * 800.0f) return null;
+            if (NukeRush()) {
+                const AIFloat3 position = u.GetPos(ai.frame);
+                const bool local = CompactEco::Active() ? CompactEco::LocalWorker(position, 800.0f)
+                    : MapHelpers::SqDist(position, Layout::TurretSeed()) <= 800.0f * 800.0f;
+                if (!local) return null;
+            }
             return Layout::NanoTask(u, Task::Priority::HIGH, NukeRush() ? 2 : -1);
         }
         if (NukeRush() && (key == "fusion" || key == "silo"))

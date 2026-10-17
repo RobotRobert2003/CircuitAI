@@ -27,6 +27,7 @@ public:
     int GetOperation() const { return operation; }
     bool ReceiveProjectiles(const char* message);
     IUnitTask* FrontWork(CCircuitUnit* unit,int kind,CCircuitDef* buildDef,float radius);
+    bool CanStartRadar(CCircuitUnit* unit);
 private:
     // Values are logged as integers; append new modes only.
     enum class Mode { SUPPORT,ASSESS,APPROACH,ALIGN,PENDING,ESCAPE,RECOVER,FALLBACK };
@@ -178,6 +179,7 @@ private:
     IUnitTask* ReclaimWork(CCircuitUnit* unit,const State& state,float radius,int frame);
     IUnitTask* LineWork(CCircuitUnit* unit,State& state,CCircuitDef* buildDef,int frame);
     IUnitTask* RadarWork(CCircuitUnit* unit,State& state,CCircuitDef* buildDef,int frame);
+    bool RadarCovered(CCircuitUnit* unit,State& state,int frame);
     IUnitTask* AssistWork(CCircuitUnit* unit,const State& state,const springai::AIFloat3& center,float radius,bool factories,int frame);
     float WorkRadius(CCircuitUnit* unit) const;
     // A ladder target is legal while a fallback holds only inside its perimeter.

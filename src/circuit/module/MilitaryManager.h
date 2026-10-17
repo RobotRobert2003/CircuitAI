@@ -113,6 +113,8 @@ public:
 	}
 
 	IFighterTask* Enqueue(const TaskF::SFightTask& ti);
+	IFighterTask* EnqueueGather(const TaskF::SFightTask& ti, const springai::AIFloat3& pos, int deadline);
+	bool SetGatherPower(IUnitTask* task, float power);
 	IUnitTask* EnqueueExternalControl(const std::string& ownerRule);
 	IUnitTask* EnqueueCargoHold(int transportId);
 	virtual CRetreatTask* EnqueueRetreat() override;

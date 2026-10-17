@@ -113,6 +113,9 @@ namespace Factory {
 	// Recheck role/retirement because task hooks may change either at handover.
 	bool AiCanRefillImmediately(CCircuitUnit@ u)
 	{
+        if (u is null || u.circuitDef is null || Lifecycle::IsRetiring(u)) return false;
+        if (Global::AISettings::Role == AiRole::TECH)
+            return Global::RoleSettings::Tech::ContinuousGantryProduction && UnitHelpers::IsGantryLab(u.circuitDef.GetName());
 		return Global::AISettings::Role == AiRole::AIR
 			&& Global::RoleSettings::Air::ContinuousFactoryProduction
 			&& u !is null && u.circuitDef !is null && !Lifecycle::IsRetiring(u)

@@ -1727,6 +1727,17 @@ IUnitTask* CFactoryManager::DefaultMakeTask(CCircuitUnit* unit)
 	return MakeFactoryTask(unit, false);
 }
 
+IUnitTask* CFactoryManager::GetPendingFactoryTask(CCircuitUnit* unit) const
+{
+    if (unit == nullptr || unit->GetCircuitDef()->IsAssist()) return nullptr;
+    // Preserve the manager's ordered eligibility/ownership test. Selection only:
+    // O(P) existing recruit tasks, no queue mutation, new orders or retained handle.
+    for (CRecruitTask* task : factoryTasks) {
+        if (task->CanAssignTo(unit)) return task;
+    }
+    return nullptr;
+}
+
 IUnitTask* CFactoryManager::MakeFactoryTask(CCircuitUnit* unit, bool keepActive, bool keepQueued)
 {
 	const IUnitTask* task = nullptr;
@@ -1736,12 +1747,7 @@ IUnitTask* CFactoryManager::MakeFactoryTask(CCircuitUnit* unit, bool keepActive,
 
 	} else {
 
-		for (const CRecruitTask* candy : factoryTasks) {
-			if (candy->CanAssignTo(unit)) {
-				task = candy;
-				break;
-			}
-		}
+        task = GetPendingFactoryTask(unit);
 
 		if (task == nullptr) {
 			task = CreateFactoryTask(unit, keepActive, keepQueued);

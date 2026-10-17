@@ -592,6 +592,48 @@ namespace Spam {
         _EnsureFocus();
         return _RouteOfKey("" + factory.id, factory.GetPos(ai.frame));
     }
+
+    // D-312: logistics borrows a real spam lane without creating a factory or
+    // route task. O(F) live route entries, only when planning a delivery. Choose
+    // nearest the midpoint of the active lane set; team-local factory ID breaks
+    // even-lane ties. Empty sets use the same centreline spam would create.
+    array<AIFloat3> DeliveryLane()
+    {
+        _EnsureFocus();
+        array<string>@ keys=routeByFactory.getKeys();
+        array<int> ids; array<float> sides;
+        float low=1e30f, high=-1e30f;
+        for (uint i=0;i<keys.length();++i) {
+            CRouteTask@ task;
+            CCircuitUnit@ factory=ai.GetTeamUnit(int(parseInt(keys[i])));
+            if (factory is null || !routeByFactory.get(keys[i],@task) || task is null || task.IsDead()) continue;
+            float side=0.0f;
+            if (!spreadByFactory.get(keys[i],side)) {
+                int lane=0;
+                if (!laneByFactory.get(keys[i],lane)) lane=0;
+                side=float(lane)*Global::Spam::LaneSpacing;
+            }
+            ids.insertLast(factory.id); sides.insertLast(side);
+            low=AiMin(low,side); high=AiMax(high,side);
+        }
+        int selected=-1; float nearest=1e30f;
+        for (uint i=0;i<ids.length();++i) {
+            const float distance=abs(sides[i]-(low+high)*0.5f);
+            if (distance<nearest || (distance==nearest && ids[i]<selected)) {
+                nearest=distance; selected=ids[i];
+            }
+        }
+        if (selected>=0) {
+            CCircuitUnit@ factory=ai.GetTeamUnit(selected);
+            array<AIFloat3> points=RouteOf(factory);
+            points.insertAt(0,factory.GetPos(ai.frame));
+            return points;
+        }
+        float ax,az,nx,nz; _Axis(ax,az,nx,nz);
+        array<AIFloat3> points=BuildSpreadRoute(Global::Map::StartPos,hasFront?_Side(front,nx,nz):0.0f);
+        points.insertAt(0,Global::Map::StartPos);
+        return points;
+    }
     int _NextLane()
     {
         // 0, +1, -1, +2, -2, ...
@@ -689,6 +731,8 @@ namespace Spam {
 
     IUnitTask@ FactoryMakeTask(CCircuitUnit@ factory)
     {
+        // D-309: finish the finite opener before converting its producer to a pump.
+        if (FrontOpener::OwnsFactory(factory)) return null;
         if (!active || factory is null || factory.circuitDef is null) return null;
         const string unitName = SpamUnitFor(factory.circuitDef);
         if (unitName.length() == 0) {
@@ -728,6 +772,9 @@ namespace Spam {
     // before deactivation still go).
     IUnitTask@ MilitaryMakeTask(CCircuitUnit@ u)
     {
+        // Also guards AdoptProducedUnits: mature income must not strip a
+        // gathering opener into individual lanes before its power threshold.
+        if (FrontOpener::OwnsUnit(u)) return null;
         if (!IsEnabled() || u is null || !IsSpamDef(u.circuitDef)) return null;
         if (routeByFactory.getSize() == 0) return null;
         const string ukey = "" + u.id;

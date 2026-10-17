@@ -35,12 +35,13 @@ using namespace springai;
 using namespace terrain;
 
 CDefendTask::CDefendTask(ITaskModule* mgr, const AIFloat3& position,
-						 FightType check, FightType promote, float maxPower, float powerMod)
+						 FightType check, FightType promote, float maxPower, float powerMod, int gatherDeadline)
 		: ISquadTask(mgr, FightType::DEFEND, powerMod)
 		, check(check)
 		, promote(promote)
 		, maxPower(maxPower * powerMod)
 		, createdFrame(mgr->GetCircuit()->GetLastFrame())
+		, gatherDeadline(gatherDeadline)
 {
 	this->position = position;
 }
@@ -51,6 +52,8 @@ CDefendTask::~CDefendTask()
 
 bool CDefendTask::CanAssignTo(CCircuitUnit* unit) const
 {
+	// Neither direction may merge a script-owned cohort into ordinary defence.
+	if (IsGather() || static_cast<CDefendTask*>(unit->GetTask())->IsGather()) return false;
 	return (leader == nullptr || leader->GetCircuitDef()->GetTargetMinCost() == unit->GetCircuitDef()->GetTargetMinCost())
         && (attackPower < maxPower) && (static_cast<CDefendTask*>(unit->GetTask())->GetPromote() == promote);
 }
@@ -120,14 +123,20 @@ void CDefendTask::Update()
 		 */
 		const float waitSec = militaryMgr->GetAttackWaitSeconds();
 		const int frame = manager->GetCircuit()->GetLastFrame();
-		const bool waitedOut = (waitSec > 0.f) && (promote == FightType::ATTACK)
+		const bool waitedOut = !IsGather() && (waitSec > 0.f) && (promote == FightType::ATTACK)
 				&& (frame - createdFrame > int(waitSec * FRAMES_PER_SEC))
 				&& (attackPower >= militaryMgr->GetMinAttackers());
 		if (waitedOut) {
 			manager->GetCircuit()->LOG("DEFEND: squad of %i waited %.0fs at power %.0f (needed %.0f); attacking anyway",
 					int(units.size()), float(frame - createdFrame) / FRAMES_PER_SEC, attackPower, maxPower);
 		}
-		if ((attackPower >= maxPower) || waitedOut || !militaryMgr->GetTasks(check).empty()) {
+		const bool gatherExpired = IsGather() && frame >= gatherDeadline;
+		if ((attackPower >= maxPower) || gatherExpired || waitedOut
+				|| (!IsGather() && !militaryMgr->GetTasks(check).empty())) {
+			if (IsGather()) {
+				manager->GetCircuit()->LOG("[Gather] launch units=%i power=%.5f threshold=%.5f expired=%i",
+						int(units.size()), attackPower, maxPower, int(gatherExpired));
+			}
 			IFighterTask* task = militaryMgr->Enqueue(TaskF::Common(promote));
 			decltype(units) tmpUnits = units;
 			for (CCircuitUnit* unit : tmpUnits) {
@@ -141,6 +150,13 @@ void CDefendTask::Update()
 	/*
 	 * Merge tasks if possible
 	 */
+	// A gathering cohort keeps its original rally orders until it launches.
+	// No target scans, paths or repeated commands while waiting. Existing native
+	// damage/retreat handling still applies. O(1) extra work per task update.
+	if (IsGather()) {
+		if (updCount % 16 == 2) IFighterTask::Update(); // preserve shield retreat checks
+		return;
+	}
 	ISquadTask* task = GetMergeTask();
 	if (task != nullptr) {
 		task->Merge(this);

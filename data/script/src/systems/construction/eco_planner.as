@@ -116,6 +116,11 @@ namespace EcoPlanner {
         }
         return conversionDecision.headroom;
     }
+    bool FundedConverterRecovery(CCircuitDef@ def, int pending) {
+        return Global::RoleSettings::Tech::EconomyRecoveryEnabled && def !is null
+            && ReplacementFunded(aiTerrainMgr.GetLostReservationCount(def), pending,
+                aiEconomyMgr.metal.current, def.costM);
+    }
     ConversionReason TechConversionAdmission(CCircuitDef@ def, CCircuitUnit@ worker) {
         if (TechBuild::MetalFullLong() || aiEconomyMgr.isMetalFull) return METAL_FULL;
         if (def is null) return UNAVAILABLE;
@@ -127,7 +132,7 @@ namespace EcoPlanner {
         const ConversionReason reason = DecideConversion(false, true, pending, parallel,
             ConversionSupply() >= aiEconomyMgr.GetEnergyUse(def), def.IsAvailable(ai.frame),
             worker is null || (worker.circuitDef !is null && worker.circuitDef.CanBuild(def)),
-            advanced ? income >= Global::RoleSettings::Tech::MinimumMetalIncomeForAdvConverter
+            advanced ? (income >= Global::RoleSettings::Tech::MinimumMetalIncomeForAdvConverter || FundedConverterRecovery(def, pending))
                 : income < Global::RoleSettings::Tech::BuildT1ConvertersUntilMetalIncome,
             conversionDecision !is null && conversionDecision.placementRejected
                 && conversionDecision.placementRejectedDef == def.id);
@@ -556,7 +561,8 @@ namespace EcoPlanner {
         Option@ adv = Make("advconv", UnitHelpers::GetAdvEnergyConverterNameForSide(side), s, true);
         if (s.builderIsT2 && adv !is null && s.advConvsQueued < par
             && surplus >= adv.energyUse
-            && s.mIncome >= Global::RoleSettings::Tech::MinimumMetalIncomeForAdvConverter) {
+            && (s.mIncome >= Global::RoleSettings::Tech::MinimumMetalIncomeForAdvConverter
+                || (Global::AISettings::Role == AiRole::TECH && FundedConverterRecovery(DefOf("advconv"), s.advConvsQueued)))) {
             why = "energy floating, surplus " + int(surplus) + " carries "
                 + int(adv.energyUse) + " E/s advanced converter for +" + int(adv.metalMake) + " metal";
             return adv.key;

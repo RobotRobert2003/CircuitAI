@@ -10,7 +10,15 @@ namespace Team { namespace HeavyTransport {
     bool reconstructed = false;
     int desired = 0;
     int lastRequestFrame = -1;
+    int requestedProvider = -1;
     const string TargetKey = "tech.transport.target";
+
+    void CancelRequest() {
+        if (requestedProvider < 0) return;
+        AiSendMessage(Ferry::MSG + "|cancel|heavy", requestedProvider);
+        requestedProvider = -1;
+        lastRequestFrame = -1;
+    }
 
     bool Enabled() { return Global::Ferry::Enabled && Global::AISettings::Role == AiRole::TECH
         && Global::RoleSettings::Tech::HeavyTransportPoolEnabled; }
@@ -49,7 +57,7 @@ namespace Team { namespace HeavyTransport {
         // Fixed six-definition lookup, not a census of factories or units.
         const array<string> names = {"armap", "corap", "legap", "armaap", "coraap", "legaap"};
         CCircuitDef@ carrier = ai.GetCircuitDef(OwnDefinition());
-        if (carrier is null) return false;
+        if (carrier is null || !TechTransport::WantsCarrier(carrier)) return false;
         for (uint index = 0; index < names.length(); ++index) {
             CCircuitDef@ factory = ai.GetCircuitDef(names[index]);
             if (factory !is null && factory.count > 0 && factory.CanBuild(carrier)) return true;
@@ -64,7 +72,8 @@ namespace Team { namespace HeavyTransport {
     IUnitTask@ FactoryTask(CCircuitUnit@ factory) {
         if (!Enabled() || factory is null || CompletedCount() + IncomingLocal() >= desired) return null;
         CCircuitDef@ definition = ai.GetCircuitDef(OwnDefinition());
-        if (definition is null || !factory.circuitDef.CanBuild(definition) || Lifecycle::IsRetiring(factory)) return null;
+        if (definition is null || !TechTransport::WantsCarrier(definition)
+            || !factory.circuitDef.CanBuild(definition) || Lifecycle::IsRetiring(factory)) return null;
         // The explicit order owns this temporary cap; generic production never
         // sees an open discretionary transport slot after the enqueue.
         definition.maxThisUnit = definition.count + 1;
@@ -81,20 +90,29 @@ namespace Team { namespace HeavyTransport {
         int provider = -1;
         float nearest = 1e30f;
         for (uint index = 0; index < providers.length(); ++index) {
+            string name;
+            if (!Global::Ferry::HeavyTransportBySide.get(providers[index].side, name)
+                || !TechTransport::WantsCarrier(ai.GetCircuitDef(name))) continue;
             const float distance = MapHelpers::SqDist(Global::Map::StartPos, providers[index].startPos);
             if (distance < nearest || (distance == nearest && providers[index].teamId < provider)) {
                 nearest = distance; provider = providers[index].teamId;
             }
         }
         if (provider < 0) return; // target stays outstanding, including late roster announcements
+        if (requestedProvider >= 0 && requestedProvider != provider) CancelRequest();
         lastRequestFrame = ai.frame;
+        requestedProvider = provider;
         AiSendMessage(Ferry::MSG + "|req|" + int(Global::Map::StartPos.x) + "|"
             + int(Global::Map::StartPos.z) + "|heavy", provider);
         GenericHelpers::LogUtil("[HeavyTransport] request AIR=" + provider + " owned="
             + CompletedCount() + " target=" + desired, 1);
     }
     void Update() {
-        if (!Enabled()) return;
+        if (!Enabled()) {
+            CancelRequest();
+            if (desired != 0) { desired = 0; aiTerrainMgr.SetLayoutInt(TargetKey, 0); }
+            return;
+        }
         if (AiPerfEnabled) AiPerfBeginLabel("tech-transport-pool");
         UpdateImpl();
         if (AiPerfEnabled) AiPerfEndLabel();
@@ -106,14 +124,22 @@ namespace Team { namespace HeavyTransport {
             for (uint index = 0; index < own.length(); ++index) Added(ai.GetTeamUnit(own[index]));
             reconstructed = true;
         }
-        const int target = TransportMath::DesiredCount(Economy::GetMinMetalIncomeLast10s(),
+        bool needed = false;
+        for (uint index = 0; index < Global::Ferry::HeavyTransportDefs.length(); ++index) {
+            if (TechTransport::WantsCarrier(ai.GetCircuitDef(Global::Ferry::HeavyTransportDefs[index]))) {
+                needed = true;
+                break;
+            }
+        }
+        const int target = needed ? TransportMath::DesiredCount(Economy::GetMinMetalIncomeLast10s(),
             Global::Ferry::RequestMinMetalIncome, Global::RoleSettings::Tech::HeavyTransportAdditionalIncomeStart,
-            Global::RoleSettings::Tech::HeavyTransportMetalPerAdditional, desired);
+            Global::RoleSettings::Tech::HeavyTransportMetalPerAdditional, desired) : 0;
         if (target != desired) {
             desired = target;
             aiTerrainMgr.SetLayoutInt(TargetKey, desired);
             GenericHelpers::LogUtil("[HeavyTransport] pool target=" + desired, 1);
         }
+        if (!needed) CancelRequest();
         for (uint index = 0; index < carriers.length(); ++index) {
             const string key = "" + carriers[index];
             CFerryTask@ task = Ferry::TaskOf(ai.GetTeamUnit(carriers[index]));

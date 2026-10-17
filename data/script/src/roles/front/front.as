@@ -11,6 +11,7 @@
 #include "../../global.as"
 #include "../../types/terrain.as"
 #include "../../systems/production/factory_production.as"
+#include "../../systems/production/front_opener.as"
 #include "../../systems/combat/land_siege.as"
 #include "../../systems/construction/front_geothermal.as"
 #include "../../systems/construction/commander_front.as"
@@ -262,7 +263,7 @@ namespace RoleFront {
     IUnitTask@ Front_TryScoutRush(CCircuitUnit@ u, const string &in factoryName, const string &in side)
     {
         if (u is null) return null;
-        if (g_frontScoutRushFinished) return null;
+        if (g_frontScoutRushFinished || FrontOpener::WasQueued("scout")) return null;
         if (!UnitHelpers::IsT1BotLab(factoryName) && !UnitHelpers::IsT1VehicleLab(factoryName)) return null;
 
         // Lock to the first T1 land factory encountered
@@ -293,6 +294,7 @@ namespace RoleFront {
             );
         }
         g_frontScoutRushFinished = true;
+        FrontOpener::MarkQueued("scout");
         GenericHelpers::LogUtil("[FRONT] ScoutRush enqueued count=" + target, 2);
         return last;
     }
@@ -302,7 +304,7 @@ namespace RoleFront {
     IUnitTask@ Front_TryT1RaiderOpener(CCircuitUnit@ u, const string &in factoryName, const string &in side)
     {
         if (u is null) return null;
-        if (g_frontRaiderOpenerDone) return null;
+        if (g_frontRaiderOpenerDone || FrontOpener::WasQueued("batch")) return null;
         if (!UnitHelpers::IsT1BotLab(factoryName) && !UnitHelpers::IsT1VehicleLab(factoryName)) return null;
 
         string raiderName = UnitHelpers::GetFrontT1RaiderForFactory(factoryName, side);
@@ -312,20 +314,24 @@ namespace RoleFront {
         }
 
         CCircuitDef@ pdef = ai.GetCircuitDef(raiderName);
+        CCircuitDef@ tank = FrontOpener::ChooseTank(u, factoryName, side);
+        if (tank !is null) { @pdef = tank; raiderName = tank.GetName(); }
         if (pdef is null || !pdef.IsAvailable(ai.frame)) {
             g_frontRaiderOpenerDone = true;
             return null;
         }
-
         const AIFloat3 pos = u.GetPos(ai.frame);
         IUnitTask@ last = null;
         const int count = Global::RoleSettings::Front::RaiderOpenerCount;
+        if (tank !is null && count > 0) FrontOpener::Begin(u, tank, count);
         for (int i = 0; i < count; ++i) {
             @last = aiFactoryMgr.Enqueue(
                 TaskS::Recruit(Task::RecruitType::FIREPOWER, Task::Priority::NORMAL, pdef, pos, 64.f)
             );
+            if (tank !is null) FrontOpener::Recruit(last);
         }
         g_frontRaiderOpenerDone = true;
+        FrontOpener::MarkQueued("batch");
         GenericHelpers::LogUtil("[FRONT] T1 raider opener enqueued count=" + count + " unit=" + raiderName, 2);
         return last;
     }
@@ -499,7 +505,7 @@ namespace RoleFront {
     void Front_FactoryAiUnitRemoved(CCircuitUnit@ unit, Unit::UseAs usage)
     {
         //GenericHelpers::LogUtil("[FRONT] FactoryAiUnitRemoved id=" + (unit is null ? -1 : unit.id) + " usage=" + usage, 3);
-        // No Front-specific cleanup required; Factory manager handles primary/anchor clearing.
+        FrontOpener::FactoryRemoved(unit);
     }
 
     bool Front_AiIsSwitchTime(int lastSwitchFrame) {
@@ -523,11 +529,17 @@ namespace RoleFront {
 
     ******************************************************************************/
     
+    IUnitTask@ Front_MilitaryAiMakeTask(CCircuitUnit@ unit) {
+        IUnitTask@ task = FrontOpener::MilitaryTask(unit);
+        return task is null ? aiMilitaryMgr.DefaultMakeTask(unit) : task;
+    }
+
     // Counter for scout assignment
     int g_frontScoutAssignmentCount = 0;
 
     void Front_MilitaryAiUnitAdded(CCircuitUnit@ unit, Unit::UseAs usage) {
         if (unit is null) return;
+        FrontOpener::Admit(unit);
         
         // Only apply to the first N units
         if (g_frontScoutAssignmentCount >= Global::RoleSettings::Front::ScoutAssignmentLimit) return;
@@ -1035,6 +1047,10 @@ namespace RoleFront {
         @cfg.SelectFactoryHandler = cast<SelectFactoryDelegate@>(@Front_SelectFactoryHandler);
         @cfg.FactoryAiUnitAdded = cast<AiUnitAddedDelegate@>(@Front_FactoryAiUnitAdded);
         @cfg.FactoryAiUnitRemoved = cast<AiUnitRemovedDelegate@>(@Front_FactoryAiUnitRemoved);
+        @cfg.FactoryAiTaskRemovedHandler = cast<AiTaskRemovedDelegate@>(@FrontOpener::RecruitRemoved);
+        @cfg.MilitaryAiMakeTaskHandler = cast<AiMakeTaskDelegate@>(@Front_MilitaryAiMakeTask);
+        @cfg.MilitaryAiUnitRemoved = cast<AiUnitRemovedDelegate@>(@FrontOpener::UnitRemoved);
+        @cfg.MilitaryAiTaskRemovedHandler = cast<AiTaskRemovedDelegate@>(@FrontOpener::TaskRemoved);
 
         @cfg.MilitaryAiUnitAdded = cast<AiUnitAddedDelegate@>(@Front_MilitaryAiUnitAdded);
 

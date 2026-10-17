@@ -1,4 +1,5 @@
 #include "../../helpers/math/transport_math.as"
+#include "tech_delivery_front.as"
 
 namespace TechHeavyDelivery {
     class Delivery {
@@ -9,10 +10,27 @@ namespace TechHeavyDelivery {
         bool removed = false;
         bool giving = false;
         bool landed = false;
+        int nextFrontPlan = 0;
+        int nextFlightAttempt = 0;
+        AIFloat3 frontDestination = AIFloat3(-1,0,-1);
+        array<AIFloat3> frontRoute;
         AIFloat3 destination = AIFloat3(-1.0f, 0.0f, -1.0f);
         CRouteTask@ route;
     }
     dictionary deliveries; // unit ID -> Delivery@; bounded by the finite batch
+
+    float ArrivalRadius() {
+        return Global::RoleSettings::Tech::HeavyDeliveryFrontEnabled
+            ? Global::RoleSettings::Tech::HeavyDeliveryFrontRadius : Global::RoleSettings::Tech::HeavyDeliveryArrivalRadius;
+    }
+    AIFloat3 ArrivalAnchor(int unitId, int recipient) {
+        if (!Global::RoleSettings::Tech::HeavyDeliveryFrontEnabled)
+            return Team::Roster::DeliveryAnchor(Team::Roster::Get(recipient));
+        Delivery@ delivery;
+        if (!deliveries.get(""+unitId,@delivery) || delivery is null || delivery.recipient!=recipient)
+            return AIFloat3(-1,0,-1);
+        return delivery.frontDestination;
+    }
 
     void Removed(CCircuitUnit@ unit) {
         if (unit is null) return;
@@ -44,7 +62,7 @@ namespace TechHeavyDelivery {
     }
     IUnitTask@ WalkTask(CCircuitUnit@ unit, Delivery@ delivery) {
         if (delivery.recipient < 0) return null;
-        const AIFloat3 anchor = Team::Roster::DeliveryAnchor(Team::Roster::Get(delivery.recipient));
+        const AIFloat3 anchor = ArrivalAnchor(unit.id,delivery.recipient);
         if (anchor.x < 0.0f) return null;
         const bool live = delivery.route !is null && !delivery.route.IsDead();
         const float moved = Global::RoleSettings::Tech::HeavyDeliveryDestinationMove;
@@ -54,19 +72,19 @@ namespace TechHeavyDelivery {
         if (live && MapHelpers::SqDist(anchor, delivery.destination) < moved * moved
             && (!delivery.route.IsAtEnd(unit) || TransportMath::Arrived(
                 MapHelpers::SqDist(unit.GetPos(ai.frame), anchor),
-                Global::RoleSettings::Tech::HeavyDeliveryArrivalRadius, false))) return delivery.route;
+                ArrivalRadius(), false))) return delivery.route;
         if (ai.frame < delivery.nextRouteAttempt) return live ? delivery.route : null;
         delivery.nextRouteAttempt = ai.frame + int(Global::RoleSettings::Tech::HeavyDeliveryRouteRetrySeconds * SECOND);
         const AIFloat3 destination = aiTerrainMgr.FindSafeDropSpot(unit, anchor,
-            Global::RoleSettings::Tech::HeavyDeliveryArrivalRadius * 0.5f,
+            ArrivalRadius() * 0.5f,
             Global::Ferry::DropSurfaceThreat, Global::Ferry::DropAirThreat);
         if (destination.x < 0.0f || !aiTerrainMgr.CanReachAtSafe(unit, destination,
-            Global::RoleSettings::Tech::HeavyDeliveryArrivalRadius)) return live ? delivery.route : null;
+            ArrivalRadius())) return live ? delivery.route : null;
         if (!live) {
             IUnitTask@ task = aiMilitaryMgr.Enqueue(TaskF::Route());
             @delivery.route = cast<CRouteTask>(cast<IFighterTask>(task));
             if (delivery.route is null) return null;
-            delivery.route.SetTraversal(false, Global::RoleSettings::Tech::HeavyDeliveryArrivalRadius * 0.25f, false);
+            delivery.route.SetTraversal(false, ArrivalRadius() * 0.25f, false);
         }
         const array<AIFloat3> points = {destination};
         delivery.route.SetRoute(points); // one engine MOVE; Recoil handles terrain routing
@@ -120,7 +138,15 @@ namespace TechHeavyDelivery {
             delivery.recipient = TechHeavyRush::Recipient();
             aiTerrainMgr.SetLayoutInt(TechHeavyRush::StateKey + "recipient." + index, delivery.recipient);
         }
-        const AIFloat3 anchor = Team::Roster::DeliveryAnchor(Team::Roster::Get(delivery.recipient));
+        const bool forward = Global::RoleSettings::Tech::HeavyDeliveryFrontEnabled;
+        if (forward && delivery.carrier<0 && !delivery.landed && ai.frame>=delivery.nextFrontPlan) {
+            delivery.nextFrontPlan=ai.frame+int(Global::RoleSettings::Tech::HeavyDeliveryRouteRetrySeconds*SECOND);
+            array<AIFloat3> path; AIFloat3 destination;
+            if (TechDeliveryFront::Plan(unit,path,destination)) {
+                delivery.frontRoute=path; delivery.frontDestination=destination;
+            }
+        }
+        const AIFloat3 anchor = ArrivalAnchor(unit.id,delivery.recipient);
         if (delivery.carrier >= 0) {
             CCircuitUnit@ aircraft = ai.GetTeamUnit(delivery.carrier);
             if (aircraft !is null && Controlled(aircraft)) return; // player took over the aircraft, possibly with cargo aboard
@@ -136,7 +162,7 @@ namespace TechHeavyDelivery {
             @delivery.route = null;
         }
         if (anchor.x >= 0.0f && TransportMath::Arrived(MapHelpers::SqDist(unit.GetPos(ai.frame), anchor),
-            Global::RoleSettings::Tech::HeavyDeliveryArrivalRadius, false)) {
+            ArrivalRadius(), false)) {
             if (!Invariants::HeavyDeliveryArrival(unit, delivery.recipient, delivery.carrier)) return;
             delivery.giving = true;
             array<CCircuitUnit@> gift = {unit};
@@ -146,12 +172,15 @@ namespace TechHeavyDelivery {
             return;
         }
         const int available = delivery.landed ? -1 : Team::HeavyTransport::Available(unit);
-        if (available >= 0 && anchor.x >= 0.0f) {
+        if (available >= 0 && anchor.x >= 0.0f && (!forward || ai.frame>=delivery.nextFlightAttempt)) {
+            delivery.nextFlightAttempt=ai.frame+int(Global::RoleSettings::Tech::HeavyDeliveryRouteRetrySeconds*SECOND);
             CFerryTask@ carrier = Team::Ferry::TaskOf(ai.GetTeamUnit(available));
-            const AIFloat3 drop = aiTerrainMgr.FindSafeDropSpot(unit, anchor, Global::Ferry::SafeDropRadius,
+            const AIFloat3 drop = forward ? anchor : aiTerrainMgr.FindSafeDropSpot(unit, anchor, Global::Ferry::SafeDropRadius,
                 Global::Ferry::DropSurfaceThreat, Global::Ferry::DropAirThreat);
-            if (drop.x >= 0.0f && carrier.SetCargo(unitId, drop,
-                Global::Ferry::DropSurfaceThreat, Global::Ferry::DropAirThreat)) {
+            if (drop.x >= 0.0f && (forward ? carrier.SetCargoRoute(unitId,delivery.frontRoute,
+                Global::Ferry::DropSurfaceThreat,Global::RoleSettings::Tech::HeavyDeliveryAirThreat,
+                Global::RoleSettings::Tech::HeavyDeliveryAirPadding) : carrier.SetCargo(unitId, drop,
+                Global::Ferry::DropSurfaceThreat, Global::Ferry::DropAirThreat))) {
                 delivery.carrier = available;
                 aiTerrainMgr.SetLayoutInt(TechHeavyRush::StateKey + "carrier." + index, available);
                 ReleaseRoute(delivery);

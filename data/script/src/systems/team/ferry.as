@@ -742,6 +742,24 @@ namespace Ferry {
         array<string>@ p = msg.split("|");
         if (p.length() < 2 || p[0] != MSG) return false;
 
+        // Withdraw only this ally's heavy obligation. Constructor requests and
+        // already started builds/flights keep their existing ownership/lifecycle.
+        if (p[1] == "cancel" && p.length() >= 3 && p[2] == "heavy") {
+            if (Global::AISettings::Role != AiRole::AIR) return true;
+            array<Id>@ allies = ai.GetTeamIds();
+            if (fromTeamId == ai.teamId || allies.find(fromTeamId) < 0) return true;
+            const int queued = QueuedRequest(fromTeamId, true);
+            if (queued >= 0) {
+                waitingTeams.removeAt(queued); waitingPositions.removeAt(queued); waitingHeavy.removeAt(queued);
+            }
+            if (requestPending && requestTeam == fromTeamId && requestHeavy && orderedFrame < 0 && buildingId < 0) {
+                _CloseSlot(TransportForSide(Global::AISettings::Side));
+                requestPending = false; requestTeam = -1; announced = false;
+                StartNextRequest();
+            }
+            return true;
+        }
+
         if (p[1] == "req") {
             if (Global::AISettings::Role != AiRole::AIR) return true;
             array<Id>@ allies = ai.GetTeamIds();

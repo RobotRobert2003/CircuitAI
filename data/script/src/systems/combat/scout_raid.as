@@ -12,12 +12,12 @@
 //
 // Policy only. Native mechanism: aiBattle.GroundHazard (observed armed ground
 // coverage, lazy per 1 s publication), aiBattle.GetUnitRaidRoute (dry unit
-// route with that coverage as a soft per-cell penalty), CRouteTask
+// route with optional hard coverage avoidance and soft escape), CRouteTask
 // SetLandTarget (BAR priority target, no ATTACK chase) and the ground
 // contact kind flags. One CRouteTask per raider.
 //
-// Cost (16 AIs): Tick once per second per AI, O(G*R + R*3) with G observed
-// ground contacts and R <= MaxRaiders; no per-unit scans of our army. Route
+// Cost (16 AIs): Tick once per second per AI, O(R*(C+P)) with C observed
+// ground contacts, P lookahead waypoints and R <= MaxRaiders; no army scans. Route
 // solves are synchronous and capped at MaxRoutesPerSecond per AI (a latency
 // budget for this new behaviour only; replans are event-driven: target lost,
 // hazard ahead, stuck). Commands: one compacted shift-MOVE batch plus at most
@@ -39,6 +39,9 @@ namespace ScoutRaid {
         int routeFailures = 0;      // consecutive failed solves: exponential replan backoff
         int targetLostFrame = -1;   // first tick the (static) target was not observed; -1 = observed
         bool insideCoverage = false; // log once on entering coverage and once when clear again
+        bool escaping = false;     // finish leaving coverage before considering another raid
+        int exploreIndex = 0;      // rotate bounded backline probes after arrival/blocked approaches
+        int escapeAttempt = 0;     // do not repeat an unreachable escape bearing forever
         int lastDirectLog = -100000; // `detour`/`blocked` lines at most once per 30 s per raider
         int nextTargetScan = 0;     // next tick a target-less raider may replan for a new contact
         bool queued = false;
@@ -154,23 +157,29 @@ namespace ScoutRaid {
     // Nearest passable ground near a point (the enemy start itself can be a
     // cliff, border strip or lake centre: glitters (4000,9800) is impassable).
     // Rings of 128 elmos, 16 bearings, outside observed armed coverage when
-    // possible. O(12*16) IsPassable lookups; results are cached per key.
+    // possible. At most 12*16 terrain/coverage lookups per budgeted plan;
+    // cached candidates are rechecked against current movement area/coverage.
     dictionary snappedGoals;
-    AIFloat3 SnapGoal(const AIFloat3& in goal)
+    AIFloat3 SnapGoal(const AIFloat3& in goal, CCircuitUnit@ unit, bool useCache = true, int bearing = 0)
     {
-        const string key = "" + int(goal.x) + "," + int(goal.z);
+        const string key = "" + unit.circuitDef.id + ":" + int(goal.x) + "," + int(goal.z);
         AIFloat3 cached;
-        if (snappedGoals.get(key, cached)) return cached;
+        // Terrain candidates are reusable, enemy coverage is not. Escape
+        // positions are transient and must never grow this finite goal cache.
+        if (useCache && snappedGoals.get(key, cached)
+            && aiTerrainMgr.CanMoveTo(unit, cached)
+            && aiBattle.GroundHazard(cached, Global::ScoutRaid::HazardMargin) <= 0.0f) return cached;
         AIFloat3 best = goal;
-        if (!LandPassable(goal) || aiBattle.GroundHazard(goal, Global::ScoutRaid::HazardMargin) > 0.0f) {
+        if (!LandPassable(goal) || !aiTerrainMgr.CanMoveTo(unit, goal)
+            || aiBattle.GroundHazard(goal, Global::ScoutRaid::HazardMargin) > 0.0f) {
             AIFloat3 fallback(-1.0f, 0.0f, -1.0f);
             bool found = false;
-            for (int ring = 1; ring <= 12 && !found; ++ring) {
+            for (int ring = 1 + AiMin(3, bearing / 16); ring <= 12 && !found; ++ring) {
                 for (int k = 0; k < 16; ++k) {
-                    const float angle = float(k) * 0.392699f;
+                    const float angle = float((k + bearing) % 16) * 0.392699f;
                     AIFloat3 p = goal + AIFloat3(cos(angle), 0.0f, sin(angle)) * float(ring * 128);
                     if (p.x < 64.0f || p.z < 64.0f || p.x > AiTerrainWidth() - 64.0f || p.z > AiTerrainHeight() - 64.0f) continue;
-                    if (!LandPassable(p)) continue;
+                    if (!LandPassable(p) || !aiTerrainMgr.CanMoveTo(unit, p)) continue;
                     if (fallback.x < 0.0f) fallback = p;
                     if (aiBattle.GroundHazard(p, Global::ScoutRaid::HazardMargin) > 0.0f) continue;
                     best = p; found = true; break;
@@ -181,7 +190,7 @@ namespace ScoutRaid {
             GenericHelpers::LogUtil("[ScoutRaid] goal snapped from=(" + int(goal.x) + "," + int(goal.z) + ") to=("
                 + int(best.x) + "," + int(best.z) + ") passable=" + LandPassable(best), 1);
         }
-        snappedGoals.set(key, best);
+        if (useCache) snappedGoals.set(key, best);
         return best;
     }
 
@@ -203,10 +212,9 @@ namespace ScoutRaid {
     // Fallback when the lane grid has no route (played: glitters' halves are
     // not connected for bots on the 64-elmo lane grid although the engine
     // fords them). Never a blind two-point move through coverage: the straight
-    // line is sampled; if it crosses coverage, one lateral detour of up to
-    // 2400 elmos around the first covered sample is tried; otherwise the route
-    // stops at the last clear sample and the raider waits there (the owner's
-    // rule is "avoid all enemies"); the backoff replan retries later.
+    // line is sampled; if it crosses coverage, up to 24 one/two-corner detours
+    // of up to 2400 elmos are tested. Cost is O(24*L/spacing) hazard lookups.
+    // Otherwise stop at the clear prefix and retry/retarget at its end.
     array<AIFloat3>@ DirectRoute(Raider@ r, const AIFloat3& in from, const AIFloat3& in goal, float margin)
     {
         const int unitId = r.id;
@@ -227,7 +235,18 @@ namespace ScoutRaid {
                 if (d.x < 64.0f || d.z < 64.0f || d.x > AiTerrainWidth() - 64.0f || d.z > AiTerrainHeight() - 64.0f) continue;
                 if (!LandPassable(d) || aiBattle.GroundHazard(d, margin) > 0.0f) continue;
                 array<AIFloat3> legs;
-                if (!SampleLeg(clear, d, margin, legs) || !SampleLeg(d, goal, margin, legs)) continue;
+                if (!SampleLeg(clear, d, margin, legs)) continue;
+                array<AIFloat3> tail;
+                if (!SampleLeg(d, goal, margin, tail)) {
+                    // A wide screen needs two corners: follow its flank before
+                    // turning back toward the economy, not a diagonal through it.
+                    AIFloat3 far = goal + side * float(s * k) * 600.0f;
+                    if (far.x < 64.0f || far.z < 64.0f || far.x > AiTerrainWidth() - 64.0f
+                        || far.z > AiTerrainHeight() - 64.0f || !LandPassable(far)) continue;
+                    tail.resize(0);
+                    if (!SampleLeg(d, far, margin, tail) || !SampleLeg(far, goal, margin, tail)) continue;
+                }
+                for (uint t = 0; t < tail.length(); ++t) legs.insertLast(tail[t]);
                 for (uint i = 0; i < legs.length(); ++i) route.insertLast(legs[i]);
                 if (say) {
                     r.lastDirectLog = ai.frame;
@@ -245,7 +264,7 @@ namespace ScoutRaid {
         return route;
     }
 
-    AIFloat3 FallbackGoal(const AIFloat3& in from, const array<AIFloat3>& in starts)
+    AIFloat3 FallbackGoal(CCircuitUnit@ unit, const AIFloat3& in from, const array<AIFloat3>& in starts, int exploreIndex)
     {
         AIFloat3 goal(-1.0f, 0.0f, -1.0f);
         float nearest = 1e30f;
@@ -253,7 +272,17 @@ namespace ScoutRaid {
             const float d = MapHelpers::SqDist(from, starts[i]);
             if (d < nearest) { nearest = d; goal = starts[i]; }
         }
-        return goal.x < 0.0f ? goal : SnapGoal(goal);
+        if (goal.x < 0.0f) return goal;
+        // Search other parts of the enemy backline after a probe is exhausted.
+        // Nine stable keys per start keep SnapGoal's cache bounded.
+        const int probe = exploreIndex % 9;
+        if (probe > 0) {
+            const float angle = float(probe - 1) * 0.785398f;
+            goal = goal + AIFloat3(cos(angle), 0.0f, sin(angle)) * 1400.0f;
+            goal.x = AiMax(64.0f, AiMin(AiTerrainWidth() - 64.0f, goal.x));
+            goal.z = AiMax(64.0f, AiMin(AiTerrainHeight() - 64.0f, goal.z));
+        }
+        return SnapGoal(goal, unit);
     }
 
     // Compact a 64-elmo grid route: turns, reversals and every WaypointSpacing.
@@ -275,12 +304,14 @@ namespace ScoutRaid {
         return result;
     }
 
-    CRouteTask@ NewRoute()
+    CRouteTask@ NewRoute(const CCircuitDef@ def)
     {
         IUnitTask@ task = aiMilitaryMgr.Enqueue(TaskF::Route());
         CRouteTask@ route = cast<CRouteTask>(cast<IFighterTask>(task));
         if (route is null) return null;
-        route.SetTraversal(true, 48.0f, false);
+        // A Tick's 140 range cannot tolerate the old 48-elmo arrival radius
+        // around a 112-elmo standoff point: it could hold outside gun range.
+        route.SetTraversal(true, AiMax(16.0f, AiMin(48.0f, def.GetMaxRange() * 0.1f)), false);
         route.SetHoldPosition(true);   // never chase: wrap-around is the route's job
         route.SetLanes(1, 0, 0);
         return route;
@@ -313,13 +344,19 @@ namespace ScoutRaid {
             target = Choose(pos, last, Global::ScoutRaid::ChainRadius, r.excluded, starts, front, range, targetPos);
             if (target < 0) target = Choose(pos, pos, -1.0f, r.excluded, starts, front, range, targetPos);
         }
-        const AIFloat3 goal = target >= 0 ? Standoff(pos, targetPos, range) : FallbackGoal(pos, starts);
+        const bool wasEscaping = r.escaping;
+        r.escaping = aiBattle.GroundHazard(pos, Global::ScoutRaid::HazardMargin) > 0.0f;
+        r.escapeAttempt = r.escaping && wasEscaping ? r.escapeAttempt + 4 : 0;
+        // Escape is a separate short route. Hard blocking a whole covered
+        // starting region would strand the scout; soft cost finds its way out.
+        const AIFloat3 goal = r.escaping ? SnapGoal(pos, u, false, r.escapeAttempt)
+            : (target >= 0 ? Standoff(pos, targetPos, range) : FallbackGoal(u, pos, starts, r.exploreIndex));
         r.queued = false;
         r.hazardSince = -1;
         r.lastMove = ai.frame; r.lastPos = pos;
         if (goal.x < 0.0f) return;
         array<AIFloat3>@ path = aiBattle.GetUnitRaidRoute(u.circuitDef, pos, goal,
-            Global::ScoutRaid::HazardMargin, Global::ScoutRaid::HazardWeight);
+            Global::ScoutRaid::HazardMargin, Global::ScoutRaid::HazardWeight, !r.escaping);
         bool direct = false;
         if (path is null || path.length() < 2) {
             // No hazard-aware route (edge cell, fine corridor rejected, goal
@@ -332,7 +369,15 @@ namespace ScoutRaid {
                 + " from=(" + int(pos.x) + "," + int(pos.z) + ") pass=" + LandPassable(pos)
                 + " goal=(" + int(goal.x) + "," + int(goal.z) + ") pass=" + LandPassable(goal)
                 + " hazard=" + aiBattle.GroundHazard(goal, Global::ScoutRaid::HazardMargin) + "; direct move", 1);
-            @path = DirectRoute(r, pos, goal, Global::ScoutRaid::HazardMargin);
+            if (r.escaping) {
+                // Coarse lane connectivity can reject a corridor the engine
+                // walks. Use only the nearest clear escape, never a backline
+                // move through the entire defended region.
+                @path = array<AIFloat3>();
+                path.insertLast(pos); path.insertLast(goal);
+            } else {
+                @path = DirectRoute(r, pos, goal, Global::ScoutRaid::HazardMargin);
+            }
             direct = true;
         }
         // Backoff: 4, 8, 16, 32, 60 s after consecutive solves that could not
@@ -348,11 +393,11 @@ namespace ScoutRaid {
         r.task.SetRoute(r.route);
         // A contact the engine will not accept as a priority target still
         // gets the route; the held priority is then cleared (INV-211).
-        if (!r.task.SetLandTarget(target)) r.task.SetLandTarget(-1);
+        if (!r.task.SetLandTarget(r.escaping ? -1 : target)) r.task.SetLandTarget(-1);
         if (target != r.target) { r.hazardReplans = 0; r.targetLostFrame = -1; }
         r.target = target; r.targetPos = targetPos;
         GenericHelpers::LogUtil("[ScoutRaid] route unit=" + r.id + " target=" + target + " points=" + r.route.length()
-            + " goal=(" + int(goal.x) + "," + int(goal.z) + ") direct=" + direct, 1);
+            + " goal=(" + int(goal.x) + "," + int(goal.z) + ") direct=" + direct + " escape=" + r.escaping, 1);
     }
 
     // Current observed ground contact of this id? O(G); only on replans.
@@ -405,7 +450,7 @@ namespace ScoutRaid {
             return null;
         }
         if (int(raiders.length()) >= Global::ScoutRaid::MaxRaiders) return null;
-        CRouteTask@ task = NewRoute();
+        CRouteTask@ task = NewRoute(u.circuitDef);
         if (task is null) return null;
         Raider@ r = Raider();
         r.id = u.id; @r.task = task;
@@ -484,7 +529,7 @@ namespace ScoutRaid {
                     r.targetLostFrame = -1;
                     // Re-arm the BAR priority target once the contact is in sensor
                     // range again (SetLandTarget needs an observed contact).
-                    if (held != r.target) r.task.SetLandTarget(r.target);
+                    if (!r.escaping && held != r.target) r.task.SetLandTarget(r.target);
                 } else {
                     if (r.targetLostFrame < 0) r.targetLostFrame = ai.frame;
                     // Static target: destroyed only if the raider has arrived and
@@ -508,11 +553,12 @@ namespace ScoutRaid {
             // Faster scouts need a longer lookahead: 10 s of travel (Rover 168
             // elmo/s -> 1680) or LookaheadElmos, whichever is larger.
             const float lookahead = AiMax(Global::ScoutRaid::LookaheadElmos, Global::ScoutRaid::LookaheadSeconds * u.circuitDef.GetSpeed());
-            for (uint k = r.cursor; k < r.route.length() && (ahead < lookahead || k < r.cursor + 3); ++k) {
+            for (uint k = r.cursor; !r.escaping && k < r.route.length() && (ahead < lookahead || k < r.cursor + 3); ++k) {
                 if (aiBattle.GroundHazard(r.route[k], margin) > 0.0f) { hazardAhead = true; break; }
                 ahead += previous.distance2D(r.route[k]); previous = r.route[k];
             }
-            if (hazardAhead) {
+            const bool covered = aiBattle.GroundHazard(pos, margin) > 0.0f;
+            if (hazardAhead && !covered) {
                 if (r.hazardSince < 0) {
                     r.hazardSince = ai.frame;
                     // A fast scout covers 130+ elmos per second: stop now, at
@@ -521,42 +567,41 @@ namespace ScoutRaid {
                     array<AIFloat3> hold = {pos};
                     r.task.SetRoute(hold);
                     r.route.resize(0); r.cursor = 0;
-                    r.nextReplan = AiMin(r.nextReplan, ai.frame + SECOND);
+                    // Queue now: clearing the route also clears next tick's
+                    // hazardAhead signal. A live economy target otherwise
+                    // leaves this one-point hold permanent (single Tick case).
+                    ++r.hazardReplans;
+                    Queue(r);
                     GenericHelpers::LogUtil("[ScoutRaid] hazard ahead unit=" + r.id + " hold at (" + int(pos.x) + "," + int(pos.z) + ")", 1);
                 }
             }
-            else r.hazardSince = -1;
-            // Inside coverage now (the engine detoured a planned leg through it,
-            // or a contact appeared on top of us): step back to the previous
-            // clear waypoint and replan at once. Round 14: a Rover sent west
-            // around the line was walked south by the engine's own path into
-            // an LLT's range.
-            const bool covered = aiBattle.GroundHazard(pos, margin) > 0.0f;
-            if (covered && ai.frame - r.lastMove < 2 * SECOND) {
-                AIFloat3 back = pos;
-                for (int k = int(r.cursor) - 1; k >= 0; --k)
-                    if (aiBattle.GroundHazard(r.route[k], margin) <= 0.0f) { back = r.route[k]; break; }
-                if (back.SqDistance2D(pos) < 1.0f && r.route.length() > 0) back = r.route[0];
-                array<AIFloat3> escape = {back};
-                r.task.SetRoute(escape);
-                r.route.resize(0); r.cursor = 0;
-                r.nextReplan = AiMin(r.nextReplan, ai.frame + SECOND);
-                // One line per episode (round 16: 758 lines in 11 min at one per tick).
+            // Do not overwrite an active escape with a hold at its own
+            // position. A newly covered scout gets one immediate escape plan;
+            // normal stuck recovery still handles a blocked escape.
+            if (covered) {
                 if (!r.insideCoverage) {
                     r.insideCoverage = true;
                     GenericHelpers::LogUtil("[ScoutRaid] inside coverage unit=" + r.id + " at (" + int(pos.x) + "," + int(pos.z)
-                        + ") back to (" + int(back.x) + "," + int(back.z) + ")", 1);
+                        + "); seeking clear ground", 1);
                 }
-                if (!r.queued) Queue(r);
-            } else if (!covered && r.insideCoverage) {
+                if (!r.escaping) Queue(r);
+            } else if (r.escaping || r.insideCoverage) {
+                r.escaping = false;
                 r.insideCoverage = false;
                 GenericHelpers::LogUtil("[ScoutRaid] clear of coverage unit=" + r.id + " at (" + int(pos.x) + "," + int(pos.z) + ")", 1);
+                Queue(r);
             }
-            const bool idleAtEnd = atEnd && r.target < 0;
-            const bool wantTarget = r.target < 0 && anyRaidTarget && ai.frame >= r.nextTargetScan;
+            // A partial safe route can finish far short of a live target.
+            // Only holding within firing distance is productive arrival.
+            const bool idleAtEnd = atEnd && (r.escaping || r.target < 0
+                || pos.distance2D(r.targetPos) > u.circuitDef.GetMaxRange() * 0.95f);
+            const bool wantTarget = !r.escaping && r.target < 0 && anyRaidTarget && ai.frame >= r.nextTargetScan;
             if (wantTarget) r.nextTargetScan = ai.frame + cooldown;
-            if ((targetLost || hazardAhead || stuck || idleAtEnd || wantTarget) && (ai.frame >= r.nextReplan || wantTarget)) {
-                if (hazardAhead && !targetLost) ++r.hazardReplans;
+            if (!r.queued && (targetLost || stuck || idleAtEnd || wantTarget) && (ai.frame >= r.nextReplan || wantTarget)) {
+                if (idleAtEnd || stuck) {
+                    if (r.target >= 0 && !r.escaping) ++r.hazardReplans;
+                    else if (!r.escaping) ++r.exploreIndex;
+                }
                 if (targetLost && LOG_LEVEL >= 1)
                     GenericHelpers::LogUtil("[ScoutRaid] target gone unit=" + r.id + " target=" + r.target, 1);
                 Queue(r);

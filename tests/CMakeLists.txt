@@ -173,3 +173,8 @@ if(BUILD_TESTING)
     target_include_directories(circuit_widget_state_test PRIVATE ../src)
     add_test(NAME circuit_widget_state_test COMMAND circuit_widget_state_test)
 endif()
+
+add_executable(transport_definition_test transport_definition_test.cpp)
+target_compile_features(transport_definition_test PRIVATE cxx_std_20)
+target_include_directories(transport_definition_test PRIVATE ../src/circuit)
+add_test(NAME transport_definition_test COMMAND transport_definition_test)
