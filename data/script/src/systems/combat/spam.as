@@ -9,6 +9,7 @@
 #include "../../helpers/math/spam_math.as"
 #include "../team/roster.as"
 #include "../presentation/widget_link.as"
+#include "edge_lanes.as"
 
 /******************************************************************************
 
@@ -147,6 +148,7 @@ namespace Spam {
      **************************************************************************/
     void Update()
     {
+        EdgeLanes::Update();   // owner, 2026-10-17: the edge lanes' lab and its repeat
         const float mi = Economy::GetMinMetalIncomeLast10s();
         const float ei = Economy::GetMinEnergyIncomeLast10s();
         const bool funded = IsEnabled() && SpamMath::Funded(mi, ei, aiEconomyMgr.isEnergyEmpty,
@@ -552,11 +554,13 @@ namespace Spam {
         float side = 0.0f;
         int lane = 0;
         if (!laneByFactory.get(key, lane)) lane = 0;
-        array<AIFloat3> raw = spreadByFactory.get(key, side) ? BuildSpreadRoute(from, side) : BuildRoute(from, lane);
         array<AIFloat3> valid;
         CCircuitUnit@ f = ai.GetTeamUnit(int(parseInt(key)));
         CCircuitDef@ d = f is null ? null : ai.GetCircuitDef(SpamUnitFor(f.circuitDef));
         if (d is null) return valid;
+        // the edge lab's lane: its three rally points, already playable and reachable
+        if (EdgeLanes::IsEdgeKey(key)) return EdgeLanes::Route(d, from);
+        array<AIFloat3> raw = spreadByFactory.get(key, side) ? BuildSpreadRoute(from, side) : BuildRoute(from, lane);
         for (uint i = 0; i < raw.length(); ++i)
             if (aiTerrainMgr.CanTraverse(d, from, raw[i])) valid.insertLast(raw[i]);
         // A lane offset/behind-start extension can fall into water or a cliff.
@@ -606,6 +610,7 @@ namespace Spam {
         for (uint i=0;i<keys.length();++i) {
             CRouteTask@ task;
             CCircuitUnit@ factory=ai.GetTeamUnit(int(parseInt(keys[i])));
+            if (EdgeLanes::IsEdgeKey(keys[i])) continue;   // the edge lane is not lent to deliveries
             if (factory is null || !routeByFactory.get(keys[i],@task) || task is null || task.IsDead()) continue;
             float side=0.0f;
             if (!spreadByFactory.get(keys[i],side)) {
@@ -673,7 +678,8 @@ namespace Spam {
         // back toward one endpoint. The factory-level offset above keeps
         // different factories' bands apart; this keeps one band from being a
         // single file.
-        task.SetLanes(Global::Spam::UnitLanes, Global::Spam::UnitLaneSpacing, Global::Spam::EndSpread);
+        if (EdgeLanes::IsEdgeKey(key)) task.SetLanes(Global::Spam::EdgeUnitLanes, Global::Spam::EdgeUnitLaneSpacing, Global::Spam::EndSpread);
+        else task.SetLanes(Global::Spam::UnitLanes, Global::Spam::UnitLaneSpacing, Global::Spam::EndSpread);
         routeByFactory.set(key, @task);
         ++routesVersion;
         GenericHelpers::LogUtil("[Spam] Route created for factory " + factory.id + " lane " + lane
@@ -705,7 +711,7 @@ namespace Spam {
         array<string>@ keys = routeByFactory.getKeys();
         for (uint i = 0; i < keys.length(); ++i) {
             CCircuitUnit@ f = ai.GetTeamUnit(int(parseInt(keys[i])));
-            if (f is null) continue;
+            if (f is null || EdgeLanes::IsEdgeKey(keys[i])) continue;
             const float sq = MapHelpers::SqDist(pos, f.GetPos(ai.frame));
             if (sq < bestSq) { bestSq = sq; @best = f; }
         }
@@ -733,6 +739,10 @@ namespace Spam {
     {
         // D-309: finish the finite opener before converting its producer to a pump.
         if (FrontOpener::OwnsFactory(factory)) return null;
+        // owner, 2026-10-17: an edge lab spams its own lane, never as an income pump
+        IUnitTask@ edge = EdgeLanes::FactoryMakeTask(factory);
+        if (edge !is null) return edge;
+        if (EdgeLanes::IsEdgeLab(factory)) return null;
         if (!active || factory is null || factory.circuitDef is null) return null;
         const string unitName = SpamUnitFor(factory.circuitDef);
         if (unitName.length() == 0) {
@@ -823,6 +833,7 @@ namespace Spam {
     void OnFactoryRemoved(CCircuitUnit@ factory)
     {
         if (factory is null) return;
+        EdgeLanes::OnFactoryRemoved(factory);
         const string key = "" + factory.id;
         CRouteTask@ task = null;
         if (routeByFactory.get(key, @task) && task !is null) {

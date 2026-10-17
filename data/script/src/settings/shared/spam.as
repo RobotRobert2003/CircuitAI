@@ -43,6 +43,21 @@ namespace Spam {
         // Rotate the focus to the next enemy start spot this often
         int RefocusMinutes = 6;
         // Which unit each T1 factory spams; factories not listed keep their role logic
+        // Edge lanes (owner, 2026-10-17; systems/combat/edge_lanes.as): two FRONTs
+        // each build one spam lab (2 construction turrets behind it, turrets
+        // first) whose units run one side edge of the map: the edge at
+        // EdgeFirstShare of the way from our starts to the enemy's, the same
+        // edge at EdgeSecondShare, then the far corner on that side. Points
+        // stay EdgeMargin inside the map and in the unit's movement area.
+        bool EdgeLanesEnabled = false;
+        float EdgeFirstShare = 0.33f;
+        float EdgeSecondShare = 0.67f;
+        float EdgeMargin = 200.0f;
+        float EdgeMinMetalIncome = 30.0f;    // build and spam from this sustained income
+        float EdgeMinEnergyIncome = 500.0f;  // ... and this (ReleaseFraction pauses it)
+        bool EdgeVehicleLab = false;         // false: a T1 bot lab; true: a T1 vehicle plant
+        int EdgeUnitLanes = 3;               // a narrow band along the edge
+        float EdgeUnitLaneSpacing = 96.0f;
         dictionary UnitByFactory = {
             {"armlab", "armpw"},   {"corlab", "corak"},    {"leglab", "leggob"},
             {"armvp", "armflash"}, {"corvp", "corgator"},  {"legvp", "leghades"}

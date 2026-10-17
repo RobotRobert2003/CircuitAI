@@ -181,6 +181,9 @@ namespace Main {
 		// All AIs (owner, 2026-10-16): 3 pinpointers in all across the allied SMRTBARbs, built by the richest
 		// (src/settings/shared/pinpointer.as, 0 there; systems/team/pinpointer_pool.as)
 		Global::Team::PinpointerPoolSize = 3;
+		// FRONT (owner, 2026-10-17): two FRONTs each build a spam lab for an edge lane, left and right
+		// (src/settings/shared/spam.as EdgeLanesEnabled, off there; systems/combat/edge_lanes.as)
+		Global::Spam::EdgeLanesEnabled = true;
 	}
 
 }  // namespace Main
