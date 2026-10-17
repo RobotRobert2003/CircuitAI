@@ -167,6 +167,9 @@ namespace Main {
 		// All roles (owner, 2026-10-16): no Telchines (src/settings/shared/military.as, off there;
 		// behaviour_leg.json also sets legamph "limit": 0)
 		Global::Military::NoTelchines = true;
+		// FRONT (owner, 2026-10-16): after a fusion, reclaim winds and solars (advanced solars too once the
+		// margin allows), those round the factories first (src/settings/roles/front.as, off there)
+		Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion = true;
 	}
 
 }  // namespace Main

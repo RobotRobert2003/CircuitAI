@@ -14,6 +14,7 @@
 #include "../../systems/production/front_opener.as"
 #include "../../systems/combat/land_siege.as"
 #include "../../systems/construction/front_geothermal.as"
+#include "../../systems/construction/front_reclaim.as"
 #include "../../systems/construction/commander_front.as"
 // Builder state and helpers for enqueueing structures like nanos
 #include "../../manager/builder.as"
@@ -573,6 +574,9 @@ namespace RoleFront {
         // energy task. Overriding an already-created task would leak work.
         IUnitTask@ geothermal=FrontGeothermal::Work(builder);
         if (geothermal !is null) return geothermal;
+        // Owner (2026-10-16): after a fusion, winds and solars come down, those round the factories first
+        IUnitTask@ reclaim=FrontReclaim::Work(builder);
+        if (reclaim !is null) return reclaim;
         // Pre-create and cache a single default task instance; never recreate.
         IUnitTask@ defaultTask = Builder::MakeDefaultTaskWithLog(builder.id, "FRONT");
 

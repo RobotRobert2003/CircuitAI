@@ -84,6 +84,16 @@ namespace Front {
             // Economy Scaling Limits
             float MetalIncomePerLab = 35.0f;
             float MetalIncomeForGantry = 250.0f;
+            // Owner (2026-10-16): once a fusion stands FRONT reclaims its winds and solars, those within
+            // ReclaimNearFactoryRadius of a factory first (played: Fatboys boxed in by advanced solars and
+            // winds round the labs), advanced solars too at ReclaimAdvSolarMargin or with an advanced fusion.
+            // Off here, on in experimental_balanced (systems/construction/front_reclaim.as).
+            bool ReclaimT1EnergyAfterFusion = false;
+            float ReclaimT1EnergyMargin = 1.25f;    // energy income without winds/solars covers the pull by this
+            float ReclaimAdvSolarMargin = 1.5f;     // ... without advanced solars as well
+            float ReclaimNearFactoryRadius = 900.0f;
+            float ReclaimEnergyRadius = 3000.0f;   // from the worker
+            int ReclaimEnergyConcurrent = 3;
             float MetalIncomePerT1Builder = 20.0f;
             int MinBuilderCap = 5;
             float MetalIncomePerT2Builder = 40.0f;
