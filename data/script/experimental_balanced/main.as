@@ -6,14 +6,13 @@
 
 namespace Main {
 
-	// Weighted strategy configuration for HARD difficulty.
-	// Values are likelihoods in [0.0, 1.0] for enabling a given strategy.
-	// Adjust these to tune how often a strategy is chosen at game start.
+	// Two rolls (owner, 2026-10-17). Roll 1 picks exactly one main rush: nuke 5%, T3 5%, heavy (T2_RUSH) 90%.
+	// Roll 2, on its own: the spam rush, on top of whatever roll 1 gave (unchanged 85%).
 	namespace StrategyWeights {
-		float Tech_Spam_Rush = 0.85f;   // 85% chance
-		float Tech_T3_RUSH = 0.35f;   // 35% chance
-		float Tech_NUKE_RUSH = 0.25f; // 25% chance
-		float Tech_T2_RUSH = 0.25f; // Independent finite heavy-delivery rush
+		float Tech_NUKE_RUSH = 0.05f; // roll 1
+		float Tech_T3_RUSH = 0.05f;   // roll 1
+		float Tech_T2_RUSH = 0.90f;   // roll 1: the finite heavy-delivery rush (TechHeavyRush)
+		float Tech_Spam_Rush = 0.85f; // roll 2
 	}
 
 	// Decide a boolean from a probability using AiDice with two weights: off vs on.
@@ -32,24 +31,31 @@ namespace Main {
 		// Start fresh (no strategies), then enable per dice outcome
 		Global::RoleSettings::Tech::StrategyMask = 0;
 
-		if (DecideEnabled(StrategyWeights::Tech_Spam_Rush)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::SPAM_RUSH);
-		}
-		if (DecideEnabled(StrategyWeights::Tech_T3_RUSH)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::T3_RUSH);
-		}
-		if (DecideEnabled(StrategyWeights::Tech_NUKE_RUSH)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::NUKE_RUSH);
-		}
+		// Roll 1: one main rush, mutually exclusive (any weight left below 1.0 is "none")
+		const float wNuke = AiMax(0.0f, StrategyWeights::Tech_NUKE_RUSH);
+		const float wT3 = AiMax(0.0f, StrategyWeights::Tech_T3_RUSH);
+		const float wT2 = AiMax(0.0f, StrategyWeights::Tech_T2_RUSH);
+		array<float>@ w = array<float>(4);
+		w[0] = wNuke;
+		w[1] = wT3;
+		w[2] = wT2;
+		w[3] = AiMax(0.0f, 1.0f - wNuke - wT3 - wT2);
+		const int pick = AiDice(w);
+		if (pick == 0) Global::RoleSettings::Tech::EnableStrategy(Strategy::NUKE_RUSH);
+		else if (pick == 1) Global::RoleSettings::Tech::EnableStrategy(Strategy::T3_RUSH);
+		else if (pick == 2) Global::RoleSettings::Tech::EnableStrategy(Strategy::T2_RUSH);
 
-		// Append the new draw: preserve the order of the three established rolls.
-		if (DecideEnabled(StrategyWeights::Tech_T2_RUSH)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::T2_RUSH);
+		// Roll 2: the spam rush, on its own
+		const bool spam = DecideEnabled(StrategyWeights::Tech_Spam_Rush);
+		if (spam) {
+			Global::RoleSettings::Tech::EnableStrategy(Strategy::SPAM_RUSH);
 		}
 
 		GenericHelpers::LogUtil(
 			"[Strategy] (EXPERIMENTAL BALANCED) Decided: Tech mask=" + Global::RoleSettings::Tech::StrategyMask +
-			" (" + StrategyUtil::NamesFromMask(Global::RoleSettings::Tech::StrategyMask) + ")",
+			" (" + StrategyUtil::NamesFromMask(Global::RoleSettings::Tech::StrategyMask) + "); roll 1: "
+			+ (pick == 0 ? "NUKE_RUSH" : pick == 1 ? "T3_RUSH" : pick == 2 ? "T2_RUSH (heavy rush)" : "none")
+			+ ", roll 2: spam rush " + (spam ? "on" : "off"),
 			2);
 	}
 
