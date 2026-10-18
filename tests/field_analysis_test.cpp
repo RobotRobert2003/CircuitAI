@@ -98,6 +98,16 @@ static void TestStructure()
 	Require(m->gw == 128 && m->gh == 96, "grid is 128 x 96 cells");
 	Require((int)m->regionOf.size() == m->gw * m->gh, "a region per cell");
 	for (int r : m->regionOf) Require(r >= 0 && r < (int)m->regions.size(), "every cell has a valid region");
+	// D-326: a ground class per cell; the synthetic map has sailable water, flat land and a steep shore
+	Require((int)m->groundOf.size() == m->gw * m->gh, "a ground class per cell");
+	{
+		int deep = 0, flat = 0, hard = 0;
+		for (unsigned char gnd : m->groundOf) {
+			Require(gnd <= G_HARM, "every cell has a valid ground class");
+			if (gnd == G_DEEP) ++deep; else if (gnd == G_FLAT) ++flat; else if (gnd == G_STEEP || gnd == G_CLIFF) ++hard;
+		}
+		Require(deep > 0 && flat > 0 && hard > 0, "ground classes: deep water, flat land and steep ground all present");
+	}
 	Require(CountKind(*m, T_LAND) == 1, "one land theatre (both halves joined by the isthmus)");
 	// the north sea and the bay south of the isthmus both touch both sides: seas
 	Require(CountKind(*m, T_SEA) == 2, "two seas");
@@ -167,6 +177,7 @@ static void TestDeterminismAndFile()
 	Require(h.seq == 7 && h.frame == 120 && h.fingerprint == a->fingerprint && h.complete, "header seq, frame, fingerprint, trailer");
 	Require(h.mapName == "Synthetic Isthmus", "header map name");
 	Require(text.find("\ncells|") != std::string::npos, "cells record");
+	Require(text.find("\nground|") != std::string::npos, "ground record");
 	Require(text.find("\nlanding|") != std::string::npos, "landing record");
 	Require(text.find("\navenue|") != std::string::npos, "avenue record");
 	SHeader torn;

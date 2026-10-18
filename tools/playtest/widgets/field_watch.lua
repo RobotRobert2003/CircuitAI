@@ -1,20 +1,21 @@
--- D-323 playtest: the battlefield blueprint in the BARb team link. Drives the
+-- D-323 / D-326 playtest: the terrain map in the BARb team link. Drives the
 -- panel through its own button paths (WG.barblink.ButtonRect + MousePress /
 -- MouseRelease, SetField, FieldSnapshot, FieldLayer, FieldBlueprint), waits in
 -- wall-clock seconds for the field file the AI writes once, then takes a series
--- of screenshots: the full map, blueprint mode, each sea, the best assault
--- landings of each side, two chokes, and the avenues alone.
+-- of screenshots: the full map, the dim sheet, blueprint mode, the ground
+-- classes alone, each sea and pond, each summit, and the narrowest land choke.
 --
 -- Stage: --extra-widget tools/widgets/gui_barb_team_link.lua
 --        --extra-widget tools/playtest/widgets/field_watch.lua
--- Check: tools/playtest/checks/shared/terrain/field_supreme.json
+-- Check: tools/playtest/checks/shared/terrain/field_terrain.json (any map) or
+--        field_supreme.json (Supreme Isthmus counts)
 -- Every check line starts "[FieldCheck]"; each screenshot is announced with a
 -- "[Playtest] screenshot field <label>" line just before the capture.
 -- Pass --shots "" so the runner's camera does not fight this one.
 
 function widget:GetInfo()
-    return {name = "BARb field blueprint check", desc = "tools/playtest: D-323 battlefield blueprint screenshots",
-        author = "s3k-CircuitAI", date = "2026-10-17", layer = 110, enabled = true}
+    return {name = "BARb terrain map check", desc = "tools/playtest: D-323/D-326 terrain map screenshots",
+        author = "s3k-CircuitAI", date = "2026-10-18", layer = 110, enabled = true}
 end
 
 local LOAD_SECONDS = 60
@@ -105,93 +106,39 @@ local function queue(label, x, z, height, before, after, overview)
     shots[#shots + 1] = {label = label, x = x, z = z, height = height, before = before, after = after, overview = overview}
 end
 
--- The invasion series (modoption field_series=invasion): for each side as the
--- viewer, the map with only theatres, shores, landings and sides on (every
--- filled chevron is a landing into the enemy side, numbered by rank), each sea
--- at 6500, then the three best assault landings focused at 2400.
-local function planInvasion(ui, snap)
-    local cx, cz = Game.mapSizeX / 2, Game.mapSizeZ / 2
-    local full = math.max(Game.mapSizeX, Game.mapSizeZ) * 1.1
-    local quiet = {"regions", "fills", "crossings", "barriers", "chokes", "standoff", "key", "avenues"}
-    local allies, seen = {}, {}
-    for _, l in ipairs(snap.items.landings) do
-        if l.side and l.side >= 0 and not seen[l.side] then seen[l.side] = true; allies[#allies + 1] = l.side end
-    end
-    table.sort(allies)
-    local seas = {}
-    for _, t in ipairs(snap.items.theatres) do if t.kind == "sea" then seas[#seas + 1] = t end end
-    table.sort(seas, function(a, b) return a.id < b.id end)
-    for _, viewer in ipairs(allies) do
-        local tag = "invade_v" .. viewer
-        queue(tag .. "_map", cx, cz, full, function()
-            for _, name in ipairs(quiet) do ui.FieldLayer(name, false) end
-            if ui.FieldSide then ui.FieldSide(viewer) else Spring.SendCommands("barbfield side " .. viewer) end
-        end, nil, true)
-        -- 5500: below the strategic detail switch, so the rank numbers are drawn
-        for _, t in ipairs(seas) do queue(tag .. "_sea" .. t.id, t.x, t.z, 5500) end
-        -- assault landings for this viewer: they lead into another side; best rank first
-        local targets = {}
-        for _, l in ipairs(snap.items.landings) do
-            if (l.rank or 0) >= 1 and l.side ~= viewer then targets[#targets + 1] = l end
-        end
-        table.sort(targets, function(a, b) if a.rank ~= b.rank then return a.rank < b.rank end return a.id < b.id end)
-        for i = 1, math.min(3, #targets) do
-            local l = targets[i]
-            queue(string.format("%s_rank%d", tag, l.rank), l.x, l.z, 2400,
-                function() ui.FieldFocus("landing", l.id) end, function() ui.FieldFocus(nil) end)
-        end
-    end
-    queue("invade_end", cx, cz, full, nil, function()
-        for _, name in ipairs(quiet) do ui.FieldLayer(name, true) end
-        if ui.FieldSide then ui.FieldSide(-1) else Spring.SendCommands("barbfield side -1") end
-    end, true)
-end
+local ALL_BUT_GROUND = {"regions", "crossings", "barriers", "shores", "chokes", "key", "labels"}
 
 local function planShots(ui, snap)
-    local series = (Spring.GetModOptions() or {}).field_series
-    if series == "invasion" then return planInvasion(ui, snap) end
     local cx, cz = Game.mapSizeX / 2, Game.mapSizeZ / 2
     local full = math.max(Game.mapSizeX, Game.mapSizeZ) * 1.1   -- the free camera is not clamped; the map fills the frame
     queue("full", cx, cz, full, nil, nil, true)
+    -- the dim terrain sheet (the middle contrast setting) over the full map
+    queue("dim", cx, cz, full, function() Spring.SendCommands("barbfield dim") end, function() Spring.SendCommands("barbfield dim") end, true)
     queue("blueprint", cx, cz, full, function() ui.FieldBlueprint(true) end, function() ui.FieldBlueprint(false) end, true)
-    local seas = {}
-    for _, t in ipairs(snap.items.theatres) do if t.kind == "sea" then seas[#seas + 1] = t end end
-    table.sort(seas, function(a, b) return a.id < b.id end)
-    for _, t in ipairs(seas) do queue("sea" .. t.id, t.x, t.z, 5000) end
-    -- the two best landings into each side (lowest rank first)
-    local bySide = {}
-    for _, l in ipairs(snap.items.landings) do
-        if (l.rank or 0) >= 1 then   -- rank 0 = a pond shore, not a way in from the water
-            bySide[l.side] = bySide[l.side] or {}
-            local list = bySide[l.side]; list[#list + 1] = l
-        end
-    end
-    local sides = {}
-    for side in pairs(bySide) do sides[#sides + 1] = side end
-    table.sort(sides)
-    for _, side in ipairs(sides) do
-        local list = bySide[side]
-        table.sort(list, function(a, b) if a.rank ~= b.rank then return a.rank < b.rank end return a.id < b.id end)
-        for i = 1, math.min(2, #list) do
-            local l = list[i]
-            queue(string.format("landing%d_side%d", l.rank, side), l.x, l.z, 1800)
-        end
-    end
-    local chokes = {}
-    for _, c in ipairs(snap.items.chokes) do chokes[#chokes + 1] = c end
-    table.sort(chokes, function(a, b) return a.width < b.width end)
-    for i = 1, math.min(2, #chokes) do queue("choke" .. chokes[i].id, chokes[i].x, chokes[i].z, 2200) end
-    -- the isthmus: the widest choke whose two regions are both land
-    local widest = nil
-    for _, c in ipairs(snap.items.chokes) do
-        if c.land and (not widest or c.width > widest.width) then widest = c end
-    end
-    if widest then queue("isthmus", widest.x, widest.z, 2600) end
-    queue("avenues", cx, cz, full, function()
-        for _, name in ipairs({"regions", "fills", "crossings", "barriers", "shores", "standoff", "chokes", "landings", "key"}) do ui.FieldLayer(name, false) end
+    -- the ground classes alone over the coastlines: the terrain detection by itself
+    queue("ground", cx, cz, full, function()
+        for _, name in ipairs(ALL_BUT_GROUND) do ui.FieldLayer(name, false) end
     end, function()
-        for _, name in ipairs({"regions", "fills", "crossings", "barriers", "shores", "standoff", "chokes", "landings", "key"}) do ui.FieldLayer(name, true) end
+        for _, name in ipairs(ALL_BUT_GROUND) do ui.FieldLayer(name, true) end
     end, true)
+    -- each sea and pond at 5000, by id
+    local waters = {}
+    for _, t in ipairs(snap.items.theatres) do if t.kind ~= "land" then waters[#waters + 1] = t end end
+    table.sort(waters, function(a, b) return a.id < b.id end)
+    for i = 1, math.min(4, #waters) do queue(waters[i].kind .. waters[i].id, waters[i].x, waters[i].z, 5000) end
+    -- each summit at 2500, largest first
+    local summits = {}
+    for _, s in ipairs(snap.items.summits or {}) do summits[#summits + 1] = s end
+    table.sort(summits, function(a, b) if a.cells ~= b.cells then return a.cells > b.cells end return a.region < b.region end)
+    for i = 1, math.min(3, #summits) do queue("summit" .. summits[i].region, summits[i].x, summits[i].z, 2500) end
+    -- the narrowest land choke
+    local narrowest = nil
+    for _, c in ipairs(snap.items.chokes) do
+        if c.land and (not narrowest or c.width < narrowest.width) then narrowest = c end
+    end
+    if narrowest then queue("choke" .. narrowest.id, narrowest.x, narrowest.z, 2200) end
+    -- the legend panel open over the map centre, so its samples can be read against the map
+    queue("legend", cx, cz, 3200, function() ui.FieldLegend(true) end, function() ui.FieldLegend(false) end)
 end
 
 function widget:GameFrame(f)
@@ -209,11 +156,14 @@ function widget:GameFrame(f)
     elseif stage == 2 then
         local snap = ui.FieldSnapshot()
         if snap and snap.loaded then
-            echo(string.format("PASS loaded theatres=%d seas=%d ponds=%d regions=%d boundaries=%d chokes=%d avenues=%d landings=%d assault=%d",
-                snap.theatres, snap.seas, snap.ponds, snap.regions, snap.boundaries, snap.chokes, snap.avenues, snap.landings, snap.assault))
-            check(snap.seas >= 1, "at least one sea")
-            check(snap.regions >= 3, "regions found")
+            local g = snap.ground or {}
+            echo(string.format("PASS loaded theatres=%d land=%d seas=%d ponds=%d regions=%d boundaries=%d chokes=%d summits=%d",
+                snap.theatres, snap.land or 0, snap.seas, snap.ponds, snap.regions, snap.boundaries, snap.chokes, snap.summits or 0))
+            echo(string.format("ground deep=%d water=%d shallow=%d flat=%d rough=%d steep=%d cliff=%d harm=%d",
+                g[0] or 0, g[1] or 0, g[2] or 0, g[3] or 0, g[4] or 0, g[5] or 0, g[6] or 0, g[7] or 0))
+            check(snap.regions >= 1, "regions found")
             check(snap.boundaries >= 1, "boundaries classified")
+            check((g[3] or 0) + (g[4] or 0) + (g[5] or 0) + (g[6] or 0) > 0, "ground classes present")
             planShots(ui, snap)
             stage = 3; shotIndex = 1; shotState = 0; shotFrame = f
         elseif Spring.DiffTimers(Spring.GetTimer(), loadTimer) > LOAD_SECONDS then

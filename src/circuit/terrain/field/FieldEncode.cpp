@@ -174,6 +174,8 @@ std::string Encode(const SModel& m, const SSettings& st, std::uint64_t seq, int 
 		out += '\n';
 	}
 	out += "cells|" + RunLength(m.regionOf) + "\n";
+	// D-326: ground class per cell, same run-length form as the region ids
+	out += "ground|" + RunLength(std::vector<int>(m.groundOf.begin(), m.groundOf.end())) + "\n";
 	out += "end|" + std::to_string(seq) + "\n";
 	return out;
 }

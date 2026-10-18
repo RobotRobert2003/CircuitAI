@@ -31,6 +31,13 @@ enum TheatreKind : int { T_LAND = 0, T_SEA, T_POND };
 enum Character : int { R_PLAIN = 0, R_ROUGH, R_PLATEAU, R_VALLEY, R_WATER, R_DEEP, R_COAST, R_STRAIT };
 enum BoundaryKind : int { B_OPEN = 0, B_RAMP, B_CLIMB, B_CLIFF, B_PASS, B_FORD, B_BEACH, B_STEEP, B_SHEER, B_EDGE };
 enum KeyKind : int { K_HIGH = 0, K_GEO, K_METAL, K_ISLAND, K_POND };
+// D-326: the ground class of one cell for the terrain view, from the same
+// movedef limits as the mobility masks. Water first (deep: ships sail it;
+// water: hovers and amphibious only; shallow: land units wade it), then land
+// by the least capable class that can use it (flat: vehicles; rough: vehicles
+// slowed; steep: bots and amphibious; cliff: all-terrain or nobody); harm is
+// any water on a map whose water hurts (lava, acid).
+enum Ground : unsigned char { G_DEEP = 0, G_WATER, G_SHALLOW, G_FLAT, G_ROUGH, G_STEEP, G_CLIFF, G_HARM };
 
 struct SPoint {
 	float x = 0.f, z = 0.f;
@@ -165,6 +172,7 @@ struct SModel {
 	std::vector<SKey> keys;
 	std::vector<int> regionOf;          // per cell
 	std::vector<int> sideOf;            // per cell, side index
+	std::vector<unsigned char> groundOf;   // per cell, Ground (D-326)
 	std::uint64_t fingerprint = 0;
 	std::vector<std::string> checkFailures;
 	STimings timings;

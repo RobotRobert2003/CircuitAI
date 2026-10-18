@@ -1,5 +1,5 @@
 {
-  "_doc": "D-323 battlefield blueprint, invasion series: for each side as the viewer, the map with only theatres, shores, landings and sides on, each sea, and the three best assault landings focused. Stage gui_barb_team_link.lua plus field_watch.lua, pass --shots \"\" --mode visual --modoption field_series=invasion.",
+  "_doc": "D-326 terrain map, any map: one FIELD_PERF from the owning AI, the team-link terrain view loads the file with ground classes, the watcher takes the screenshot series (full, dim, blueprint, ground alone, seas and ponds, summits, narrowest choke, legend). Stage gui_barb_team_link.lua plus field_watch.lua, pass --shots \"\" and --mode visual.",
   "stop_minute": 3,
   "expect": [
     {
@@ -15,14 +15,14 @@
       "scope": "any"
     },
     {
-      "key": "invasion map screenshot",
-      "pattern": "\\[Playtest\\] screenshot field invade_v\\d+_map",
-      "by_minute": 3,
+      "key": "ground classes",
+      "pattern": "\\[FieldCheck\\] PASS ground classes present",
+      "by_minute": 2.5,
       "scope": "any"
     },
     {
-      "key": "assault landing screenshot",
-      "pattern": "\\[Playtest\\] screenshot field invade_v\\d+_rank1",
+      "key": "full map screenshot",
+      "pattern": "\\[Playtest\\] screenshot field full",
       "by_minute": 3,
       "scope": "any"
     },

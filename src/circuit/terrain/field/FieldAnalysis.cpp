@@ -234,6 +234,21 @@ void Context::BuildMobility()
 		landMask[c] = waterMask[c] ? 0 : 1;
 		walkMask[c] = (mob[C_BOT][c] != NO_GO && !waterMask[c]) ? 1 : 0;
 	}
+	// D-326: the per-cell ground class the terrain view draws, read straight off
+	// the masks above so the picture and the analysis cannot disagree. O(cells).
+	m.groundOf.assign(cells, G_FLAT);
+	for (int c = 0; c < n; ++c) {
+		const float depth = -hMean[c];
+		unsigned char gnd;
+		if (depth > 0.f && in.waterHarmful) gnd = G_HARM;
+		else if (waterMask[c]) gnd = G_DEEP;
+		else if (depth > 0.f) gnd = (depth > kWade) ? G_WATER : G_SHALLOW;
+		else if (mob[C_VEH][c] == GO) gnd = G_FLAT;
+		else if (mob[C_VEH][c] == SLOW_GO) gnd = G_ROUGH;
+		else if (mob[C_BOT][c] != NO_GO) gnd = G_STEEP;
+		else gnd = G_CLIFF;
+		m.groundOf[c] = gnd;
+	}
 }
 
 // ---------------------------------------------------------------- sides
@@ -1185,6 +1200,7 @@ void Context::Finish()
 	m.sideOf = sideOf;
 	std::uint64_t h = 1469598103934665603ULL;
 	h = Fnv1a(h, regionOf.data(), regionOf.size() * sizeof(int));
+	h = Fnv1a(h, m.groundOf.data(), m.groundOf.size());
 	const int counts[] = {Count(m.theatres), Count(m.regions), Count(m.boundaries), Count(m.chokes), Count(m.avenues), Count(m.landings)};
 	h = Fnv1a(h, counts, sizeof(counts));
 	m.fingerprint = h;
