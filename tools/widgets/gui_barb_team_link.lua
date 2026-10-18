@@ -662,6 +662,7 @@ local focusList = nil
 local hover = nil                -- inspector text lines
 local hoverTimer = nil
 local controls = {}              -- legend panel hit regions {x1,y1,x2,y2,id=,action=}
+local legendRect = nil           -- the panel's screen box as last drawn: clicks inside never reach the game
 local dockX, dockY, drag, pressed
 local seq = nil
 
@@ -1110,7 +1111,7 @@ local STYLE = {
 local GROUND = {
     [0] = {name="deep",    fill=K.blue,   alpha=0.30, mark=nil,       text="Deep water: ships sail it"},
     [1] = {name="water",   fill=K.sky,    alpha=0.22, mark="wave",    text="Water, no ships: hovers and amphibious only"},
-    [2] = {name="shallow", fill=K.teal,   alpha=0.22, mark="dash",    text="Shallows, marsh: land units wade, slowed"},
+    [2] = {name="shallow", fill=K.teal,   alpha=0.32, mark="dash",    text="Shallows, marsh: land units wade, slowed"},
     [3] = {name="flat",    fill=nil,      alpha=0,    mark=nil,       text="Flat: vehicles drive"},
     [4] = {name="rough",   fill=nil,      alpha=0,    mark="hatch",   text="Rough: vehicles slowed, bots fine"},
     [5] = {name="steep",   fill=K.orange, alpha=0.12, mark="hatch2",  text="Steep: bots and amphibious climb, no vehicles"},
@@ -1291,7 +1292,7 @@ compileAll = function()
                 if gd.mark then
                     gl.LineWidth(1)
                     setColour(MARK_COLOUR[gd.mark], (gd.mark == "hatch") and 0.4 or 0.6)
-                    cellMarks(m, m.groundRuns, want, gd.mark, (gd.mark == "hatch" or gd.mark == "wave" or gd.mark == "dash") and 2 or 1)
+                    cellMarks(m, m.groundRuns, want, gd.mark, (gd.mark == "hatch" or gd.mark == "wave") and 2 or 1)
                 end
             end
         end
@@ -1704,6 +1705,7 @@ end
 local ROW_H, HEAD_H = 16, 20
 local function drawLegend(panel)
     controls = {}
+    legendRect = nil
     if not on or not options.legend or Spring.IsGUIHidden() then return end
     local vw, vh = gl.GetViewSizes()
     local rows = legendRowsCached()
@@ -1718,6 +1720,7 @@ local function drawLegend(panel)
     dockX = math.max(8, math.min(vw - w - 8, dockX or (vw - w - 22)))
     dockY = math.max(math.min(h + 8, vh - 65), math.min(vh - 65, dockY or (vh - 80)))
     local x, top = dockX, dockY
+    legendRect = {x, top-h, x+w, top}
     gl.Color(inkPanel); gl.Rect(x, top-h, x+w, top)
     gl.Color(K.sky[1], K.sky[2], K.sky[3], 1); gl.Rect(x, top-3, x+w, top)
     gl.Color(0.93, 0.96, 1, 1); gl.Text("TERRAIN MAP", x+14, top-24, 14, "o")
@@ -1809,7 +1812,7 @@ local function mousePress(x, y, b)
             if b == 1 then pressed = r; if r.id == "fieldDrag" then drag = {x, y, dockX, dockY} end end
             return true
         end
-        if dockX and x >= dockX and x <= dockX+440 and y <= dockY and y >= dockY-(options.collapsed and 36 or 640) then return true end
+        if legendRect and x >= legendRect[1] and x <= legendRect[3] and y >= legendRect[2] and y <= legendRect[4] then return true end
     end
     if options.pick and b == 1 and model then pickAt(x, y); return true end
     return false

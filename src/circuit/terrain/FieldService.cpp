@@ -254,6 +254,7 @@ void CFieldService::Launch(CCircuitAI* circuit)
 	auto cancelFlag = cancel;
 	const SSettings st = settings;
 	auto work = [input, st, res, cancelFlag, complete, queued = Clock::now()]() -> std::shared_ptr<IMainJob> {
+		res->started.store(true, std::memory_order_release);
 		res->queueMs = Ms(queued);
 		const auto start = Clock::now();
 		try {
@@ -314,6 +315,20 @@ void CFieldService::DelegateAuthority(CCircuitAI* leaving)
 	if (model != nullptr || result == nullptr) return;   // nothing pending
 	for (CCircuitAI* circuit : gameAttribute->GetCircuits()) {
 		if (circuit->IsInitialized() && circuit != leaving) {
+			if (!result->started.load(std::memory_order_acquire)) {
+				// D-327: the leaving AI's scheduler drops its queued work with it, so a
+				// job the worker has not picked up yet would never run and a poll would
+				// wait all game. Capture again from the AI that takes over and relaunch.
+				if (cancel) cancel->store(true, std::memory_order_relaxed);
+				result.reset();
+				circuit->LOG("FIELD: owner team %i left before the analysis started; this team relaunches it", leaving->GetTeamId());
+				Launch(circuit);
+				if (result != nullptr) {
+					ownerTeam = circuit->GetTeamId();
+					circuit->GetScheduler()->RunOnRelease(CScheduler::GameJob(&CFieldService::DelegateAuthority, this, circuit));
+				}
+				return;
+			}
 			ArmPoll(circuit);
 			return;
 		}

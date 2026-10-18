@@ -124,6 +124,7 @@ private:
 	SGridShape g;
 	int cell = 32;
 	std::vector<float> hMean, hMin, hMax, sMax;
+	std::vector<float> sPass;   // the cell's second steepest 16-elmo slope sample (D-328: what a unit threads through)
 	std::vector<unsigned char> mob[_CLASSES_];
 	std::vector<char> landMask, waterMask, walkMask;
 	std::vector<int> theatreOf;
@@ -152,7 +153,9 @@ void Context::BuildGrid()
 	g.gh = std::max(1, in.mapHeight / cell);
 	m.gw = g.gw; m.gh = g.gh; m.cell = cell; m.mapName = in.mapName;
 	const int n = g.Size();
-	hMean.assign(n, 0.f); hMin.assign(n, 0.f); hMax.assign(n, 0.f); sMax.assign(n, 0.f);
+	hMean.assign(n, 0.f); hMin.assign(n, 0.f); hMax.assign(n, 0.f); sMax.assign(n, 0.f); sPass.assign(n, 0.f);
+	std::vector<float> samples;
+	samples.reserve(16);
 	const int hs = std::max(1, cell / 8), ss = std::max(1, cell / 16);
 	const int hw = std::max(1, in.heightStride), hh = std::max(1, in.heightRows);
 	const int sw = std::max(1, in.slopeStride), sh = std::max(1, in.slopeRows);
@@ -172,15 +175,26 @@ void Context::BuildGrid()
 			}
 			hMean[c] = count > 0 ? sum / count : 0.f; hMin[c] = lo; hMax[c] = hi;
 			float s = 0.f;
+			samples.clear();
 			for (int j = 0; j < ss; ++j) {
 				const int sz = std::min(sh - 1, z * ss + j);
 				for (int i = 0; i < ss; ++i) {
 					const int sx = std::min(sw - 1, x * ss + i);
 					const std::size_t idx = (std::size_t)sz * sw + sx;
-					if (idx < in.slope.size()) s = std::max(s, in.slope[idx]);
+					const float v = idx < in.slope.size() ? in.slope[idx] : 0.f;
+					s = std::max(s, v);
+					samples.push_back(v);
 				}
 			}
 			sMax[c] = s;
+			// D-328: the engine paths over its own 16-elmo squares, so a unit threads a cell
+			// through its gentler squares. The cell passes unless two of its four squares
+			// are too steep (the second steepest sample): the steepest sample made every
+			// narrow ramp a cliff (KI-645), the second least steep opened real summits
+			// (the survey lost 18 confirmed ones on Glacial Gap).
+			std::sort(samples.begin(), samples.end());
+			const std::size_t pick = samples.size() >= 3 ? samples.size() - 2 : (samples.size() >= 2 ? 1 : 0);
+			sPass[c] = samples.empty() ? 0.f : samples[pick];
 		}
 	}
 }
@@ -205,7 +219,7 @@ void Context::BuildMobility()
 	for (int k = 0; k < _CLASSES_; ++k) mob[k].assign(cells, NO_GO);
 	for (int c = 0; c < n; ++c) {
 		const float depth = -hMean[c];
-		const float s = sMax[c];
+		const float s = sPass[c];   // D-328: passable when a chain of 16-elmo squares is, not when every square is
 		for (int k = 0; k < kGroundClasses; ++k) {
 			unsigned char v;
 			if (s > limit[k]) v = NO_GO;
@@ -876,7 +890,8 @@ void Context::BuildBoundaries()
 			const int ca = e.cellA, cb = e.cellB;
 			const SPoint mid{(e.seg.a.x + e.seg.b.x) * 0.5f, (e.seg.a.z + e.seg.b.z) * 0.5f};
 			const bool vertical = e.seg.a.x == e.seg.b.x;
-			float s = std::max(sMax[ca], sMax[cb]);
+			// D-328: the cells' passable samples, so a border a unit threads is not a cliff
+			float s = std::max(sPass[ca], sPass[cb]);
 			s = std::max(s, std::max(SlopeAt(mid.x + (vertical ? 8.f : 0.f), mid.z + (vertical ? 0.f : 8.f)),
 									 SlopeAt(mid.x - (vertical ? 8.f : 0.f), mid.z - (vertical ? 0.f : 8.f))));
 			if (shore) {
@@ -887,7 +902,7 @@ void Context::BuildBoundaries()
 				for (int k = 0; k < beachCells && g.Inside(x, z); ++k, x += dx, z += dz) {
 					const int lc = g.Index(x, z);
 					if (IsWater(lc)) break;
-					s = std::max(s, sMax[lc]);
+					s = std::max(s, sPass[lc]);
 				}
 				landOk[i] = BestGround(land) != NO_GO;
 				wade[i] = -hMean[water] <= 20.f;

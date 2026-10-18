@@ -68,6 +68,7 @@ private:
 		std::shared_ptr<SModel> model;
 		std::exception_ptr error;
 		double queueMs = 0, analyseMs = 0;
+		std::atomic<bool> started{false};   // the worker picked the job up (D-327: a queued job dies with its owner's scheduler)
 		std::atomic<bool> done{false};
 	};
 	// The completion's target: outlives any owner AI (it is held by this

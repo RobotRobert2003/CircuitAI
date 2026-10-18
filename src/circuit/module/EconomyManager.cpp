@@ -988,8 +988,9 @@ int CEconomyManager::GetClaimedMexCountWithin(
 
 bool CEconomyManager::IsOwnSpot(const springai::AIFloat3& pos)
 {
-	if (mexNavigationEnabled) {
-		if (!IsMexOwnershipActive()) return true;
+	// D-322 ownership by walking distance holds for the opening window only;
+	// once it ends the D-072 Voronoi split below is the rule again (D-327).
+	if (mexNavigationEnabled && IsMexOwnershipActive()) {
 		auto* terrain = circuit->GetTerrainManager();
 		if (!std::isfinite(pos.x) || !std::isfinite(pos.z) || pos.x < 0 || pos.z < 0
 				|| pos.x >= terrain->GetTerrainWidth() || pos.z >= terrain->GetTerrainHeight()) return false;
@@ -1120,7 +1121,7 @@ IBuilderTask* CEconomyManager::EnqueueMexWithin(
 				static_cast<CBMexTask*>(task)->SetIgnoreAlly(!allyAware);
 				// Task-added callbacks are a mutation boundary. Audit territorial
 				// admission once per new order; this is a warm cached spot query.
-				if (mexNavigationEnabled && !IsOwnSpot(pos))
+				if (IsMexOwnershipActive() && !IsOwnSpot(pos))
 					circuit->LOG("[INVARIANT] INV-227 mex admitted outside protected ownership team=%i x=%.0f z=%.0f",
 						circuit->GetTeamId(), pos.x, pos.z);
 			}
@@ -1561,7 +1562,10 @@ IBuilderTask* CEconomyManager::UpdateMetalTasks(const AIFloat3& position, CCircu
 			// NOTE: threatmap type is set outside
 			CMetalData::PointPredicate predicate = [this, &spots, map, &mexDefs, terrainMgr, unit, &mexDef](int index) {
 				const AIFloat3& pos = spots[index].position;
-				if (IsAllyOpenMexSpot(index) && (mexNavigationEnabled ? IsOwnSpot(pos) : !terrainMgr->IsZoneAlly(pos))
+				// D-327: the walking-distance ownership replaces the ally-zone veto only
+				// while its opening window runs; afterwards the zone veto and the Voronoi split hold
+				if (IsAllyOpenMexSpot(index)
+					&& (IsMexOwnershipActive() ? IsOwnSpot(pos) : (!terrainMgr->IsZoneAlly(pos) && (!mexNavigationEnabled || IsOwnSpot(pos))))
 					&& CanReachMex(unit, pos))  // hostile environment
 				{
 					for (CCircuitDef* mDef : mexDefs) {
