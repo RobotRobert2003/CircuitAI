@@ -8,6 +8,7 @@
 #include "geo_release.as"
 #include "commander_energy.as"
 #include "pinpointer_pool.as"
+#include "ally_clear.as"
 
 namespace Team {
     // Return true if the def represents a T2 constructor (land or air)
@@ -51,6 +52,7 @@ namespace Team {
         if (CommanderEnergy::HandleMessage(msg, fromTeamId)) return;
         if (PinpointerPool::HandleMessage(msg, fromTeamId)) return;
         if (GeoRelease::HandleMessage(msg, fromTeamId)) return;
+        if (AllyClear::HandleMessage(msg, fromTeamId)) return;
         if (Ferry::HandleMessage(msg, fromTeamId)) return;
         if (Donation::HandleMessage(msg, fromTeamId)) return;
         if (SeaAssist::HandleMessage(msg, fromTeamId)) return;

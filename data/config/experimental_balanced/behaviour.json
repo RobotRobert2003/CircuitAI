@@ -1443,7 +1443,7 @@
                 "sustained_rush_min_front": 8,
                 "sustained_rush_remaining": 0.25,
                 "sustained_rush_cooldown": 20.0,
-                "sustained_rush_range": 0.8, "formation": {"family": "t1_bot_line", "position": "front"}, "range_fraction": 0.97, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "rush_ratio": 1.5, "catch_seconds": 6, "engagement_seconds": 12, "support_allies": true, "support_loss_fraction": 0.70, "intent_gain": 0.20, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.4, "static_loss_fraction": 0.12},
+                "sustained_rush_range": 0.8, "formation": {"family": "t1_bot_line", "position": "front"}, "range_fraction": 0.95, "poke_in": 0.95, "poke_in_dominant": 0.90, "poke_out": 1.05, "poke_ratio": 2.0, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "rush_ratio": 1.5, "catch_seconds": 6, "engagement_seconds": 12, "support_allies": true, "support_loss_fraction": 0.70, "intent_gain": 0.20, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.4, "static_loss_fraction": 0.12},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -2022,7 +2022,7 @@
                 "sustained_rush_min_front": 8,
                 "sustained_rush_remaining": 0.25,
                 "sustained_rush_cooldown": 20.0,
-                "sustained_rush_range": 0.8, "formation": {"family": "t1_bot_line", "position": "front"}, "range_fraction": 0.97, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "rush_ratio": 1.5, "catch_seconds": 6, "engagement_seconds": 12, "support_allies": true, "support_loss_fraction": 0.70, "intent_gain": 0.20, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.4, "static_loss_fraction": 0.12},
+                "sustained_rush_range": 0.8, "formation": {"family": "t1_bot_line", "position": "front"}, "range_fraction": 0.95, "poke_in": 0.95, "poke_in_dominant": 0.90, "poke_out": 1.05, "poke_ratio": 2.0, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "rush_ratio": 1.5, "catch_seconds": 6, "engagement_seconds": 12, "support_allies": true, "support_loss_fraction": 0.70, "intent_gain": 0.20, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.4, "static_loss_fraction": 0.12},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},

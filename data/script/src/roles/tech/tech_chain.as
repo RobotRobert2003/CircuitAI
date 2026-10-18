@@ -753,6 +753,39 @@ namespace TechChain
         return null;
     }
 
+    // Later nuke-rush silos (owner, 2026-10-17): packed in the base layout's zones next to the
+    // completed turrets, like the opening silo, without the opening's fusion/turret prerequisites.
+    // Returns null when no zone has room; one failed search is shared for five seconds.
+    int packedSiloRetry = 0;
+    IUnitTask@ PackedSilo()
+    {
+        if (ai.frame < packedSiloRetry) return null;
+        CCircuitDef@ d = ai.GetCircuitDef(DefFor("silo"));
+        if (d is null || !d.IsAvailable(ai.frame)) return null;
+        packedSiloRetry = ai.frame + 5 * SECOND;
+        const bool compact = CompactEco::Active();
+        const int zoneCount = compact ? int(CompactEco::groups.length()) : Layout::ZoneCount();
+        for (int z = 0; z < zoneCount; ++z) {
+            const int slot = aiTerrainMgr.PackNearBuiltPower(compact ? CompactEco::zones[z] : Layout::ZoneAt(z), d,
+                compact ? CompactEco::groups[z] : Layout::nanoGroup,
+                compact ? Layout::LabFacing() : Layout::facing, Layout::TurretSeed(), 16.0f);
+            if (slot < 0) continue;
+            IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::BIG_GUN, Task::Priority::HIGH, d,
+                aiTerrainMgr.GetReservationPos(slot), 0.0f, true, 300 * SECOND));
+            if (t is null) { aiTerrainMgr.ReleaseReservation(slot); return null; }
+            if (!AiPinReservation(t, slot)) {
+                aiBuilderMgr.AbortTask(t);
+                aiTerrainMgr.ReleaseReservation(slot);
+                return null;
+            }
+            packedSiloRetry = 0;
+            GenericHelpers::LogUtil("[TECH][NukeRush] silo packed in layout zone " + z, 1);
+            return t;
+        }
+        GenericHelpers::LogUtil("[TECH][NukeRush] no packed silo site in " + zoneCount + " layout zones", 1);
+        return null;
+    }
+
     IUnitTask@ Order(int i, Step@ s, CCircuitDef@ d, CCircuitUnit@ u)
     {
         const string key = s.key;

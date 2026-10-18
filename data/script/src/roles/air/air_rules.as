@@ -120,6 +120,15 @@ namespace AirRules {
             @t = aiEconomyMgr.EnqueueMexWithin(u, Global::Map::StartPos, Global::RoleSettings::Air::HomeMexRadius, 0, true);
             if (t !is null) return AirBuild::Record(t, "mex.expand", u);
         }
+        // BankFunding: a home with fewer than HomeMexMinimum spots (e.g. Moonshine Run: 3) is
+        // exhausted early; reach out to FarMexRadius, one claim at a time, even while preparing fusion.
+        if (Global::RoleSettings::Air::BankFunding && !commander && AirEconomy::metal < 80.0f
+            && AirEconomy::MexCount() < Global::RoleSettings::Air::HomeMexMinimum
+            && aiEconomyMgr.GetMexTaskCountWithin(Global::Map::StartPos, Global::RoleSettings::Air::HomeMexRadius) < 1
+            && aiEconomyMgr.GetMexTaskCountWithin(Global::Map::StartPos, Global::RoleSettings::Air::FarMexRadius) < 1) {
+            @t = aiEconomyMgr.EnqueueMexWithin(u, Global::Map::StartPos, Global::RoleSettings::Air::FarMexRadius, 0, true);
+            if (t !is null) return AirBuild::Record(t, "mex.expand.far", u);
+        }
         // Affordable production support and the first wind buffer must not starve
         // behind an aspirational energy target that moves upward with mex income.
         if (AirEconomy::energy >= 250.0f) {

@@ -60,6 +60,7 @@ namespace Spam {
         bool EdgeVehicleLab = false;         // false: a T1 bot lab; true: a T1 vehicle plant
         int EdgeUnitLanes = 3;               // a narrow band along the edge
         float EdgeUnitLaneSpacing = 96.0f;
+        float EdgeReleaseRadius = 400.0f;    // within this of the far corner a unit leaves the lane for normal attacks
         dictionary UnitByFactory = {
             {"armlab", "armpw"},   {"corlab", "corak"},    {"leglab", "leggob"},
             {"armvp", "armflash"}, {"corvp", "corgator"},  {"legvp", "leghades"}

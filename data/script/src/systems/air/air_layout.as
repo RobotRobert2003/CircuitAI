@@ -206,8 +206,10 @@ namespace AirLayout {
         searchAfter = ai.frame + 10 * SECOND;
         return null;
     }
+    bool held = false;   // the last Activate held its campus for Team::AllyClear (owner, 2026-10-17)
     Bay@ Activate(Bay@ bay)
     {
+        held = false;
         if (bay is null) return bay;
         array<Bay@> members;
         array<int> slots;
@@ -236,6 +238,20 @@ namespace AirLayout {
         }
         const int state = LayoutHelpers::ActivationState(slots);
         if (state == 0) return bay;
+        {
+            // owner, 2026-10-17: an allied SMRTBARb's T1 porc/eco on the campus is
+            // handed over and reclaimed before the campus is given up
+            float x0 = 1.0e30f, z0 = 1.0e30f, x1 = -1.0e30f, z1 = -1.0e30f;
+            for (uint i = 0; i < slots.length(); ++i) {
+                if (slots[i] < 0) continue;
+                const AIFloat3 q = aiTerrainMgr.GetReservationPos(slots[i]);
+                if (q.x < 0.0f) continue;
+                x0 = AiMin(x0, q.x); z0 = AiMin(z0, q.z); x1 = AiMax(x1, q.x); z1 = AiMax(z1, q.z);
+            }
+            // slot positions are centres: pad by half the largest (plant) footprint
+            if (x1 >= x0 && Team::AllyClear::Hold("air." + bay.key, AIFloat3((x0 + x1) * 0.5f, 0.0f, (z0 + z1) * 0.5f),
+                (x1 - x0) * 0.5f + 64.0f, (z1 - z0) * 0.5f + 64.0f)) { held = true; return null; }
+        }
         GenericHelpers::LogUtil("[AIR][Layout] relocate blocked unused cluster=" + bay.cluster, 1);
         for (uint i = 0; i < slots.length(); ++i) aiTerrainMgr.ReleasePersistentBuilding(slots[i]);
         aiTerrainMgr.ReleaseZone(bay.envelope);

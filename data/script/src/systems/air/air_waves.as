@@ -9,6 +9,7 @@
 #include "../../manager/military.as"
 #include "../../helpers/math/air_math.as"
 #include "air_operations.as"
+#include "air_liches.as"
 
 /******************************************************************************
 
@@ -672,6 +673,7 @@ namespace AirWaves {
 
         array<IUnitTask@> aborted;
         int attached = 0;
+        int launchedLiches = 0;
         if (Global::RoleSettings::Air::ExperimentalBuild) {
             array<string>@ ids = heldBombers.getKeys();
             for (uint i = 0; i < ids.length() && int(waveBombers.getSize()) < limit; ++i) {
@@ -681,6 +683,11 @@ namespace AirWaves {
                     waveBombers.set(ids[i], int(member.id)); heldBombers.delete(ids[i]);
                 }
             }
+            // Held Liches leave with every offensive wave on their own targets (AirLiches),
+            // escorted only by fighters beyond this wave's own escort.
+            if (!plannedDefensive && waveBombers.getSize() > 0)
+                launchedLiches = AirLiches::LaunchWith(int(AirOperations::AvailableFighters())
+                    - FightersFor(int(waveBombers.getSize())));
             attached = AirOperations::AttachFighters(cast<CAirWaveTask>(planned), !plannedDefensive);
             AirOperations::TrackBombers(planned, waveBombers);
         } else {
@@ -715,7 +722,7 @@ namespace AirWaves {
         nextWaveSize = _Clamp(int(float(lastWaveSize) * Global::RoleSettings::Air::BomberWaveGrowthDefault + 0.5f));
 
         GenericHelpers::LogUtil("[AIR][Waves] Wave " + waveIndex + " launched (" + reason + "): bombers=" + launchedBombers
-            + " fighters=" + launchedFighters + " holdTasksAborted=" + aborted.length()
+            + " fighters=" + launchedFighters + " liches=" + launchedLiches + " holdTasksAborted=" + aborted.length()
             + " provisionalNext=" + nextWaveSize, 1);
     }
 

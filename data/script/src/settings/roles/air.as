@@ -70,6 +70,15 @@ namespace Air {
             int FirstFusionTargetSeconds = 20 * 60;
             int FirstFusionLeadSeconds = 12 * 60;
             int PreFusionMexLimit = 6;
+            // Bank funding (balanced opt-in): with this much banked metal (often allied overflow),
+            // AIR funds energy, T1 constructors and T2 lab turrets even while its own mex income is low.
+            bool BankFunding = false;
+            float BankRichMetal = 1500.0f;
+            int BankRichT1Builders = 8;
+            // With BankFunding: when no free spot is left within HomeMexRadius and AIR owns fewer
+            // than HomeMexMinimum mexes, it expands out to FarMexRadius (one claim at a time).
+            int HomeMexMinimum = 6;
+            float FarMexRadius = 2800.0f;
             float FusionAccessMinMetal = 12.0f;
             float FusionAccessMinEnergy = 450.0f;
             float WarmFactoryGapSeconds = 0.5f; // prior until measured; not cold opening time
@@ -446,6 +455,29 @@ namespace Air {
             float T2HeavyAirIncomeThreshold = 250.0f; // metal/s, 10 s minimum; also gates air_production.as heavy line
             int T2HeavyAirTargetCount = 6;
             int T2HeavyAirBatchPerFactory = 2;
+
+            /******************** LICHES (Armada T2 nuclear bomber, systems/air/air_liches.as) ********************/
+            // Off here; experimental_balanced turns it on. Liches are built from the T2 plants once the
+            // 10 s minimum metal income reaches LicheMetalIncome (latched for the game), held at home,
+            // and launched with each offensive T2 bomber wave as their own operation with their own targets.
+            bool LichesEnabled = false;
+            float LicheMetalIncome = 150.0f;   // metal/s, 10 s minimum (Economy::GetMinMetalIncomeLast10s)
+            int LicheReserve = 8;              // Liches held or building beyond those already on a run
+            int LicheOrderEvery = 3;           // every Nth T2 bomber order is a Liche while bombers are also wanted
+            // Target weights by tier (owner, 2026-10-17). Each def's native weight is TierWeight * 1000 / its metal
+            // cost: the native scorer multiplies by cost, so cost cancels and only the tier, distance and route
+            // risk decide. Keep each tier far enough above the next (20x) that a cheaper def of a lower tier never
+            // outranks a dearer one of a higher tier; Init logs a warning when it would.
+            float LicheWeightShields = 3200000.0f;    // 1) Keeper, Overseer, Soteria
+            float LicheWeightHeavyDefence = 160000.0f; // 2) Pulsar, Bulwark, Bastion, Cerberus
+            float LicheWeightStrategic = 8000.0f;     // 3) anti-nukes (static and mobile), nuke silos, Rampart, advanced geo
+            float LicheWeightGeo = 400.0f;            // 4) geothermal, Prude
+            float LicheWeightGantry = 20.0f;          // 5) T3 gantries
+            float LicheWeightT2Factory = 1.0f;        // 6) T2 air, vehicle, bot and sea factories
+            // In flight a visible higher-tier target this close to the Liches takes over. Half the T2 bombers'
+            // StrikeImmediateRadius (1800): the Liche's homing missile (range 250) needs no long lined-up run,
+            // so it picks targets closer in front (owner, 2026-10-17).
+            float LicheImmediateRadius = 900.0f;
 
             /******************** COMMANDER FACTORY ASSIST ********************/
             // Maximum time spent assisting the opening aircraft plant. Assistance

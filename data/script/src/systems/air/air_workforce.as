@@ -280,6 +280,8 @@ namespace AirWorkforce {
         const int ordinary = advanced ? Global::RoleSettings::Air::MaxT2EconomyBuilders : Global::RoleSettings::Air::MaxT1EconomyBuilders;
         const int cap = pressure ? AiMax(ordinary, Global::RoleSettings::Air::WorkforceSafetyConstructors) : ordinary;
         if (present < floor) return floor;
+        // BankFunding: a rich bank grows the T1 crew even before a project is short of power.
+        if (!advanced && AirEconomy::BankRich() && present < AiMin(cap, Global::RoleSettings::Air::BankRichT1Builders)) return present + 1;
         if (shortage < d.GetBuildSpeed() * .25f || present >= cap) return present;
         return present + 1; // reassess after each completed/funded investment
     }

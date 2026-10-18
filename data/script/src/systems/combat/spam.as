@@ -785,6 +785,7 @@ namespace Spam {
         // Also guards AdoptProducedUnits: mature income must not strip a
         // gathering opener into individual lanes before its power threshold.
         if (FrontOpener::OwnsUnit(u)) return null;
+        if (EdgeLanes::IsReleased(u)) return null;   // reached its edge lane's end: normal attacks (owner, 2026-10-17)
         if (!IsEnabled() || u is null || !IsSpamDef(u.circuitDef)) return null;
         if (routeByFactory.getSize() == 0) return null;
         const string ukey = "" + u.id;

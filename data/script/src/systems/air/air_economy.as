@@ -21,6 +21,10 @@ namespace AirEconomy {
 
     bool Active() { return Global::AISettings::Role == AiRole::AIR && AirLayout::enabled; }
     bool TechGrowth() { return !MetalEconomy::Active() && aiTerrainMgr.GetLayoutInt("air.techGrowth", 0) != 0; }
+    // Banked metal (often allied overflow) funds work that own mex income alone would not.
+    bool BankRich() { return Global::RoleSettings::Air::BankFunding && !MetalEconomy::Active() && bankM >= Global::RoleSettings::Air::BankRichMetal; }
+    // Energy recovery no longer zeroes T2 lab support (turrets are mostly metal).
+    bool KeepT2Support() { return Global::RoleSettings::Air::BankFunding; }
     bool GrowthComplete() { return aiTerrainMgr.GetLayoutInt("air.massBombers", 0) != 0; }
     bool MassBombers() {
         CCircuitDef@ bomber = ai.GetCircuitDef(UnitHelpers::GetT2WaveBomberForSide(Global::AISettings::Side));
@@ -400,8 +404,9 @@ namespace AirEconomy {
     }
     int NanoTarget(uint bay)
     {
-        if (bay >= power.length() || recovery) return 0;
+        if (bay >= power.length()) return 0;
         const bool advanced = UnitHelpers::IsT2AircraftPlant(AirLayout::bays[bay].defName);
+        if (recovery && !(advanced && KeepT2Support())) return 0;
         CCircuitDef@ plant = ai.GetCircuitDef(AirLayout::bays[bay].defName);
         CCircuitDef@ nano = ai.GetCircuitDef(UnitHelpers::GetT1NanoNameForSide(Global::AISettings::Side));
         if (plant is null || nano is null) return 0;
@@ -415,7 +420,7 @@ namespace AirEconomy {
         // RepairSupport to allocate its first turret.
         const int cap = limit;
         const int production = ProductionMath::SupportTarget(work, plant.GetBuildSpeed(), nano.GetBuildSpeed(), Global::RoleSettings::Air::WarmFactoryGapSeconds, rate, cap);
-        const int expansion = advanced && Transition(plant) ? AiMin(cap, Global::RoleSettings::Air::T2ExpansionSupport) : 0;
+        const int expansion = advanced && (Transition(plant) || BankRich()) ? AiMin(cap, Global::RoleSettings::Air::T2ExpansionSupport) : 0;
         const int opening = !advanced && CompletedConstructors() >= Global::RoleSettings::Air::OpeningAirConstructors
             ? AiMin(cap, OpeningNanoTarget()) : 0;
         return AiMax(opening, AiMax(expansion, production));

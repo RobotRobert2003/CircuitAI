@@ -251,10 +251,20 @@ namespace AirProduction {
             // Native counts include frames and orders immediately, including births between slow ticks.
             const int b = AiMax(0, Projected(bd) - AirOperations::BomberCount(bomber));
             const int f = AiMax(0, Projected(fd) + AirScreen::CountOther(fighter) - int(AirOperations::escorts.getSize()));
-            if (f < AirWaves::FightersFor(b)) {
+            const int escortFor = b + AirLiches::Pool(); // held Liches fly with spare escorts
+            const bool bombersWanted = b < AirWaves::ProductionTarget();
+            if (f < AirWaves::FightersFor(escortFor)) {
                 @t = Recruit(u, fighter, Projected(fd) + 1, "wave.escort", Task::Priority::NORMAL);
-            } else if (b < AirWaves::ProductionTarget()) {
-                @t = Recruit(u, bomber, Projected(bd) + 1, "wave.bomber", Task::Priority::NORMAL);
+            } else {
+                // Liches (Armada, from the latched income gate): every Nth bomber order.
+                if (AirLiches::Turn(side, bombersWanted)) {
+                    @t = Recruit(u, AirLiches::Name, AirLiches::Target(), "wave.liche", Task::Priority::NORMAL);
+                    if (t !is null) AirLiches::Ordered(true);
+                }
+                if (t is null && bombersWanted) {
+                    @t = Recruit(u, bomber, Projected(bd) + 1, "wave.bomber", Task::Priority::NORMAL);
+                    if (t !is null) AirLiches::Ordered(false);
+                }
             }
             if (t !is null) return t;
         }
@@ -299,13 +309,15 @@ namespace AirProduction {
         for (uint i = 0; i < activeFighters.length(); ++i) ids.insertLast(activeFighters[i]);
         for (uint i = 0; i < bombers.length(); ++i) ids.insertLast(bombers[i]);
         for (uint i = 0; i < escorts.length(); ++i) ids.insertLast(escorts[i]);
+        array<string>@ liches = AirLiches::HeldIds();
+        for (uint i = 0; i < liches.length(); ++i) ids.insertLast(liches[i]);
         for (uint i = 0; i < ids.length(); ++i) {
             CCircuitUnit@ u = ai.GetTeamUnit(parseInt(ids[i]));
             if (u !is null) { u.SetFireState(u.circuitDef.GetFireState()); u.SetIdleMode(1); }
             if (u !is null && u.task !is null && holds.findByRef(u.task) < 0) holds.insertLast(u.task);
         }
         for (uint i = 0; i < holds.length(); ++i) holds[i].Abort();
-        Reset(); AirWaves::Init();
+        Reset(); AirWaves::Init(); AirLiches::Init();
     }
     IUnitTask@ HomeTask(CCircuitUnit@ u)
     {

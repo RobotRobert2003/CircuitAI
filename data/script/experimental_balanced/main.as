@@ -65,6 +65,7 @@ namespace Main {
 		// Also initialize before setupMap (and when reconstructing a saved game).
 		aiEconomyMgr.SetMexOwnership(true, Global::RoleSettings::MexOwnershipSeconds);
 		Global::RoleSettings::Air::FundFirstLab = true;
+		Global::RoleSettings::Air::BankFunding = true; // AIR: bank funds energy/cons/T2 turrets; far mexes past a small home (owner 2026-10-17)
         Global::Commander::AfusDefenceRadius = Global::Commander::BaseRadius;
         Global::Commander::FrontRecovery = true;
         Global::Commander::FrontMexSeconds = 1.f;
@@ -162,14 +163,26 @@ namespace Main {
 	void ApplyProfileSettings()
 	{
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
+        // TECH gantry (owner, 2026-10-17): the nearest spot up to 40% toward the front first, cramped allowed,
+        // 24+ turrets, exit clear 480 ahead and leading to the front (src/settings/roles/tech.as GantryNearMaxShare, 0 there)
+        Global::RoleSettings::Tech::GantryNearMaxShare = 0.4f;
         Global::RoleSettings::Front::VehicleTankOpenerChance = 0.5f;
 		// AIR (owner, 2026-10-16): Tyrannus / Dragon heavy air from 175 metal/s, 10 s minimum
 		// (src/settings/roles/air.as T2HeavyAirIncomeThreshold, 250 there)
 		Global::RoleSettings::Air::T2HeavyAirIncomeThreshold = 175.0f;
-		// The nuke rush (owner, 2026-10-16): from 18 min a second call to the silo decision, up to 8 silos in all,
-		// one at a time (src/settings/roles/tech.as NukeRushSecondCallSeconds -1 and NukeLimit 20 there)
+		// AIR Armada (owner, 2026-10-17): Liches from 150 metal/s (10 s minimum), launched with each bomber wave,
+		// own tiered targets: shields, Pulsar class, anti-nukes/silos, geo, gantries, T2 factories
+		// (src/settings/roles/air.as LichesEnabled, off there; systems/air/air_liches.as)
+		Global::RoleSettings::Air::LichesEnabled = true;
+		// The nuke rush (owner, 2026-10-16): from 18 min a second call to the silo decision, up to 8 silos by that call,
+		// one at a time (src/settings/roles/tech.as NukeRushSecondCallSeconds -1 and NukeRushSecondCallLimit -1 there)
 		Global::RoleSettings::Tech::NukeRushSecondCallSeconds = 18 * 60;
-		Global::RoleSettings::Tech::NukeLimit = 8;
+		Global::RoleSettings::Tech::NukeRushSecondCallLimit = 8;
+		// The nuke rush (owner, 2026-10-17): one more silo after each completed advanced fusion, on the regular
+		// silo gates, packed on the base layout; 15 silos in all (src/settings/roles/tech.as NukeRushSiloPerAfus
+		// false and NukeLimit 20 there; the timed second call above keeps its 8)
+		Global::RoleSettings::Tech::NukeRushSiloPerAfus = true;
+		Global::RoleSettings::Tech::NukeLimit = 15;
 		// All roles (owner, 2026-10-16): no Telchines (src/settings/shared/military.as, off there;
 		// behaviour_leg.json also sets legamph "limit": 0)
 		Global::Military::NoTelchines = true;
@@ -184,6 +197,9 @@ namespace Main {
 		// FRONT (owner, 2026-10-17): two FRONTs each build a spam lab for an edge lane, left and right
 		// (src/settings/shared/spam.as EdgeLanesEnabled, off there; systems/combat/edge_lanes.as)
 		Global::Spam::EdgeLanesEnabled = true;
+		// TECH/AIR (owner, 2026-10-17): reclaim allied SMRTBARb T1 porc and T1 eco in their blocked planned sites
+		// (src/settings/shared/ally_clear.as, off there; systems/team/ally_clear.as). Never human allies.
+		Global::Team::AllyClearEnabled = true;
 	}
 
 }  // namespace Main

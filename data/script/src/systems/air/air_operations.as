@@ -58,20 +58,21 @@ namespace AirOperations {
         escorts.delete(key);
         return false;
     }
-    int AttachFighters(CAirWaveTask@ wave, bool attack = true)
+    // limit < 0: every available fighter (bomber waves); a Liche run takes only a share.
+    int AttachFighters(CAirWaveTask@ wave, bool attack = true, int limit = -1)
     {
         operations.insertLast(wave); offensive.insertLast(attack);
         launched.insertLast(array<int>()); struck.insertLast(false);
-        return AttachAvailableFighters(wave);
+        return AttachAvailableFighters(wave, limit);
     }
     // Shared ownership for bomber operations and defensive naval relief. The
     // caller owns route/lead geometry and ends its task when the mission ends.
-    int AttachAvailableFighters(IUnitTask@ owner)
+    int AttachAvailableFighters(IUnitTask@ owner, int limit = -1)
     {
-        if (owner is null || owner.IsDead()) return 0;
+        if (owner is null || owner.IsDead() || limit == 0) return 0;
         int count = 0;
         array<Id>@ ids = ai.GetOwnedUnitIds();
-        for (uint i = 0; i < ids.length(); ++i) {
+        for (uint i = 0; i < ids.length() && (limit < 0 || count < limit); ++i) {
             CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
             if (!CanEscort(u)) continue;
             // Transfer only this member; aborting a shared wall task steals its neighbours.

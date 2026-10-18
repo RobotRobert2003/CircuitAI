@@ -232,6 +232,10 @@ namespace Tech {
             float GantryMinimumBuilderPower = 100.0f;
             float GantryMaximumSurfaceThreat = 1.0f;
             float GantryExitProbeDistance = 320.0f;
+            float GantryNearMaxShare = 0.0f;               // owner 2026-10-17: a gantry's near pass up to this share toward the front, before the roomy search (0 = off; experimental_balanced opts in)
+            int GantryNearMinTurrets = 24;                 // its turret block holds at least this many
+            int GantryNearLateralSplit = 4;                // the near pass tries positions this many times closer across the line
+            float GantryNearExitLength = 480.0f;           // and nothing stands or is planned this far ahead of its exit
             int GantryTurretWaitSeconds = 90;
             int GantryAssistSeconds = 60;
             int GantryMaximumTaskBuilders = 2;
@@ -765,6 +769,16 @@ namespace Tech {
             int NukeRushSecondCallSeconds = -1;
             float NukeRushSecondCallMetalIncome = 50.0f;
             float NukeRushSecondCallEnergyIncome = 2000.0f;
+            // Most silos the timed second call above builds (-1 = NukeLimit); 8 in experimental_balanced
+            int NukeRushSecondCallLimit = -1;
+            // Silo per advanced fusion (owner, 2026-10-17): a NUKE_RUSH TECH adds one silo after each
+            // completed advanced fusion (want = 1 + completed AFUS, up to NukeLimit), one at a time, on the
+            // regular gates (MinimumMetalIncomeForNuke / MinimumEnergyIncomeForNuke), packed on the base
+            // layout next to the built turrets. Off here; on in experimental_balanced.
+            bool NukeRushSiloPerAfus = false;
+            // Its income gates; -1 = the regular gates (MinimumMetalIncomeForNuke / MinimumEnergyIncomeForNuke)
+            float NukeRushAfusSiloMetalIncome = -1.0f;
+            float NukeRushAfusSiloEnergyIncome = -1.0f;
             
             /******************** ANTI-NUKE THRESHOLDS ********************/
             // Minimum economy thresholds to allow building anti-nuke defenses

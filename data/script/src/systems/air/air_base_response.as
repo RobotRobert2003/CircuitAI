@@ -43,6 +43,8 @@ namespace AirBaseResponse {
         // interceptor wall and available for bomber-wave ownership (D-277).
         if (AirScreen::IsFighter(d)) return -1;
         if (!d.HasSurfToLand()) return -1;
+        // A nuclear missile is not a weapon for our own base (AirLiches).
+        if (Global::RoleSettings::Air::LichesEnabled && AirLiches::IsLiche(d)) return -1;
         if (d.GetTargetMinCost() > 0) return 3; // JSON-opted fortress, separate from cheap gunships
         return AirWaves::IsWaveBomber(d) ? 1 : 0;
     }

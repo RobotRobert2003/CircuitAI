@@ -69,6 +69,7 @@ namespace EdgeLanes {
     int labId = -1;
     IUnitTask@ repeat;
     int planFrame = -100000;
+    array<AIFloat3> badSites;   // sites whose turret spots the engine kept refusing
     int routeSent = -1;         // Spam::routesVersion last given to the lab as its factory route
     array<AIFloat3> rally;      // the lane's three rally points, from the lab
 
@@ -251,8 +252,44 @@ namespace EdgeLanes {
             CCircuitDef@ d = ai.GetCircuitDef(Spam::SpamUnitFor(lab.circuitDef));
             if (d !is null && d.maxThisUnit < d.count + 50) d.maxThisUnit = d.count + 50;
         }
+        ReleaseArrived(lab);
         Report(lab);
     }
+    // Owner, 2026-10-17: a unit that reached the lane's end (the far corner)
+    // leaves the route task and goes back to the ordinary military logic
+    // (native attack/raid tasks). It stops getting route orders, and Spam never
+    // pulls it back onto a lane. Checked every 2 s, O(units on the lane).
+    dictionary released;      // unit id string -> true
+    int releaseFrame = -1;
+    bool IsReleased(CCircuitUnit@ u) { return u !is null && released.exists("" + u.id); }
+    void ReleaseArrived(CCircuitUnit@ lab)
+    {
+        if (lab is null || rally.length() < 3 || ai.frame - releaseFrame < 2 * SECOND) return;
+        releaseFrame = ai.frame;
+        CRouteTask@ task = null;
+        if (!Spam::routeByFactory.get("" + lab.id, @task) || task is null || task.IsDead()) return;
+        array<CCircuitUnit@>@ us = task.GetUnits();
+        const float r = Global::Spam::EdgeReleaseRadius;
+        int n = 0;
+        for (uint i = 0; i < us.length(); ++i) {
+            CCircuitUnit@ u = us[i];
+            if (u is null || MapHelpers::SqDist(u.GetPos(ai.frame), rally[2]) > r * r) continue;
+            const string key = "" + u.id;
+            released.set(key, true);
+            Spam::routedUnits.delete(key);   // INV-043: leaving the lane on purpose
+            IUnitTask@ normal = aiMilitaryMgr.DefaultMakeTask(u);
+            if (normal !is null && aiMilitaryMgr.TransferUnit(u, normal)) ++n;
+        }
+        if (n > 0) GenericHelpers::LogUtil("[EdgeLanes] " + Name(lane) + " lane: released " + n
+            + " unit(s) at the far corner to normal attacks", 1);
+        // forget dead units
+        if (ai.frame % (60 * SECOND) < 2 * SECOND) {
+            array<string>@ keys = released.getKeys();
+            for (uint i = 0; i < keys.length(); ++i)
+                if (ai.GetTeamUnit(int(parseInt(keys[i]))) is null) released.delete(keys[i]);
+        }
+    }
+
     // Once a minute: how many units run the lane and how far the leader got
     int reportFrame = -1;
     void Report(CCircuitUnit@ lab)
@@ -358,6 +395,9 @@ namespace EdgeLanes {
             const float pad = (pass == 0) ? cell : 0.0f;
             for (uint i = 0; i < outward.length(); ++i) for (uint j = 0; j < along.length(); ++j) {
                 const AIFloat3 p(home.x + nx * float(lane) * outward[i] + ax * along[j], 0.0f, home.z + nz * float(lane) * outward[i] + az * along[j]);
+                bool bad = false;
+                for (uint k = 0; k < badSites.length() && !bad; ++k) bad = MapHelpers::SqDist(p, badSites[k]) < 400.0f * 400.0f;
+                if (bad) continue;
                 if (p.x < 256.0f || p.z < 256.0f || p.x > float(AiTerrainWidth()) - 256.0f || p.z > float(AiTerrainHeight()) - 256.0f) { ++why[0]; continue; }
                 const int f = NativeFacing(p);
                 const float halfAcross = float(Layout::Across(lab, f)) * 0.5f * cell;
@@ -439,7 +479,31 @@ namespace EdgeLanes {
             if (f.GetBuildProgress() < 1.0f) return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, f, 30 * SECOND));
             return null;   // it stands; its turrets assist it
         }
-        if (standing == 0 || pending) return null;   // a turret order still lives: the cluster waits
+        if (pending) return null;   // a turret order still lives: the cluster waits
+        if (standing == 0) {
+            // Both turret spots refused (six dead orders each, or 240 s): the
+            // ground behind this site does not take turrets. Played 2026-10-17
+            // (All That Glitters, team 15): 12 orders died and no lab was ever
+            // ordered. Try another site twice; then the lab goes up without
+            // turrets rather than never.
+            const bool gaveUp0 = turretFails[0] >= 6 || (turretFrame[0] >= 0 && ai.frame - turretFrame[0] >= 240 * SECOND);
+            const bool gaveUp1 = turretFails[1] >= 6 || (turretFrame[1] >= 0 && ai.frame - turretFrame[1] >= 240 * SECOND);
+            if (!gaveUp0 || !gaveUp1) return null;
+            if (badSites.length() < 2) {
+                badSites.insertLast(site);
+                GenericHelpers::LogUtil("[EdgeLanes] the " + Name(lane) + " lane's turret spots at (" + int(site.x) + "," + int(site.z)
+                    + ") were refused " + (turretFails[0] + turretFails[1]) + " times; planning another site (" + badSites.length() + " of 2)", 1);
+                site = AIFloat3(-1.0f, 0.0f, -1.0f);
+                turretFrame[0] = -1; turretFrame[1] = -1;
+                turretOrder[0] = -1; turretOrder[1] = -1;
+                turretFails[0] = 0; turretFails[1] = 0;
+                @turretTask[0] = null; @turretTask[1] = null;
+                rally.resize(0);
+                planFrame = -100000;
+                return null;
+            }
+            // third site refused too: build the lab without turrets
+        }
         IUnitTask@ joined = Join(labTask);
         if (joined !is null) return joined;
         if (labTask !is null && !labTask.IsDead()) {
