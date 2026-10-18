@@ -8,6 +8,7 @@
 
 #include "terrain/field/FieldEncode.h"
 #include "terrain/field/FieldGrid.h"
+#include "terrain/field/FieldLandmarks.h"
 
 #include <cmath>
 #include <cstdio>
@@ -196,6 +197,106 @@ std::string Summary(const SModel& m)
 		(int)m.theatres.size(), land, seas, ponds, (int)m.regions.size(), crossings, barriers, (int)m.chokes.size(),
 		(int)m.landings.size(), assault, (int)m.avenues.size(), (int)m.keys.size(), sides);
 	return buf;
+}
+
+namespace {
+
+void Fixed(std::string& out, float v, int decimals)
+{
+	char buf[32];
+	std::snprintf(buf, sizeof(buf), "%.*f", decimals, v);
+	out += buf;
+}
+
+int Percent(float share) { return (int)std::lround(100.f * share); }
+
+} // namespace
+
+std::string EncodeMarks(const SModel& m, const SSettings& st, std::uint64_t seq, int frame)
+{
+	std::string out;
+	out.reserve(64 * 1024);
+	out += "barbmarks|" + std::to_string(kMarksFormat) + "|" + Clean(m.mapName) + "|" + std::to_string(m.fingerprint) + "|"
+		+ std::to_string(m.marksFingerprint) + "|" + std::to_string(seq) + "|" + std::to_string(frame) + "\n";
+	out += "env|"; Fixed(out, m.minWind, 1); out += '|'; Fixed(out, m.maxWind, 1); out += '|'; Fixed(out, m.tidal, 1); out += '|';
+	Num(out, m.mapDiagonal); out += '\n';
+	for (int c = 0; c < _OPENINGS_; ++c) {
+		out += "factory|"; out += OpeningName(c);
+		for (int f = 0; f < 3; ++f) {
+			const std::string& id = st.marks.factories[c][f];
+			out += '|'; out += id.empty() ? std::string("-") : Clean(id);
+		}
+		out += '\n';
+	}
+	for (const SPosition& p : m.positions) {
+		out += "position|"; Num(out, p.index); out += '|'; out += Clean(p.name); out += '|'; Num(out, p.allyTeam); out += '|';
+		Num(out, p.n); out += '|'; Num(out, p.pos.x); out += '|'; Num(out, p.pos.z); out += '|';
+		out += p.predicted ? "predicted" : "script"; out += '|'; out += LabelName(p.label); out += '|'; out += SubLabelName(p.sub); out += '|';
+		Num(out, Percent(p.frontShare)); out += '|'; Num(out, p.rearRank); out += '|'; Num(out, p.f.cells); out += '\n';
+	}
+	for (const SPosition& p : m.positions) {
+		const SFeatures& f = p.f;
+		out += "feature|"; Num(out, p.index); out += '|';
+		const int order[7] = {G_DEEP, G_WATER, G_SHALLOW, G_FLAT, G_ROUGH, G_STEEP, G_CLIFF};
+		for (int i = 0; i < 7; ++i) { if (i) out += ','; Num(out, Percent(f.ground[order[i]])); }
+		out += '|'; Num(out, f.openWidth); out += '|'; Num(out, Percent(f.vehShare)); out += '|'; Fixed(out, f.metal, 1); out += '|';
+		Num(out, f.clusters); out += '|'; Num(out, f.geos); out += '|'; Num(out, f.geoDist); out += '|'; Num(out, f.sea); out += '|';
+		Num(out, f.yard.x); out += ','; Num(out, f.yard.z); out += '|'; Num(out, f.yardDist); out += '|'; Num(out, f.pondCells); out += '|';
+		Num(out, f.assaultRank); out += '|'; Num(out, f.island ? 1 : 0); out += '\n';
+	}
+	for (const SPosition& p : m.positions) {
+		out += "opening|"; Num(out, p.index); out += '|'; out += OpeningName(p.opening); out += '|';
+		for (std::size_t i = 0; i < p.fallbacks.size(); ++i) { if (i) out += ','; out += OpeningName(p.fallbacks[i]); }
+		out += '|'; out += EnergyName(p.energy); out += '|';
+		const std::string& second = (p.label >= 0 && p.label < _LABELS_) ? st.marks.second[p.label] : std::string();
+		out += second.empty() ? std::string("-") : Clean(second);
+		out += '|';
+		for (std::size_t i = 0; i < p.reasons.size(); ++i) {
+			if (i) out += ';';
+			std::string r = Clean(p.reasons[i]);
+			for (char& ch : r) if (ch == ';') ch = ',';
+			out += r;
+		}
+		out += '\n';
+	}
+	for (const SMark& mk : m.marks) {
+		out += "mark|"; Num(out, mk.id); out += '|'; out += MarkGroupName(mk.group); out += '|'; out += MarkKindName(mk.kind); out += '|';
+		Num(out, mk.pos.x); out += '|'; Num(out, mk.pos.z); out += '|'; Fixed(out, mk.value, 1); out += '|';
+		Num(out, mk.position); out += '|'; Num(out, mk.allyTeam); out += '|'; Num(out, mk.contested ? 1 : 0); out += '|';
+		Num(out, mk.phaseFrom); out += '|'; Num(out, mk.phaseTo); out += '|'; Num(out, mk.labelled ? 1 : 0); out += '|';
+		out += Clean(mk.reason); out += '|';
+		if (mk.line.empty()) out += '-'; else Poly(out, mk.line);
+		out += '\n';
+	}
+	out += "territory|" + RunLength(m.posOf) + "\n";
+	out += "end|" + std::to_string(seq) + "\n";
+	return out;
+}
+
+std::string MarksSummary(const SModel& m)
+{
+	int labels[_LABELS_] = {0, 0, 0, 0, 0, 0, 0, 0};
+	int kinds[_MARK_KINDS_] = {};
+	for (const SPosition& p : m.positions) if (p.label >= 0 && p.label < _LABELS_) ++labels[p.label];
+	for (const SMark& mk : m.marks) if (mk.kind >= 0 && mk.kind < _MARK_KINDS_) ++kinds[mk.kind];
+	std::string out = std::to_string(m.positions.size()) + " positions (";
+	bool first = true;
+	for (int l = 0; l < _LABELS_; ++l) {
+		if (labels[l] == 0) continue;
+		if (!first) out += ", ";
+		out += std::to_string(labels[l]) + " " + LabelName(l);
+		first = false;
+	}
+	out += "), " + std::to_string(m.marks.size()) + " marks (";
+	first = true;
+	for (int k = 0; k < _MARK_KINDS_; ++k) {
+		if (kinds[k] == 0) continue;
+		if (!first) out += ", ";
+		out += std::to_string(kinds[k]) + " " + MarkKindName(k);
+		first = false;
+	}
+	out += ")";
+	return out;
 }
 
 bool ParseHeader(const std::string& text, SHeader& out)

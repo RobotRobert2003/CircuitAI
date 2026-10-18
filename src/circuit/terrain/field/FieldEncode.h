@@ -23,6 +23,14 @@ constexpr int kFileFormat = 1;
 std::string Encode(const SModel& model, const SSettings& settings, std::uint64_t seq, int frame);
 std::string Summary(const SModel& model);
 
+// Part B1: LuaUI/Config/BARb/field/landmarks.txt, the second file, written
+// after map.txt and carrying its fingerprint. Grammar: section 6 of
+// rjm.bar.docs/projects/circuitai/field-landmarks-proposal.md; the reader is
+// the `marks` module of tools/widgets/gui_barb_team_link.lua.
+constexpr int kMarksFormat = 1;
+std::string EncodeMarks(const SModel& model, const SSettings& settings, std::uint64_t seq, int frame);
+std::string MarksSummary(const SModel& model);
+
 // Header fields of an encoded file, for tests and the service log.
 struct SHeader {
 	int format = 0, gw = 0, gh = 0, cell = 0, frame = 0;

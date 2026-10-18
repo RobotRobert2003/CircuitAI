@@ -37,6 +37,10 @@
 -- cell (deep, water, shallows, flat, rough, steep, cliff, lava), land masses,
 -- seas and ponds, regions, crossings and cliffs, shores (beach / steep / sheer),
 -- chokes, high ground and summits, geos, islands. Read-only; it asks no AI anything.
+-- Landmarks (field-landmarks proposal, section 7): the "Landmarks" rows or /barbmarks
+-- draw <writeDir>/LuaUI/Config/BARb/field/landmarks.txt, written once right after
+-- map.txt: start positions and territories, landmarks by phase window, and the
+-- selected position's opening card. Read-only as well.
 
 function widget:GetInfo()
 	return {
@@ -835,6 +839,8 @@ local function beginParse(text)
     end
     local m = newModel()
     m.name, m.gw, m.gh, m.cell = name, tonumber(gw), tonumber(gh), tonumber(cell)
+    -- the header's ninth field: the analysis fingerprint the landmarks file must repeat
+    m.fingerprint = string.match(text, "^barbfield|[^|]*|[^|]*|[^|]*|[^|]*|[^|]*|[^|]*|[^|]*|([^|\r\n]+)")
     parse = {text=text, pos=1, m=m, total=#text, seq=tonumber(fseq)}
     return true
 end
@@ -1906,8 +1912,1372 @@ return {SetMode=setMode, Mode=function() return on end, Status=function() return
     Legend=function() return options.legend end, Config=config, GetConfig=getConfig, TextCommand=textCommand,
     Update=update, DrawWorld=drawWorld, DrawScreen=drawScreen, DrawMiniMap=drawMiniMap, Shutdown=shutdown,
     SetAllyProvider=function(fn) allyProvider = fn end,
+    -- read-only access for the landmarks view: the parsed map.txt (grid, fingerprint, chokes)
+    -- and the soft-edged run-length fill, so both views fill territory the same way
+    Model=function() return model end,
+    FillRuns=function(m, runs, cells, want, c, a) fillWith(c, a); fillRuns(m, runs, cells, want, nil) end,
     ButtonRect=function(id) for _, r in ipairs(controls) do if r.id == id then return {r[1], r[2], r[3], r[4]} end end end,
     MousePress=mousePress, MouseRelease=mouseRelease, MouseMove=mouseMove}
+end)()
+
+-- ---------------------------------------------------------------- marks
+-- Strategic landmarks and the opening per start position (field-landmarks
+-- proposal, section 7): a second file written once by the same BARb field
+-- service right after map.txt, LuaUI/Config/BARb/field/landmarks.txt. Like the
+-- terrain map it is read once when the view is turned on, parsed over Update
+-- calls (64 lines per step, 2 ms), and drawn from one display list per layer.
+-- Cost: after load nothing is parsed or scanned per frame; drawing is about ten
+-- CallList calls plus at most 200 labels. The lists are compiled a few per
+-- Update (the incremental compile KI-643 asks of Terrain), and the territory
+-- cell expansion and border edges are built in time-boxed steps before that.
+-- A new selection recompiles only the selection layers (territory fill,
+-- landings, ring, minimap) and the card; a new phase only the mark layers; a
+-- roster change (polled every 2 s while shown) only the position layer.
+-- D-325: every kind of mark differs by shape first; colour (Okabe-Ito) only
+-- repeats it, and every line is cased in ink (the halo pass).
+-- Grammar: the landmarks.txt record list (format 1); unknown records are ignored.
+local marks = (function()
+local PATH = "LuaUI/Config/BARb/field/landmarks.txt"
+local FACTIONS = {"armada", "cortex", "legion"}
+local FACTION_NAME = {armada="Armada", cortex="Cortex", legion="Legion"}
+local PHASES = {
+    {key="0-5", lo=0, hi=5}, {key="5-15", lo=5, hi=15}, {key="15-25", lo=15, hi=25}, {key="25+", lo=25, hi=1e9}, {key="all"},
+}
+local PHASE_KEYS = {}
+local PHASE_BY_KEY = {}
+for i, p in ipairs(PHASES) do PHASE_KEYS[i] = p.key; PHASE_BY_KEY[p.key] = p end
+-- every display list, in compile order; DRAW_ORDER is the world draw order
+local LAYER_ORDER = {"dim", "terrOutline", "terrSel", "seazone", "economy", "land", "sea", "late", "landing", "positions", "selRing", "minimap"}
+local DRAW_ORDER = {"terrOutline", "terrSel", "seazone", "economy", "land", "sea", "late", "landing", "positions", "selRing"}
+-- "late" reads the selection too: only the selected side's anti-nuke coverage circles are drawn
+local BY_SELECTION = {"terrSel", "landing", "late", "selRing", "minimap"}
+-- above LABEL_HEIGHT (the strategic view) the mark layers switch to a second list in which
+-- the labelled marks' glyphs are FAR_SCALE times larger, so they stay readable from far
+local FAR_SCALE = 3
+local BY_PHASE = {"seazone", "economy", "land", "sea", "late", "landing", "minimap"}
+local BY_ROSTER = {"positions"}
+local CLASS_WORD = {bot="Bot lab", vehicle="Vehicle plant", hover="Hover plant", ship="Shipyard", air="Aircraft plant"}
+local MATCH_RADIUS = 800      -- elmos: a roster start this close to a position is that position's AI
+local POS_R = 80              -- position disc radius, elmos
+local LABEL_CAP = 200
+local LABEL_HEIGHT = 6000     -- above this camera height labels shrink and labelled glyphs draw FAR_SCALE larger
+local options = {legend=false, phase="all", faction=nil}
+local on = false
+local model, parse, prep, seq = nil, nil, nil, nil
+local lastExists = nil
+local status = "Landmarks hidden"
+local lists = {}
+local pending, pendingSet = {}, {}
+local labelsAll = {}
+local selected = nil          -- the selected position index
+local inspectLines = nil      -- the clicked mark's record
+local fieldApi = nil          -- the terrain module: map.txt grid, fingerprint and chokes, its fill routine
+local rosterProvider = nil    -- function() -> {{teamId=, allyTeam=, role=, side=, factory=, x=, z=}, ...}
+local mineProvider = nil      -- function() -> x, z of the viewer's start (spectating: the panel's selected AI)
+local rosterSig, rosterTimer = "", nil
+local panelRects = {}
+local card = nil              -- the selected position's opening card
+
+local K = {
+    white  = {1,1,1},
+    grey   = {0.72,0.72,0.74},
+    orange = {0.90,0.62,0.00},
+    sky    = {0.34,0.71,0.91},
+    green  = {0.00,0.62,0.45},
+    yellow = {0.94,0.89,0.26},
+    blue   = {0.00,0.45,0.70},
+    verm   = {0.84,0.37,0.00},
+    purple = {0.80,0.47,0.65},
+    teal   = {0.15,0.65,0.62},
+    ink    = {0.025,0.045,0.07},
+}
+local mint, muted = {0.35,0.9,0.73,1}, {0.65,0.73,0.8,1}
+local inkPanel = {0.025,0.045,0.07,0.94}
+
+local function split(s, sep)
+    local out, from = {}, 1
+    while true do
+        local a, b = string.find(s, sep, from, true)
+        if not a then out[#out+1] = string.sub(s, from); break end
+        out[#out+1] = string.sub(s, from, a-1); from = b+1
+    end
+    return out
+end
+local function poly(s)
+    local p = {}
+    if not s then return p end
+    for x, z in string.gmatch(s, "(-?%d+%.?%d*),(-?%d+%.?%d*)") do p[#p+1] = tonumber(x); p[#p+1] = tonumber(z) end
+    return p
+end
+local function num(v, d) return tonumber(v) or d or 0 end
+local function loose(name) return string.lower((string.gsub(name or "", "[%s%._%-]", ""))) end
+local function groundY(x, z) return math.max(0, Spring.GetGroundHeight(x, z)) + 8 end
+local function words(s, sep)
+    local out = {}
+    if not s or s == "" or s == "-" then return out end
+    for _, v in ipairs(split(s, sep)) do
+        local t = string.match(v, "^%s*(.-)%s*$")
+        if t and t ~= "" then out[#out+1] = t end
+    end
+    return out
+end
+local function normFaction(side)
+    local s = string.lower(side or "")
+    if string.find(s, "arm", 1, true) then return "armada" end
+    if string.find(s, "cor", 1, true) then return "cortex" end
+    if string.find(s, "leg", 1, true) then return "legion" end
+    return nil
+end
+local function fieldModel() return fieldApi and fieldApi.Model and fieldApi.Model() or nil end
+
+-- ---- parsing
+local function newModel()
+    return {name="", fieldFp="", marksFp="", env={minWind=0, maxWind=0, tidal=0, diag=0}, factories={},
+        positions={}, order={}, features={}, openings={}, marks={}, terrRuns={}, terrCount=0, cellPos={}, edges={}, byLayer={},
+        gw=0, gh=0, cell=32, terrOk=false}
+end
+local function parseRecord(m, line)
+    local f = split(line, "|")
+    local k = f[1]
+    if k == "mark" then
+        local pl = f[15]
+        m.marks[#m.marks+1] = {id=num(f[2]), group=f[3] or "", kind=f[4] or "", x=num(f[5]), z=num(f[6]), value=num(f[7]),
+            pos=num(f[8], -1), ally=num(f[9], -1), contested=f[10] == "1", from=num(f[11], 0), to=num(f[12], -1),
+            labelled=f[13] == "1", reason=f[14] or "", line=(pl and pl ~= "-" and pl ~= "") and poly(pl) or nil}
+    elseif k == "position" then
+        local i = tonumber(f[2])
+        if i then
+            if not m.positions[i] then m.order[#m.order+1] = i end
+            m.positions[i] = {index=i, name=f[3] or ("P" .. i), ally=num(f[4], -1), n=num(f[5]), x=num(f[6]), z=num(f[7]),
+                source=f[8] or "predicted", label=f[9] or "", sublabel=f[10] or "-", frontShare=num(f[11]), rearRank=num(f[12]), cells=num(f[13])}
+        end
+    elseif k == "opening" then
+        local i = tonumber(f[2])
+        if i then m.openings[i] = {class=f[3] or "", fallbacks=words(f[4], ","), energy=f[5] or "", second=f[6] or "", reasons=words(f[7], ";")} end
+    elseif k == "feature" then
+        local i = tonumber(f[2])
+        if i then
+            local g = {}
+            for v in string.gmatch(f[3] or "", "-?%d+") do g[#g+1] = tonumber(v) end
+            local yx, yz = string.match(f[11] or "", "(-?%d+),(-?%d+)")
+            m.features[i] = {ground=g, openWidth=num(f[4]), vehShare=num(f[5]), metal=num(f[6]), clusters=num(f[7]), geos=num(f[8]),
+                geoDist=num(f[9], -1), sea=num(f[10], -1), yardX=num(yx, -1), yardZ=num(yz, -1), yardDist=num(f[12], -1),
+                pondCells=num(f[13]), assaultRank=num(f[14]), island=f[15] == "1"}
+        end
+    elseif k == "territory" then
+        -- run-length position index per cell (-1 = none), the same form as map.txt cells|
+        local runs, start = m.terrRuns, m.terrCount
+        for id, count in string.gmatch(f[2] or "", "(-?%d+)%*(%d+)") do
+            local n = tonumber(count)
+            runs[#runs+1] = {start, tonumber(id), n}
+            start = start + n
+        end
+        m.terrCount = start
+    elseif k == "env" then
+        m.env = {minWind=num(f[2]), maxWind=num(f[3]), tidal=num(f[4]), diag=num(f[5])}
+    elseif k == "factory" and f[2] then
+        local function id(v) if v == nil or v == "" or v == "-" then return nil end return v end
+        m.factories[f[2]] = {armada=id(f[3]), cortex=id(f[4]), legion=id(f[5])}
+    end
+end
+
+local function beginParse(text)
+    local fmt, name, ffp, mfp, fseq = string.match(text, "^barbmarks|(%d+)|([^|]*)|([^|]*)|([^|]*)|(%d+)")
+    if not fmt then return false, "unexpected header" end
+    if tonumber(fmt) ~= 1 then return false, "format " .. tostring(fmt) end
+    local trailer = "\nend|" .. fseq
+    local tp = string.find(text, trailer, 1, true)
+    if not tp then return false, "torn file" end
+    local after = string.sub(text, tp + #trailer, tp + #trailer)
+    if after ~= "" and after ~= "\n" and after ~= "\r" then return false, "torn file" end
+    if name ~= "" and Game.mapName and loose(name) ~= loose(Game.mapName)
+        and not string.find(loose(Game.mapName), loose(name), 1, true) and not string.find(loose(name), loose(Game.mapName), 1, true) then
+        return false, "file is for map '" .. name .. "'"
+    end
+    local fm = fieldModel()
+    if fm and fm.fingerprint and ffp ~= fm.fingerprint then return false, "fingerprint differs from map.txt" end
+    local m = newModel()
+    m.name, m.fieldFp, m.marksFp = name, ffp, mfp
+    parse = {text=text, pos=1, m=m, seq=tonumber(fseq)}
+    return true
+end
+
+local finishModel   -- forward
+local function stepParse()
+    if not parse then return end
+    local t0 = Spring.GetTimer()
+    local text, pos = parse.text, parse.pos
+    local lines = 0
+    while true do
+        local e = string.find(text, "\n", pos, true)
+        local line = e and string.sub(text, pos, e-1) or string.sub(text, pos)
+        if string.sub(line, -1) == "\r" then line = string.sub(line, 1, -2) end
+        if #line > 0 and not string.find(line, "^barbmarks") and not string.find(line, "^end|") then parseRecord(parse.m, line) end
+        pos = e and e + 1 or #text + 1
+        lines = lines + 1
+        if pos > #text then break end
+        if lines % 64 == 0 and Spring.DiffTimers(Spring.GetTimer(), t0) > 0.002 then break end
+    end
+    parse.pos = pos
+    if pos > #text then
+        local m, s = parse.m, parse.seq
+        parse = nil
+        finishModel(m, s)
+    else
+        status = string.format("Reading landmarks %d%%", math.floor(100 * pos / math.max(1, #text)))
+    end
+end
+local function tryLoad()
+    if not (VFS and VFS.LoadFile and VFS.FileExists) then status = "VFS unavailable"; return end
+    local now = Spring.GetTimer()
+    if lastExists and Spring.DiffTimers(now, lastExists) < 2 then return end
+    lastExists = now
+    if not VFS.FileExists(PATH, VFS.RAW) then
+        if string.sub(status, 1, 15) ~= "Landmarks file " then status = "Landmarks: waiting for file" end
+        return
+    end
+    local ok, text = pcall(VFS.LoadFile, PATH, VFS.RAW)
+    if not ok or type(text) ~= "string" or #text == 0 then status = "Cannot read " .. PATH; return end
+    local good, err = beginParse(text)
+    if not good then status = "Landmarks file skipped: " .. tostring(err) end
+end
+
+-- ---- line generation: the same emitter idea as the terrain map. In world space seg()
+-- splits long segments so a line follows the ground; for a legend sample `flatY` is the
+-- sample's screen y and a map z is mirrored about it, so north stays up and every
+-- legend glyph is drawn by exactly the code that draws the map. Line layers are
+-- compiled twice: an ink under-stroke three pixels wider, then the colour.
+local SEG_MAX = 128
+local flatY = nil
+local patScale = 1
+local haloPass = false
+local function vtx(x, z)
+    if flatY then gl.Vertex(x, 2*flatY - z) else gl.Vertex(x, groundY(x, z), z) end
+end
+local function seg(ax, az, bx, bz)
+    if flatY then vtx(ax, az); vtx(bx, bz); return end
+    local dx, dz = bx - ax, bz - az
+    local n = math.max(1, math.ceil(math.sqrt(dx*dx + dz*dz) / SEG_MAX))
+    local px, pz = ax, az
+    for i = 1, n do
+        local x, z = ax + dx*i/n, az + dz*i/n
+        vtx(px, pz); vtx(x, z)
+        px, pz = x, z
+    end
+end
+local function solid(p) for i = 3, #p, 2 do seg(p[i-2], p[i-1], p[i], p[i+1]) end end
+local function dashed(p, onLen, offLen)
+    local runs = {onLen * patScale, offLen * patScale}
+    local k, phase = 1, 0
+    for i = 3, #p, 2 do
+        local ax, az, bx, bz = p[i-2], p[i-1], p[i], p[i+1]
+        local dx, dz = bx-ax, bz-az
+        local len = math.sqrt(dx*dx + dz*dz)
+        if len > 0 then
+            dx, dz = dx/len, dz/len
+            local t = 0
+            while t < len do
+                local run = runs[k] - phase
+                local t2 = math.min(len, t + run)
+                if k == 1 then seg(ax+dx*t, az+dz*t, ax+dx*t2, az+dz*t2) end
+                if t2 >= len then phase = phase + (len - t) else phase = 0; k = 3 - k end
+                t = t2
+            end
+        end
+    end
+end
+local function stroke(c, a, w)
+    if haloPass then gl.Color(K.ink[1], K.ink[2], K.ink[3], 0.85); gl.LineWidth((w or 2) + 3)
+    else gl.Color(c[1], c[2], c[3], a or 1); gl.LineWidth(w or 2) end
+end
+local function ngon(x, z, r, n, dash)
+    local px, pz
+    for i = 0, n do
+        local a = i * 2 * math.pi / n
+        local cx, cz = x + math.cos(a)*r, z + math.sin(a)*r
+        if px and (not dash or i % 2 == 0) then seg(px, pz, cx, cz) end
+        px, pz = cx, cz
+    end
+end
+local function disc(x, z, r)
+    -- a filled disc (inside gl.BeginEnd(GL.TRIANGLES))
+    local n = 20
+    for i = 0, n - 1 do
+        local a1, a2 = i * 2 * math.pi / n, (i + 1) * 2 * math.pi / n
+        vtx(x, z); vtx(x + math.cos(a1)*r, z + math.sin(a1)*r); vtx(x + math.cos(a2)*r, z + math.sin(a2)*r)
+    end
+end
+local function polyMid(p)
+    if #p < 4 then return p[1] or 0, p[2] or 0 end
+    local total = 0
+    for i = 3, #p, 2 do local dx, dz = p[i]-p[i-2], p[i+1]-p[i-1]; total = total + math.sqrt(dx*dx+dz*dz) end
+    local half, acc = total / 2, 0
+    for i = 3, #p, 2 do
+        local dx, dz = p[i]-p[i-2], p[i+1]-p[i-1]
+        local len = math.sqrt(dx*dx+dz*dz)
+        if acc + len >= half and len > 0 then
+            local f = (half - acc) / len
+            return p[i-2] + dx*f, p[i-1] + dz*f
+        end
+        acc = acc + len
+    end
+    return p[#p-1], p[#p]
+end
+local function hatch(p, step)
+    -- 45-degree hatching inside the closed polygon p (lines x + z = c, even-odd rule)
+    local n = math.floor(#p / 2)
+    if n < 3 then return end
+    local umin, umax = math.huge, -math.huge
+    for i = 1, n do
+        local u = p[2*i-1] + p[2*i]
+        if u < umin then umin = u end
+        if u > umax then umax = u end
+    end
+    step = math.max(step, (umax - umin) / 300)
+    local xs = {}
+    local c = umin + step * 0.5
+    while c < umax do
+        local cnt = 0
+        for i = 1, n do
+            local j = (i % n) + 1
+            local ax, az, bx, bz = p[2*i-1], p[2*i], p[2*j-1], p[2*j]
+            local ua, ub = ax + az, bx + bz
+            if (ua <= c and ub > c) or (ub <= c and ua > c) then
+                cnt = cnt + 1
+                xs[cnt] = ax + (bx - ax) * (c - ua) / (ub - ua)
+            end
+        end
+        for q = #xs, cnt + 1, -1 do xs[q] = nil end
+        table.sort(xs)
+        for q = 1, cnt - 1, 2 do seg(xs[q], c - xs[q], xs[q+1], c - xs[q+1]) end
+        c = c + step
+    end
+end
+
+-- ---- glyphs: one shape per kind, centred on (x, z), size r (inside gl.BeginEnd(GL.LINES))
+local function square(x, z, r) seg(x-r, z-r, x+r, z-r); seg(x+r, z-r, x+r, z+r); seg(x+r, z+r, x-r, z+r); seg(x-r, z+r, x-r, z-r) end
+local function ibeam(x, z, dx, dz, half, serif)
+    -- the Terrain choke glyph: a width bar perpendicular to (dx, dz), a serif at each end
+    local len = math.sqrt(dx*dx + dz*dz); if len == 0 then dx, dz, len = 0, 1, 1 end
+    dx, dz = dx/len, dz/len
+    local lx, lz, rx, rz = x - dz*half, z + dx*half, x + dz*half, z - dx*half
+    seg(lx, lz, rx, rz)
+    seg(lx - dx*serif, lz - dz*serif, lx + dx*serif, lz + dz*serif)
+    seg(rx - dx*serif, rz - dz*serif, rx + dx*serif, rz + dz*serif)
+end
+local function star(x, z, r)
+    local px, pz
+    for i = 0, 10 do
+        local a = -math.pi / 2 + i * math.pi / 5
+        local rr = (i % 2 == 0) and r or r * 0.42
+        local cx, cz = x + math.cos(a)*rr, z + math.sin(a)*rr
+        if px then seg(px, pz, cx, cz) end
+        px, pz = cx, cz
+    end
+end
+local function arcUp(x, z, r, n)
+    -- the upper half circle (north), a dome
+    local px, pz
+    for i = 0, n do
+        local a = math.pi + i * math.pi / n
+        local cx, cz = x + math.cos(a)*r, z + math.sin(a)*r
+        if px then seg(px, pz, cx, cz) end
+        px, pz = cx, cz
+    end
+end
+local function arcDown(x, z, r, n)
+    local px, pz
+    for i = 0, n do
+        local a = i * math.pi / n
+        local cx, cz = x + math.cos(a)*r, z + math.sin(a)*r
+        if px then seg(px, pz, cx, cz) end
+        px, pz = cx, cz
+    end
+end
+local function dot(x, z, d) seg(x - d, z, x + d, z); seg(x, z - d, x, z + d) end
+local function glyph(kind, x, z, r, mk)
+    if kind == "metal" then square(x, z, r * 0.7)
+    elseif kind == "centre" then star(x, z, r)
+    elseif kind == "geo" then
+        -- a downward triangle (the Terrain view's upright triangle is high ground)
+        seg(x - r, z - r*0.7, x + r, z - r*0.7); seg(x + r, z - r*0.7, x, z + r); seg(x, z + r, x - r, z - r*0.7)
+    elseif kind == "tidal" then
+        for _, oz in ipairs({-0.3, 0.3}) do
+            local zz = z + r * oz
+            seg(x - r, zz, x - r*0.5, zz - r*0.25); seg(x - r*0.5, zz - r*0.25, x, zz)
+            seg(x, zz, x + r*0.5, zz - r*0.25); seg(x + r*0.5, zz - r*0.25, x + r, zz)
+        end
+    elseif kind == "choke" then ibeam(x, z, mk.dx or 0, mk.dz or 1, mk.half and math.max(mk.half, r) or r, r * 0.35)
+    elseif kind == "killzone" then
+        ibeam(x, z, mk.dx or 0, mk.dz or 1, r, r * 0.35)
+        seg(x - r*0.6, z - r*0.6, x + r*0.6, z + r*0.6); seg(x - r*0.6, z + r*0.6, x + r*0.6, z - r*0.6)
+    elseif kind == "radar" then arcUp(x, z + r*0.3, r, 8); arcUp(x, z + r*0.3, r * 0.55, 6); dot(x, z + r*0.3, r * 0.12)
+    elseif kind == "perch" then seg(x - r, z + r*0.4, x, z - r*0.5); seg(x, z - r*0.5, x + r, z + r*0.4)
+    elseif kind == "lrpc" then
+        -- a tall, narrow double chevron
+        for _, oz in ipairs({0, 0.5}) do
+            local zz = z + r * oz
+            seg(x - r*0.55, zz + r*0.6, x, zz - r*1.1); seg(x, zz - r*1.1, x + r*0.55, zz + r*0.6)
+        end
+    elseif kind == "forward" then square(x, z, r * 0.8); square(x, z, r * 0.15)
+    elseif kind == "yard" then
+        -- an anchor: ring, stock, shank, the arms as the lower half circle
+        ngon(x, z - r*0.9, r*0.16, 8)
+        seg(x - r*0.45, z - r*0.5, x + r*0.45, z - r*0.5)
+        seg(x, z - r*0.74, x, z + r*0.8)
+        arcDown(x, z, r * 0.8, 8)
+    elseif kind == "strait" then seg(x - r, z - r*0.28, x + r, z - r*0.28); seg(x - r, z + r*0.28, x + r, z + r*0.28)
+    elseif kind == "emergence" then
+        for i = -2, 2 do
+            for j = -2, 2 do
+                if (i + j) % 2 == 0 and math.abs(i) + math.abs(j) <= 2 then dot(x + i*r*0.4, z + j*r*0.4, r * 0.08) end
+            end
+        end
+    elseif kind == "coastfire" then ngon(x, z, r * 0.8, 16); dot(x, z, r * 0.25)
+    elseif kind == "seaplane" then
+        seg(x, z - r, x, z + r)
+        seg(x - r, z + r*0.2, x, z - r*0.2); seg(x, z - r*0.2, x + r, z + r*0.2)
+        seg(x - r*0.4, z + r*0.85, x + r*0.4, z + r*0.85)
+    elseif kind == "island" then ngon(x, z, r, 6); ngon(x, z, r * 0.55, 6)
+    elseif kind == "antinuke" then
+        -- a ring with three spokes; the 2000-elmo coverage circle is drawn by the late layer
+        -- for the selected side only (drawn for every site it crossed the whole map as dashes)
+        ngon(x, z, r * 0.45, 12)
+        for _, a in ipairs({-math.pi / 2, math.pi / 6, 5 * math.pi / 6}) do
+            seg(x + math.cos(a) * r * 0.45, z + math.sin(a) * r * 0.45, x + math.cos(a) * r, z + math.sin(a) * r)
+        end
+    end
+end
+local function landingGlyph(mk, assault, L)
+    -- the beach line; an arrow inland for an assault landing, out to sea for a home landing
+    if mk.contested then dashed(mk.line, 40, 20) else solid(mk.line) end
+    if assault == nil or not mk.mx then return end
+    local dx, dz = mk.nx, mk.nz
+    if not assault then dx, dz = -dx, -dz end
+    local tx, tz = mk.mx + dx*L, mk.mz + dz*L
+    seg(mk.mx - dx*L*0.2, mk.mz - dz*L*0.2, tx, tz)
+    local px, pz = -dz, dx
+    seg(tx, tz, tx - dx*L*0.4 + px*L*0.3, tz - dz*L*0.4 + pz*L*0.3)
+    seg(tx, tz, tx - dx*L*0.4 - px*L*0.3, tz - dz*L*0.4 - pz*L*0.3)
+end
+
+-- The style of every kind: shape (above) first, colour second; the text is the legend row.
+local KIND = {
+    metal     = {c=K.white,  w=1.5, r=28, text="Hollow square: metal cluster (number: metal per second)"},
+    centre    = {c=K.white,  w=2,   r=70, text="Star: map centre"},
+    geo       = {c=K.yellow, w=2,   r=40, text="Downward triangle: geothermal vent"},
+    tidal     = {c=K.sky,    w=2,   r=40, text="Two waves: tidal generator site"},
+    choke     = {c=K.white,  w=2.5, r=40, text="Bar with serifs: choke (number: width in elmos)"},
+    killzone  = {c=K.verm,   w=2.5, r=50, text="Crossed bar: kill zone, hold the approach here"},
+    radar     = {c=K.green,  w=2,   r=45, text="Two arcs over a dot: radar hill"},
+    perch     = {c=K.orange, w=2.5, r=45, text="Wide chevron: artillery perch"},
+    forward   = {c=K.green,  w=2,   r=45, text="Square with a dot: forward base site"},
+    emergence = {c=K.purple, w=2,   r=50, text="Dot cluster: emergence band, amphibious units come ashore"},
+    island    = {c=K.teal,   w=2,   r=60, text="Double hexagon: island (its class is in the record)"},
+    yard      = {c=K.blue,   w=2,   r=50, text="Anchor: shipyard site"},
+    seazone   = {c=K.blue,   w=1.5, r=40, text="Hatched area: sea control zone"},
+    strait    = {c=K.sky,    w=2.5, r=50, text="Double bar: strait"},
+    coastfire = {c=K.orange, w=2,   r=40, text="Circle with a cross: coast-fire station on the standoff line"},
+    seaplane  = {c=K.sky,    w=2,   r=45, text="Plane: seaplane platform site"},
+    lrpc      = {c=K.verm,   w=2.5, r=50, text="Tall double chevron: long-range cannon perch"},
+    antinuke  = {c=K.purple, w=2,   r=40, text="Ring with three spokes: anti-nuke site; thin circle: the selected side's 2000 coverage"},
+    landing   = {c=K.white,  w=2.5, r=40, text="Beach line: landing"},
+}
+local KIND_ORDER = {"metal", "centre", "geo", "tidal", "choke", "killzone", "radar", "perch", "forward", "emergence", "island",
+    "yard", "strait", "coastfire", "seaplane", "lrpc", "antinuke"}
+
+local function phaseVisible(mk)
+    local ph = PHASE_BY_KEY[options.phase]
+    if not ph or not ph.lo then return true end
+    local to = (mk.to < 0) and 1e9 or mk.to
+    return mk.from < ph.hi and to > ph.lo
+end
+local function layerOf(mk)
+    if mk.kind == "seazone" then return "seazone" end
+    if mk.kind == "landing" then return "landing" end
+    if mk.group == "economy" or mk.group == "land" or mk.group == "sea" or mk.group == "late" then return mk.group end
+    return "land"
+end
+-- Lua numbers here are single precision floats, so %g printed 65.6 as 65.5999985: round
+-- to a whole number when within 0.05 of one, else to one decimal.
+local function fmtNum(v)
+    v = tonumber(v) or 0
+    local r = math.floor(v + 0.5)
+    if math.abs(v - r) < 0.05 then return string.format("%d", r) end
+    return string.format("%.1f", v)
+end
+local function markWord(mk)
+    local v = mk.value or 0
+    if mk.kind == "metal" then return string.format("%.1f m/s", v) end   -- metal per second
+    if mk.kind == "choke" then return fmtNum(v) end
+    if v ~= 0 then return mk.kind .. " " .. fmtNum(v) end
+    return mk.kind
+end
+
+-- ---- selection-independent preparation (time-boxed steps before the first compile)
+local function prepMarks(m)
+    local fm = fieldModel()
+    m.byLayer = {}
+    for _, mk in ipairs(m.marks) do
+        local layer = layerOf(mk)
+        local bl = m.byLayer[layer]; if not bl then bl = {}; m.byLayer[layer] = bl end
+        local list = bl[mk.kind]; if not list then list = {}; bl[mk.kind] = list end
+        list[#list+1] = mk
+        if mk.kind == "choke" or mk.kind == "killzone" then
+            if mk.kind == "choke" then mk.half = math.max(16, math.min(400, (mk.value or 0) / 2)) end
+            -- borrow the crossing direction of the terrain map's choke at the same place
+            mk.dx, mk.dz = 0, 1
+            if fm and fm.chokes then
+                local best = 160 * 160
+                for _, c in ipairs(fm.chokes) do
+                    local d = (c.x - mk.x)^2 + (c.z - mk.z)^2
+                    if d < best then best = d; mk.dx, mk.dz = c.dx, c.dz end
+                end
+            end
+        elseif mk.kind == "landing" and mk.line and #mk.line >= 4 then
+            local p = mk.line
+            local mx, mz = polyMid(p)
+            local tx, tz = p[#p-1] - p[1], p[#p] - p[2]
+            local len = math.sqrt(tx*tx + tz*tz); if len == 0 then tx, tz, len = 1, 0, 1 end
+            local nx, nz = -tz/len, tx/len
+            -- inland is the side of the beach whose ground stands higher
+            local ha = Spring.GetGroundHeight(mx + nx*120, mz + nz*120)
+            local hb = Spring.GetGroundHeight(mx - nx*120, mz - nz*120)
+            if hb > ha then nx, nz = -nx, -nz end
+            mk.mx, mk.mz, mk.nx, mk.nz = mx, mz, nx, nz
+        end
+    end
+end
+local function verticalEdges(m, col)
+    -- borders between columns col-1 and col, merged down the rows
+    local gw, gh, cell, c, edges = m.gw, m.gh, m.cell, m.cellPos, m.edges
+    local runA, runB, start = nil, nil, nil
+    for row = 0, gh do
+        local a, b = nil, nil
+        if row < gh then a, b = c[row*gw + col - 1], c[row*gw + col] end
+        local diff = row < gh and a ~= b
+        if not (diff and start and a == runA and b == runB) then
+            if start then edges[#edges+1] = {col*cell, start*cell, col*cell, row*cell, runA, runB} end
+            if diff then start, runA, runB = row, a, b else start = nil end
+        end
+    end
+end
+local function horizontalEdges(m, row)
+    local gw, cell, c, edges = m.gw, m.cell, m.cellPos, m.edges
+    local runA, runB, start = nil, nil, nil
+    for col = 0, gw do
+        local a, b = nil, nil
+        if col < gw then a, b = c[(row-1)*gw + col], c[row*gw + col] end
+        local diff = col < gw and a ~= b
+        if not (diff and start and a == runA and b == runB) then
+            if start then edges[#edges+1] = {start*cell, row*cell, col*cell, row*cell, runA, runB} end
+            if diff then start, runA, runB = col, a, b else start = nil end
+        end
+    end
+end
+local function queue(names)
+    for _, n in ipairs(names) do
+        if not pendingSet[n] then pendingSet[n] = true; pending[#pending+1] = n end
+    end
+end
+local function stepPrep()
+    local m = model
+    local t0 = Spring.GetTimer()
+    local steps = 0
+    while prep do
+        if prep.stage == 1 then
+            prepMarks(m)
+            prep.stage, prep.i = (m.terrOk and 2 or 5), 1
+        elseif prep.stage == 2 then
+            local r = m.terrRuns[prep.i]
+            if not r then prep.stage, prep.i = 3, 1
+            else
+                local cells = m.cellPos
+                for c = r[1], r[1] + r[3] - 1 do cells[c] = r[2] end
+                prep.i = prep.i + 1
+            end
+        elseif prep.stage == 3 then
+            if prep.i > m.gw - 1 then prep.stage, prep.i = 4, 1 else verticalEdges(m, prep.i); prep.i = prep.i + 1 end
+        elseif prep.stage == 4 then
+            if prep.i > m.gh - 1 then prep.stage = 5 else horizontalEdges(m, prep.i); prep.i = prep.i + 1 end
+        else
+            prep = nil
+            queue(LAYER_ORDER)
+            break
+        end
+        steps = steps + 1
+        if steps % 8 == 0 and Spring.DiffTimers(Spring.GetTimer(), t0) > 0.002 then break end
+    end
+end
+
+-- ---- labels (screen space, rebuilt on selection and phase changes; never per frame)
+local function addLabel(x, z, s, size, maxH, c, centre, dzFar)
+    -- dzFar: the label's z offset in the strategic view, below a FAR_SCALE glyph (nil: z as given)
+    if #labelsAll >= LABEL_CAP then return end
+    labelsAll[#labelsAll+1] = {x, groundY(x, z) + 12, z, s, size, maxH, c, centre, dzFar}
+end
+local function buildLabels()
+    labelsAll = {}
+    local m = model
+    if not m then return end
+    for _, i in ipairs(m.order) do
+        local p = m.positions[i]
+        local c = (i == selected) and K.yellow or K.white
+        -- the rank on the disc: ink on a solid (script) disc, white in a hollow (predicted) one
+        addLabel(p.x, p.z, tostring(p.n), 13, 1e9, p.source == "script" and K.ink or K.white, true)
+        addLabel(p.x, p.z + POS_R * 1.9 + 40, p.name .. "  " .. p.label, 12, 1e9, c, false)
+    end
+    for _, mk in ipairs(m.marks) do
+        if mk.labelled and KIND[mk.kind] and phaseVisible(mk) then
+            local x, z = mk.x, mk.z
+            if mk.mx then x, z = mk.mx, mk.mz end
+            -- labelled marks keep their text at every height (the strategic view too); the cap is 200
+            local r = KIND[mk.kind].r
+            addLabel(x, z + r + 30, markWord(mk), 11, 1e9, KIND[mk.kind].c, false, r * FAR_SCALE + 60 - (r + 30))
+        end
+    end
+end
+
+-- ---- the opening card
+local function factoryFor(class, faction)
+    local f = model and model.factories[class]
+    return f and f[faction] or nil
+end
+local function viewerFaction()
+    if options.faction then return options.faction end
+    local ok, _, _, _, _, side = pcall(Spring.GetTeamInfo, Spring.GetMyTeamID(), false)
+    return (ok and normFaction(side)) or "armada"
+end
+local function buildCard()
+    card = nil
+    if not model or not selected then return end
+    local p = model.positions[selected]
+    if not p then return end
+    local o = model.openings[selected]
+    local faction = viewerFaction()
+    local c = {name=p.name, label=p.label, sublabel=p.sublabel, source=p.source, faction=faction, reasons={}, lines={}}
+    local function line(head, body, col) c.lines[#c.lines+1] = {head, body, col or {0.91, 0.93, 0.96}} end
+    local sub = (p.sublabel ~= "" and p.sublabel ~= "-") and ("  /  " .. p.sublabel) or ""
+    local src = p.source
+    if p.actual and p.actualDist then src = string.format("%s, %d from actual", src, math.floor(p.actualDist + 0.5)) end
+    line(p.name, string.format("%s%s   (%s)", p.label, sub, src), K.white)
+    if o then
+        c.class, c.factory, c.next = o.class, factoryFor(o.class, faction) or "-", o.fallbacks[1] or "-"
+        c.energy, c.second, c.reasons = o.energy, o.second, o.reasons
+        local e = model.env
+        c.wind, c.tidal = (e.minWind + e.maxWind) / 2, e.tidal
+        line("Ideal factory", string.format("%s  %s   next: %s", CLASS_WORD[o.class] or o.class, c.factory, c.next))
+        line("Energy", string.format("%s  (wind %.1f avg, tidal %s)", o.energy ~= "" and o.energy or "-", c.wind, fmtNum(c.tidal)))
+        line("Then", o.second ~= "" and o.second or "-")
+        if #o.reasons == 0 then line("Why", "-") end
+        for k = 1, math.min(3, #o.reasons) do line(k == 1 and "Why" or "", o.reasons[k]) end
+    else
+        line("Opening", "none in the file", K.verm)
+    end
+    local r = p.actual
+    if r then
+        local tf = normFaction(r.side) or faction
+        local ideal = o and factoryFor(o.class, tf)
+        local verdict = "differs"
+        if ideal and r.factory == ideal then verdict = "matches"
+        elseif o and o.fallbacks[1] and r.factory == factoryFor(o.fallbacks[1], tf) then verdict = "fallback" end
+        c.chosen = {factory=r.factory, team=r.teamId, role=r.role, verdict=verdict}
+        line("Chosen", string.format("%s   (team %s, %s)   %s", r.factory or "-", tostring(r.teamId), r.role or "?", verdict),
+            verdict == "matches" and K.green or (verdict == "differs" and K.verm or K.yellow))
+    else
+        c.chosen = {verdict="no AI"}
+        line("Chosen", "no AI", K.grey)
+    end
+    card = c
+end
+
+-- ---- display lists
+local function compileLayer(name, fn)
+    if lists[name] then gl.DeleteList(lists[name]); lists[name] = nil end
+    if fn then lists[name] = gl.CreateList(fn) end
+end
+local function lineLayer(name, fn)
+    compileLayer(name, function() haloPass = true; fn(); haloPass = false; fn() end)
+end
+local function markLayer(name)
+    -- two lists per mark layer: `name` (near) and `name .. "Far"` (strategic view), in which
+    -- the labelled marks' glyphs are FAR_SCALE larger; drawWorld picks one by camera height
+    local byKind = (model and model.byLayer[name]) or {}
+    local sel = selected and model and model.positions[selected]
+    local function body(far)
+        local function size(st, mk) return (far and mk.labelled) and st.r * FAR_SCALE or st.r end
+        for _, kind in ipairs(KIND_ORDER) do
+            local ms, st = byKind[kind], KIND[kind]
+            if ms and st then
+                stroke(st.c, 0.95, st.w)
+                gl.BeginEnd(GL.LINES, function()
+                    for _, mk in ipairs(ms) do if phaseVisible(mk) then glyph(kind, mk.x, mk.z, size(st, mk), mk) end end
+                end)
+            end
+        end
+        -- anti-nuke coverage: a thin solid circle, only for the selected position's side
+        local nukes = byKind.antinuke
+        if nukes and sel then
+            stroke(KIND.antinuke.c, 0.8, 1.2)
+            gl.BeginEnd(GL.LINES, function()
+                for _, mk in ipairs(nukes) do if mk.ally == sel.ally and phaseVisible(mk) then ngon(mk.x, mk.z, 2000, 96) end end
+            end)
+        end
+        -- contested: a dashed (split) vermilion outline around the glyph
+        stroke(K.verm, 0.95, 1.5)
+        gl.BeginEnd(GL.LINES, function()
+            for _, kind in ipairs(KIND_ORDER) do
+                local ms, st = byKind[kind], KIND[kind]
+                if ms and st then
+                    for _, mk in ipairs(ms) do if mk.contested and phaseVisible(mk) then ngon(mk.x, mk.z, size(st, mk) * 1.5, 12, true) end end
+                end
+            end
+        end)
+    end
+    lineLayer(name, function() body(false) end)
+    lineLayer(name .. "Far", function() body(true) end)
+end
+local BUILD = {}
+BUILD.dim = function()
+    compileLayer("dim", function()
+        local w, h = Game.mapSizeX, Game.mapSizeZ
+        gl.Color(K.ink[1], K.ink[2], K.ink[3], 0.45)
+        gl.BeginEnd(GL.QUADS, function()
+            gl.Vertex(-512, 0, -512); gl.Vertex(w+512, 0, -512); gl.Vertex(w+512, 0, h+512); gl.Vertex(-512, 0, h+512)
+        end)
+    end)
+end
+BUILD.terrOutline = function()
+    local m = model
+    if not m.terrOk then compileLayer("terrOutline", nil); return end
+    -- a light boundary between territories; no halo, it sits under everything
+    compileLayer("terrOutline", function()
+        gl.Color(K.grey[1], K.grey[2], K.grey[3], 0.5); gl.LineWidth(1.2)
+        gl.BeginEnd(GL.LINES, function() for _, e in ipairs(m.edges) do seg(e[1], e[2], e[3], e[4]) end end)
+    end)
+end
+BUILD.terrSel = function()
+    local m = model
+    if not m.terrOk or not selected or not m.positions[selected] then compileLayer("terrSel", nil); return end
+    local sel = selected
+    compileLayer("terrSel", function()
+        if fieldApi and fieldApi.FillRuns then
+            fieldApi.FillRuns({gw=m.gw, gh=m.gh, cell=m.cell}, m.terrRuns, m.cellPos, {[sel]=true}, K.yellow, 0.16)
+        end
+        for pass = 1, 2 do
+            haloPass = pass == 1
+            stroke(K.yellow, 0.9, 2)
+            gl.BeginEnd(GL.LINES, function()
+                for _, e in ipairs(m.edges) do if e[5] == sel or e[6] == sel then seg(e[1], e[2], e[3], e[4]) end end
+            end)
+        end
+        haloPass = false
+    end)
+end
+BUILD.seazone = function()
+    local list = (model.byLayer.seazone or {}).seazone or {}
+    lineLayer("seazone", function()
+        local st = KIND.seazone
+        stroke(st.c, 0.7, 1.2)
+        gl.BeginEnd(GL.LINES, function()
+            for _, mk in ipairs(list) do if mk.line and phaseVisible(mk) then hatch(mk.line, 120) end end
+        end)
+        stroke(st.c, 0.95, 2)
+        gl.BeginEnd(GL.LINES, function()
+            for _, mk in ipairs(list) do
+                if mk.line and phaseVisible(mk) then if mk.contested then dashed(mk.line, 60, 30) else solid(mk.line) end end
+            end
+        end)
+    end)
+end
+BUILD.economy = function() markLayer("economy") end
+BUILD.land = function() markLayer("land") end
+BUILD.sea = function() markLayer("sea") end
+BUILD.late = function() markLayer("late") end
+BUILD.landing = function()
+    local list = (model.byLayer.landing or {}).landing or {}
+    local sel = selected and model.positions[selected]
+    -- the selected position's side reads each landing: an assault landing (arrow inland) when
+    -- the landing's defending ally is another team, a home landing (arrow out to sea) when it is its own
+    local groups = {{c=K.verm, want=true}, {c=K.green, want=false}, {c=K.white}}
+    lineLayer("landing", function()
+        for _, g in ipairs(groups) do
+            stroke(g.c, 0.95, KIND.landing.w)
+            gl.BeginEnd(GL.LINES, function()
+                for _, mk in ipairs(list) do
+                    if mk.line and phaseVisible(mk) then
+                        local assault = nil
+                        if sel then assault = mk.ally ~= sel.ally end
+                        if assault == g.want then landingGlyph(mk, assault, 110) end
+                    end
+                end
+            end)
+        end
+    end)
+end
+BUILD.positions = function()
+    local m = model
+    lineLayer("positions", function()
+        if not haloPass then
+            gl.Color(K.white[1], K.white[2], K.white[3], 0.85)
+            gl.BeginEnd(GL.TRIANGLES, function()
+                for _, i in ipairs(m.order) do local p = m.positions[i]; if p.source == "script" then disc(p.x, p.z, POS_R) end end
+            end)
+        end
+        stroke(K.white, 0.95, 2)
+        gl.BeginEnd(GL.LINES, function()
+            for _, i in ipairs(m.order) do
+                local p = m.positions[i]
+                ngon(p.x, p.z, POS_R, 24)
+                if p.source ~= "script" then ngon(p.x, p.z, POS_R * 0.7, 24) end
+            end
+        end)
+        -- a thin dashed line from a predicted position to the actual start the roster reports
+        stroke(K.sky, 0.9, 1.5)
+        gl.BeginEnd(GL.LINES, function()
+            for _, i in ipairs(m.order) do
+                local p = m.positions[i]
+                local r = p.actual
+                if r and p.source ~= "script" and p.actualDist and p.actualDist > POS_R then
+                    dashed({p.x, p.z, r.x, r.z}, 40, 24)
+                    dot(r.x, r.z, 30)
+                end
+            end
+        end)
+    end)
+end
+BUILD.selRing = function()
+    local p = selected and model.positions[selected]
+    if not p then compileLayer("selRing", nil); return end
+    lineLayer("selRing", function()
+        stroke(K.yellow, 1, 3)
+        gl.BeginEnd(GL.LINES, function() ngon(p.x, p.z, POS_R * 1.5, 32); ngon(p.x, p.z, POS_R * 1.8, 32) end)
+    end)
+end
+BUILD.minimap = function()
+    local m = model
+    compileLayer("minimap", function()
+        local function ring(x, z, r, n)
+            for i = 0, n - 1 do
+                local a1, a2 = i * 2 * math.pi / n, (i + 1) * 2 * math.pi / n
+                gl.Vertex(x + math.cos(a1)*r, z + math.sin(a1)*r); gl.Vertex(x + math.cos(a2)*r, z + math.sin(a2)*r)
+            end
+        end
+        gl.LineWidth(1.5)
+        gl.Color(K.white[1], K.white[2], K.white[3], 0.95)
+        gl.BeginEnd(GL.LINES, function()
+            for _, i in ipairs(m.order) do local p = m.positions[i]; ring(p.x, p.z, 150, 12) end
+        end)
+        gl.Color(K.yellow[1], K.yellow[2], K.yellow[3], 0.95)
+        gl.BeginEnd(GL.LINES, function()
+            for _, mk in ipairs(m.marks) do
+                if mk.labelled and KIND[mk.kind] and phaseVisible(mk) and mk.kind ~= "landing" and mk.kind ~= "seazone" then
+                    local s = 60
+                    gl.Vertex(mk.x - s, mk.z - s); gl.Vertex(mk.x + s, mk.z + s); gl.Vertex(mk.x - s, mk.z + s); gl.Vertex(mk.x + s, mk.z - s)
+                end
+            end
+        end)
+        local p = selected and m.positions[selected]
+        if p then gl.LineWidth(2.5); gl.BeginEnd(GL.LINES, function() ring(p.x, p.z, 260, 16) end) end
+    end)
+end
+
+local function loadedStatus()
+    if not model then return end
+    local s = string.format("%d positions, %d marks", #model.order, #model.marks)
+    if prep or #pending > 0 then s = s .. "  (drawing)" end
+    if model.terrCount > 0 and not model.terrOk then s = s .. "  (territory grid mismatch)" end
+    status = s
+end
+local function compileSome()
+    local t0 = Spring.GetTimer()
+    local n = 0
+    while #pending > 0 do
+        local name = table.remove(pending, 1)
+        pendingSet[name] = nil
+        local b = BUILD[name]
+        if b then b() end
+        n = n + 1
+        if n >= 3 or Spring.DiffTimers(Spring.GetTimer(), t0) > 0.002 then break end
+    end
+    loadedStatus()
+end
+local function disposeLists()
+    for _, l in pairs(lists) do gl.DeleteList(l) end
+    lists = {}
+end
+
+-- ---- selection, roster
+local function selectIndex(i)
+    if not model or not model.positions[i] then return false end
+    selected = i
+    inspectLines = nil
+    queue(BY_SELECTION)
+    buildLabels()
+    buildCard()
+    return true
+end
+local function nearestPosition(x, z, radius)
+    if not model or not x or not z then return nil end
+    local best, bd = nil, radius * radius
+    for _, i in ipairs(model.order) do
+        local p = model.positions[i]
+        local d = (p.x - x)^2 + (p.z - z)^2
+        if d < bd then best, bd = i, d end
+    end
+    return best
+end
+local function selectMine()
+    if not model then return false end
+    local x, z = nil, nil
+    if mineProvider then x, z = mineProvider() end
+    local i = nearestPosition(x, z, 1500)
+    if not i then i = model.order[1] end
+    return i ~= nil and selectIndex(i)
+end
+local function refreshRoster(force)
+    if not model then return end
+    local now = Spring.GetTimer()
+    if not force and rosterTimer and Spring.DiffTimers(now, rosterTimer) < 2 then return end
+    rosterTimer = now
+    local rs = rosterProvider and rosterProvider() or {}
+    local parts = {}
+    for _, r in ipairs(rs) do
+        parts[#parts+1] = tostring(r.teamId) .. ":" .. tostring(r.x) .. ":" .. tostring(r.z) .. ":" .. tostring(r.factory) .. ":" .. tostring(r.role) .. ":" .. tostring(r.side)
+    end
+    local sig = table.concat(parts, ";")
+    if sig == rosterSig and not force then return end
+    rosterSig = sig
+    for _, i in ipairs(model.order) do
+        local p = model.positions[i]
+        local best, bd = nil, MATCH_RADIUS * MATCH_RADIUS
+        for _, r in ipairs(rs) do
+            if r.x and r.z then
+                local d = (r.x - p.x)^2 + (r.z - p.z)^2
+                if d < bd then best, bd = r, d end
+            end
+        end
+        p.actual = best
+        p.actualDist = best and math.sqrt(bd) or nil
+    end
+    queue(BY_ROSTER)
+    buildCard()
+end
+finishModel = function(m, s)
+    local fm = fieldModel()
+    if fm and fm.gw and fm.gw > 0 then m.gw, m.gh, m.cell = fm.gw, fm.gh, fm.cell or 32
+    else m.cell = 32; m.gw = math.max(1, math.floor(Game.mapSizeX / 32)); m.gh = math.max(1, math.floor(Game.mapSizeZ / 32)) end
+    m.terrOk = m.terrCount > 0 and m.terrCount == m.gw * m.gh
+    m.fpChecked = fm ~= nil and fm.fingerprint ~= nil
+    disposeLists()
+    pending, pendingSet = {}, {}
+    model, seq = m, s
+    selected, inspectLines, card = nil, nil, nil
+    rosterSig = ""
+    prep = {stage=1, i=1}
+    refreshRoster(true)
+    if not selectMine() then buildLabels() end
+    -- what the two calls queued is a subset of the full queue stepPrep adds when it ends
+    pending, pendingSet = {}, {}
+    loadedStatus()
+end
+local function checkFingerprint()
+    -- the terrain file may load after this one: compare once it has
+    if not model or model.fpChecked then return end
+    local fm = fieldModel()
+    if not (fm and fm.fingerprint) then return end
+    model.fpChecked = true
+    if fm.fingerprint ~= model.fieldFp then
+        disposeLists()
+        model, prep, selected, card, inspectLines = nil, nil, nil, nil, nil
+        pending, pendingSet, labelsAll = {}, {}, {}
+        status = "Landmarks file skipped: fingerprint differs from map.txt"
+    end
+end
+
+-- ---- public state changes
+local function setMode(value)
+    local was = on
+    on = value and true or false
+    if on then
+        if not model and not parse then status = "Landmarks: waiting for file"; lastExists = nil end
+    else
+        parse = nil
+        if not model then status = "Landmarks hidden" end
+    end
+    return was ~= on
+end
+local function setPhase(p)
+    if type(p) == "string" then p = string.lower(p) end
+    if p == "0" then p = "0-5" elseif p == "5" then p = "5-15" elseif p == "15" then p = "15-25" elseif p == "25" then p = "25+" end
+    if not PHASE_BY_KEY[p] then return false end
+    if options.phase ~= p then
+        options.phase = p
+        if model then queue(BY_PHASE); buildLabels() end
+    end
+    return true
+end
+local function setFaction(f)
+    f = normFaction(f)
+    if not f then return false end
+    options.faction = f
+    buildCard()
+    return true
+end
+local function selectName(name)
+    if not model or not name then return false end
+    -- exact name, then any case (P0.3 / p0.3); never a punctuation-blind match (P1.12 vs P11.2)
+    local lower = string.lower(tostring(name))
+    for _, i in ipairs(model.order) do if model.positions[i].name == name then return selectIndex(i) end end
+    for _, i in ipairs(model.order) do if string.lower(model.positions[i].name) == lower then return selectIndex(i) end end
+    local n = tonumber(name)
+    if n and model.positions[n] then return selectIndex(n) end
+    return false
+end
+local function step(d)
+    if not model or #model.order == 0 then return false end
+    local at = 0
+    for k, i in ipairs(model.order) do if i == selected then at = k end end
+    local n = #model.order
+    local k = ((at - 1 + d) % n) + 1
+    if at == 0 then k = 1 end
+    return selectIndex(model.order[k])
+end
+
+-- ---- picking
+local function markRecord(mk)
+    local owner = (mk.pos >= 0 and model.positions[mk.pos]) and model.positions[mk.pos].name or "none"
+    local to = mk.to < 0 and "end" or fmtNum(mk.to)
+    return {
+        string.format("%s  (%s)  value %s%s", string.upper(mk.kind), mk.group, fmtNum(mk.value), mk.contested and "  contested" or ""),
+        string.format("owner %s  ally %d  minutes %s-%s", owner, mk.ally, fmtNum(mk.from), to),
+        mk.reason ~= "" and mk.reason or "-",
+    }
+end
+local function pickAt(mx, my)
+    local kind, pos = Spring.TraceScreenRay(mx, my, true)
+    if kind ~= "ground" or not pos then return false end
+    local x, z = pos[1], pos[3]
+    local i = nearestPosition(x, z, POS_R * 1.6)
+    if i then selectIndex(i); return true end
+    local best, bd = nil, 80 * 80
+    for _, mk in ipairs(model.marks) do
+        if (KIND[mk.kind]) and phaseVisible(mk) then
+            local px, pz = mk.x, mk.z
+            if mk.mx then px, pz = mk.mx, mk.mz end
+            local d = (px - x)^2 + (pz - z)^2
+            if d < bd then best, bd = mk, d end
+        end
+    end
+    if best then inspectLines = markRecord(best); return true end
+    inspectLines = nil
+    return false
+end
+
+-- ---- drawing
+local function drawWorld()
+    if not on or not model or Spring.IsGUIHidden() then return end
+    gl.DepthTest(false)
+    -- with the terrain map off the marks draw over a dim sheet of their own
+    if not (fieldApi and fieldApi.Mode and fieldApi.Mode()) and lists.dim then gl.CallList(lists.dim) end
+    local _, cy = Spring.GetCameraPosition()
+    local far = (cy or 0) > LABEL_HEIGHT
+    for _, name in ipairs(DRAW_ORDER) do
+        local l = lists[name]
+        if far and lists[name .. "Far"] then l = lists[name .. "Far"] end
+        if l then gl.CallList(l) end
+    end
+    gl.LineWidth(1); gl.Color(1, 1, 1, 1); gl.DepthTest(true)
+end
+local function drawMiniMap(sx, sy)
+    if not on or not model or not lists.minimap then return end
+    gl.PushMatrix()
+    gl.Translate(0, sy, 0)
+    gl.Scale(sx / Game.mapSizeX, -sy / Game.mapSizeZ, 1)
+    gl.CallList(lists.minimap)
+    gl.PopMatrix()
+    gl.LineWidth(1); gl.Color(1, 1, 1, 1)
+end
+local function drawLabels()
+    local _, cy = Spring.GetCameraPosition()
+    cy = cy or 0
+    local vw, vh = gl.GetViewSizes()
+    local far = cy > LABEL_HEIGHT
+    local shrink = far and math.max(0.55, math.min(1, LABEL_HEIGHT / cy)) or 1
+    for _, l in ipairs(labelsAll) do
+        if cy <= l[6] then
+            local sx, sy, sz = Spring.WorldToScreenCoords(l[1], l[2], l[3] + ((far and l[9]) or 0))
+            if sx and sz and sz > 0 and sz < 1 and sx > 0 and sx < vw and sy > 0 and sy < vh then
+                local size = math.max(9, l[5] * shrink)
+                local opt = l[8] and "cv" or "c"
+                gl.Color(K.ink[1], K.ink[2], K.ink[3], 0.85)
+                gl.Text(l[4], sx+1, sy-1, size, opt); gl.Text(l[4], sx-1, sy-1, size, opt); gl.Text(l[4], sx+1, sy+1, size, opt); gl.Text(l[4], sx-1, sy+1, size, opt)
+                local c = l[7]
+                gl.Color(c[1], c[2], c[3], 0.95); gl.Text(l[4], sx, sy, size, opt)
+            end
+        end
+    end
+    gl.Color(1, 1, 1, 1)
+end
+-- legend samples: the map's own glyph code in screen space (flatY), halo pass then colour
+local function legendSample(cx, cy, fn)
+    flatY, patScale = cy, 0.2
+    haloPass = true; fn(cx, cy)
+    haloPass = false; fn(cx, cy)
+    flatY, patScale = nil, 1
+    gl.LineWidth(1)
+end
+local function kindSample(kind)
+    return function(cx, cy)
+        local st = KIND[kind]
+        stroke(st.c, 0.95, st.w)
+        gl.BeginEnd(GL.LINES, function() glyph(kind, cx, cy, 8, {}) end)
+    end
+end
+local function legendRows()
+    local rows = {}
+    local function head(t) rows[#rows+1] = {nil, t} end
+    local function add(sample, t) rows[#rows+1] = {sample, t} end
+    head("POSITIONS")
+    add(function(cx, cy)
+        if not haloPass then gl.Color(1, 1, 1, 0.85); gl.BeginEnd(GL.TRIANGLES, function() disc(cx, cy, 7) end) end
+        stroke(K.white, 0.95, 2); gl.BeginEnd(GL.LINES, function() ngon(cx, cy, 7, 16) end)
+    end, "Filled disc: a start position from the start script (number: rank from the rear)")
+    add(function(cx, cy)
+        stroke(K.white, 0.95, 2); gl.BeginEnd(GL.LINES, function() ngon(cx, cy, 7, 16); ngon(cx, cy, 4.5, 12) end)
+    end, "Hollow double ring: a predicted start position")
+    add(function(cx, cy)
+        stroke(K.yellow, 1, 3); gl.BeginEnd(GL.LINES, function() ngon(cx, cy, 6, 16); ngon(cx, cy, 8, 16) end)
+    end, "Double yellow ring: the selected position (the opening card describes it)")
+    add(function(cx, cy)
+        stroke(K.sky, 0.9, 1.5); gl.BeginEnd(GL.LINES, function() dashed({cx - 20, cy, cx + 14, cy}, 40, 24); dot(cx + 18, cy, 3) end)
+    end, "Thin dashed line: prediction to the actual start")
+    add(function(cx, cy)
+        if not haloPass then
+            gl.Color(K.yellow[1], K.yellow[2], K.yellow[3], 0.3); gl.Rect(cx - 22, cy - 6, cx, cy + 6)
+            gl.Color(K.grey[1], K.grey[2], K.grey[3], 0.6); gl.LineWidth(1.2)
+            gl.BeginEnd(GL.LINES, function() seg(cx + 6, cy - 7, cx + 6, cy + 7); seg(cx + 6, cy, cx + 22, cy) end)
+        end
+    end, "Soft fill: selected territory; thin grey lines: other territories")
+    head("ECONOMY")
+    for _, k in ipairs({"metal", "geo", "tidal", "centre"}) do add(kindSample(k), KIND[k].text) end
+    head("LAND")
+    for _, k in ipairs({"choke", "killzone", "radar", "perch", "forward", "emergence", "island"}) do add(kindSample(k), KIND[k].text) end
+    head("SEA")
+    add(kindSample("yard"), KIND.yard.text)
+    add(function(cx, cy)
+        local p = {cx - 16, cy - 7, cx + 16, cy - 7, cx + 16, cy + 7, cx - 16, cy + 7, cx - 16, cy - 7}
+        stroke(KIND.seazone.c, 0.95, 1.2); gl.BeginEnd(GL.LINES, function() hatch(p, 5); solid(p) end)
+    end, KIND.seazone.text)
+    add(kindSample("strait"), KIND.strait.text)
+    local function landingRow(assault, c)
+        return function(cx, cy)
+            local mk = {line={cx - 18, cy + 4, cx + 18, cy + 4}, mx=cx, mz=cy + 4, nx=0, nz=-1}
+            stroke(c, 0.95, 2.5); gl.BeginEnd(GL.LINES, function() landingGlyph(mk, assault, 11) end)
+        end
+    end
+    add(landingRow(true, K.verm), "Beach line, arrow inland: assault landing for the selected side")
+    add(landingRow(false, K.green), "Beach line, arrow out to sea: home landing (the selected side defends it)")
+    for _, k in ipairs({"coastfire", "seaplane"}) do add(kindSample(k), KIND[k].text) end
+    head("LATE GAME")
+    add(kindSample("lrpc"), KIND.lrpc.text)
+    add(function(cx, cy)
+        kindSample("antinuke")(cx, cy)
+        stroke(KIND.antinuke.c, 0.8, 1.2); gl.BeginEnd(GL.LINES, function() ngon(cx, cy, 13, 24) end)
+    end, KIND.antinuke.text)
+    head("ANY MARK")
+    add(function(cx, cy)
+        kindSample("metal")(cx, cy)
+        stroke(K.verm, 0.95, 1.5); gl.BeginEnd(GL.LINES, function() ngon(cx, cy, 12, 12, true) end)
+    end, "Dashed ring around a mark: contested, near the contact line")
+    return rows
+end
+local legendCache = nil
+local ROW_H, HEAD_H = 17, 20
+local function panel(x, top, w, h)
+    gl.Color(inkPanel); gl.Rect(x, top - h, x + w, top)
+    gl.Color(K.sky[1], K.sky[2], K.sky[3], 1); gl.Rect(x, top - 3, x + w, top)
+    panelRects[#panelRects+1] = {x, top - h, x + w, top}
+end
+-- The panels dock on the left just below the minimap (BAR draws the minimap over anything
+-- placed under it; the first played run hid the card there). The minimap's bottom edge in
+-- GL coordinates is the y of Spring.GetMiniMapGeometry (BAR's minimap_utils reads it so);
+-- the picture-in-picture minimap reports its own box through WG.minimap.getScreenBounds.
+local function dockTop(vh)
+    local bottom = nil
+    local wm = WG and WG.minimap
+    local okPip, pip = pcall(function() return wm and wm.isPipMinimapActive and wm.isPipMinimapActive() end)
+    if okPip and pip and wm.getScreenBounds then
+        local ok, _, b = pcall(wm.getScreenBounds)
+        if ok and type(b) == "number" then bottom = b end
+    end
+    if not bottom and Spring.GetMiniMapGeometry then
+        local ok, _, py, _, sy, minimized = pcall(Spring.GetMiniMapGeometry)
+        if ok and type(py) == "number" and type(sy) == "number" and sy > 0 and not minimized then bottom = py end
+    end
+    if not bottom or bottom <= 0 or bottom > vh then bottom = vh - 60 end
+    return bottom - 12
+end
+local function drawPanels()
+    panelRects = {}
+    if Spring.IsGUIHidden() then return end
+    local vw, vh = gl.GetViewSizes()
+    local dock = dockTop(vh)
+    local x, top = 12, dock
+    local w = 460
+    -- the opening card, with the clicked mark's record under it
+    local lines = card and card.lines or {}
+    local h = 40 + #lines * 15 + (inspectLines and (20 + #inspectLines * 14) or 0) + 8
+    if not model then h = 40 + 18 end
+    top = math.max(h + 10, math.min(vh - 10, top))
+    panel(x, top, w, h)
+    gl.Color(0.93, 0.96, 1, 1); gl.Text("LANDMARKS  /  OPENING CARD", x + 14, top - 24, 13, "o")
+    local y = top - 44
+    if not model then
+        gl.Color(muted); gl.Text(status, x + 14, y, 10, "o")
+    else
+        for _, l in ipairs(lines) do
+            gl.Color(mint); gl.Text(l[1], x + 14, y, 10, "o")
+            local c = l[3]
+            gl.Color(c[1], c[2], c[3], 1); gl.Text(l[2], x + 112, y, 10, "o")
+            y = y - 15
+        end
+        if inspectLines then
+            y = y - 6
+            gl.Color(mint); gl.Text("MARK", x + 14, y, 10, "o"); y = y - 14
+            for _, l in ipairs(inspectLines) do gl.Color(0.91, 0.93, 0.96, 1); gl.Text(l, x + 14, y, 10, "o"); y = y - 14 end
+        end
+    end
+    -- the legend, beside the card
+    if options.legend then
+        if not legendCache then legendCache = legendRows() end
+        local lw = 470
+        local lh = 40
+        for _, row in ipairs(legendCache) do lh = lh + (row[1] and ROW_H or HEAD_H) end
+        local lx = x + w + 8
+        if lx + lw > vw - 8 then lx = math.max(8, vw - lw - 8) end
+        local ltop = math.max(lh + 10, math.min(vh - 10, dock))
+        panel(lx, ltop, lw, lh)
+        gl.Color(0.93, 0.96, 1, 1); gl.Text("LANDMARKS LEGEND  /  shape carries the meaning, colour repeats it", lx + 14, ltop - 24, 11, "o")
+        local ly = ltop - 40
+        for _, row in ipairs(legendCache) do
+            if row[1] then
+                legendSample(lx + 40, ly, row[1])
+                gl.Color(0.9, 0.93, 0.97, 1); gl.Text(row[2], lx + 76, ly - 4, 10, "o")
+                ly = ly - ROW_H
+            else
+                ly = ly - 4
+                gl.Color(mint); gl.Text(row[2], lx + 14, ly - 2, 10, "o")
+                ly = ly - (HEAD_H - 4)
+            end
+        end
+    end
+    gl.LineWidth(1); gl.Color(1, 1, 1, 1)
+end
+local function drawScreen()
+    if not on then panelRects = {}; return end
+    if model then drawLabels() end
+    drawPanels()
+end
+local function update()
+    if not on then return end
+    if parse then stepParse(); return end
+    if not model then tryLoad(); return end
+    checkFingerprint()
+    if not model then return end
+    if prep then stepPrep(); loadedStatus(); return end
+    refreshRoster(false)
+    if #pending > 0 then compileSome() end
+end
+local function mousePress(x, y, b, overUi)
+    if not on or Spring.IsGUIHidden() then return false end
+    for _, r in ipairs(panelRects) do
+        if x >= r[1] and x <= r[3] and y >= r[2] and y <= r[4] then return true end
+    end
+    if overUi or b ~= 1 or not model or prep then return false end
+    return pickAt(x, y)
+end
+
+local function snapshot()
+    local out = {loaded = model ~= nil, on = on, status = status, seq = seq, positions = 0, marks = 0, selected = nil,
+        phase = options.phase, faction = viewerFaction(), legend = options.legend, compiled = false, pending = #pending,
+        kinds = {}, items = {positions = {}}, card = nil, inspect = inspectLines, panels = {}}
+    -- the card (and legend) boxes as last drawn, screen coordinates {x1, y1, x2, y2}
+    for i, r in ipairs(panelRects) do out.panels[i] = {r[1], r[2], r[3], r[4]} end
+    local m = model
+    if not m then return out end
+    out.compiled = prep == nil and #pending == 0
+    out.positions, out.marks = #m.order, #m.marks
+    out.territory = m.terrOk
+    out.fieldFingerprint = m.fieldFp
+    for _, mk in ipairs(m.marks) do out.kinds[mk.kind] = (out.kinds[mk.kind] or 0) + 1 end
+    for _, i in ipairs(m.order) do
+        local p, o = m.positions[i], m.openings[i]
+        out.items.positions[#out.items.positions+1] = {index=i, name=p.name, label=p.label, sublabel=p.sublabel, source=p.source,
+            ally=p.ally, n=p.n, x=p.x, z=p.z, opening = o ~= nil, class = o and o.class or nil,
+            factory = o and factoryFor(o.class, out.faction) or nil, energy = o and o.energy or nil, next = o and o.fallbacks[1] or nil}
+    end
+    local sp = selected and m.positions[selected]
+    out.selected = sp and sp.name or nil
+    if card then
+        local text = {}
+        for _, l in ipairs(card.lines) do text[#text+1] = (l[1] ~= "" and (l[1] .. ": ") or "") .. l[2] end
+        out.card = {name=card.name, label=card.label, sublabel=card.sublabel, source=card.source, faction=card.faction,
+            class=card.class, factory=card.factory, next=card.next, energy=card.energy, wind=card.wind, tidal=card.tidal,
+            second=card.second, reasons=card.reasons, chosen=card.chosen, lines=text}
+    end
+    return out
+end
+local function config(data)
+    if type(data) ~= "table" then return end
+    if type(data.legend) == "boolean" then options.legend = data.legend end
+    if type(data.phase) == "string" and PHASE_BY_KEY[data.phase] then options.phase = data.phase end
+    if type(data.faction) == "string" and FACTION_NAME[data.faction] then options.faction = data.faction end
+    if data.show == true then setMode(true) end
+end
+local function getConfig()
+    return {show=on, legend=options.legend, phase=options.phase, faction=options.faction}
+end
+local function textCommand(cmd)
+    if cmd == "barbmarks" then setMode(not on); return true end
+    local sub = string.match(cmd, "^barbmarks%s+(.+)$")
+    if not sub then return false end
+    sub = string.match(sub, "^%s*(.-)%s*$")
+    if sub == "show" or sub == "on" then setMode(true)
+    elseif sub == "hide" or sub == "off" then setMode(false)
+    elseif sub == "legend" then options.legend = not options.legend; if options.legend and not on then setMode(true) end
+    else
+        local ph = string.match(sub, "^phase%s+(%S+)$")
+        local pos = string.match(sub, "^pos%s+(%S+)$")
+        local fac = string.match(sub, "^faction%s+(%a+)$")
+        if ph then
+            if not setPhase(ph) then Spring.Echo("[BARb link] /barbmarks phase <0-5|5-15|15-25|25+|all>") end
+        elseif pos then
+            if not selectName(pos) then Spring.Echo("[BARb link] no landmarks position " .. pos) end
+        elseif fac then
+            if not setFaction(fac) then Spring.Echo("[BARb link] /barbmarks faction <armada|cortex|legion>") end
+        else
+            Spring.Echo("[BARb link] /barbmarks [show|hide|legend|phase <0-5|5-15|15-25|25+|all>|pos <name>|faction <armada|cortex|legion>]")
+        end
+    end
+    return true
+end
+local function shutdown()
+    disposeLists()
+    on = false
+end
+return {SetMode=setMode, Mode=function() return on end, Status=function() return status end, Snapshot=snapshot,
+    SetLegend=function(v) options.legend = v and true or false end, Legend=function() return options.legend end,
+    SetPhase=setPhase, Phase=function() return options.phase end, Phases=function() return PHASE_KEYS end,
+    SetFaction=setFaction, Faction=viewerFaction, Factions=function() return FACTIONS end,
+    FactionName=function(f) return FACTION_NAME[f] or tostring(f) end,
+    Select=selectName, SelectMine=selectMine, Step=step,
+    SelectedName=function() local p = model and selected and model.positions[selected]; return p and p.name or nil end,
+    SetField=function(api) fieldApi = api end, SetRosterProvider=function(fn) rosterProvider = fn end,
+    SetMineProvider=function(fn) mineProvider = fn end,
+    Config=config, GetConfig=getConfig, TextCommand=textCommand,
+    Update=update, DrawWorld=drawWorld, DrawScreen=drawScreen, DrawMiniMap=drawMiniMap, Shutdown=shutdown,
+    MousePress=mousePress}
 end)()
 
 -- ---------------------------------------------------------------- constants
@@ -1940,7 +3310,7 @@ local ICON = {
 }
 local MAX_EVENTS = 120
 local QUERY_INTERVAL_FRAMES = 1800
-local WIN_W, WIN_H = 340, 450   -- unscaled px
+local WIN_W, WIN_H = 340, 560   -- unscaled px (560: room for the Landmarks rows)
 local LAUNCHER = 26             -- unscaled px
 
 local C = {
@@ -2277,6 +3647,27 @@ end
 function widget:Initialize()
 	 theatres.SetRefresh(function() if theatres.Mode() then setTheatres(theatres.Mode()) end end)
     field.SetAllyProvider(function() return selectedAlly end)
+    -- the landmarks view reads the terrain module's grid and fingerprint, the roster's
+    -- starts and factories (the card's Chosen line), and the viewer's own start (Mine)
+    marks.SetField(field)
+    marks.SetRosterProvider(function()
+        local out = {}
+        for _, id in ipairs(aiOrder) do
+            local e = ais[id]
+            local r = e and e.roster
+            if r then out[#out + 1] = {teamId=id, allyTeam=e.allyTeam, role=r.role, side=r.side, factory=r.factory, x=r.x, z=r.z} end
+        end
+        return out
+    end)
+    marks.SetMineProvider(function()
+        if not Spring.GetSpectatingState() then
+            local x, _, z = Spring.GetTeamStartPosition(spGetMyTeamID())
+            if x and (x > 0 or z > 0) then return x, z end
+        end
+        local e = selected and ais[selected]
+        if e and e.roster then return e.roster.x, e.roster.z end
+        return nil, nil
+    end)
 	self:ViewResize(Spring.GetViewGeometry())
 	refreshTeams()
 	hookAIMessages()
@@ -2299,6 +3690,14 @@ function widget:Initialize()
         FieldBlueprint = field.SetBlueprint,
         FieldLegend = field.SetLegend,
         FieldSide = field.SetSide,
+        -- the landmarks view (marks module): the same paths as the Landmarks rows and /barbmarks
+        MarksShow = function(v) return marks.SetMode(v) end,
+        MarksStatus = marks.Status,
+        MarksSnapshot = marks.Snapshot,
+        MarksPhase = function(p) return marks.SetPhase(p) end,
+        MarksSelect = function(name) return marks.Select(name) end,
+        MarksFaction = function(f) return marks.SetFaction(f) end,
+        MarksLegend = function(v) marks.SetLegend(v) end,
         MousePress = function(x,y,b) return widget:MousePress(x,y,b) end,
         MouseRelease = function(x,y,b) return widget:MouseRelease(x,y,b) end,
         MouseMove = function(x,y,dx,dy,b) return widget:MouseMove(x,y,dx,dy,b) end,
@@ -2337,6 +3736,7 @@ end
 function widget:Shutdown()
     blueprints.SetMode(nil)
     field.Shutdown()
+    marks.Shutdown()
 	unhookAIMessages()
 	WG.barblink = nil
 	if WG.guishader then
@@ -2346,13 +3746,14 @@ function widget:Shutdown()
 end
 
 function widget:GetConfigData()
-	return { open = open, offX = offX / mathMax(scale, 0.01), offY = offY / mathMax(scale, 0.01),  theatres=theatres.GetConfig(), field=field.GetConfig() }
+	return { open = open, offX = offX / mathMax(scale, 0.01), offY = offY / mathMax(scale, 0.01),  theatres=theatres.GetConfig(), field=field.GetConfig(), marks=marks.GetConfig() }
 end
 
 function widget:SetConfigData(data)
 	if type(data) ~= "table" then return end
 	theatres.Config(data.theatres)
 	field.Config(data.field)
+	marks.Config(data.marks)
 	if data.open ~= nil then
 		firstRun = false   -- a config of this version: its open state stands
 		open = data.open == true
@@ -2364,6 +3765,7 @@ end
 function widget:Update()
     if stateFiles.Poll then stateFiles.Poll() end
     field.Update()
+    marks.Update()
     local waiting=false
     for id,p in pairs(theatrePending) do
         local result=theatres.Snapshot(id)
@@ -2546,8 +3948,8 @@ do
         gl.LineWidth(1); gl.Color(1,1,1,1); gl.DepthTest(true)
     end
 end
-function widget:DrawWorld() blueprints.Draw(); field.DrawWorld() end
-function widget:DrawInMiniMap(sx, sy) field.DrawMiniMap(sx, sy) end
+function widget:DrawWorld() blueprints.Draw(); field.DrawWorld(); marks.DrawWorld() end
+function widget:DrawInMiniMap(sx, sy) field.DrawMiniMap(sx, sy); marks.DrawMiniMap(sx, sy) end
 
 -- ---------------------------------------------------------------- messages
 
@@ -2934,6 +4336,61 @@ local function drawWindow()
     register(left,cy-px(12),right,cy,"fieldStatus",function() end,field.Status())
     cy=cy-px(14)
 
+    -- the landmarks view (field-landmarks proposal, section 7): positions, landmarks and the
+    -- opening card, read from landmarks.txt; it can be on together with Terrain
+    text(font2,fitText(font2,"Landmarks",px(9),buttonsLeft-left-px(2)),left,cy-px(14),px(9),"o",C.onSurfaceVariant)
+    labelButton(buttonsLeft,cy-px(22),buttonsLeft+bw,cy,ICON.overlay,"Show","marksShow",function()
+        playClick(); marks.SetMode(true)
+    end,"Show start positions, their territories, landmarks and the opening card (/barbmarks)",marks.Mode())
+    labelButton(buttonsLeft+bw+px(4),cy-px(22),buttonsLeft+2*bw+px(4),cy,ICON.team,"Legend","marksLegend",function()
+        playClick(); marks.SetLegend(not marks.Legend()); if marks.Legend() and not marks.Mode() then marks.SetMode(true) end
+    end,"Open or close the landmarks legend beside the opening card",marks.Legend())
+    labelButton(buttonsLeft+2*bw+px(8),cy-px(22),right,cy,ICON.close,"Hide","marksOff",function()
+        playClick(); marks.SetMode(false)
+    end,"Hide the landmarks view",not marks.Mode())
+    cy=cy-px(25)
+    text(font,fitText(font,marks.Status(),px(8),w),left,cy-px(9),px(8),"o",C.onSurfaceVariant)
+    register(left,cy-px(12),right,cy,"marksStatus",function() end,marks.Status())
+    cy=cy-px(14)
+    -- the phase window: only landmarks that matter in those minutes are drawn
+    text(font,"Phase",left,cy-px(12),px(8.5),"o",C.onSurfaceVariant)
+    local phases=marks.Phases()
+    local pgap=px(3)
+    local pw=(right-buttonsLeft-pgap*(#phases-1))/#phases
+    for i,ph in ipairs(phases) do
+        local px1=buttonsLeft+(i-1)*(pw+pgap)
+        local key=ph
+        labelButton(px1,cy-px(18),px1+pw,cy,nil,key=="all" and "All" or key,"marksPhase_"..key,function()
+            playClick(); marks.SetPhase(key)
+        end,key=="all" and "Show every landmark" or ("Landmarks that matter in minutes "..key),marks.Phase()==key)
+    end
+    cy=cy-px(22)
+    -- the selected position: step through them, or jump to the viewer's own start
+    text(font,"Position",left,cy-px(12),px(8.5),"o",C.onSurfaceVariant)
+    local sw=px(18)
+    local mineW=px(44)
+    local nx1=buttonsLeft+sw+px(4)
+    local nx2=right-mineW-sw-px(8)
+    labelButton(buttonsLeft,cy-px(18),buttonsLeft+sw,cy,nil,"<","marksPrev",function() playClick(); marks.Step(-1) end,"Previous position",false)
+    text(font2,fitText(font2,marks.SelectedName() or "-",px(9),nx2-nx1),(nx1+nx2)/2,cy-px(12),px(9),"oc",C.onSurface)
+    labelButton(nx2,cy-px(18),nx2+sw,cy,nil,">","marksNext",function() playClick(); marks.Step(1) end,"Next position",false)
+    labelButton(right-mineW,cy-px(18),right,cy,nil,"Mine","marksMine",function() playClick(); marks.SelectMine() end,
+        "Select the position at your own start (spectating: the selected AI's start)",false)
+    cy=cy-px(22)
+    -- the faction whose factory ids the opening card shows
+    text(font,"Faction",left,cy-px(12),px(8.5),"o",C.onSurfaceVariant)
+    local facs=marks.Factions()
+    local fgap=px(4)
+    local fw=(right-buttonsLeft-fgap*(#facs-1))/#facs
+    for i,fac in ipairs(facs) do
+        local fx1=buttonsLeft+(i-1)*(fw+fgap)
+        local key=fac
+        labelButton(fx1,cy-px(18),fx1+fw,cy,nil,marks.FactionName(key),"marksFaction_"..key,function()
+            playClick(); marks.SetFaction(key)
+        end,"Show the opening card's factory ids for "..marks.FactionName(key),marks.Faction()==key)
+    end
+    cy=cy-px(24)
+
 	-- ally-team chips (only when more than one ally team has an AI)
 	if #allyTeams > 1 then
 		local chH = px(18)
@@ -3092,6 +4549,7 @@ function widget:DrawScreen()
 	updatePlacement()
 	theatres.Draw(open and win or nil)
 	field.DrawScreen(open and win or nil)
+	marks.DrawScreen()
 	drawLauncher()
 	if open then drawWindow() end
 
@@ -3124,6 +4582,9 @@ end
 function widget:MousePress(mx, my, mb)
 	if theatres.MousePress(mx,my,mb) then return true end
 	if field.MousePress(mx,my,mb) then return true end
+	-- landmarks: clicks on its panels are kept from the game; a left click on a position
+	-- disc or a mark (never under the window) selects or inspects it
+	if marks.MousePress(mx,my,mb,overLauncher(mx, my) or overWindow(mx, my)) then return true end
 	if not (overLauncher(mx, my) or overWindow(mx, my)) then return false end
 	if mb ~= 1 then return true end
 	local top = nil
@@ -3198,6 +4659,7 @@ end
 
 function widget:TextCommand(cmd)
 	if field.TextCommand(cmd) then return true end
+	if marks.TextCommand(cmd) then return true end
 	if cmd=="barbtheatres" then if theatres.Mode() then setTheatres(nil) else setTheatres(selected or "all") end; return true end
 	if cmd == "barblink" then setOpen(not open); return true end
 	if cmd == "barblayout" then

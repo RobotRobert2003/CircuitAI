@@ -12,6 +12,7 @@
 
 #include "terrain/field/FieldAnalysis.h"
 #include "terrain/field/FieldGrid.h"
+#include "terrain/field/FieldLandmarks.h"
 
 #include <algorithm>
 #include <chrono>
@@ -1250,6 +1251,11 @@ void Context::Run()
 	stage(m.timings.keyMs, &Context::BuildKeyTerrain);
 	Finish();
 	m.timings.totalMs = Ms(t0);
+	// Part B1 (positions, openings, landmarks) on the same worker, after the
+	// Part A fingerprint, so the terrain file is unchanged by it. The view
+	// borrows this context's grids for the call only.
+	const SFieldView view{g, cell, hMean, mob, theatreOf, sideOf, regionOf, boxDist, sideSeeds, waterClr, regionRise};
+	BuildMarks(in, st, view, cancel, m);
 }
 
 } // namespace

@@ -1,0 +1,58 @@
+{
+  "_doc": "Field landmarks, any map: one FIELD_PERF and one MARKS_PERF from the owning AI, the team-link Landmarks view loads landmarks.txt (header, trailer, map name and the map.txt fingerprint checked), every position has an opening, one [MarksCard] line per position, then the screenshot series (each phase window, one card per position label, the legend). Stage gui_barb_team_link.lua plus marks_watch.lua, pass --shots \"\" and --mode visual.",
+  "stop_minute": 4,
+  "expect": [
+    {
+      "key": "field analysed",
+      "pattern": "FIELD_PERF",
+      "by_minute": 1.5,
+      "scope": "any"
+    },
+    {
+      "key": "landmarks analysed",
+      "pattern": "MARKS_PERF",
+      "by_minute": 1.5,
+      "scope": "any"
+    },
+    {
+      "key": "landmarks loaded",
+      "pattern": "\\[MarksCheck\\] PASS loaded",
+      "by_minute": 2.5,
+      "scope": "any"
+    },
+    {
+      "key": "opening cards",
+      "pattern": "\\[MarksCard\\] ",
+      "by_minute": 2.5,
+      "scope": "any"
+    },
+    {
+      "key": "screenshot series",
+      "pattern": "\\[MarksCheck\\] PASS series",
+      "by_minute": 3.5,
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script error",
+      "pattern": ": ERR\\s+:",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "field failure",
+      "pattern": "FIELD: worker failed|FIELD: check failed|MARKS: check failed|\\[MarksCheck\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "widget error",
+      "pattern": "Error in.*BARb team link|Failed to load.*gui_barb_team_link|\\[BARb link\\] message error|Error in.*BARb landmarks check",
+      "scope": "any"
+    }
+  ]
+}

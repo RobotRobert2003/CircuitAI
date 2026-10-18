@@ -7,6 +7,8 @@
 #include "terrain/FieldService.h"
 #include "terrain/field/FieldAnalysis.h"
 #include "terrain/field/FieldEncode.h"
+#include "terrain/field/FieldLandmarks.h"
+#include "terrain/field/FieldSettings.h"
 #include "CircuitAI.h"
 #include "scheduler/Scheduler.h"
 #include "setup/SetupData.h"
@@ -64,7 +66,7 @@ std::string DumpInput(const SInput& in)
 	std::string out;
 	auto putI = [&](int v) { out.append(reinterpret_cast<const char*>(&v), sizeof(v)); };
 	auto putF = [&](float v) { out.append(reinterpret_cast<const char*>(&v), sizeof(v)); };
-	out.append("FLD1", 4);
+	out.append("FLD2", 4);
 	putI(in.mapWidth); putI(in.mapHeight); putI(in.heightStride); putI(in.heightRows); putI(in.slopeStride); putI(in.slopeRows);
 	putI(in.waterHarmful ? 1 : 0);
 	putI((int)in.boxes.size()); putI((int)in.geos.size()); putI((int)in.clusters.size());
@@ -77,6 +79,10 @@ std::string DumpInput(const SInput& in)
 	for (const SClusterInput& c : in.clusters) { putF(c.x); putF(c.z); putF(c.income); }
 	putI((int)in.mapName.size());
 	out += in.mapName;
+	// FLD2: Part B1 inputs
+	putF(in.minWind); putF(in.maxWind); putF(in.tidal);
+	putI((int)in.teams.size());
+	for (const STeamInput& t : in.teams) { putI(t.team); putI(t.allyTeam); putI(t.known ? 1 : 0); putF(t.x); putF(t.z); }
 	return out;
 }
 
@@ -118,6 +124,7 @@ bool CFieldService::ReadSettings(CCircuitAI* circuit)
 	settings.avenueMax = f.get("avenue_max", settings.avenueMax).asInt();
 	settings.seaReach = f.get("sea_reach", settings.seaReach).asFloat();
 	settings.pondMaxShare = f.get("pond_max_share", settings.pondMaxShare).asFloat();
+	ReadMarkSettings(*root, settings.marks);
 	publishFile = f.get("publish_file", true).asBool();
 	dumpInput = f.get("dump_input", false).asBool();
 	return enabled;
@@ -186,6 +193,15 @@ bool CFieldService::Capture(CCircuitAI* circuit, SInput& out) const
 		}
 		if (anyAlly && anyFoe) circuit->LOG("FIELD: no start boxes in the script; sides from the %i script start positions", setupMgr->GetScriptStartCount());
 	}
+	// Part B1: every playing team (not this AI's view), wind range and tidal strength
+	for (const CSetupManager::SScriptTeam& t : circuit->GetSetupManager()->GetScriptTeams()) {
+		STeamInput ti;
+		ti.team = t.team; ti.allyTeam = t.allyTeam; ti.known = t.known; ti.x = t.pos.x; ti.z = t.pos.z;
+		out.teams.push_back(ti);
+	}
+	out.minWind = map->GetMinWind();
+	out.maxWind = map->GetMaxWind();
+	out.tidal = map->GetTidalStrength();
 	for (const AIFloat3& geo : gameAttribute->GetEnergyData().GetSpots()) out.geos.push_back({geo.x, geo.z});
 	for (const CMetalData::SCluster& cl : gameAttribute->GetMetalData().GetClusters()) {
 		out.clusters.push_back({cl.position.x, cl.position.z, cl.income});
@@ -209,6 +225,8 @@ void CFieldService::Start(CCircuitAI* circuit, CGameAttribute* ga)
 		} else {
 			std::error_code ec;
 			std::filesystem::remove(filePath, ec);   // a previous game's map must not be shown as this one
+			marksPath = filePath.parent_path() / "landmarks.txt";
+			std::filesystem::remove(marksPath, ec);
 		}
 	}
 	Launch(circuit);
@@ -242,6 +260,7 @@ void CFieldService::Launch(CCircuitAI* circuit)
 	// for a delegated poll; the scheduler's finish queue is the normal one.
 	std::weak_ptr<SState> weak = state;
 	auto res = result;
+	res->teams = (int)input->teams.size();
 	auto complete = CScheduler::GameJob([weak, res]() {
 		const auto s = weak.lock();
 		if (!s || s->service == nullptr) return;
@@ -290,6 +309,13 @@ void CFieldService::Complete(CCircuitAI* circuit)
 		(int)model->theatres.size(), (int)model->regions.size(), (int)model->boundaries.size(), (int)model->chokes.size(),
 		(int)model->avenues.size(), (int)model->landings.size(), static_cast<unsigned long long>(model->fingerprint));
 	circuit->LOG("[Field] summary: %s", summary.c_str());
+	if (model->marksBuilt) {
+		for (const std::string& f : model->marksFailures) circuit->LOG("MARKS: check failed: %s", f.c_str());
+		circuit->LOG("MARKS_PERF owner=%i positions_ms=%.1f territory_ms=%.1f labels_ms=%.1f marks_ms=%.1f total_ms=%.1f teams=%i positions=%i marks=%i fingerprint=%llu",
+			ownerTeam, t.positionsMs, t.territoryMs, t.labelsMs, t.marksMs, t.marksTotalMs, result->teams,
+			(int)model->positions.size(), (int)model->marks.size(), static_cast<unsigned long long>(model->marksFingerprint));
+		circuit->LOG("[Marks] summary: %s", MarksSummary(*model).c_str());
+	}
 	result.reset();
 	if (publishFile && !published) Publish(circuit, circuit->GetLastFrame());
 }
@@ -304,8 +330,19 @@ void CFieldService::Publish(CCircuitAI* circuit, int frame)
 	circuit->LOG("FIELD: publishing %s (%zu bytes, encode_ms=%.1f)", filePath.string().c_str(), text.size(), encodeMs);
 	const std::filesystem::path path = filePath;
 	// The job owns the text and the path only: no `this`, no engine calls.
-	circuit->GetScheduler()->RunBackgroundJob(CScheduler::WorkJob([path, text = std::move(text)]() {
+	std::string marks;
+	std::filesystem::path marksFile;
+	if (model->marksBuilt && !marksPath.empty()) {
+		const auto marksBegin = Clock::now();
+		marks = EncodeMarks(*model, settings, seq, frame);
+		marksFile = marksPath;
+		circuit->LOG("MARKS: publishing %s (%zu bytes, encode_ms=%.1f)", marksPath.string().c_str(), marks.size(), Ms(marksBegin));
+	}
+	// One job writes both files in order, so landmarks.txt never precedes the
+	// map.txt whose fingerprint it carries.
+	circuit->GetScheduler()->RunBackgroundJob(CScheduler::WorkJob([path, text = std::move(text), marksFile, marks = std::move(marks)]() {
 		widget_state::WriteFileAtomically(path, text);
+		if (!marksFile.empty()) widget_state::WriteFileAtomically(marksFile, marks);
 		return std::shared_ptr<IMainJob>();
 	}));
 }

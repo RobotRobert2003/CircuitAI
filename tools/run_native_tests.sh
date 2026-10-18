@@ -25,7 +25,7 @@ cmd=""
 for t in "${tests[@]}"; do
     extra=""
     if [ "$t" = lane_solver_test ] || [ "$t" = terrain_route_test ]; then extra="/src/src/circuit/terrain/LaneSolver.cpp"; fi
-    if [ "$t" = field_analysis_test ]; then extra="/src/src/circuit/terrain/field/FieldAnalysis.cpp /src/src/circuit/terrain/field/FieldEncode.cpp"; fi
+    if [ "$t" = field_analysis_test ]; then extra="/src/src/circuit/terrain/field/FieldAnalysis.cpp /src/src/circuit/terrain/field/FieldEncode.cpp /src/src/circuit/terrain/field/FieldLandmarks.cpp /src/src/circuit/terrain/field/FieldSettings.cpp /src/src/lib/json/jsoncpp.cpp"; fi
 	cmd="$cmd x86_64-w64-mingw32-g++ -std=c++20 -O1 -Wall -Wextra -static -pthread -I/src/src -I/src/src/circuit -I/src/src/lib /src/tests/$t.cpp $extra -o /out/$t.exe || exit 1;"
 done
 cmd="$cmd x86_64-w64-mingw32-g++ -std=c++20 -O1 -static -DAS_MAX_PORTABILITY -DANGELSCRIPT_EXPORT -I/src/src/lib/angelscript/include -I/src/src/lib/angelscript/add_on/scriptarray -I/src/src/lib/angelscript/add_on/scriptstdstring -I/src/src/lib/angelscript/add_on/scriptdictionary /src/tests/production_math_test.cpp /src/src/lib/angelscript/add_on/scriptarray/scriptarray.cpp /src/src/lib/angelscript/add_on/scriptstdstring/scriptstdstring.cpp /src/src/lib/angelscript/add_on/scriptstdstring/scriptstdstring_utils.cpp /src/src/lib/angelscript/add_on/scriptdictionary/scriptdictionary.cpp /src/src/lib/angelscript/source/*.cpp -o /out/production_math_test.exe || exit 1;"

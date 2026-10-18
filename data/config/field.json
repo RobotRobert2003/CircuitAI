@@ -20,6 +20,79 @@
 	"sea_reach": 0,               // elmos a start box may lie from a sea to hold it; 0 = a fifth of the map diagonal
 	"pond_max_share": 0.025,      // a water body this small is a pond (D-128 value)
 	"publish_file": true,         // write LuaUI/Config/BARb/field/map.txt once for the team-link widget
-	"dump_input": false           // also write the input snapshot (field/input.bin) for the native replay (tests/field_analysis_test.exe <input.bin>)
+	"dump_input": false,          // also write the input snapshot (field/input.bin) for the native replay (tests/field_analysis_test.exe <input.bin>)
+
+	// Part B1 (rjm.bar.docs/projects/circuitai/field-landmarks-proposal.md): one position
+	// per playing team, its job word and opening, and the strategic landmarks, written once
+	// to LuaUI/Config/BARb/field/landmarks.txt for the team-link Landmarks view. Shares are
+	// of a side's largest travel cost to the contact line; distances are elmos.
+	"landmarks_enabled": true,
+	"positions": {
+		"walk_radius": 750,       // metal and geos this far outside a start box still pull a predicted position (BAR's start guesser)
+		"min_spacing": 350,       // predicted positions at least this far apart (BAR tooCloseToSpawn)
+		"kmedoids_rounds": 10,    // swap rounds of the value-weighted k-medoids
+		"site_step": 4,           // candidate site lattice, cells (grows on large boxes, at most 600 sites)
+		"geo_weight": 3,          // a geo vent's pull, in metal-income units
+		"area_weight": 0.02,      // each buildable lattice site's pull (spreads positions over the box)
+		"metal_scale": 0.001      // the engine's spot value to T1 metal per second (armmex/cormex/legmex extractsmetal)
+	},
+	"labels": {
+		"sea_share_min": 0.4,     // a contested sea filling this share of a territory makes it a sea candidate; the one holding most of the sea keeps it
+		"sea_full_share": 0.9,    // a territory this much sea is always a sea seat (water starts), outside sea_per_sea
+		"sea_yard_reach": 1600,   // failing that, a shipyard site this close makes it a candidate
+		"yard_depth": 30,         // a T1 shipyard needs 30 deep (KB 54)
+		"yard_clear": 320,        // open water around the yard, so its ships can leave (D-128 exit)
+		"geo_reach": 900,         // a geo vent this close gives the geo / geo sea position
+		"pond_min_cells": 40,     // pond cells inside the territory for a pond position
+		"island_base_area": 1000000,   // flat square elmos below which an island start is a harbour (KB 77)
+		"rear_fraction": 0.5,     // air and tech come from this rear share of a side's plain positions; the rest are fronts
+		"geo_share_min": 0.2,     // a geo position is not on the contact line
+		"air_per_side": 1,        // the meta's one air player per side (maps-metadata)
+		"tech_per_side": 1,       // and at most one tech
+		"sea_per_sea": 1,         // one sea position per contested sea per side
+		"air_min_positions": 3,   // no air or tech label on sides smaller than this (1v1, 2v2)
+		"tech_min_positions": 3,
+		"front_tech_metal": 12,   // a front with more metal income than this is front/tech (the richest one)
+		"tech_area_weight": 2     // tech picks the rear position with the most metal plus this per flat Mm2 (room for fusions and converters)
+	},
+	"openings": {
+		"veh_share": 0.6,         // a front opens vehicles when this share of its front ground is vehicle ground,
+		"open_width": 640,        // the ground is at least this wide (width beats slope),
+		"veh_map_scale": 14000,   // and the map diagonal is at least this (large maps favour vehicles); otherwise bots
+		"wind_min": 7,            // winds before solar at this average wind (shipped tip; KB 70 says about 10)
+		"tidal_margin": 1,        // tidal before wind when tidal beats the average wind by this
+		"factories": {            // per class: Armada, Cortex, Legion
+			"bot":     ["armlab", "corlab", "leglab"],
+			"vehicle": ["armvp",  "corvp",  "legvp"],
+			"hover":   ["armhp",  "corhp",  "leghp"],
+			"ship":    ["armsy",  "corsy",  "legsy"],
+			"air":     ["armap",  "corap",  "legap"]
+		},
+		"second": {               // the step after the factory, shown on the card
+			"front": "second factory or bank for T2 at 3-5 min",
+			"sea": "T2 shipyard; expect a donated T2 constructor around 8:00",
+			"island": "constructor hover, then the T2 shipyard",
+			"pond": "tidal field for the fronts",
+			"geo": "geothermal, then T2 off the vent",
+			"air": "T1 air constructor, then the T2 air plant",
+			"tech": "T2 at 15-20 metal income; reclaim the T1 lab",
+			"front/tech": "hold the lane, then T2 at 15-20 metal income"
+		}
+	},
+	"landmarks": {
+		"contest_distance": 600,  // a mark this close to the contact line is contested
+		"kill_reach": 1400,       // a choke this close to a front position is that front's kill zone
+		"radar_front_share": 0.5, // radar hills in the front half of the side
+		"perch_range": 1250,      // high ground this close to a kill zone or home landing is an artillery perch
+		"forward_income": 4,      // forward-base clusters yield at least this (KB 72)
+		"forward_share_max": 0.6, // and lie in the front part of the side
+		"artillery_ship_range": 1550,   // coast-fire stations at 85% of this from the target (KB 64)
+		"lrpc_range": 4650,       // LRPC perches 20-40% of this behind the contact line (armbrtha range)
+		"antinuke_coverage": 2000,     // anti-nuke districts (armamd coverage)
+		"labels_per_kind": 3,     // marks of each kind that get a text label
+		"lrpc_per_side": 2,
+		"antinuke_per_side": 2,
+		"coast_targets": 3        // coastal metal clusters per side that get a coast-fire station
+	}
 }
 }

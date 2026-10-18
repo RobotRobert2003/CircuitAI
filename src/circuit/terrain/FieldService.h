@@ -68,6 +68,7 @@ private:
 		std::shared_ptr<SModel> model;
 		std::exception_ptr error;
 		double queueMs = 0, analyseMs = 0;
+		int teams = 0;                      // playing teams in the input (Part B1 log)
 		std::atomic<bool> started{false};   // the worker picked the job up (D-327: a queued job dies with its owner's scheduler)
 		std::atomic<bool> done{false};
 	};
@@ -95,6 +96,7 @@ private:
 	std::shared_ptr<const SModel> model;
 	std::string summary;
 	std::filesystem::path filePath;
+	std::filesystem::path marksPath;      // Part B1: landmarks.txt beside map.txt
 	std::uint64_t seq = 0;
 	double captureMs = 0;
 	bool published = false;

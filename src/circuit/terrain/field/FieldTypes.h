@@ -54,6 +54,15 @@ struct SClusterInput {
 	float x = 0.f, z = 0.f, income = 0.f;
 };
 
+// Part B1 (landmarks): a playing team from the start script. `known` is set
+// when the script carries its start position (fixed or chosen-before-game
+// starts, the playtest harness); otherwise the position is predicted.
+struct STeamInput {
+	int team = -1, allyTeam = -1;
+	bool known = false;
+	float x = 0.f, z = 0.f;
+};
+
 // Everything the analysis reads. Captured once by the owner AI (FieldService).
 struct SInput {
 	std::string mapName;
@@ -66,6 +75,54 @@ struct SInput {
 	std::vector<SBoxInput> boxes;        // one per ally team with a start box
 	std::vector<SPoint> geos;
 	std::vector<SClusterInput> clusters;
+	// Part B1: every playing team of the game (not this AI's view of it), the
+	// map's wind range and tidal strength. Nothing about the owner AI enters.
+	std::vector<STeamInput> teams;
+	float minWind = 0.f, maxWind = 0.f, tidal = 0.f;
+};
+
+// Part B1: the opening factory classes, mapped to a factory id per faction by
+// field.json "openings.factories" (no factory id lives in C++).
+enum Opening : int { O_BOT = 0, O_VEH, O_HOVER, O_SHIP, O_AIR, _OPENINGS_ };
+// The game's own position words (maps-metadata, Build Atlas), not AiRole.
+enum PosLabel : int { L_FRONT = 0, L_SEA, L_ISLAND, L_POND, L_GEO, L_AIR, L_TECH, L_FRONT_TECH, _LABELS_ };
+enum PosSub : int { S_NONE = 0, S_BEACH_SEA, S_GEO_SEA, S_SUICIDE_FRONT };
+enum Energy : int { E_SOLAR = 0, E_WIND, E_TIDAL };
+enum MarkGroup : int { MG_ECONOMY = 0, MG_LAND, MG_SEA, MG_LATE };
+enum MarkKind : int {
+	MK_METAL = 0, MK_CENTRE, MK_GEO, MK_TIDAL,
+	MK_CHOKE, MK_KILL, MK_RADAR, MK_PERCH, MK_FORWARD,
+	MK_YARD, MK_SEAZONE, MK_STRAIT, MK_LANDING, MK_EMERGE, MK_COASTFIRE, MK_SEAPLANE, MK_ISLAND,
+	MK_LRPC, MK_ANTINUKE, _MARK_KINDS_
+};
+
+// Part B1 levers (field.json "positions", "labels", "openings", "landmarks").
+// Fractions are shares of a side's largest travel cost to the contact line;
+// distances are elmos; every value has a JSON key of the same meaning.
+struct SMarkSettings {
+	bool enabled = true;
+	// positions
+	float walkRadius = 750.f, minSpacing = 350.f;
+	int kmedoidsRounds = 10, siteStep = 4;
+	float geoWeight = 3.f, areaWeight = 0.02f;
+	float metalScale = 0.001f;   // spot value to T1 metal per second (armmex/cormex/legmex extractsmetal)
+	// labels
+	float seaYardReach = 1600.f, yardDepth = 30.f, yardClear = 320.f, geoReach = 900.f, seaShareMin = 0.4f, seaFullShare = 0.9f;
+	int pondMinCells = 40;
+	float islandBaseArea = 1000000.f;
+	float rearFraction = 0.5f, geoShareMin = 0.2f;
+	int airPerSide = 1, techPerSide = 1, seaPerSea = 1, airMinPositions = 3, techMinPositions = 3;
+	float frontTechMetal = 12.f, techAreaWeight = 2.f;
+	// openings
+	float vehShare = 0.6f, openWidth = 640.f, vehMapScale = 14000.f;
+	float windMin = 7.f, tidalMargin = 1.f;
+	std::string factories[_OPENINGS_][3];   // [class][armada, cortex, legion]
+	std::string second[_LABELS_];           // the step after the factory, per label
+	// landmarks
+	float contestDistance = 600.f, killReach = 1400.f, radarFrontShare = 0.5f;
+	float perchRange = 1250.f, forwardIncome = 4.f, forwardShareMax = 0.6f;
+	float artilleryShipRange = 1550.f, lrpcRange = 4650.f, antinukeCoverage = 2000.f;
+	int labelsPerKind = 3, lrpcPerSide = 2, antinukePerSide = 2, coastTargets = 3;
 };
 
 struct SSettings {
@@ -82,6 +139,7 @@ struct SSettings {
 	float seaReach = 0.f;              // elmos; 0 = a fifth of the map diagonal
 	float pondMaxShare = 0.025f;
 	float standoffDepths[3] = {8.f, 15.f, 30.f};
+	SMarkSettings marks;
 };
 
 struct STheatre {
@@ -152,9 +210,51 @@ struct SKey {
 	float value = 0.f;
 };
 
+// Part B1: one position per playing team, both sides.
+struct SFeatures {
+	int cells = 0;
+	float ground[8] = {0, 0, 0, 0, 0, 0, 0, 0};   // share per Ground class (G_HARM folded into water)
+	float openWidth = 0.f, vehShare = 0.f, metal = 0.f;
+	int clusters = 0, geos = 0, geoNear = -1;   // geoNear: the nearest geo vent on the own side (index into the input)
+	float geoDist = -1.f;
+	int sea = -1;                 // the contested sea (T_SEA) the territory holds, or one with a yard within reach; -1 none
+	int seaCells = 0;             // that sea's cells inside the territory
+	SPoint yard{-1.f, -1.f};
+	float yardDist = -1.f;
+	int pondCells = 0, assaultRank = 0;
+	bool island = false;
+	bool hoverAvenue = false, landAvenue = false;
+	float landArea = 0.f;         // flat buildable elmo² inside the territory
+};
+
+struct SPosition {
+	int index = 0, side = -1, allyTeam = -1, n = 0, rearRank = 0, cell = -1;
+	std::string name;
+	SPoint pos;
+	bool predicted = true;
+	int label = L_FRONT, sub = S_NONE;
+	float frontShare = 1.f;       // travel cost to the contact line / the side's largest
+	SFeatures f;
+	int opening = O_BOT;
+	std::vector<int> fallbacks;
+	int energy = E_SOLAR;
+	std::vector<std::string> reasons;
+};
+
+struct SMark {
+	int id = 0, group = MG_ECONOMY, kind = MK_METAL, position = -1, allyTeam = -1;
+	SPoint pos;
+	float value = 0.f;
+	bool contested = false, labelled = false;
+	int phaseFrom = 0, phaseTo = -1;   // game minutes, -1 = open
+	std::string reason;
+	Polyline line;
+};
+
 struct STimings {
 	double gridMs = 0, mobilityMs = 0, sidesMs = 0, theatresMs = 0, regionsMs = 0,
 		   boundariesMs = 0, landingsMs = 0, avenuesMs = 0, keyMs = 0, totalMs = 0;
+	double positionsMs = 0, territoryMs = 0, labelsMs = 0, marksMs = 0, marksTotalMs = 0;
 };
 
 struct SModel {
@@ -175,6 +275,14 @@ struct SModel {
 	std::vector<unsigned char> groundOf;   // per cell, Ground (D-326)
 	std::uint64_t fingerprint = 0;
 	std::vector<std::string> checkFailures;
+	// Part B1 (landmarks.txt); empty when field.json disables it
+	bool marksBuilt = false;
+	std::vector<SPosition> positions;
+	std::vector<SMark> marks;
+	std::vector<int> posOf;             // per cell, position index or -1
+	float minWind = 0.f, maxWind = 0.f, tidal = 0.f, mapDiagonal = 0.f;
+	std::uint64_t marksFingerprint = 0;
+	std::vector<std::string> marksFailures;
 	STimings timings;
 };
 

@@ -11,11 +11,17 @@
 #include "circuit/terrain/field/FieldAnalysis.h"
 #include "circuit/terrain/field/FieldEncode.h"
 #include "circuit/terrain/field/FieldGrid.h"
+#include "circuit/terrain/field/FieldLandmarks.h"
+#include "circuit/terrain/field/FieldSettings.h"
+#include "json/json.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 #include <vector>
 
@@ -69,7 +75,25 @@ static SInput Synthetic()
 	in.boxes = {west, east};
 	in.geos.push_back({600.f, 2000.f});
 	in.clusters.push_back({3600.f, 1600.f, 6.f});
+	// Part B1: four placed-in-game teams per side, wind 4-12, tidal 18
+	for (int t = 0; t < 8; ++t) {
+		STeamInput ti;
+		ti.team = t; ti.allyTeam = t < 4 ? 0 : 1;
+		in.teams.push_back(ti);
+	}
+	in.minWind = 4.f; in.maxWind = 12.f; in.tidal = 18.f;
 	return in;
+}
+
+static SSettings MarkSettings()
+{
+	SSettings st;
+	const char* ids[_OPENINGS_][3] = {{"armlab", "corlab", "leglab"}, {"armvp", "corvp", "legvp"}, {"armhp", "corhp", "leghp"},
+		{"armsy", "corsy", "legsy"}, {"armap", "corap", "legap"}};
+	for (int c = 0; c < _OPENINGS_; ++c) for (int f = 0; f < 3; ++f) st.marks.factories[c][f] = ids[c][f];
+	st.marks.second[L_SEA] = "T2 shipyard";
+	st.marks.metalScale = 1.f;   // the synthetic clusters are already in metal per second
+	return st;
 }
 
 static int CountKind(const SModel& m, int theatreKind)
@@ -185,6 +209,110 @@ static void TestDeterminismAndFile()
 	std::printf("field_analysis_test: file %zu bytes\n", text.size());
 }
 
+// Part B1: positions, territory, labels, openings and landmarks on the
+// synthetic isthmus; predicted and script positions; the landmarks file.
+static void TestMarks()
+{
+	const SInput in = Synthetic();
+	const SSettings st = MarkSettings();
+	auto m = Analyse(in, st, nullptr);
+	for (const std::string& f : m->marksFailures) std::printf("field_analysis_test: marks check failed: %s\n", f.c_str());
+	std::printf("field_analysis_test: %s\n", MarksSummary(*m).c_str());
+	Require(m->marksBuilt && m->marksFailures.empty(), "marks: built, checks pass");
+	Require(m->positions.size() == 8, "marks: one position per playing team");
+	int perSide[2] = {0, 0}, air[2] = {0, 0}, tech[2] = {0, 0};
+	std::map<std::pair<int, int>, int> seaPerSea;
+	for (const SPosition& p : m->positions) {
+		std::printf("  %s side=%d at (%.0f,%.0f) label=%s/%s share=%.2f opening=%s energy=%s veh=%.2f width=%.0f yard=%.0f geo=%.0f pond=%d island=%d cells=%d\n",
+			p.name.c_str(), p.side, p.pos.x, p.pos.z, LabelName(p.label), SubLabelName(p.sub), p.frontShare, OpeningName(p.opening), EnergyName(p.energy),
+			p.f.vehShare, p.f.openWidth, p.f.yardDist, p.f.geoDist, p.f.pondCells, p.f.island ? 1 : 0, p.f.cells);
+		for (const std::string& r : p.reasons) std::printf("      why: %s\n", r.c_str());
+		Require(p.side == 0 || p.side == 1, "marks: a position belongs to a side");
+		Require(p.predicted, "marks: no script start, so every position is predicted");
+		Require(p.f.cells > 0, "marks: every position has a territory");
+		Require(!p.reasons.empty(), "marks: every opening has a reason");
+		Require(p.label >= 0 && p.label < _LABELS_ && p.opening >= 0 && p.opening < _OPENINGS_, "marks: valid label and opening");
+		Require(m->sideOf[p.cell] == p.side, "marks: a position stands on its own side");
+		++perSide[p.side];
+		if (p.label == L_AIR) ++air[p.side];
+		if (p.label == L_TECH) ++tech[p.side];
+		if (p.label == L_SEA) ++seaPerSea[{p.side, p.f.sea}];
+		if (p.label == L_SEA) Require(p.opening == O_SHIP, "marks: a sea position with a yard site opens the shipyard");
+		if (p.label == L_POND) Require(p.opening == O_VEH, "marks: a pond position opens the vehicle plant");
+		if (p.label == L_AIR) Require(p.opening == O_AIR, "marks: the air position opens the air plant");
+	}
+	Require(perSide[0] == 4 && perSide[1] == 4, "marks: four positions per side");
+	Require(air[0] == 1 && air[1] == 1, "marks: one air position per side");
+	Require(tech[0] <= 1 && tech[1] <= 1, "marks: at most one tech per side");
+	for (const auto& kv : seaPerSea) Require(kv.second <= 1, "marks: at most one sea position per sea per side");
+	bool anySea = false;
+	for (const SPosition& p : m->positions) anySea |= p.label == L_SEA;
+	Require(anySea, "marks: the north sea gives a sea position");
+	for (int c = 0; c < (int)m->posOf.size(); ++c) {
+		const int p = m->posOf[c];
+		Require(p >= 0 && p < (int)m->positions.size() && m->positions[p].side == m->sideOf[c], "marks: every cell belongs to a position of its side");
+	}
+	for (int s = 0; s < 2; ++s) {
+		int expect = 1;
+		for (const SPosition& p : m->positions) {
+			if (p.side != s) continue;
+			Require(p.n == expect, "marks: positions numbered from the rear");
+			++expect;
+		}
+	}
+	int kinds[_MARK_KINDS_] = {};
+	for (const SMark& mk : m->marks) {
+		std::printf("  mark %s/%s at (%.0f,%.0f) value=%.1f pos=%d ally=%d contested=%d labelled=%d: %s\n", MarkGroupName(mk.group), MarkKindName(mk.kind),
+			mk.pos.x, mk.pos.z, mk.value, mk.position, mk.allyTeam, mk.contested ? 1 : 0, mk.labelled ? 1 : 0, mk.reason.c_str());
+		Require(mk.kind >= 0 && mk.kind < _MARK_KINDS_ && !mk.reason.empty(), "marks: valid kind and reason");
+		++kinds[mk.kind];
+	}
+	Require(kinds[MK_GEO] == 1 && kinds[MK_METAL] + kinds[MK_CENTRE] == 1, "marks: the geo and the metal cluster are marked");
+	Require(kinds[MK_TIDAL] == 1, "marks: the pond is a tidal field");
+	Require(kinds[MK_SEAZONE] >= 1, "marks: a contested sea gets a sea control zone");
+	Require(kinds[MK_LANDING] >= 1, "marks: ranked sea landings are marked");
+	Require(kinds[MK_CHOKE] + kinds[MK_KILL] >= 1, "marks: the isthmus choke is marked");
+	Require(kinds[MK_ANTINUKE] >= 1, "marks: an anti-nuke district per side");
+	// determinism and the file
+	auto again = Analyse(in, st, nullptr);
+	Require(again->marksFingerprint == m->marksFingerprint && again->posOf == m->posOf, "marks: same input, same marks");
+	const std::string text = EncodeMarks(*m, st, 3, 90);
+	Require(text.compare(0, 12, "barbmarks|1|") == 0, "marks file: header");
+	Require(text.find("|" + std::to_string(m->fingerprint) + "|") != std::string::npos, "marks file: carries the field fingerprint");
+	Require(text.find("\nfactory|bot|armlab|corlab|leglab\n") != std::string::npos, "marks file: factory ids from the settings");
+	Require(text.find("\nposition|") != std::string::npos && text.find("\nopening|") != std::string::npos
+		&& text.find("\nmark|") != std::string::npos && text.find("\nterritory|") != std::string::npos, "marks file: records");
+	Require(text.size() > 8 && text.compare(text.size() - 6, 6, "end|3\n") == 0, "marks file: trailer");
+	std::printf("field_analysis_test: marks file %zu bytes, marks %.1f ms\n", text.size(), m->timings.marksTotalMs);
+	// the engine reports geo vents in a varying order: the marks must not depend on it
+	SInput twoGeos = in;
+	twoGeos.geos.push_back({3700.f, 1800.f});
+	SInput swapped = twoGeos;
+	std::reverse(swapped.geos.begin(), swapped.geos.end());
+	Require(Analyse(twoGeos, st, nullptr)->marksFingerprint == Analyse(swapped, st, nullptr)->marksFingerprint, "marks: geo input order does not matter");
+	// script starts are kept exactly; the remaining teams are predicted around them
+	SInput placed = in;
+	placed.teams[0].known = true; placed.teams[0].x = 500.f; placed.teams[0].z = 2400.f;
+	placed.teams[5].known = true; placed.teams[5].x = 3700.f; placed.teams[5].z = 2000.f;
+	auto mp = Analyse(placed, st, nullptr);
+	int script = 0;
+	for (const SPosition& p : mp->positions) {
+		if (p.predicted) continue;
+		++script;
+		Require((p.pos.x == 500.f && p.pos.z == 2400.f) || (p.pos.x == 3700.f && p.pos.z == 2000.f), "marks: a script start is kept exactly");
+	}
+	Require(script == 2 && mp->positions.size() == 8, "marks: script starts plus predictions");
+	// no team list: one position per side; disabled: nothing built and the terrain unchanged
+	SInput none = in;
+	none.teams.clear();
+	auto mn = Analyse(none, st, nullptr);
+	Require(mn->positions.size() == 2, "marks: no team list gives one position per side");
+	SSettings off = st;
+	off.marks.enabled = false;
+	auto mo = Analyse(in, off, nullptr);
+	Require(!mo->marksBuilt && mo->positions.empty() && mo->fingerprint == m->fingerprint, "marks: disabled leaves the terrain unchanged");
+}
+
 static void TestCancel()
 {
 	const SInput in = Synthetic();
@@ -209,7 +337,7 @@ static void TestNoBoxes()
 // field.json "dump_input": true) and print the summary and timings; with a
 // second argument, also write the widget file. The map's real analysis can
 // then be tuned without a game.
-static int Replay(const char* dumpPath, const char* outPath)
+static int Replay(const char* dumpPath, const char* outPath, bool predict, const char* configPath)
 {
 	std::FILE* f = std::fopen(dumpPath, "rb");
 	if (f == nullptr) { std::cerr << "cannot open " << dumpPath << "\n"; return 2; }
@@ -220,7 +348,8 @@ static int Replay(const char* dumpPath, const char* outPath)
 	std::size_t at = 0;
 	auto getI = [&]() { int v = 0; if (at + 4 <= raw.size()) std::memcpy(&v, raw.data() + at, 4); at += 4; return v; };
 	auto getF = [&]() { float v = 0.f; if (at + 4 <= raw.size()) std::memcpy(&v, raw.data() + at, 4); at += 4; return v; };
-	if (raw.size() < 4 || std::memcmp(raw.data(), "FLD1", 4) != 0) { std::cerr << "not a field dump\n"; return 2; }
+	const bool v2 = raw.size() >= 4 && std::memcmp(raw.data(), "FLD2", 4) == 0;
+	if (raw.size() < 4 || (!v2 && std::memcmp(raw.data(), "FLD1", 4) != 0)) { std::cerr << "not a field dump\n"; return 2; }
 	at = 4;
 	SInput in;
 	in.mapWidth = getI(); in.mapHeight = getI(); in.heightStride = getI(); in.heightRows = getI();
@@ -241,7 +370,29 @@ static int Replay(const char* dumpPath, const char* outPath)
 	for (int i = 0; i < clusters; ++i) { SClusterInput c; c.x = getF(); c.z = getF(); c.income = getF(); in.clusters.push_back(c); }
 	const int nameLen = getI();
 	if (nameLen > 0 && at + nameLen <= raw.size()) in.mapName.assign(raw.data() + at, nameLen);
-	SSettings st;
+	at += std::max(0, nameLen);
+	if (v2) {
+		in.minWind = getF(); in.maxWind = getF(); in.tidal = getF();
+		const int teams = getI();
+		for (int i = 0; i < teams && at < raw.size(); ++i) {
+			STeamInput t;
+			t.team = getI(); t.allyTeam = getI(); t.known = getI() != 0; t.x = getF(); t.z = getF();
+			in.teams.push_back(t);
+		}
+	}
+	SSettings st = MarkSettings();
+	st.marks.metalScale = 0.001f;   // a real dump: the engine's spot values
+	if (configPath != nullptr) {
+		// the profile's field.json (comments allowed): the same reader as CFieldService
+		std::ifstream cfg(configPath);
+		Json::Value root;
+		Json::Reader reader;
+		if (!cfg || !reader.parse(cfg, root)) { std::cerr << "cannot read " << configPath << "\n"; return 2; }
+		st.marks = SMarkSettings();
+		ReadMarkSettings(root, st.marks);
+	}
+	std::vector<STeamInput> actual = in.teams;
+	if (predict) for (STeamInput& t : in.teams) t.known = false;
 	auto m = Analyse(in, st, nullptr);
 	std::printf("%s\n%s\n", in.mapName.c_str(), Summary(*m).c_str());
 	const STimings& t = m->timings;
@@ -257,22 +408,72 @@ static int Replay(const char* dumpPath, const char* outPath)
 		if (l.rank <= 3) std::printf("landing %d kind=%d side=%d rank=%d width=%.0f inland=%.0f at (%.0f,%.0f)\n", l.id, l.kind, l.side, l.rank, l.width, l.inland, l.mid.x, l.mid.z);
 	}
 	for (const std::string& s : m->checkFailures) std::printf("CHECK FAILED: %s\n", s.c_str());
+	if (m->marksBuilt) {
+		std::printf("marks: %s (%.1f ms)\n", MarksSummary(*m).c_str(), m->timings.marksTotalMs);
+		for (const SPosition& p : m->positions) {
+			std::printf("position %s label=%s/%s share=%.2f opening=%s energy=%s veh=%.2f width=%.0f\n", p.name.c_str(), LabelName(p.label),
+				SubLabelName(p.sub), p.frontShare, OpeningName(p.opening), EnergyName(p.energy), p.f.vehShare, p.f.openWidth);
+		}
+		for (const std::string& s : m->marksFailures) std::printf("MARKS CHECK FAILED: %s\n", s.c_str());
+		if (predict) {
+			// greedy nearest matching of predictions to the real starts, per ally team
+			std::vector<char> used(actual.size(), 0);
+			int within575 = 0, beyond1150 = 0, matched = 0;
+			float worst = 0.f, sum = 0.f;
+			for (const SPosition& p : m->positions) {
+				int best = -1;
+				float bestD = 1e30f;
+				for (int i = 0; i < (int)actual.size(); ++i) {
+					if (used[i] || !actual[i].known || (p.allyTeam >= 0 && actual[i].allyTeam != p.allyTeam)) continue;
+					const float d = std::hypot(actual[i].x - p.pos.x, actual[i].z - p.pos.z);
+					if (d < bestD) { bestD = d; best = i; }
+				}
+				if (best < 0) continue;
+				used[best] = 1;
+				++matched; sum += bestD; worst = std::max(worst, bestD);
+				if (bestD <= 575.f) ++within575;
+				if (bestD > 1150.f) ++beyond1150;
+				std::printf("predict %s at (%.0f,%.0f) nearest real start (%.0f,%.0f) %.0f\n", p.name.c_str(), p.pos.x, p.pos.z, actual[best].x, actual[best].z, bestD);
+			}
+			std::printf("PREDICT %s matched=%d within575=%d beyond1150=%d mean=%.0f worst=%.0f\n", in.mapName.c_str(), matched, within575, beyond1150,
+				matched > 0 ? sum / matched : 0.f, worst);
+		}
+	}
 	if (outPath != nullptr) {
 		const std::string text = Encode(*m, st, 1, 0);
 		std::FILE* o = std::fopen(outPath, "wb");
 		if (o != nullptr) { std::fwrite(text.data(), 1, text.size(), o); std::fclose(o); std::printf("wrote %s (%zu bytes)\n", outPath, text.size()); }
+		if (m->marksBuilt) {
+			const std::string marks = EncodeMarks(*m, st, 1, 0);
+			const std::string marksPath = std::string(outPath) + ".marks";
+			std::FILE* mo = std::fopen(marksPath.c_str(), "wb");
+			if (mo != nullptr) { std::fwrite(marks.data(), 1, marks.size(), mo); std::fclose(mo); std::printf("wrote %s (%zu bytes)\n", marksPath.c_str(), marks.size()); }
+		}
 	}
 	return m->checkFailures.empty() ? 0 : 1;
 }
 
 int main(int argc, char** argv)
 {
-	if (argc > 1) return Replay(argv[1], argc > 2 ? argv[2] : nullptr);
+	if (argc > 1) {
+		// <input.bin> [out.txt] [--predict] [--config field.json]: --predict hides the
+		// script starts; --config reads the landmark levers from a field.json
+		bool predict = false;
+		const char* out = nullptr;
+		const char* config = nullptr;
+		for (int i = 2; i < argc; ++i) {
+			if (std::strcmp(argv[i], "--predict") == 0) predict = true;
+			else if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc) config = argv[++i];
+			else out = argv[i];
+		}
+		return Replay(argv[1], out, predict, config);
+	}
 	try {
 		TestStructure();
 		TestDeterminismAndFile();
 		TestCancel();
 		TestNoBoxes();
+		TestMarks();
 	} catch (const std::exception& e) {
 		std::cerr << "field_analysis_test FAILED: " << e.what() << "\n";
 		return 1;
