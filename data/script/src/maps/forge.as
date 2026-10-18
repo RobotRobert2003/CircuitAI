@@ -8,27 +8,25 @@ namespace Forge {
 
 	// landLocked heuristic (initial): none flagged yet on this map; future pass may mark
 	// isolated peninsulas requiring hover/amph first. Pass false for all for now.
-	// Start spots for Eight Horses map (converted from YAML, roles matched to AiRole enum)
+	// Start spots = the lobby maps JSON spawn points P1-P16 (2026-10-18); owner: P6 and P14 are TECH.
 	StartSpot@[] spots = {
-		StartSpot(AIFloat3(  2100, 0,  1600), AiRole::FRONT, false),       
-		StartSpot(AIFloat3(  430, 0, 3500), AiRole::FRONT, false),       
-		StartSpot(AIFloat3(  2000, 0, 4000), AiRole::SUPPORT, false),        
-		StartSpot(AIFloat3(  1900, 0, 5200), AiRole::SUPPORT, false),    
+		StartSpot(AIFloat3( 2137, 0, 1545), AiRole::FRONT, false), // P1
+		StartSpot(AIFloat3( 2347, 0, 2722), AiRole::FRONT, false), // P2
+		StartSpot(AIFloat3(  451, 0, 3453), AiRole::AIR, false), // P3
+		StartSpot(AIFloat3( 2018, 0, 4108), AiRole::FRONT, false), // P4
+		StartSpot(AIFloat3( 1997, 0, 5212), AiRole::FRONT, false), // P5
+		StartSpot(AIFloat3(  317, 0, 6091), AiRole::TECH, false), // P6 (lobby JSON: front)
+		StartSpot(AIFloat3( 2368, 0, 6535), AiRole::FRONT, false), // P7
+		StartSpot(AIFloat3( 2111, 0, 7630), AiRole::FRONT, false), // P8
 
-		StartSpot(AIFloat3(  400, 0, 6150), AiRole::FRONT, false),     
-		StartSpot(AIFloat3(  2030, 0, 7600), AiRole::FRONT, false),      
-		StartSpot(AIFloat3(  600, 0, 7700), AiRole::AIR, false), 
-		StartSpot(AIFloat3(  2000, 0, 8400), AiRole::FRONT, false), 
-		    
-		StartSpot(AIFloat3(  7000, 0,  1600), AiRole::FRONT, false),       
-		StartSpot(AIFloat3(  8700, 0, 2000), AiRole::FRONT, false),       
-		StartSpot(AIFloat3(  8800, 0, 3500), AiRole::TECH, false),        
-		StartSpot(AIFloat3(  7200, 0, 4100), AiRole::FRONT, false),    
-
-		StartSpot(AIFloat3(  7200, 0, 5200), AiRole::FRONT, false),     
-		StartSpot(AIFloat3(  8800, 0, 6100), AiRole::AIR, false),      
-		StartSpot(AIFloat3(  7100, 0, 7600), AiRole::FRONT, false), 
-		StartSpot(AIFloat3(  7200, 0, 8400), AiRole::FRONT, false)       
+		StartSpot(AIFloat3( 7095, 0, 7604), AiRole::FRONT, false), // P9
+		StartSpot(AIFloat3( 6929, 0, 6517), AiRole::FRONT, false), // P10
+		StartSpot(AIFloat3( 8887, 0, 6005), AiRole::AIR, false), // P11
+		StartSpot(AIFloat3( 7205, 0, 5179), AiRole::FRONT, false), // P12
+		StartSpot(AIFloat3( 7190, 0, 4100), AiRole::FRONT, false), // P13
+		StartSpot(AIFloat3( 8795, 0, 3495), AiRole::TECH, false), // P14 (lobby JSON: front)
+		StartSpot(AIFloat3( 6890, 0, 2669), AiRole::FRONT, false), // P15
+		StartSpot(AIFloat3( 7074, 0, 1552), AiRole::FRONT, false) // P16
 	};
 
 	// Base per-map unit limits
