@@ -9,7 +9,13 @@
 // Support::ReclaimT1EnergyAfterFusion and Support::Reclaim* (SupportBuild::MakeTask). The settings
 // below are read for the AI's current role; log [SUPPORT][Reclaim]. While SUPPORT reclaims,
 // EnergyAllowed() keeps its eco planner from ordering the same winds and solars again.
+// FRONT eco ladder (owner, 2026-10-16; Front::EcoLadder, systems/construction/front_eco_ladder.as):
+// T1 converters come down too once the first fusion stands (owner, 2026-10-17), and the fusions once the second
+// advanced fusion is framed, one at a time, when the bank has room for the refund (BAR pays it at
+// completion; metal past storage is lost) and energy income without the fusion covers the pull by
+// Front::EcoLadderFusionReclaimMargin (always once the second advanced fusion stands).
 #include "../../helpers/math/production_math.as"
+#include "front_eco_ladder.as"
 namespace FrontReclaim {
     array<int> targets;          // structures being reclaimed
     array<IUnitTask@> tasks;
@@ -68,6 +74,35 @@ namespace FrontReclaim {
         const int level = Level();
         return !(t1 && level >= 1) && !(adv && level == 2);
     }
+    // A fusion at a time; its refund must fit the bank unless the storage never could hold it and
+    // the ladder has built its metal storages
+    int fusionLog = -100000;
+    bool FusionsAllowed()
+    {
+        if (IsSupport() || !FrontEcoLadder::ReclaimFusions() || aiEconomyMgr.isEnergyStalling) return false;
+        const string fus = UnitHelpers::GetFusionNameForSide(Global::AISettings::Side);
+        for (uint i = 0; i < targets.length(); ++i) {
+            CCircuitUnit@ t = ai.GetTeamUnit(targets[i]);
+            if (t !is null && t.circuitDef !is null && t.circuitDef.GetName() == fus) return false;
+        }
+        CCircuitDef@ d = ai.GetCircuitDef(fus);
+        if (d is null) return false;
+        const float fusOut = FrontEcoLadder::FusionOutput(fus);
+        if (!ProductionMath::LowTierEnergyReclaim(FrontEcoLadder::SecondAdvFusionStands(), aiEconomyMgr.energy.income, fusOut,
+            aiEconomyMgr.energy.pull, Global::RoleSettings::Front::EcoLadderFusionReclaimMargin)) return false;
+        const float bank = aiEconomyMgr.metal.current, storage = aiEconomyMgr.metal.storage;
+        const bool fits = bank + d.costM <= storage;
+        const bool never = storage < d.costM && FrontEcoLadder::StoragesDone();
+        if (!fits && !never) {
+            if (ai.frame - fusionLog >= 30 * SECOND) {
+                fusionLog = ai.frame;
+                GenericHelpers::LogUtil("[FRONT][Reclaim] fusion waits: refund " + int(d.costM) + " does not fit the bank " + int(bank) + "/" + int(storage), 1);
+            }
+            return false;
+        }
+        return true;
+    }
+
     IUnitTask@ Work(CCircuitUnit@ worker)
     {
         if (!Enabled() || worker is null || worker.circuitDef is null
@@ -75,11 +110,15 @@ namespace FrontReclaim {
         Tick();
         if (targets.length() >= uint(Concurrent())) return null;
         const int level = Level();
-        if (level == 0) return null;
+        const bool t1Conv = !IsSupport() && FrontEcoLadder::ReclaimT1Converters() && !aiEconomyMgr.isEnergyStalling;
+        const bool fusions = FusionsAllowed();
+        if (level == 0 && !t1Conv && !fusions) return null;
         const string side = Global::AISettings::Side;
         const string wind = UnitHelpers::GetWindNameForSide(side);
         const string solar = UnitHelpers::GetSolarNameForSide(side);
         const string advSolar = UnitHelpers::GetAdvSolarNameForSide(side);
+        const string converter = UnitHelpers::GetEnergyConverterNameForSide(side);
+        const string fusion = UnitHelpers::GetFusionNameForSide(side);
         array<Id>@ ids = ai.GetOwnedUnitIds();
         array<AIFloat3> labs;
         for (uint i = 0; i < ids.length(); ++i) {
@@ -96,7 +135,8 @@ namespace FrontReclaim {
             CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
             if (u is null || u.circuitDef is null || u.GetBuildProgress() < 1.0f) continue;
             const string n = u.circuitDef.GetName();
-            if (n != wind && n != solar && !(level == 2 && n == advSolar)) continue;
+            const bool lowTier = level >= 1 && (n == wind || n == solar || (level == 2 && n == advSolar));
+            if (!lowTier && !(t1Conv && n == converter) && !(fusions && n == fusion)) continue;
             if (targets.find(u.id) >= 0 || Lifecycle::IsRetiring(u)) continue;
             const AIFloat3 p = u.GetPos(ai.frame);
             const float toWorker = MapHelpers::SqDist(wp, p);
@@ -114,8 +154,10 @@ namespace FrontReclaim {
         if (task is null) return null;
         targets.insertLast(best.id);
         tasks.insertLast(task);
-        Lifecycle::Retire(best, Tag() + " low-tier energy replaced by a fusion");
-        GenericHelpers::LogUtil("[" + Tag() + "][Reclaim] " + best.circuitDef.GetName() + " id=" + best.id + (bestNearLab ? " beside a factory" : "")
+        const string bestName = best.circuitDef.GetName();
+        Lifecycle::Retire(best, Tag() + (bestName == fusion ? " fusion replaced by advanced fusions"
+            : bestName == converter ? " T1 converter replaced by T2 converters" : " low-tier energy replaced by a fusion"));
+        GenericHelpers::LogUtil("[" + Tag() + "][Reclaim] " + bestName + " id=" + best.id + (bestNearLab ? " beside a factory" : "")
             + " by " + worker.circuitDef.GetName() + " " + worker.id + " | E +" + int(aiEconomyMgr.energy.income) + " pull " + int(aiEconomyMgr.energy.pull)
             + (level == 2 ? " (advanced solars too)" : ""), 1);
         return task;

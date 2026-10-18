@@ -189,6 +189,13 @@ namespace Main {
 		// FRONT (owner, 2026-10-16): after a fusion, reclaim winds and solars (advanced solars too once the
 		// margin allows), those round the factories first (src/settings/roles/front.as, off there)
 		Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion = true;
+		// FRONT (owner, 2026-10-16/17): eco ladder to a gantry: three fusions (winds, solars, advanced solars,
+		// T1 converters reclaimed once the first stands), advanced fusion, second advanced fusion (fusions
+		// reclaimed), more advanced fusions one at a time until metal income 175, then the gantry, its 6 turrets
+		// ordered from the frame, then advanced fusions again; T2 converters while energy would be wasted
+		// (src/settings/roles/front.as, off there)
+		Global::RoleSettings::Front::EcoLadder = true;
+		Global::RoleSettings::Front::EcoLadderGantryMetalIncome = 175.0f;   // owner, 2026-10-18 (150 in src)
 		// SUPPORT (owner, 2026-10-16): the same reclaim for SUPPORT (src/settings/roles/support.as, off there)
 		Global::RoleSettings::Support::ReclaimT1EnergyAfterFusion = true;
 		// All AIs (owner, 2026-10-16): 3 pinpointers in all across the allied SMRTBARbs, built by the richest
