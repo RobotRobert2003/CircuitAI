@@ -77,6 +77,11 @@ struct RangedPolicy {
     // commanders and reclaimers keep the full escape. Sustained rushes, rush
     // fallback, regrouping and the rear line are unchanged.
     float pokeIn = 0.f, pokeInDominant = .90f, pokeOut = 1.05f, pokeRatio = 2.f;
+    // Owner 2026-10-19 regimes (see cohort::PokeRegime): EVEN and OUTMATCHED
+    // hulls step in only above pokeHealth of max HP; a PRESS hull holds the
+    // deep band through its reload down to pokePressHealth; OUTMATCHED steps
+    // in again only pokePauseSeconds after its last shot.
+    float pokeHealth = .8f, pokePressHealth = .5f, pokePauseSeconds = 5.f;
     // Owner 2026-10-19: 0 = off. Armed static defences of this tech level or
     // lower (BAR customparams.techlevel, 1 when absent) are not coverage this
     // hull avoids: it picks firing sites, paths and stays inside their reach

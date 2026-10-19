@@ -119,9 +119,21 @@ inline bool Pokeable(float enemyRange,float enemyReach,float ownRange,float in,f
 inline bool Dominant(float own,float hostile,float ratio) {
     return hostile>0.f && own>=hostile*ratio;
 }
-// Step in once per reload: in while the weapon is ready, out while reloading.
-inline float PokeFraction(bool reloading,float in,float out) {
-    return reloading ? out : in;
+// Owner 2026-10-19: the local metal regime of a poke. PRESS when we outweigh
+// the opposition by ratio, OUTMATCHED when it outweighs us by ratio, else EVEN.
+enum class Poke { OUTMATCHED=-1, EVEN=0, PRESS=1 };
+inline Poke PokeRegime(float own,float hostile,float ratio) {
+    if(Dominant(own,hostile,ratio)) return Poke::PRESS;
+    if(hostile>0.f && hostile>=std::max(0.f,own)*ratio) return Poke::OUTMATCHED;
+    return Poke::EVEN;
+}
+// PRESS stays in the deep band, reload or not, until the hull drops to the
+// press health. EVEN steps in once per reload while above the poke health.
+// OUTMATCHED does the same, but only after the pause since its last shot.
+inline float PokeFraction(Poke regime,bool reloading,float health,bool paused,
+    float in,float pressIn,float out,float pokeHealth,float pressHealth) {
+    if(regime==Poke::PRESS) return health>pressHealth ? pressIn : out;
+    return !reloading && health>pokeHealth && !paused ? in : out;
 }
 inline float HealthValue(float cost,float health,float maximum) {
     return cost*std::clamp(health/std::max(1.f,maximum),0.f,1.f);

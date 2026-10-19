@@ -53,8 +53,24 @@ int main() {
     assert(!cohort::Pokeable(475,500,380,.95f,1.05f));
     assert(!cohort::Pokeable(380,402,380,0.f,1.05f)); // off by default
     assert(cohort::Dominant(2000,1000,2.f) && !cohort::Dominant(1900,1000,2.f) && !cohort::Dominant(500,0,2.f));
-    assert(cohort::PokeFraction(false,.95f,1.05f)==.95f);
-    assert(cohort::PokeFraction(true,.95f,1.05f)==1.05f); // reloading: step out
+    // Owner 2026-10-19 regimes: press at 1.5:1, even, outmatched at 1:1.5.
+    using cohort::Poke;
+    assert(cohort::PokeRegime(1500,1000,1.5f)==Poke::PRESS);
+    assert(cohort::PokeRegime(1400,1000,1.5f)==Poke::EVEN);
+    assert(cohort::PokeRegime(1000,1400,1.5f)==Poke::EVEN);
+    assert(cohort::PokeRegime(1000,1500,1.5f)==Poke::OUTMATCHED);
+    assert(cohort::PokeRegime(0,500,1.5f)==Poke::OUTMATCHED);
+    assert(cohort::PokeRegime(500,0,1.5f)==Poke::EVEN);
+    // EVEN: in while ready and above 80% HP; out while reloading or damaged.
+    assert(cohort::PokeFraction(Poke::EVEN,false,.9f,false,.95f,.9f,1.05f,.8f,.5f)==.95f);
+    assert(cohort::PokeFraction(Poke::EVEN,true,.9f,false,.95f,.9f,1.05f,.8f,.5f)==1.05f);
+    assert(cohort::PokeFraction(Poke::EVEN,false,.8f,false,.95f,.9f,1.05f,.8f,.5f)==1.05f);
+    // OUTMATCHED: a ready, healthy hull still waits out its pause.
+    assert(cohort::PokeFraction(Poke::OUTMATCHED,false,.9f,true,.95f,.9f,1.05f,.8f,.5f)==1.05f);
+    assert(cohort::PokeFraction(Poke::OUTMATCHED,false,.9f,false,.95f,.9f,1.05f,.8f,.5f)==.95f);
+    // PRESS: stays in through the reload, out only at the press health.
+    assert(cohort::PokeFraction(Poke::PRESS,true,.7f,false,.95f,.9f,1.05f,.8f,.5f)==.9f);
+    assert(cohort::PokeFraction(Poke::PRESS,true,.5f,false,.95f,.9f,1.05f,.8f,.5f)==1.05f);
     assert(cohort::Admit({400,0},{0,0},450));
     assert(!cohort::Admit({800,0},{0,0},450)); // no recruitment through a chain
     assert(!cohort::CanRush(380,325,45,45,840,810,1.75,6,440)); // kite Centurion
