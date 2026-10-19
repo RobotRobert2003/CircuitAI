@@ -560,7 +560,10 @@ void CFactoryManager::ReadConfig()
             number("poke_in_dominant", policy.pokeInDominant, .5f, .99f);
             number("poke_out", policy.pokeOut, 1.f, 1.5f);
             number("poke_ratio", policy.pokeRatio, 1.f, 10.f);
-            // Owner 2026-10-19: the static press.
+            // Owner 2026-10-19: poke regimes and the static press.
+            number("poke_health", policy.pokeHealth, 0.f, 1.f);
+            number("poke_press_health", policy.pokePressHealth, 0.f, 1.f);
+            number("poke_pause_seconds", policy.pokePauseSeconds, 0.f, 60.f);
             number("press_static", policy.pressStatic, 0.f, 3.f);
             // The cohort controller has its own static admission (assault list).
             if (policy.pressStatic > 0.f && policy.coordinated) valid = false;

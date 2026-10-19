@@ -342,10 +342,14 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     // the closest similar-range mobile, whatever the local metal balance; the
     // band is deeper when our side clearly outweighs the opposition. Sustained
     // rushes, rush fallback, regrouping and the rear line keep their movement.
+    // Owner 2026-10-19: the local metal ratio picks the regime. PRESS holds
+    // the deep band to win; EVEN trades once per reload; OUTMATCHED trades
+    // only intermittently. EVEN and OUTMATCHED hulls pop out at poke_health.
     const bool poking=assessed && policy.pokeIn>0.f && group.target>=0
         && !group.sustainedRush && !group.rushFallback && !group.formationRear
         && group.mode!=cohort::Mode::REGROUP;
-    const bool dominant=poking && cohort::Dominant(group.ownValue,group.hostileValue,policy.pokeRatio);
+    const cohort::Poke regime=poking?cohort::PokeRegime(group.ownValue,group.hostileValue,policy.pokeRatio):cohort::Poke::EVEN;
+    const bool dominant=poking && regime==cohort::Poke::PRESS;
     const float pokeIn=dominant?policy.pokeInDominant:policy.pokeIn;
     const auto pokeable=[&](const CRangedWorld::Contact& c) {
         return poking && c.def && c.mobile && c.armed && !c.def->IsEnemyRoleAny(CCircuitDef::COMM)
@@ -443,13 +447,18 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     // In to the band while the weapon is ready, out to poke_out while it
     // reloads: roughly one step in per reload cycle, straight along the line
     // to the closest pokeable enemy so each step is as short as possible.
+    // The regime (above) decides whether reload, health or a pause apply.
     const bool poke=closest!=nullptr;
     int phase=-1;
     if(poke) {
         const bool reloading=liveWeapon && liveWeapon->GetReloadFrame()>frame;
-        phase=reloading?0:1;
-        const float reach=world.Range(caps.weapons.front(),pos,closest->pos)
-            *cohort::PokeFraction(reloading,pokeIn,policy.pokeOut);
+        const float health=unit->GetUnit()->GetHealth()/std::max(1.f,def->GetHealth());
+        const bool paused=regime==cohort::Poke::OUTMATCHED
+            && frame<lastShotFrame+int(policy.pokePauseSeconds*FRAMES_PER_SEC);
+        const float fraction=cohort::PokeFraction(regime,reloading,health,paused,
+            policy.pokeIn,policy.pokeInDominant,policy.pokeOut,policy.pokeHealth,policy.pokePressHealth);
+        phase=fraction<1.f?1:0;
+        const float reach=world.Range(caps.weapons.front(),pos,closest->pos)*fraction;
         AIFloat3 away=pos-closest->pos; away.Normalize2D();
         if(away.SqLength2D()<.5f) away=group.back;
         point=closest->pos+away*reach;
@@ -588,10 +597,10 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     SelectTarget(unit,best>=0?contacts[best].id:-1,weapon,damage,score);
     if(trace && frame>=traceFrame+150) {
         traceFrame=frame;
-        ai->LOG("COHORT: unit=%d members=%u mode=%d target=%d radius=%.0f dest=%.0f,%.0f danger=%d reason=%d loss=%.3f advantage=%.3f committed=%d supporting=%d screen=%.0f poke=%d dominant=%d own=%.0f hostile=%.0f closest=%d",
+        ai->LOG("COHORT: unit=%d members=%u mode=%d target=%d radius=%.0f dest=%.0f,%.0f danger=%d reason=%d loss=%.3f advantage=%.3f committed=%d supporting=%d screen=%.0f poke=%d regime=%d own=%.0f hostile=%.0f closest=%d",
             id,unsigned(group.members.size()),int(group.mode),group.target,group.radius,point.x,point.z,danger?danger->id:-1,
             int(group.reason),group.loss,group.advantage,int(group.committed),int(group.supporting),group.screenDepth,
-            phase,int(dominant),group.ownValue,group.hostileValue,closest?closest->id:-1);
+            phase,int(regime),group.ownValue,group.hostileValue,closest?closest->id:-1);
     }
 }
 
