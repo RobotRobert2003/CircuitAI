@@ -123,9 +123,9 @@ bool CRangedEngagement::Spam(const RangedPolicy& p,const CRangedWorld::Contact& 
 }
 void CRangedEngagement::UpdateFireState(CCircuitUnit* unit,bool open)
 {
-    // One state change per second at most; Recoil keeps the last one sent.
+    // Holding is immediate; reopening waits a second after the last change.
     const int frame=ai->GetLastFrame();
-    if(open==fireOpen || frame<fireStateFrame+30) return;
+    if(open==fireOpen || (open && frame<fireStateFrame+30)) return;
     fireOpen=open; fireStateFrame=frame;
     unit->TrySetFireState(open?CCircuitDef::FireType::OPEN:CCircuitDef::HOLD);
     if(trace) ai->LOG("RANGED: fire unit=%d open=%d",id,int(open));
@@ -727,8 +727,11 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
     for(int i:nearby) {
         const auto& c=contacts[i];
         if(policy.fireAtWill && c.def && c.pos.y>=-20.f && !c.def->IsAbleToFly()) {
-            const float d2=pos.SqDistance2D(c.pos);
-            if(d2<=maxRange*maxRange) (Spam(policy,c)?spamInRange:otherInRange)=true;
+            // Engine reach includes the target's radius. Spam is held 200 elmos
+            // early: a volley fired just before it walks in still lands on it.
+            const bool spam=Spam(policy,c);
+            const float reach=maxRange+c.radius+(spam?200.f:64.f);
+            if(pos.SqDistance2D(c.pos)<=reach*reach) (spam?spamInRange:otherInRange)=true;
         }
         if(Spam(policy,c)) continue; // owner 2026-10-19: never a priority target
         if(!c.los && !policy.allowRadar) continue;
@@ -781,7 +784,9 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             }
         }
     }
-    if(policy.fireAtWill) UpdateFireState(unit,best>=0 || (otherInRange && !spamInRange));
+    // A priority target still fires on HOLD, so spam in reach always holds:
+    // an unreachable priority target would otherwise hand the volley to spam.
+    if(policy.fireAtWill) UpdateFireState(unit,!spamInRange && (best>=0 || otherInRange));
     if(best>=0) {
         const auto& c=contacts[best];
         SelectTarget(unit,c.id,bestWeapon,bestDamage,bestScore);

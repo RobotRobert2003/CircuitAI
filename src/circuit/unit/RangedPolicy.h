@@ -94,8 +94,9 @@ struct RangedPolicy {
     float assistRadius = 0.f;
     // Owner 2026-10-19: fire at will except at spam. Engine auto-fire is
     // allowed while no spam contact (mobile, not a commander, metal cost at
-    // most spamMaxCost) is in weapon range, or while our own priority target
-    // is set; otherwise fire is held. Spam is never our priority target.
+    // most spamMaxCost) is in weapon reach and a non-spam target is; otherwise
+    // fire is held (our priority target still fires). Spam is never our
+    // priority target.
     // Individual (non-coordinated) controller only. 0 = no spam class.
     bool fireAtWill = false;
     float spamMaxCost = 0.f;
