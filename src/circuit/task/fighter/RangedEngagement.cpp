@@ -116,6 +116,20 @@ void CRangedEngagement::SelectTarget(CCircuitUnit* unit,int selected,int weapon,
     target=selected; weaponIndex=weapon; targetFrame=frame; reservedDamage=damage;
     if(selected>=0) world.ReserveShot(id,selected,damage,frame+90);
 }
+bool CRangedEngagement::Spam(const RangedPolicy& p,const CRangedWorld::Contact& c)
+{
+    return p.spamMaxCost>0.f && c.def && c.mobile && c.cost<=p.spamMaxCost
+        && !c.def->IsEnemyRoleAny(CCircuitDef::COMM);
+}
+void CRangedEngagement::UpdateFireState(CCircuitUnit* unit,bool open)
+{
+    // One state change per second at most; Recoil keeps the last one sent.
+    const int frame=ai->GetLastFrame();
+    if(open==fireOpen || frame<fireStateFrame+30) return;
+    fireOpen=open; fireStateFrame=frame;
+    unit->TrySetFireState(open?CCircuitDef::FireType::OPEN:CCircuitDef::HOLD);
+    if(trace) ai->LOG("RANGED: fire unit=%d open=%d",id,int(open));
+}
 void CRangedEngagement::Hold(CCircuitUnit* unit,bool unsafe)
 {
     // Range eligibility alone cannot cancel a facing step. Safety owns an
@@ -709,8 +723,14 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
         withdrawalUntil=0;
     }
     int best=-1,bestWeapon=-1; float bestScore=-1.f,bestDamage=0.f;
+    bool spamInRange=false, otherInRange=false; // fire_at_will
     for(int i:nearby) {
         const auto& c=contacts[i];
+        if(policy.fireAtWill && c.def && c.pos.y>=-20.f && !c.def->IsAbleToFly()) {
+            const float d2=pos.SqDistance2D(c.pos);
+            if(d2<=maxRange*maxRange) (Spam(policy,c)?spamInRange:otherInRange)=true;
+        }
+        if(Spam(policy,c)) continue; // owner 2026-10-19: never a priority target
         if(!c.los && !policy.allowRadar) continue;
         if((c.mobile && !policy.allowMobile)||(!c.mobile && !policy.allowStatic)) continue;
         // D-294 (owner correction): artillery and radar are a pairing, so a
@@ -761,6 +781,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             }
         }
     }
+    if(policy.fireAtWill) UpdateFireState(unit,best>=0 || (otherInRange && !spamInRange));
     if(best>=0) {
         const auto& c=contacts[best];
         SelectTarget(unit,c.id,bestWeapon,bestDamage,bestScore);

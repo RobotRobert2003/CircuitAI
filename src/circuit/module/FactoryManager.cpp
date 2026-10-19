@@ -519,6 +519,8 @@ void CFactoryManager::ReadConfig()
 			boolean("advance_unknown_radar", policy.advanceUnknownRadar);
 			boolean("hold_fireline", policy.holdFireline);
 			boolean("stage_when_blocked", policy.stageWhenBlocked);
+			boolean("fire_at_will", policy.fireAtWill);
+			number("spam_max_cost", policy.spamMaxCost, 0.f, 2000.f);
 			boolean("coordinated", policy.coordinated);
             // Fireline holding is an individual forward-arc doctrine. Reject
             // unsupported cohort ownership instead of silently allowing retreats.

@@ -1,0 +1,17 @@
+{
+  "name":"medusa-army-mobile", "unit":"legmed",
+  "description":"Six Medusas behind an allied tank line; an enemy mobile army walks into that line while three HLTs sit further back. Measures Medusa volleys at mobiles vs statics in a crowded front.",
+  "map":"All That Glitters v2.2.3", "map_key":"glitters",
+  "starts":[[4000,2400],[4000,9800]], "side":"legion",
+  "camera":[4000,5000,2400], "photos":[30,60,120],
+  "groups":[
+    {"unit":"armarad","count":1,"team":0,"position":[3200,4300]},
+    {"unit":"corhlt","count":3,"team":1,"position":[3500,5500],"spacing":500},
+    {"unit":"armbull","count":10,"team":0,"position":[3400,4700],"columns":10,"spacing":130},
+    {"unit":"legmed","count":6,"team":0,"position":[3500,4050],"columns":6,"spacing":200,"after_seconds":5},
+    {"unit":"correap","count":12,"team":1,"position":[3300,6400],"columns":6,"spacing":200,"after_seconds":25},
+    {"unit":"corraid","count":12,"team":1,"position":[3300,6700],"columns":6,"spacing":200,"after_seconds":25}
+  ],
+  "enemy_waypoints":[[4000,4500]],
+  "assertions":{"min_kills":4,"min_shooters":3,"max_losses":30}
+}

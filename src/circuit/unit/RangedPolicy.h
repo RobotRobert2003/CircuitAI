@@ -92,6 +92,13 @@ struct RangedPolicy {
     // this radius that an allied screen is already fighting (CRangedWorld::Engaged).
     // Individual (non-coordinated) controller only.
     float assistRadius = 0.f;
+    // Owner 2026-10-19: fire at will except at spam. Engine auto-fire is
+    // allowed while no spam contact (mobile, not a commander, metal cost at
+    // most spamMaxCost) is in weapon range, or while our own priority target
+    // is set; otherwise fire is held. Spam is never our priority target.
+    // Individual (non-coordinated) controller only. 0 = no spam class.
+    bool fireAtWill = false;
+    float spamMaxCost = 0.f;
     float assistMargin = 150.f; // ally counts as engaged within its ground range + margin + contact radius
     bool assistScreen = true;   // assist firing sites require an allied screen toward the target
 };
