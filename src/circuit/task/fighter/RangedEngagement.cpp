@@ -39,7 +39,12 @@ CRangedEngagement::CRangedEngagement(CCircuitAI* ai,IUnitTask* owner,CCircuitUni
     // Priority targets are explicit user targets in BAR and can fire on HOLD.
     // Automatic fire would bypass precision/splash selection while approaching
     // the firing band (the engine includes target radius in reach).
-    unit->TrySetFireState(CCircuitDef::HOLD);
+    // Owner 2026-10-19: a coordinated fire_at_will cohort (Thug, Mace) fires
+    // at will for its whole life: its fast reload wastes nothing on stray
+    // targets, while held fire left it silent between priority picks.
+    const auto& policy=unit->GetCircuitDef()->GetRangedPolicy();
+    fireOpen=policy.coordinated && policy.fireAtWill;
+    unit->TrySetFireState(fireOpen?CCircuitDef::FireType::OPEN:CCircuitDef::HOLD);
     ai->LOG("RANGED: assigned %s(%d) weapons=%u",unit->GetCircuitDef()->GetDef()->GetName(),id,unsigned(caps.weapons.size()));
     if(caps.weapons.empty()) ai->LOG("[INVARIANT] INV-147 ranged unit %d has no compatible loaded weapon",id);
     if(trace) for(const auto& w:caps.weapons) ai->LOG("RANGED: weapon unit=%d index=%d range=%.1f speed=%.3f gravity=%.3f category=%d forward=%d",id,w.index,w.range,w.speed,w.gravity,w.category,int(w.forward));

@@ -97,7 +97,8 @@ struct RangedPolicy {
     // most spamMaxCost) is in weapon reach and a non-spam target is; otherwise
     // fire is held (our priority target still fires). Spam is never our
     // priority target.
-    // Individual (non-coordinated) controller only. 0 = no spam class.
+    // Individual controller: as above (0 = no spam class). Coordinated cohort:
+    // fire at will always, spamMaxCost unused (owner 2026-10-19, Thug/Mace).
     bool fireAtWill = false;
     float spamMaxCost = 0.f;
     float assistMargin = 150.f; // ally counts as engaged within its ground range + margin + contact radius
