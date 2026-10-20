@@ -516,6 +516,7 @@ void CMilitaryManager::ReadConfig()
 		empInfo.mobileMaxAge = empCfg.get("mobile_max_age", 30).asInt() * FRAMES_PER_SEC;
 		empInfo.minTargets = std::max(1, empCfg.get("min_targets", 1).asInt());
 		empInfo.structuresFirst = empCfg.get("structures_first", true).asBool();
+		empInfo.shieldsSecond = empCfg.get("shields_second", true).asBool();
 		empInfo.structuresFirstMinCost = empCfg.get("structures_first_min_cost", 1500.f).asFloat();
 		empInfo.isEnabled = isRoles && (empInfo.empableFlag != 0);
 		circuit->LOG("CONFIG %s: emp %s | empable=0x%x declineRate=%.0f minStun=%.1fs mobileMaxAge=%is",

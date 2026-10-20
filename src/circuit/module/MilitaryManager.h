@@ -181,6 +181,9 @@ public:
 		int mobileMaxAge = 0;        // frames a mobile's last known position stays usable
 		int minTargets = 1;
 		bool structuresFirst = true;  // only structures get an uncapped stun
+		// Static shield generators rank right after the anti-nuke, above every
+		// other structure: stunned, a shield drops the bubble over its porc.
+		bool shieldsSecond = true;
 		// Only structures at or above this cost keep their rank above mobiles;
 		// cheaper ones compete with mobiles on cost. "Large statics first, then
 		// the most expensive thing in range" - a 1 020-metal wall should not

@@ -762,7 +762,8 @@ bool CSuperTask::SelectSuspectedJammer(CCircuitUnit* unit, CCircuitDef* cdef)
  * unit_paralyze_damage_limit.lua caps mobiles at 20 s but not buildings, which
  * is why structures rank first. Anti-nuke is the one class ranked above raw
  * value: stunning it is what lets a nuke through, and the EMP missile itself
- * carries no `targetable`, so the anti-nuke cannot intercept it.
+ * carries no `targetable`, so the anti-nuke cannot intercept it. Static shield
+ * generators come next (owner, 2026-10-20), then large structures, then the rest.
  */
 bool CSuperTask::SelectEmpTarget(CCircuitUnit* unit, CCircuitDef* cdef)
 {
@@ -796,13 +797,18 @@ bool CSuperTask::SelectEmpTarget(CCircuitUnit* unit, CCircuitDef* cdef)
 		const bool isMobile = edef->IsMobile();
 		if (!isMobile && edef->IsRespRoleAny(emp.antiNukeRole)) {
 			rank = 0;
+		} else if (!isMobile && emp.shieldsSecond && (edef->GetMaxShield() > 0.f)) {
+			// A static plasma deflector (Armada/Cortex gate and floating gate,
+			// Legion deflector and T3 shield): stunned, it drops its bubble and
+			// the porc and artillery it covers are open to everything else.
+			rank = 1;
 		} else if (!isMobile && (!emp.structuresFirst || e.cost >= emp.structuresFirstMinCost)) {
-			rank = 1;  // a large structure: LRPC, bastion, silo, AFUS, gantry
+			rank = 2;  // a large structure: LRPC, bastion, silo, AFUS, gantry
 		} else {
 			// Everything else - cheap structures and every mobile - by cost.
 			// A target that cannot be stunned was already rejected above, so
 			// "highest metal cost except EMP-immune" is what this rank is.
-			rank = 2;
+			rank = 3;
 		}
 		// Value is metal: it floats Ragnarok, AFUS, gantry and silo above a cheap
 		// turret without any of them needing to be tagged.
