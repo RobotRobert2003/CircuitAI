@@ -63,6 +63,9 @@ private:
         float t3ScreenProgress=0;
         springai::AIFloat3 t3ScreenPos;
         int unseenUntil=0; // D-294: withdrawing cloaked from fire it cannot see
+        // Priority D-gun (owner 2026-10-20): frame of the pending override
+        // shot, its target, and when that target first stood in reach.
+        int priorityShot=-1,priorityTarget=-1,priorityInReach=-1;
         float t3Closest=0,t3Juke=0,t3Standoff=0,t3MinHealth=0,t3Radius=0,t3Splash=0,t3Cost=0,t3Advance=0,t3Reach=0;
         springai::AIFloat3 t3Anchor,t3LastPos,t3Heading; // heading: last direction of travel
         std::vector<int> farT3; int farT3Frame=-10000; // D-294 artillery beyond scan
@@ -100,6 +103,9 @@ private:
         float frontDistance=1600,frontStandoff=650,frontRadius=500,frontThreat=3;
         float t3Intercept=1,t3Health=.2f,t3Distance=1000,detectionMargin=32;
         float afusDefenceRadius=0; // opt-in script policy; zero preserves ordinary combat
+        // Owner 2026-10-20: a Juggernaut, Titan, Behemoth or Sol Invictus in
+        // D-gun reach is shot ahead of everything else (script priority_dgun 0 = off).
+        float priorityDGun=1;
         // D-293: fall back to the backline porc line before a capable group.
         bool fallback=true;
         float fallbackMetal=400,fallbackRangeScale=2,fallbackGroupRadius=400;
@@ -178,7 +184,10 @@ private:
     bool Intercept(CCircuitUnit* unit,State& state,int frame);
     void EndT3(CCircuitUnit* unit,State& state,int frame,const char* reason);
     void Decline(CCircuitUnit* unit,State& state,const commander::Contact& target,int frame,const char* reason);
-    bool Fire(CCircuitUnit* unit,State& state,const commander::Line& line,int frame);
+    bool Fire(CCircuitUnit* unit,State& state,const commander::Line& line,int frame,bool priority=false);
+    // Priority D-gun override (CommanderIntercept.cpp), ahead of the T3 plan.
+    std::set<int> priorityDefs; bool priorityResolved=false;
+    bool PriorityDGun(CCircuitUnit* unit,State& state,int frame);
     bool FallbackActive(const State& state,int frame) const { return state.fallback && frame<state.fallbackUntil; }
     // Engine reachability indexes sectors by position without bounds checks
     // (KI register, GetClosestSector). Reject garbage/off-map points first.

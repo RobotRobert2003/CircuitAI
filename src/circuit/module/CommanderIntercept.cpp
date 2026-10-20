@@ -107,7 +107,7 @@ bool CCommanderControl::CloakSafe(CCircuitUnit* unit,Point from,Point to,float s
     return false;
 }
 
-bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& line,int frame) {
+bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& line,int frame,bool priority) {
     const auto pos=unit->GetPos(frame); const float range=unit->GetDGunRange()-12;
     auto* def=unit->GetCircuitDef();
     if(s.afusEngagement && protectedAfus<0) {
@@ -126,7 +126,9 @@ bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& 
     // line shot or fallback shot must not bypass T3 death-blast protection.
     // O(local contacts), only when issuing a shot; definitions are AI-owned
     // immutable caches. Predict the same intersections used by shot claims.
-    if(options.t3Trade<=0) {
+    // A priority D-gun (PriorityDGun) is ordered ahead of survival: the owner
+    // trades the commander's risk for the shot at a Juggernaut-class unit.
+    if(options.t3Trade<=0 && !priority) {
         const auto& cap=ai->GetMilitaryManager()->GetRangedWorld()->CapabilitiesFor(def);
         const int armor=std::max(0,def->GetDef()->GetArmorType());
         float blast=0; bool t3=false;
@@ -174,6 +176,94 @@ bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& 
     s.route.clear(); Transition(unit,s,Mode::PENDING,frame);
     TRY_UNIT(ai,unit,unit->GetUnit()->DGunPosition(aim,0,frame+30);)
     ai->LOG("[Commander] unit=%i shot_pending target=%i kills=%i value=%.1f energy=%.1f",unit->GetId(),line.target,line.kills,line.value,ai->GetEconomyManager()->GetEnergyCur());
+    return true;
+}
+
+bool CCommanderControl::PriorityDGun(CCircuitUnit* unit,State& s,int frame) {
+    if(!priorityResolved) {
+        priorityResolved=true;
+        // Juggernaut, Titan, Behemoth, Sol Invictus (and its archaic version).
+        for(const char* name:{"corkorg","armbanth","corjugg","legeheatraymech","legeheatraymech_old"})
+            if(auto* d=ai->GetCircuitDef(name)) priorityDefs.insert(d->GetId());
+    }
+    // Our own pending override shot: WeaponFired clears pending on dispatch.
+    if(s.priorityShot>=0) {
+        if(s.pending<0 || unit->GetDGunReloadFrame()>frame) {
+            if(s.pending>=0) { s.fired=frame; s.pending=-1; }
+            ai->LOG("[CommanderPriority] unit=%i target=%i action=fired aim=%.1fs frame=%i",
+                unit->GetId(),s.priorityTarget,float(frame-s.priorityShot)/FRAMES_PER_SEC,frame);
+            s.priorityShot=-1;
+        } else if(frame-s.pending>30) {
+            ai->LOG("[CommanderPriority] unit=%i target=%i action=timeout frame=%i",unit->GetId(),s.priorityTarget,frame);
+            s.pending=-1; s.leaseUntil=0; s.priorityShot=-1;
+            ai->GetAllyTeam()->GetCommanderShots().Release(ai->GetTeamId(),unit->GetId());
+        } else return true;
+    }
+    if(options.priorityDGun<=0 || priorityDefs.empty()) return false;
+    const AIFloat3 pos=unit->GetPos(frame);
+    if(pos.y<0.f) return false; // BAR D-guns do not fire submerged
+    auto* def=unit->GetCircuitDef();
+    const float range=unit->GetDGunRange()-12;
+    const float speed=std::max(1.f,def->GetDGunDef()->GetDef()->GetProjectileSpeed()*30.f);
+    const float width=std::min(24.f,std::max(4.f,def->GetDGunDef()->GetAoe()*.25f));
+    // Nearest listed unit in reach: the shot's lane must pass through its body
+    // (half its radius past the D-gun's end), on the surface, and no friendly
+    // commander in the lane. Other friendlies in the lane are accepted losses.
+    const commander::Contact* target=nullptr; commander::Line best; float nearest=1e9f;
+    for(const auto& c:contacts) {
+        if(c.friendly || c.blocker || !c.targetable) continue;
+        auto* enemy=ai->GetEnemyInfo(c.id);
+        if(!enemy || !enemy->GetCircuitDef() || !priorityDefs.count(enemy->GetCircuitDef()->GetId())) continue;
+        const float distance=commander::Length(c.pos-P(pos));
+        if(distance>range+c.radius*.5f || distance>=nearest) continue;
+        if(std::abs(c.height-std::max(0.f,pos.y))>range*.5f) continue;
+        const Point lead=c.pos+c.velocity*(distance/speed);
+        commander::Line line; line.direction=commander::Normal(lead-P(pos));
+        if(commander::Length(line.direction)<.5f) continue;
+        bool commanderInLane=false;
+        for(const auto& f:contacts) {
+            if(!f.friendly || !f.blocker) continue;
+            const float along=commander::Dot(f.pos-P(pos),line.direction);
+            const Point d=f.pos+f.velocity*(std::max(0.f,along)/speed)-P(pos);
+            if(commander::Dot(d,line.direction)>=0 && commander::Intersects(d,line.direction,range,f.radius+width+options.friendlyMargin)) {
+                commanderInLane=true; break;
+            }
+        }
+        if(commanderInLane) continue;
+        line.target=c.id; line.value=c.cost; line.requiredHit=true;
+        target=&c; best=line; nearest=distance;
+    }
+    if(!target) { s.priorityInReach=-1; return false; }
+    if(s.priorityTarget!=target->id || s.priorityInReach<0) {
+        s.priorityTarget=target->id; s.priorityInReach=frame;
+        ai->LOG("[CommanderPriority] unit=%i target=%i def=%s action=in_reach distance=%.0f range=%.0f frame=%i",
+            unit->GetId(),target->id,ai->GetEnemyInfo(target->id)->GetCircuitDef()->GetDef()->GetName(),nearest,range,frame);
+    }
+    // Actual bank only: the shot outranks every other commander's reserve.
+    const float bank=ai->GetEconomyManager()->GetEnergyCur();
+    if(!unit->IsDGunReady(frame,bank)) {
+        if(frame%30<3) ai->LOG("[CommanderPriority] unit=%i target=%i action=wait reason=%s energy=%.0f frame=%i",
+            unit->GetId(),target->id,unit->GetDGunReloadFrame()>frame?"reload":"energy",bank,frame);
+        return false;
+    }
+    auto* task=dynamic_cast<CCommanderTask*>(unit->GetTask());
+    if(!task) {
+        auto* current=unit->GetTask();
+        task=ai->GetBuilderManager()->EnqueueCommander(current);
+        ai->GetBuilderManager()->AssignTask(unit,task);
+        if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return false; }
+        s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); s.failed=0; ++operation;
+        unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
+        TRY_UNIT(ai,unit,unit->CmdStop();)
+    }
+    if(task->GetAssignees().size()!=1 || !task->GetAssignees().count(unit) || unit->GetDGunAct()) {
+        ai->LOG("[INVARIANT] INV-214 commander priority shot has competing owner unit=%i",unit->GetId());
+        task->Resume(unit); return true;
+    }
+    if(!Fire(unit,s,best,frame,true)) return false;
+    s.priorityShot=frame;
+    ai->LOG("[CommanderPriority] unit=%i target=%i action=fire distance=%.0f in_reach=%.1fs energy=%.0f frame=%i",
+        unit->GetId(),target->id,nearest,float(frame-s.priorityInReach)/FRAMES_PER_SEC,bank,frame);
     return true;
 }
 

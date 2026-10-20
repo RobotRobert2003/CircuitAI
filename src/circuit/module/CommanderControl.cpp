@@ -147,7 +147,7 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"move_resend_seconds",&options.moveResendSeconds,0,3},{"fallback_goal_hold_seconds",&options.fallbackGoalHoldSeconds,0,5},
         {"t3_intercept",&options.t3Intercept,0,1},{"t3_health",&options.t3Health,.1f,.5f},
         {"t3_distance",&options.t3Distance,250,2000},{"detection_margin",&options.detectionMargin,8,200},
-        {"afus_defence_radius",&options.afusDefenceRadius,0,5000},
+        {"afus_defence_radius",&options.afusDefenceRadius,0,5000},{"priority_dgun",&options.priorityDGun,0,1},
         {"fallback_metal",&options.fallbackMetal,0,20000},{"fallback_range_scale",&options.fallbackRangeScale,.5f,6},
         {"fallback_group_radius",&options.fallbackGroupRadius,50,2000},{"fallback_offset",&options.fallbackOffset,0,600},
         {"fallback_search",&options.fallbackSearch,300,10000},{"fallback_hold_seconds",&options.fallbackHoldSeconds,0,30},
@@ -491,6 +491,9 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
     const float range=unit->GetDGunRange()-12;
     Observe(unit,frame);
     if(trace) ai->LOG("[CommanderTrace] observation unit=%i contacts=%i seeds=%i threats=%i y=%.0f",unit->GetId(),int(contacts.size()),int(seeds.size()),int(threats.size()),pos.y);
+    // Owner 2026-10-20: a Juggernaut, Titan, Behemoth or Sol Invictus in
+    // D-gun reach is shot first, ahead of the T3 plan and every withdrawal.
+    if(PriorityDGun(unit,s,frame)) return;
     // D-294: a T3 in range is engaged from the line (concealed per-T3 plan)
     // ahead of the D-293 withdrawal, which then covers everything else.
     if(Intercept(unit,s,frame)) return;
