@@ -165,6 +165,25 @@ namespace Sea {
             bool ZoneAroundAllies = true;
             // D-344: converter annexes a full economy block may grow (0 disables),
             // and ring candidates tried per ask (one ask every two seconds at most).
+            // Diagnostic [SEA][State]: ships within this distance of the start count as home.
+            float DiagnosticHomeRadius = 1500.0f;
+            // D-346: damaged ships fall back just outside known enemy reach
+            // (+ ForwardRepairBuffer) and wait there to be healed, instead of
+            // sailing to base. false restores the base retreat.
+            bool ForwardRepair = true;
+            // D-347: a rez sub keeps a resurrection this long before it may be
+            // reassigned (repair jobs used to interrupt it every 2 s).
+            int RecoveryResurrectCommitSeconds = 120;
+            // D-348: route-order volume (2026-10-19 online lag with 144 subs).
+            int FleetRerouteSeconds = 3;        // same-target re-route interval
+            int FleetRoutesPerTick = 16;        // combat re-routes per census, rest next census
+            bool MergeChasingCohorts = true;    // one pack per hull chasing one target
+            float ChaseMergeRadius = 900.0f;
+            float ForwardRepairBuffer = 250.0f;
+            float ForwardRepairHealth = 0.75f;     // publish a point below this health
+            float ForwardRepairMaxDistance = 2000.0f;
+            int ForwardRepairSeconds = 30;         // a point expires unless renewed
+            float UnknownContactRange = 500.0f;    // sonar contact with no definition
             int ConverterAnnexes = 4;
             int AnnexCandidates = 6;
             float SubmarineRetreatRadius = 2000.0f;
@@ -206,6 +225,7 @@ namespace Sea {
             float SubmarineReplacementRatio = 1.15f;
             float SubmarineReplacementRadius = 384.0f;
             int SubmarineReplacementSeconds = 90;
+            int SubmarineReplacementHoldSeconds = 60; // D-348: a reserve held this long joins the fight
             array<string> FirelineSubmarineDefinitions = { "armsub", "corsub", "legnavysub" };
             // Master switch for SEA per-hull MOVE compaction (D-243).
             bool CompactMoveRoutes = true;
@@ -300,6 +320,7 @@ namespace Sea {
             float AirCounterRatio = 0.7f;
             float SubCounterRatio = 1.2f;
             int FleetThreatMemorySeconds = 30; // retain a lost contact's cost, never its live hidden position
+            int SubThreatMemorySeconds = 120;  // D-347: submarines vanish between sonar pings; keep their cost longer
             float UnknownSubContactMetal = 500.0f; // conservative sonar uncertainty, not a revealed UnitDef cost
             float FleetAirCoverShare = 0.06f;
             float FleetSubCoverShare = 0.3f;

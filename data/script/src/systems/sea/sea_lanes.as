@@ -56,10 +56,19 @@ namespace SeaLanes {
         const string name = u.circuitDef.GetName();
         return UnitHelpers::IsT1Shipyard(name) || UnitHelpers::IsT2Shipyard(name) || UnitHelpers::IsWaterGantry(name);
     }
+    // D-350: the factory opening, the middle of its front edge (the footprint
+    // depth along the facing is X for east/west-facing buildings).
+    float HalfDepth(CCircuitUnit@ u, int f) {
+        return float((f == 1 || f == 3) ? u.circuitDef.GetFootprintX() : u.circuitDef.GetFootprintZ()) * 4.0f;
+    }
+    AIFloat3 Opening(CCircuitUnit@ u) {
+        const int f = aiTerrainMgr.GetBuildingFacing(u);
+        return LayoutHelpers::Offset(u.GetPos(ai.frame), f, 0, HalfDepth(u, f) + 8.0f);
+    }
     AIFloat3 Mouth(CCircuitUnit@ u) {
         const AIFloat3 p = u.GetPos(ai.frame);
         const int f = aiTerrainMgr.GetBuildingFacing(u);
-        const float half = float(u.circuitDef.GetFootprintZ()) * 4.0f;
+        const float half = HalfDepth(u, f);
         for (float along = half + 192.0f; along >= 32.0f; along -= 64.0f) {
             const AIFloat3 q = LayoutHelpers::Offset(p, f, 0, along);
             if (aiBattle.Height(q) < -8.0f) return q;
@@ -146,7 +155,10 @@ namespace SeaLanes {
                 if (d < bestStart) { bestStart = d; kind = k; water = w; land = l; }
             }
         }
-        lane.points.insertLast(mouth);
+        // Drawn from the factory opening; routed from the first open water
+        // beyond it (the route search needs a navigable start).
+        lane.points.insertLast(Opening(factory));
+        if (MapHelpers::SqDist(lane.points[0], mouth) > 16.0f * 16.0f) lane.points.insertLast(mouth);
         AIFloat3 from = mouth;
         if (contact.x >= 0) {
             Append(lane.points, aiBattle.GetTerrainRoute(from, contact, 5, 10, 1, 3, 1000000));

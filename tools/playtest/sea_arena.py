@@ -234,9 +234,13 @@ def prepare(a):
         # Observation only; do not force retreat, alter health or command ships.
         path=staged/'src/systems/sea/sea_retreat.as'
         source=path.read_text()
-        needle='CCircuitUnit@ ship=ai.GetTeamUnit(SeaCombat::owned[i]);'
+        # D-346 added a second loop over owned ships (forward holds); probe the
+        # withdrawal-waypoint loop, identified by its multi-line filter.
+        needle='CCircuitUnit@ ship=ai.GetTeamUnit(SeaCombat::owned[i]);\n            if (ship is null || !ship.circuitDef.IsMobile() || ship.circuitDef.IsAbleToFly()\n'
+        if source.count(needle)!=1: needle=needle.replace('\n','\r\n')
         assert source.count(needle)==1
-        source=source.replace(needle,needle+'\n SeaRetreatProbe::Observe(ship);')
+        first=needle.split(';',1)[0]+';'
+        source=source.replace(needle,first+'\n SeaRetreatProbe::Observe(ship);'+needle[len(first):])
         needle='ship.SetRetreatWaypoint(goal,anchor,ai.frame+WaypointSeconds*SECOND);'
         assert source.count(needle)==1
         source=source.replace(needle,needle+'\n if (anchor>=0) GenericHelpers::LogUtil("[RetreatProbe] waypoint ship="+ship.id+" anchor="+anchor+" x="+goal.x+" z="+goal.z,1);')

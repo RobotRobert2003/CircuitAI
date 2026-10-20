@@ -3563,12 +3563,131 @@ end
 -- Drawn in the owning team's colour: a ring at the factory, the line, a dot
 -- at the nearest last known enemy, a square (start box) or triangle (beach)
 -- at the end. Visualisation only. /barbsealanes [on|off] toggles it.
+-- D-349: the same module is the Tactical view: tactical positions placed on
+-- the map as waypoints. Repair points ("searepair": 1;<ship>,<x>,<z>,<retreating>;...)
+-- are a pin standing out of the water with a diamond head and a "repair"
+-- label, in the team colour; one pin per position, however many ships share
+-- it, with the count in the label. A retreating ship gets a line from its
+-- current position. /barbtactical [on|off] (alias /barbtactics) toggles the
+-- view, /barbrepair and /barbsealanes its layers.
 -- Cost: parsing only when the file changes; DrawWorld draws a few hundred
 -- vertices; no per-frame engine queries beyond ground height per vertex.
 local seaLanes = (function()
-    local show = true
-    local byTeam = {}      -- team -> { frame, lanes = { {factory, kind, contact, pts={{x,y,z}}} } }
+    local show = true          -- the whole Tactics overlay
+    local showLanes, showRepair = true, true
+    local byTeam = {}
+    local repairByTeam = {}    -- team -> { {ship, x, y, z, retreating} }
+    local function receiveRepair(team, payload)
+        local list = {}
+        local first = true
+        for part in (payload .. ";"):gmatch("(.-);") do
+            if first then first = false
+            else
+                local id, x, z, r = part:match("^(%d+),(%-?%d+),(%-?%d+),(%d)$")
+                if id then
+                    x, z = tonumber(x), tonumber(z)
+                    list[#list + 1] = { ship = tonumber(id), x = x, y = math.max(0, Spring.GetGroundHeight(x, z) or 0) + 10, z = z, retreating = r == "1" }
+                end
+            end
+        end
+        repairByTeam[team] = list
+    end      -- team -> { frame, lanes = { {factory, kind, contact, pts={{x,y,z}}} } }
     local function ground(x, z) return math.max(0, Spring.GetGroundHeight(x, z) or 0) + 10 end
+    -- D-350: friendly lanes that run together are drawn like a metro map: a
+    -- bundle of parallel strands, one per lane in its owner's colour, which
+    -- separate again where the lanes branch. Every lane is resampled every
+    -- STEP elmos; a sample shares a bundle with other lanes' samples within
+    -- NEAR (50) elmos heading the same way (|cos| > 0.7) and owned by the same ally
+    -- team. Each lane takes a fixed
+    -- slot in a bundle (ordered by team, then factory) and is shifted
+    -- sideways by one line width per slot; shifts are smoothed over a few samples so
+    -- strands ease in and out. Rebuilt only when a lane file changes:
+    -- O(samples x neighbours) with a 128-elmo cell hash, a few thousand
+    -- samples at most; drawing then costs only the stored vertices.
+    -- Strands sit exactly side by side on screen: a lane's sideways shift is
+    -- stored in strand slots and turned into elmos each frame from the
+    -- camera's elmos per pixel, so neighbours touch at every zoom. Lines
+    -- keep their normal width; only the bundle reads wider.
+    local STEP, NEAR, CELL = 64, 50, 128
+    local LINE_PX = 2.5        -- strand width in pixels, and the slot pitch
+    local strands = {}         -- { team, lane, pts = {{x, y, z, nx, nz, slot}} }
+    local function resample(pts)
+        local out = {}
+        for i = 1, #pts - 1 do
+            local a, b = pts[i], pts[i + 1]
+            local dx, dz = b[1] - a[1], b[3] - a[3]
+            local len = math.sqrt(dx * dx + dz * dz)
+            local n = math.max(1, math.floor(len / STEP))
+            for k = 0, n - 1 do
+                out[#out + 1] = { x = a[1] + dx * k / n, z = a[3] + dz * k / n, dx = dx / math.max(len, 1), dz = dz / math.max(len, 1) }
+            end
+        end
+        local last, prev = pts[#pts], out[#out]
+        out[#out + 1] = { x = last[1], z = last[3], dx = prev and prev.dx or 1, dz = prev and prev.dz or 0 }
+        return out
+    end
+    local function rebuild()
+        strands = {}
+        local all = {}
+        for team, entry in pairs(byTeam) do
+            if isPermittedTeam(team) then
+                for _, lane in ipairs(entry.lanes) do
+                    if #lane.pts >= 2 then
+                        local ally = select(6, Spring.GetTeamInfo(team, false)) or team
+                        all[#all + 1] = { team = team, ally = ally, lane = lane, key = team * 100000 + (lane.factory or 0), samples = resample(lane.pts) }
+                    end
+                end
+            end
+        end
+        table.sort(all, function(a, b) return a.key < b.key end)
+        local grid = {}
+        for li, l in ipairs(all) do
+            for si, p in ipairs(l.samples) do
+                local c = math.floor(p.x / CELL) .. ":" .. math.floor(p.z / CELL)
+                grid[c] = grid[c] or {}
+                local bucket = grid[c]; bucket[#bucket + 1] = { li, si }
+            end
+        end
+        for li, l in ipairs(all) do
+            local raw = {}
+            for si, p in ipairs(l.samples) do
+                local present = { [li] = true }
+                local cx, cz = math.floor(p.x / CELL), math.floor(p.z / CELL)
+                for ox = -1, 1 do for oz = -1, 1 do
+                    local bucket = grid[(cx + ox) .. ":" .. (cz + oz)]
+                    if bucket then
+                        for _, ref in ipairs(bucket) do
+                            local oli = ref[1]
+                            -- Only friendly lanes bundle: a spectator sees both
+                            -- sides, and opposing lanes in one channel stay apart.
+                            if oli ~= li and not present[oli] and all[oli].ally == l.ally then
+                                local q = all[oli].samples[ref[2]]
+                                local ddx, ddz = q.x - p.x, q.z - p.z
+                                if ddx * ddx + ddz * ddz <= NEAR * NEAR and math.abs(q.dx * p.dx + q.dz * p.dz) > 0.7 then present[oli] = true end
+                            end
+                        end
+                    end
+                end end
+                local ids = {}
+                for id in pairs(present) do ids[#ids + 1] = id end
+                table.sort(ids)
+                local slot = 1
+                for k, id in ipairs(ids) do if id == li then slot = k end end
+                -- A canonical sideways direction, so every lane in a bundle
+                -- agrees which side is which whatever its own heading.
+                local nx, nz = -p.dz, p.dx
+                if nx < 0 or (nx == 0 and nz < 0) then nx, nz = -nx, -nz end
+                raw[si] = { off = slot - (#ids + 1) / 2, nx = nx, nz = nz }
+            end
+            local pts = {}
+            for si, p in ipairs(l.samples) do
+                local sum, n = 0, 0
+                for k = math.max(1, si - 2), math.min(#raw, si + 2) do sum = sum + raw[k].off; n = n + 1 end
+                pts[#pts + 1] = { p.x, ground(p.x, p.z), p.z, raw[si].nx, raw[si].nz, sum / n }
+            end
+            strands[#strands + 1] = { team = l.team, lane = l.lane, pts = pts }
+        end
+    end
     local function receive(team, payload)
         local parts = {}
         for v in (payload .. ";"):gmatch("(.-);") do parts[#parts + 1] = v end
@@ -3587,40 +3706,69 @@ local seaLanes = (function()
             end
         end
         byTeam[team] = entry
+        rebuild()
     end
     local function colour(team, alpha)
         local r, g, b = Spring.GetTeamColor(team)
         return r or 1, g or 1, b or 1, alpha
     end
-    local function drawWorld()
-        if not show then return end
-        for team, entry in pairs(byTeam) do
+    local PIN = 140            -- waypoint pin height (elmos above the water)
+    local MERGE = 160          -- repair points closer than this share one waypoint
+    local function waypoints()
+        -- One waypoint per (team, position): ships sharing a point share a pin.
+        local pins = {}
+        for team, list in pairs(repairByTeam) do
             if isPermittedTeam(team) then
-                local r, g, b = colour(team, 1)
-                for _, lane in ipairs(entry.lanes) do
-                    local pts = lane.pts
-                    if #pts >= 2 then
-                        gl.LineWidth(4)
-                        gl.Color(0, 0, 0, 0.5)
-                        gl.BeginEnd(GL.LINE_STRIP, function() for _, p in ipairs(pts) do gl.Vertex(p[1], p[2] - 2, p[3]) end end)
-                        gl.LineWidth(2.5)
-                        gl.Color(r, g, b, 0.9)
-                        gl.BeginEnd(GL.LINE_STRIP, function() for _, p in ipairs(pts) do gl.Vertex(p[1], p[2], p[3]) end end)
-                        local s, e = pts[1], pts[#pts]
-                        gl.LineWidth(3)
-                        gl.DrawGroundCircle(s[1], s[2], s[3], 64, 24)
-                        local c = pts[(lane.contact or -1) + 1]
-                        if lane.contact and lane.contact >= 0 and c then gl.DrawGroundCircle(c[1], c[2], c[3], 32, 12) end
-                        local h = 72
-                        if lane.kind == 1 then
-                            gl.BeginEnd(GL.LINE_LOOP, function()
-                                gl.Vertex(e[1], e[2], e[3] - h); gl.Vertex(e[1] - h, e[2], e[3] + h); gl.Vertex(e[1] + h, e[2], e[3] + h)
-                            end)
-                        else
-                            gl.BeginEnd(GL.LINE_LOOP, function()
-                                gl.Vertex(e[1] - h, e[2], e[3] - h); gl.Vertex(e[1] + h, e[2], e[3] - h)
-                                gl.Vertex(e[1] + h, e[2], e[3] + h); gl.Vertex(e[1] - h, e[2], e[3] + h)
-                            end)
+                -- Points within MERGE elmos of a pin join it (ships that are
+                -- already clear each hold where they are): O(points x pins).
+                local own = {}
+                for _, p in ipairs(list) do
+                    local w
+                    for _, q in ipairs(own) do
+                        local dx, dz = q.x - p.x, q.z - p.z
+                        if dx * dx + dz * dz <= MERGE * MERGE then w = q; break end
+                    end
+                    if not w then
+                        w = { team = team, x = p.x, y = p.y, z = p.z, ships = 0, retreating = 0, kind = "repair" }
+                        own[#own + 1] = w; pins[#pins + 1] = w
+                    end
+                    w.ships = w.ships + 1
+                    if p.retreating then w.retreating = w.retreating + 1 end
+                end
+            end
+        end
+        return pins
+    end
+    -- Elmos covered by one screen pixel at the camera's focus (vertical FOV).
+    local function elmosPerPixel()
+        local _, cy = Spring.GetCameraPosition()
+        local _, vsy = Spring.GetViewGeometry()
+        local fov = math.rad(Spring.GetCameraFOV() or 45)
+        return math.max(0.2, 2 * math.max(200, cy or 2000) * math.tan(fov / 2) / math.max(1, vsy or 1080))
+    end
+    local function strandVertices(st, k, dy)
+        for _, p in ipairs(st.pts) do
+            gl.Vertex(p[1] + p[4] * p[6] * k, p[2] + (dy or 0), p[3] + p[5] * p[6] * k)
+        end
+    end
+    local function drawRepair()
+        -- World part of a repair waypoint: a thin stem and a ground ring; the
+        -- wrench badge and label are drawn on screen (drawScreen).
+        for _, w in ipairs(waypoints()) do
+            local r, g, b = Spring.GetTeamColor(w.team)
+            gl.LineWidth(1.5); gl.Color(r or 1, g or 1, b or 1, w.retreating > 0 and 0.9 or 0.5)
+            gl.BeginEnd(GL.LINES, function() gl.Vertex(w.x, w.y, w.z); gl.Vertex(w.x, w.y + PIN, w.z) end)
+            gl.DrawGroundCircle(w.x, w.y, w.z, 40, 20)
+        end
+        for team, list in pairs(repairByTeam) do
+            if isPermittedTeam(team) then
+                local r, g, b = Spring.GetTeamColor(team)
+                for _, p in ipairs(list) do
+                    if p.retreating then
+                        local ux, uy, uz = Spring.GetUnitPosition(p.ship)
+                        if ux then
+                            gl.LineWidth(1); gl.Color(r or 1, g or 1, b or 1, 0.5)
+                            gl.BeginEnd(GL.LINES, function() gl.Vertex(ux, math.max(0, uy) + 10, uz); gl.Vertex(p.x, p.y, p.z) end)
                         end
                     end
                 end
@@ -3628,36 +3776,164 @@ local seaLanes = (function()
         end
         gl.LineWidth(1); gl.Color(1, 1, 1, 1)
     end
-    local function drawMiniMap(sx, sy)
+    local function drawWorld()
         if not show then return end
-        local mx, mz = Game.mapSizeX, Game.mapSizeZ
-        gl.PushMatrix()
-        gl.Translate(0, sy, 0); gl.Scale(sx / mx, -sy / mz, 1)
-        gl.LineWidth(1.5)
-        for team, entry in pairs(byTeam) do
-            if isPermittedTeam(team) then
-                gl.Color(colour(team, 0.9))
-                for _, lane in ipairs(entry.lanes) do
-                    if #lane.pts >= 2 then
-                        gl.BeginEnd(GL.LINE_STRIP, function() for _, p in ipairs(lane.pts) do gl.Vertex(p[1], p[3], 0) end end)
+        if showRepair then drawRepair() end
+        if not showLanes then return end
+        local k = LINE_PX * elmosPerPixel()
+        gl.LineWidth(LINE_PX + 1.5); gl.Color(0, 0, 0, 0.45)
+        for _, st in ipairs(strands) do gl.BeginEnd(GL.LINE_STRIP, function() strandVertices(st, k, -1) end) end
+        gl.LineWidth(LINE_PX)
+        for _, st in ipairs(strands) do
+            local r, g, b = colour(st.team, 1)
+            gl.Color(r, g, b, 0.95)
+            gl.BeginEnd(GL.LINE_STRIP, function() strandVertices(st, k) end)
+        end
+        gl.LineWidth(1); gl.Color(1, 1, 1, 1)
+    end
+    -- Screen-space badges: a dark disc with a team-coloured ring and a white
+    -- symbol, the same size at every zoom. (x, y) is the badge centre.
+    local BADGE = 12
+    local function disc(x, y, radius)
+        gl.BeginEnd(GL.TRIANGLE_FAN, function()
+            gl.Vertex(x, y)
+            for a = 0, 24 do local t = a / 24 * 2 * math.pi; gl.Vertex(x + math.cos(t) * radius, y + math.sin(t) * radius) end
+        end)
+    end
+    local function ring(x, y, radius, from, to)
+        gl.BeginEnd(GL.LINE_STRIP, function()
+            for a = 0, 20 do local t = from + (to - from) * a / 20; gl.Vertex(x + math.cos(t) * radius, y + math.sin(t) * radius) end
+        end)
+    end
+    local function badge(x, y, r, g, b, symbol, angle)
+        gl.Color(0.04, 0.06, 0.09, 0.85); disc(x, y, BADGE)
+        gl.LineWidth(2); gl.Color(r, g, b, 1); ring(x, y, BADGE, 0, 2 * math.pi)
+        gl.Color(1, 1, 1, 1); gl.LineWidth(2)
+        if symbol == "wrench" then
+            -- Handle from lower left to an open jaw at upper right.
+            gl.BeginEnd(GL.LINES, function() gl.Vertex(x - 6, y - 6); gl.Vertex(x + 1, y + 1) end)
+            ring(x + 3.5, y + 3.5, 3.5, math.rad(-20), math.rad(250))
+        elseif symbol == "anchor" then
+            gl.BeginEnd(GL.LINES, function()
+                gl.Vertex(x, y + 7); gl.Vertex(x, y - 6)
+                gl.Vertex(x - 4, y + 4); gl.Vertex(x + 4, y + 4)
+            end)
+            ring(x, y - 1, 6, math.rad(200), math.rad(340))
+            ring(x, y + 8, 1.5, 0, 2 * math.pi)
+        elseif symbol == "target" then
+            ring(x, y, 6, 0, 2 * math.pi); ring(x, y, 2, 0, 2 * math.pi)
+            gl.BeginEnd(GL.LINES, function()
+                gl.Vertex(x - 10, y); gl.Vertex(x - 7, y); gl.Vertex(x + 7, y); gl.Vertex(x + 10, y)
+                gl.Vertex(x, y - 10); gl.Vertex(x, y - 7); gl.Vertex(x, y + 7); gl.Vertex(x, y + 10)
+            end)
+        elseif symbol == "landing" then
+            -- Two chevrons pointing along `angle` (towards the shore).
+            local dx, dy = math.cos(angle or math.pi / 2), math.sin(angle or math.pi / 2)
+            local nx, ny = -dy, dx
+            for c = 0, 1 do
+                local bx, by = x + dx * (c * 5 - 1), y + dy * (c * 5 - 1)
+                gl.BeginEnd(GL.LINE_STRIP, function()
+                    gl.Vertex(bx - dx * 4 + nx * 5, by - dy * 4 + ny * 5); gl.Vertex(bx, by); gl.Vertex(bx - dx * 4 - nx * 5, by - dy * 4 - ny * 5)
+                end)
+            end
+        elseif symbol == "enemy" then
+            gl.LineWidth(2.5)
+            gl.BeginEnd(GL.LINES, function() gl.Vertex(x, y + 7); gl.Vertex(x, y - 1) end)
+            disc(x, y - 5, 1.6)
+        end
+        gl.LineWidth(1)
+    end
+    local function toScreen(x, y, z)
+        local sx, sy, sz = Spring.WorldToScreenCoords(x, y, z)
+        if sx and sz and sz < 1 then return sx, sy end
+    end
+    local function drawScreen()
+        if not show then return end
+        if showLanes then
+            -- One badge per distinct position: lanes sharing a start, contact or
+            -- end share its badge. O(lanes).
+            local seen = {}
+            local function once(key) if seen[key] then return false end seen[key] = true return true end
+            for team, entry in pairs(byTeam) do
+                if isPermittedTeam(team) then
+                    local r, g, b = colour(team, 1)
+                    for _, lane in ipairs(entry.lanes) do
+                        local pts = lane.pts
+                        if #pts >= 2 then
+                            local s0, e = pts[1], pts[#pts]
+                            local sx, sy = toScreen(s0[1], s0[2], s0[3])
+                            if sx and once("s" .. team .. ":" .. math.floor(s0[1] / 64) .. ":" .. math.floor(s0[3] / 64)) then
+                                badge(sx, sy, r, g, b, "anchor")
+                            end
+                            local c = pts[(lane.contact or -1) + 1]
+                            if lane.contact and lane.contact >= 0 and c then
+                                local cx, cy = toScreen(c[1], c[2], c[3])
+                                if cx and once("c" .. math.floor(c[1] / 128) .. ":" .. math.floor(c[3] / 128)) then
+                                    badge(cx, cy, 1, 0.25, 0.2, "enemy")
+                                end
+                            end
+                            local ex, ey = toScreen(e[1], e[2], e[3])
+                            if ex and once("e" .. math.floor(e[1] / 200) .. ":" .. math.floor(e[3] / 200)) then
+                                local angle
+                                if lane.kind == 1 then
+                                    local p = pts[#pts - 1]
+                                    local px, py = toScreen(p[1], p[2], p[3])
+                                    if px then angle = math.atan2(ey - py, ex - px) end
+                                end
+                                badge(ex, ey, r, g, b, lane.kind == 1 and "landing" or "target", angle)
+                                gl.Color(1, 1, 1, 0.9)
+                                gl.Text(lane.kind == 1 and "landing" or "enemy base", ex, ey + BADGE + 4, 12, "co")
+                            end
+                        end
                     end
                 end
             end
         end
+        if not showRepair then return end
+        for _, w in ipairs(waypoints()) do
+            local sx, sy = toScreen(w.x, w.y + PIN, w.z)
+            if sx then
+                local r, g, b = Spring.GetTeamColor(w.team)
+                badge(sx, sy + BADGE, r or 1, g or 1, b or 1, "wrench")
+                gl.Color(r or 1, g or 1, b or 1, w.retreating > 0 and 1 or 0.75)
+                gl.Text(w.ships > 1 and string.format("repair x%d", w.ships) or "repair", sx, sy + 2 * BADGE + 4, 12, "co")
+            end
+        end
+        gl.Color(1, 1, 1, 1)
+    end
+    local function drawMiniMap(sx, sy)
+        if not show or not showLanes then return end
+        local mx, mz = Game.mapSizeX, Game.mapSizeZ
+        gl.PushMatrix()
+        gl.Translate(0, sy, 0); gl.Scale(sx / mx, -sy / mz, 1)
+        gl.LineWidth(1.5)
+        for _, st in ipairs(strands) do
+            gl.Color(colour(st.team, 0.9))
+            gl.BeginEnd(GL.LINE_STRIP, function() for _, p in ipairs(st.pts) do gl.Vertex(p[1], p[3], 0) end end)
+        end
         gl.PopMatrix(); gl.LineWidth(1); gl.Color(1, 1, 1, 1)
     end
     local function textCommand(cmd)
-        if cmd == "barbsealanes" then show = not show
-        elseif cmd == "barbsealanes on" then show = true
-        elseif cmd == "barbsealanes off" then show = false
-        else return false end
-        Spring.Echo("[BARb link] sea lanes " .. (show and "shown" or "hidden"))
+        local what, state = cmd:match("^barb(%a+)%s*(%a*)$")
+        if what == "tactics" then what = "tactical" end
+        if what ~= "tactical" and what ~= "sealanes" and what ~= "repair" then return false end
+        local function set(current) if state == "on" then return true elseif state == "off" then return false end return not current end
+        if what == "tactical" then show = set(show)
+        elseif what == "sealanes" then showLanes = set(showLanes); if showLanes then show = true end
+        else showRepair = set(showRepair); if showRepair then show = true end end
+        Spring.Echo(string.format("[BARb link] tactical view %s (lanes %s, repair %s)", show and "on" or "off",
+            showLanes and "on" or "off", showRepair and "on" or "off"))
         return true
     end
     return {
-        Receive = receive, DrawWorld = drawWorld, DrawMiniMap = drawMiniMap, TextCommand = textCommand,
-        GetConfig = function() return { show = show } end,
-        Config = function(c) if type(c) == "table" and c.show ~= nil then show = c.show == true end end,
+        Receive = receive, ReceiveRepair = receiveRepair, DrawWorld = drawWorld, DrawScreen = drawScreen, DrawMiniMap = drawMiniMap, TextCommand = textCommand,
+        GetConfig = function() return { show = show, lanes = showLanes, repair = showRepair } end,
+        Config = function(c)
+            if type(c) ~= "table" then return end
+            if c.show ~= nil then show = c.show == true end
+            if c.lanes ~= nil then showLanes = c.lanes == true end
+            if c.repair ~= nil then showRepair = c.repair == true end
+        end,
     }
 end)()
 
@@ -4054,6 +4330,8 @@ local function onAIMessage(aiTeam, dataStr)
 		addEvent(string.format("Team %d sea assist: %s", sender, rest), "info")
 	elseif topic == "sealanes" and sender == aiTeam then
 		seaLanes.Receive(sender, table.concat(p, "|", 5))
+	elseif topic == "searepair" and sender == aiTeam then
+		seaLanes.ReceiveRepair(sender, table.concat(p, "|", 5))
 	elseif topic == "layout" and sender == aiTeam then
 		blueprints.Receive(sender, tonumber(p[5]) or 0, tonumber(p[6]) or 0, table.concat(p, "|", 7))
 	end
@@ -4559,6 +4837,7 @@ function widget:DrawScreen()
 	theatres.Draw(open and win or nil)
 	field.DrawScreen(open and win or nil)
 	if not field.Mode() then marks.DrawScreen() end
+	seaLanes.DrawScreen()
 	drawLauncher()
 	if open then drawWindow() end
 

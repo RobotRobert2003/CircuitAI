@@ -154,7 +154,12 @@ namespace SeaCombat {
         // Sonar coverage can blink while a hull moves or a scout dies. Forget
         // its cost after a bounded policy interval, not at the next factory
         // ask. This retains no hidden positions and never issues a blind shot.
-        underwater=SeaMath::RememberThreat(underwater,nextSub,ai.frame-subSeen,memory);
+        // D-347: submarines hide between sonar pings. The 2026-10-19 Glacial
+        // log showed the sub threat dropping to 0 thirty seconds after each
+        // contact, so counters were never queued. Remember their cost longer
+        // (cost only; no hidden position is kept).
+        underwater=SeaMath::RememberThreat(underwater,nextSub,ai.frame-subSeen,
+            AiMax(memory,Global::RoleSettings::Sea::SubThreatMemorySeconds*SECOND));
         air=SeaMath::RememberThreat(air,nextAir,ai.frame-airSeen,memory);
         shore=aiBattle.GetNavalThreatCost(3);
         SeaPatrol::Tick();

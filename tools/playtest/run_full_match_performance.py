@@ -47,6 +47,8 @@ def main():
     p.add_argument('--detail-sea',action='store_true',help='Additional staged SEA subphase labels; use in a separate attribution run')
     p.add_argument('--detail-air',action='store_true',help='Additional staged AIR subphase labels; attribution overhead is recorded')
     p.add_argument('--command-detail',action='store_true',help='Read-only unit/command/origin counts; adds observer overhead, not gameplay orders')
+    p.add_argument('--extra-widget',action='append',help='Stage another widget under test (e.g. tools/widgets/gui_barb_team_link.lua)')
+    p.add_argument('--shots',help='Visual mode: override screenshots, comma list of minute@height@x:z')
     p.add_argument('--verify-indexes',action='store_true',help='Correctness only: duplicate live route/economy scans; timings are invalid')
     a=p.parse_args()
     # KI-655: SEA subphase labels ([PerfLabel]) are emitted only with native
@@ -118,8 +120,10 @@ def main():
     if a.mode!='visual' or a.headless:
         shot_minutes=[]
         changes=[(0,a.speed)]
+    if a.shots and a.mode=='visual' and not a.headless:changes=[(0,a.speed)]  # custom shots: no profiler slowdowns
     plan=','.join(f'{m}:{speed}' for m,speed in sorted(changes))
     shots=','.join(f'{m}@{focus["height"]}@{focus["x"]}:{focus["z"]}' for m in shot_minutes)
+    if a.shots and a.mode=='visual' and not a.headless:shots=a.shots
     cli=[sys.executable,str(playtest.HERE/'playtest.py')]
     cmd=cli+['stage','--dir',str(d),'--dll',str(a.dll),'--map',name,*extra,
        *(['--game',a.game] if a.game else []),'--engine','recoil_2026.07.04',
@@ -131,6 +135,7 @@ def main():
     if a.data:cmd+=['--data',str(a.data)]
     for widget in ['skirmish_perf_watch.lua','air_command_watch.lua','perf_spectator_cleanup.lua','full_match_perf.lua']:
         cmd+=['--extra-widget',str(playtest.HERE/'widgets'/widget)]
+    for widget in a.extra_widget or []:cmd+=['--extra-widget',widget]
     subprocess.run(cmd,check=True)
     scripts=d/'AI/Skirmish/BARbTest/test/script'
     if a.verify_indexes:

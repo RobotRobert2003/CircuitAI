@@ -100,6 +100,7 @@ void CRetreatTask::AssignTo(CCircuitUnit* unit)
 
 void CRetreatTask::RemoveAssignee(CCircuitUnit* unit)
 {
+	holdPathed.erase(unit);  // before the base call can finish this task
 	IUnitTask::RemoveAssignee(unit);
 	if (units.empty()) {
 		manager->DoneTask(this);
@@ -120,7 +121,10 @@ void CRetreatTask::Start(CCircuitUnit* unit)
 	const bool commanderFallback = circuit->GetCommanderControl()
 		&& circuit->GetCommanderControl()->RetreatStation(unit, commanderStation);
 	if (unit->GetTravelAct()->IsFinished()) {
-		if (!commanderFallback || unit->GetPos(circuit->GetLastFrame()).SqDistance2D(commanderStation) <= SQUARE(64.f)) return;
+		// D-346: waiting at a forward repair point that has become threatened
+		// or expired: resume the ordinary retreat to the haven.
+		const bool holdLost = unit->GetRetreatHoldUntil() >= 0 && !HoldValid(unit, circuit->GetLastFrame());
+		if (!holdLost && (!commanderFallback || unit->GetPos(circuit->GetLastFrame()).SqDistance2D(commanderStation) <= SQUARE(64.f))) return;
 		unit->GetTravelAct()->StateActivate();
 	}
 
@@ -142,6 +146,21 @@ void CRetreatTask::Start(CCircuitUnit* unit)
 
 	bool isNoEndPos = true;
     if (commanderFallback) { endPos = commanderStation; range = 64.f; isNoEndPos = false; }
+    // D-346: a forward repair point outside enemy reach. Valid only while
+    // unexpired, reachable and no more threatened than here; otherwise it is
+    // dropped and the ordinary stage/repairer/haven rules apply. O(1).
+    if (isNoEndPos && HoldValid(unit, frame)) {
+        endPos = unit->GetRetreatHold(); range = HOLD_RADIUS; isNoEndPos = false;
+        // Same hold as the active path: keep travelling, no new query/orders.
+        auto it = holdPathed.find(unit);
+        if (it != holdPathed.end() && it->second.SqDistance2D(endPos) <= SQUARE(HOLD_REPATH)
+            && unit->GetTravelAct()->GetPath() != nullptr && !unit->GetTravelAct()->IsFinished()) {
+            return;
+        }
+        holdPathed[unit] = endPos;
+    } else {
+        holdPathed.erase(unit);
+    }
     // D-268: a script may nominate a short withdrawal stage, not replace the
     // repair destination. Constant work per route request; no fleet scan here.
     // Expiry, anchor ownership/movement, reachability and current threat are
@@ -235,10 +254,34 @@ void CRetreatTask::Cancel()
 	}
 }
 
+bool CRetreatTask::HoldValid(CCircuitUnit* unit, int frame)
+{
+	CCircuitAI* circuit = manager->GetCircuit();
+	const AIFloat3& hold = unit->GetRetreatHold();
+	const bool valid = frame < unit->GetRetreatHoldUntil()
+		&& geom::is_valid(hold) && std::isfinite(hold.x) && std::isfinite(hold.z)
+		&& hold.x >= 0.f && hold.z >= 0.f
+		&& hold.x < CTerrainManager::GetTerrainWidth() && hold.z < CTerrainManager::GetTerrainHeight()
+		&& circuit->GetTerrainManager()->CanReachAt(unit, hold, HOLD_RADIUS)
+		&& circuit->GetThreatMap()->GetThreatAt(unit, hold) <= circuit->GetThreatMap()->GetThreatAt(unit, unit->GetPos(frame));
+	if (!valid) unit->ClearRetreatHold();
+	return valid;
+}
+
 void CRetreatTask::OnUnitIdle(CCircuitUnit* unit)
 {
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
+	// D-346: at the forward repair point, wait there (idle heal plus the
+	// mobile repair task) until Update sees the unit repaired. If the point
+	// is no longer valid (threatened, expired), fall through to the haven.
+	if (unit->GetRetreatHoldUntil() >= 0) {
+		if (unit->GetPos(frame).SqDistance2D(unit->GetRetreatHold()) <= SQUARE(HOLD_RADIUS) && HoldValid(unit, frame)) {
+			if (unit->GetTravelAct() != nullptr) unit->GetTravelAct()->StateFinish();
+			return;
+		}
+		if (HoldValid(unit, frame)) { Start(unit); return; }
+	}
     AIFloat3 commanderStation;
     if (circuit->GetCommanderControl() && circuit->GetCommanderControl()->RetreatStation(unit, commanderStation)) {
         // Reaching repair range is not reaching safety from the T3. Keep the

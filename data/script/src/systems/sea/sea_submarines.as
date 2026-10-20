@@ -141,7 +141,13 @@ namespace SeaSubmarines {
         for (uint i=0;i<replacementLines.length();++i) {
             ReplacementLine@ line=replacementLines[i];
             if (line.body!=g.body || g.replacementReleased>=line.created) continue;
-            if (SeaMath::ReplacementReady(line.count,line.readyMetal,line.enemyMetal,
+            // D-348: the line's enemyMetal only grows (AiMax over the fight),
+            // so in a large battle the ratio may never be met and the reserve
+            // sits behind the line for ever (owner: late-game T1 subs grouped
+            // at base). A reserve held SubmarineReplacementHoldSeconds goes in.
+            if (g.replacementSince<0 || g.replacementSince<line.created) g.replacementSince=ai.frame;
+            const bool heldTooLong=ai.frame-g.replacementSince>=Global::RoleSettings::Sea::SubmarineReplacementHoldSeconds*SECOND;
+            if (heldTooLong || SeaMath::ReplacementReady(line.count,line.readyMetal,line.enemyMetal,
                 Global::RoleSettings::Sea::SubmarineDepartureCount,Global::RoleSettings::Sea::SubmarineReplacementRatio)) {
                 g.replacementReleased=line.created; g.released=true;
                 GenericHelpers::LogUtil("[SEA][SubReplacement] advance cohort="+g.serial+" power="+line.readyMetal,1);

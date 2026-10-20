@@ -1272,6 +1272,8 @@ void CInitScript::RegisterCore()
 	r = engine->RegisterObjectMethod("CCircuitUnit", "float GetHealthPercent()", asMETHOD(CCircuitUnit, GetHealthPercent), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitUnit", "float GetBuildProgress()", asFUNCTION(CCircuitUnit_GetBuildProgress), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-105
     r = engine->RegisterObjectMethod("CCircuitUnit", "void SetRetreatWaypoint(const AIFloat3& in, int, int)", asMETHOD(CCircuitUnit, SetRetreatWaypoint), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CCircuitUnit", "void SetRetreatHold(const AIFloat3& in, int)", asMETHOD(CCircuitUnit, SetRetreatHold), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CCircuitUnit", "void ClearRetreatHold()", asMETHOD(CCircuitUnit, ClearRetreatHold), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitUnit", "int GetStockpile()", asFUNCTION(CCircuitUnit_GetStockpile), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-229
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void DelAttribute(Type)", asMETHOD(CCircuitUnit, DelAttribute), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void TglAttribute(Type)", asMETHOD(CCircuitUnit, TglAttribute), asCALL_THISCALL); ASSERT(r >= 0);

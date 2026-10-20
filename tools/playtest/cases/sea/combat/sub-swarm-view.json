@@ -1,0 +1,86 @@
+{
+  "name": "sub-swarm-view",
+  "groups": [
+    {
+      "unit": "armsub",
+      "team": 0,
+      "count": 72,
+      "position": [
+        2300,
+        4300
+      ],
+      "columns": 12,
+      "spacing": 56
+    },
+    {
+      "unit": "armroy",
+      "team": 0,
+      "count": 8,
+      "position": [
+        2400,
+        3950
+      ],
+      "columns": 4,
+      "spacing": 96
+    },
+    {
+      "unit": "armfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2200,
+        4200
+      ]
+    },
+    {
+      "unit": "armason",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2800,
+        4650
+      ]
+    },
+    {
+      "unit": "corsub",
+      "team": 1,
+      "count": 72,
+      "position": [
+        4100,
+        4300
+      ],
+      "columns": 12,
+      "spacing": 56
+    },
+    {
+      "unit": "corroy",
+      "team": 1,
+      "count": 8,
+      "position": [
+        4000,
+        3950
+      ],
+      "columns": 4,
+      "spacing": 96
+    },
+    {
+      "unit": "corfrad",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4500,
+        4200
+      ]
+    },
+    {
+      "unit": "corason",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        4650
+      ]
+    }
+  ],
+  "shots": "1.6@1800@3600:4300,1.9@1800@3600:4300,2.3@1800@3400:4300"
+}

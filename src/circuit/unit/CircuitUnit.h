@@ -90,6 +90,14 @@ public:
     int GetRetreatAnchor() const { return retreatAnchor; }
     int GetRetreatWaypointUntil() const { return retreatWaypointUntil; }
     void ClearRetreatWaypoint() { retreatAnchor = -1; retreatWaypointUntil = -1; }
+    // D-346: a script-nominated forward repair point (outside enemy reach plus
+    // a buffer). While valid, a RETREAT task ends there and waits to be healed
+    // instead of travelling to the base. Native code revalidates expiry,
+    // reachability and threat on every retreat step.
+    void SetRetreatHold(const springai::AIFloat3& position, int until) { retreatHold = position; retreatHoldUntil = until; }
+    const springai::AIFloat3& GetRetreatHold() const { return retreatHold; }
+    int GetRetreatHoldUntil() const { return retreatHoldUntil; }
+    void ClearRetreatHold() { retreatHoldUntil = -1; }
 
 	void SetManager(ITaskModule* mgr) { manager = mgr; }
 	ITaskModule* GetManager() const { return manager; }
@@ -281,6 +289,8 @@ private:
     springai::AIFloat3 retreatWaypoint;
     int retreatAnchor = -1;
     int retreatWaypointUntil = -1;
+    springai::AIFloat3 retreatHold;
+    int retreatHoldUntil = -1;
 
 	CCircuitDef::AttrM attr;
 

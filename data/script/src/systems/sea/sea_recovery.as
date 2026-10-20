@@ -35,8 +35,25 @@ namespace SeaRecovery {
         return u is null || u.task !is null && (u.task.GetType()==int(Task::Type::PLAYER)
             || u.task.GetType()==int(Task::Type::RETREAT) || u.task.IsEnemyReclaim());
     }
+    // D-347: a sub on a resurrection keeps it until the native task ends
+    // (wreck raised, gone or aborted), so repair jobs found every 2 s no longer
+    // pull it away half done. RecoveryResurrectCommitSeconds bounds a stuck
+    // task. Keyed by unit id; O(1) per tick.
+    dictionary resurrectSince;
+    bool Resurrecting(CCircuitUnit@ u) {
+        IBuilderTask@ b=cast<IBuilderTask>(u.task);
+        const string key=""+u.id;
+        if (b is null || b.IsDead() || b.GetBuildType()!=int(Task::BuildType::RESURRECT)) { resurrectSince.delete(key); return false; }
+        int since=ai.frame;
+        if (!resurrectSince.get(key,since)) { resurrectSince.set(key,ai.frame); return true; }
+        if (ai.frame-since<Global::RoleSettings::Sea::RecoveryResurrectCommitSeconds*SECOND) return true;
+        resurrectSince.delete(key);
+        GenericHelpers::LogUtil("[SEA][Recovery] sub="+u.id+" resurrection commit expired",1);
+        return false;
+    }
     IUnitTask@ Make(CCircuitUnit@ u) {
         if (Protected(u)) return u is null ? null : u.task;
+        if (Resurrecting(u)) return u.task;
         const float radius=Global::RoleSettings::Sea::RecoverySearchRadius;
         IUnitTask@ t=null;
         // Safe fleet repairs precede resource recovery. Native admission checks
@@ -68,9 +85,10 @@ namespace SeaRecovery {
     void Removed(CCircuitUnit@ u) {
         if (u is null) return;
         const int i=subs.find(u.id); if (i>=0) subs.removeAt(i);
+        resurrectSince.delete(""+u.id);
     }
     void Reset() {
-        subs.resize(0); nextUpdate=0; lowMetal=false; opportunityFrame=-100000; safeWreckMetal=0; damagedMetal=0;
+        subs.resize(0); resurrectSince.deleteAll(); nextUpdate=0; lowMetal=false; opportunityFrame=-100000; safeWreckMetal=0; damagedMetal=0;
         array<Id>@ ids=ai.GetOwnedUnitIds();
         for (uint i=0;i<ids.length();++i) Added(ai.GetTeamUnit(ids[i]));
     }

@@ -12,7 +12,7 @@ namespace SeaOperations {
         int search=0, retry=0, serial=0, sampleFrame=0, sampleTarget=-1, pursuitStart=0;
         bool released=false;
         bool holdingFireline=false;
-        int replacementReleased=-1;
+        int replacementReleased=-1, replacementSince=-1;
         bool perimeterAdvancing=false;
         bool perimeterAligned=false;
         int avoidUntil=0;
@@ -514,13 +514,93 @@ namespace SeaOperations {
         // Allow a short exit under the recently observed damage rate. Native
         // retreat retains destination/path/repair ownership. Without safe
         // repair access, reserve withdrawal for critically damaged hulls.
-        const float threshold=g.repairAccess ? AiMin(.7f,Global::RoleSettings::Sea::FleetRepairHealth+lossRate*4) : .2f;
+        // D-346: with forward repair a damaged ship heals just outside enemy
+        // reach, so it may withdraw without a reachable repair site.
+        const bool canWithdraw=g.repairAccess || Global::RoleSettings::Sea::ForwardRepair;
+        const float threshold=canWithdraw ? AiMin(.7f,Global::RoleSettings::Sea::FleetRepairHealth+lossRate*4) : .2f;
         g.route.SetRepairThreshold(threshold);
+    }
+    // Diagnostic (2026-10-19, sub response review): once a minute, where the
+    // combat ships are and what they are doing. Per kind (sub/surface): ships
+    // near home (HomeRadius of the start), ships not in any cohort, retreating
+    // ships, and cohort target codes for ships near home. O(ships + cohort
+    // members) once a minute; no orders.
+    int stateLog=0;
+    int routeBudget=0, routeOffset=0;
+    // D-348: merge small cohorts of one hull chasing the same live target in
+    // one body (within ChaseMergeRadius) up to FleetCohortMaximum, so one
+    // route order serves the whole pack. O(groups) with a dictionary keyed by
+    // body, hull and target. New members are transferred once by the census.
+    void MergeChasing() {
+        if (!Global::RoleSettings::Sea::MergeChasingCohorts) return;
+        dictionary leaders;
+        const float radius=Global::RoleSettings::Sea::ChaseMergeRadius;
+        const uint maximum=uint(AiMax(1,Global::RoleSettings::Sea::FleetCohortMaximum));
+        for (uint i=0;i<groups.length();++i) {
+            Cohort@ g=groups[i];
+            if (g.ids.length()==0 || g.target<0 || g.route is null || g.route.IsDead()) continue;
+            const string key=""+g.body+":"+g.defId+":"+g.target;
+            int64 index=-1;
+            if (!leaders.get(key,index) || index<0) { leaders.set(key,int64(i)); continue; }
+            Cohort@ lead=groups[uint(index)];
+            if (lead.ids.length()+g.ids.length()>maximum || MapHelpers::SqDist(lead.centre,g.centre)>radius*radius) {
+                if (g.ids.length()>lead.ids.length()) leaders.set(key,int64(i));
+                continue;
+            }
+            for (uint m=0;m<g.ids.length();++m) {
+                lead.ids.insertLast(g.ids[m]);
+                memberGroup.set(""+g.ids[m],lead.key);
+            }
+            g.ids.resize(0);
+        }
+    }
+    void LogState() {
+        if (ai.frame<stateLog) return;
+        stateLog=ai.frame+60*SECOND;
+        dictionary targetOf;
+        for (uint k=0;k<groups.length();++k)
+            for (uint j=0;j<groups[k].ids.length();++j) targetOf.set(""+groups[k].ids[j],int64(groups[k].target));
+        const float home=Global::RoleSettings::Sea::DiagnosticHomeRadius;
+        array<int> total={0,0}, nearHome={0,0}, loose={0,0}, retreat={0,0};
+        array<string> codes={"",""};
+        dictionary homeCodes;
+        for (uint i=0;i<SeaCombat::owned.length();++i) {
+            CCircuitUnit@ u=ai.GetTeamUnit(SeaCombat::owned[i]);
+            if (u is null || !u.circuitDef.IsMobile() || u.circuitDef.IsAbleToFly() || u.circuitDef.GetBuildSpeed()>0) continue;
+            const int kind=SeaSubmarines::Handles(u.circuitDef) ? 0 : 1;
+            ++total[kind];
+            const bool atHome=MapHelpers::SqDist(u.GetPos(ai.frame),Global::Map::StartPos)<home*home;
+            if (atHome) ++nearHome[kind];
+            if (u.task !is null && u.task.GetType()==int(Task::Type::RETREAT)) { ++retreat[kind]; continue; }
+            int64 target=-999;
+            if (!targetOf.get(""+u.id,target)) { ++loose[kind]; target=-1000; }
+            if (atHome) {
+                const string key=(kind==0 ? "sub" : "surf")+":"+target;
+                homeCodes.set(key,DictIntOr(homeCodes,key)+1);
+            }
+        }
+        string atHomeCodes="";
+        array<string>@ keys=homeCodes.getKeys();
+        for (uint i=0;i<keys.length();++i) atHomeCodes+=" "+keys[i]+"="+DictIntOr(homeCodes,keys[i]);
+        // Sub cohorts at home that never received an objective: why.
+        for (uint k=0;k<groups.length();++k) {
+            Cohort@ g=groups[k];
+            if (g.ids.length()==0 || g.target!=-999 || !SeaSubmarines::Handles(ai.GetCircuitDef(g.defId))) continue;
+            if (MapHelpers::SqDist(g.centre,Global::Map::StartPos)>home*home) continue;
+            GenericHelpers::LogUtil("[SEA][StateIdle] cohort="+g.serial+" n="+g.ids.length()+" released="+g.released
+                +" route="+(g.route !is null && !g.route.IsDead())+" retryIn="+(g.retry-ai.frame)/SECOND
+                +" age="+(ai.frame-g.created)/SECOND+" fireline="+g.holdingFireline+" replacement="+g.replacementReleased
+                +" search="+g.search+" coast="+g.coastTarget,1);
+        }
+        GenericHelpers::LogUtil("[SEA][State] subs="+total[0]+" home="+nearHome[0]+" loose="+loose[0]+" retreat="+retreat[0]
+            +" surface="+total[1]+" home="+nearHome[1]+" loose="+loose[1]+" retreat="+retreat[1]+" homeTargets="+atHomeCodes,1);
     }
     void Tick() {
         if (!SeaCombat::Active() || !Global::RoleSettings::Sea::FleetOperations) return;
         Census();
+        LogState();
         if (Global::RoleSettings::Sea::CoordinatedFleet) SeaSubmarines::MergeSettled();
+        MergeChasing();
         if (Global::RoleSettings::Sea::CoordinatedFleet) SeaRetreat::Publish();
         SeaSubmarines::BeginDecisions();
         SeaSubmarines::PrepareReplacements();
@@ -534,7 +614,14 @@ namespace SeaOperations {
         }
         BuildTaskForces();
         const int contacts=aiBattle.GetSeaForceCount(); // legal SEA extension; AIR snapshot unchanged
-        for (uint k=0;k<groups.length();++k) {
+        // D-348: at most FleetRoutesPerTick combat re-routes per census, and the
+        // loop starts at a rotating offset so the budget never starves the same
+        // groups. Skipped groups are reconsidered on the next census (1 s).
+        routeBudget=Global::RoleSettings::Sea::FleetRoutesPerTick;
+        const uint groupCount=groups.length();
+        const uint groupOffset=groupCount>0 ? uint(routeOffset++)%groupCount : 0;
+        for (uint visit=0;visit<groupCount;++visit) {
+            const uint k=(visit+groupOffset)%groupCount;
             Cohort@ g=groups[k]; if (g.ids.length()==0) continue;
             if (int(g.ids.length())>Global::RoleSettings::Sea::FleetCohortMaximum)
                 Invariants::Violation("INV-171",g.key,"SEA local cohort exceeded configured capacity");
@@ -962,6 +1049,14 @@ namespace SeaOperations {
             const float engagementRange=AiMax(def.GetMaxRange(targetSub || submarine ? 2 : 1),
                 targetDef is null ? 0.0f : targetDef.GetMaxRange(submarine ? 2 : 1))+128.0f;
             const bool transit=target<0 || nearest>engagementRange*engagementRange;
+            // D-348 (2026-10-19 online lag: 59 small sub groups re-routed on one
+            // frame, 509 route orders a minute): chasing the SAME target is
+            // re-routed at most every FleetRerouteSeconds; a new target is
+            // immediate. Firing never waits on the queue (priority fire is
+            // independent), so this only thins MOVE orders, not reactions.
+            if (target>=0 && target==g.target && ai.frame-g.ordered<Global::RoleSettings::Sea::FleetRerouteSeconds*SECOND) continue;
+            if (routeBudget<=0) continue;
+            --routeBudget;
             if (Route(g,goal,false,scout,false,transit,target<0)) {
                 g.target=target;
                 if (target>=0 && targetSub && (targetFlags&128)==0) AntiSubFormation(g,targetPosition);
