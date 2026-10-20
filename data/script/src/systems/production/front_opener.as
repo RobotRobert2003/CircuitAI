@@ -16,6 +16,7 @@ namespace FrontOpener {
     float unitPower = 0.0f;
     AIFloat3 rally;
     bool closed = true;
+    Task::FightType launch = Task::FightType::RAID; // the squad the gather becomes once full
 
     bool Enabled() { return Global::RoleSettings::Front::VehicleTankOpenerChance > 0.0f; }
     bool WasQueued(const string &in part) {
@@ -44,16 +45,22 @@ namespace FrontOpener {
 
     // Match native IFighterTask's sum of UnitDef combat power, not metal cost.
     float RequiredPower() {
+        // Owner (2026-10-20): a T2 wave does not depart before its jammer, radar and flak escorts are out
+        if (!closed && FrontWaveEscort::Pending(factoryId, started)) return 1.0e9f;
         float power = 0.0f;
         for (int i = 0; i < expected; ++i) power += unitPower;
         // Small relative tolerance covers subtraction/re-addition after retreat.
         return power * 0.99999f;
     }
 
-    void Begin(CCircuitUnit@ factory, CCircuitDef@ def, int count) {
+    // gatherSeconds > 0: this batch's own release deadline (FrontTankMass); else VehicleTankGatherSeconds.
+    // promote: RAID (the opener, T1 masses) or ATTACK (T2 masses sent at the enemy as one squad)
+    void Begin(CCircuitUnit@ factory, CCircuitDef@ def, int count, int gatherSeconds = -1,
+               Task::FightType promote = Task::FightType::RAID) {
+        launch = promote;
         factoryId = factory.id; defId = def.id;
         started = ai.frame;
-        deadline = started + AiMax(1, Global::RoleSettings::Front::VehicleTankGatherSeconds) * SECOND;
+        deadline = started + AiMax(1, gatherSeconds > 0 ? gatherSeconds : Global::RoleSettings::Front::VehicleTankGatherSeconds) * SECOND;
         expected = count; batchSize = count; admitted = 0; unitPower = def.power;
         rally = factory.GetPos(ai.frame);
         members.resize(0); departed.resize(0); recruits.resize(0); @gather = null; closed = false;
@@ -114,7 +121,7 @@ namespace FrontOpener {
         if (!Admit(unit)) return null;
         if (gather !is null && gather.IsDead()) { Close(); return null; }
         if (gather is null) {
-            @gather = aiMilitaryMgr.EnqueueGather(TaskF::Defend(Task::FightType::RAID, RequiredPower()), rally, deadline);
+            @gather = aiMilitaryMgr.EnqueueGather(TaskF::Defend(launch, RequiredPower()), rally, deadline);
             if (gather is null) { Close(); return null; }
         }
         return gather;

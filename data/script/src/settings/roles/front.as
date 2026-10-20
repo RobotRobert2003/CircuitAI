@@ -93,6 +93,50 @@ namespace Front {
             // Opt-in profile policy: retain the first scout, then choose tanks.
             float VehicleTankOpenerChance = 0.0f;
             int VehicleTankGatherSeconds = 300; // release a disrupted/incomplete batch
+            // Owner (2026-10-19): after the opener and until a T2 factory stands, a T1 vehicle plant rolls
+            // every VehicleTankMassIntervalSeconds; on VehicleTankMassChance it builds VehicleTankMassMin..Max
+            // (random) medium tanks (Stout/Brute/Decurion) in succession, held at the plant until the last is
+            // out, then on normal orders. Off here, on in experimental_balanced (systems/production/front_tank_mass.as).
+            float VehicleTankMassChance = 0.0f;
+            int VehicleTankMassIntervalSeconds = 180;
+            int VehicleTankMassMin = 5;
+            int VehicleTankMassMax = 8;
+            int VehicleTankMassGatherSeconds = 480; // release a disrupted/incomplete mass
+            // Owner (2026-10-19): the same for a finished T2 vehicle plant, all game: Bull/Tiger/Prometheus,
+            // held until the last is out, then sent at the enemy as one attack squad. Off here, on in experimental_balanced.
+            float VehicleT2TankMassChance = 0.0f;
+            int VehicleT2TankMassIntervalSeconds = 180;
+            int VehicleT2TankMassMin = 5;
+            int VehicleT2TankMassMax = 8;
+            int VehicleT2TankMassGatherSeconds = 600;
+            // Owner (2026-10-19): each T2 wave also gets a radar jammer, radar and flak vehicle from the same plant,
+            // moved every WaveEscortUpdateSeconds to the wave's safe centre (its tanks' centroid, WaveEscortBehind
+            // back toward our start) once that moves WaveEscortRepath. Off here (systems/production/front_wave_escort.as).
+            bool VehicleT2WaveEscorts = false;
+            float WaveEscortBehind = 150.0f;   // owner (2026-10-20): close behind, moving with the group
+            int WaveEscortUpdateSeconds = 2;
+            float WaveEscortRepath = 120.0f;
+            // Owner (2026-10-20): on the same T2 roll, VehicleT2ArtySquadChance for a faction artillery squad held until
+            // complete, then led by its Starlight/Quaker/Thanatos, which stops at ArtySquadRangeFraction of its range from
+            // the nearest known enemy; the rest follow ArtySquadFollowBehind behind, all on hold position and fire at will.
+            // Off here (systems/production/front_arty_squad.as).
+            float VehicleT2ArtySquadChance = 0.0f;
+            int ArtySquadUpdateSeconds = 2;
+            float ArtySquadRangeFraction = 0.95f;
+            float ArtySquadCohesion = 450.0f;
+            float ArtySquadFollowBehind = 120.0f;
+            float ArtySquadRepath = 96.0f;
+            int ArtySquadStragglerSeconds = 60;   // longest the lead waits for stragglers before advancing anyway
+            // Owner (2026-10-19): bot lab FRONTs, from the opener wave until a T2 factory stands: every
+            // BotWaveIntervalSeconds, BotWaveChance for BotWaveMin..Max Pawns/Grunts (Goblins: BotWaveGoblinMin..Max),
+            // held at the lab until the last is out, then one attack wave. Off here, on in experimental_balanced.
+            float BotWaveChance = 0.0f;
+            int BotWaveIntervalSeconds = 180;
+            int BotWaveMin = 10;
+            int BotWaveMax = 15;
+            int BotWaveGoblinMin = 15;
+            int BotWaveGoblinMax = 20;
+            int BotWaveGatherSeconds = 360;
             float SwitchFactoryCostMultiplier = 1.2f;
             int ScoutAssignmentLimit = 5;
             float BuilderCostThresholdForBase = 200.0f;

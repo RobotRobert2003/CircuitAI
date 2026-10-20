@@ -142,6 +142,8 @@ namespace Military {
         AmphibiousOps::Reset(); // ephemeral routes are rebuilt through Military::AiMakeTask
         AmphibiousOps::lastTick = -100000; // a loaded frame may precede the last live update
         FrontOpener::Load(); // retire ephemeral opener task ownership after reload
+        FrontWaveEscort::Load(); // T2 wave escorts back to ordinary military policy
+        FrontArtySquad::Load(); // T2 artillery squads too
         ScoutRaid::Reset(); // raid routes are rebuilt through Military::AiMakeTask
         ScoutRaid::lastTick = -100000;
 	}

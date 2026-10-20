@@ -12,6 +12,9 @@
 #include "../../types/terrain.as"
 #include "../../systems/production/factory_production.as"
 #include "../../systems/production/front_opener.as"
+#include "../../systems/production/front_tank_mass.as"
+#include "../../systems/production/front_wave_escort.as"
+#include "../../systems/production/front_arty_squad.as"
 #include "../../systems/combat/land_siege.as"
 #include "../../systems/construction/front_geothermal.as"
 #include "../../systems/construction/commander_front.as"
@@ -269,6 +272,7 @@ namespace RoleFront {
         // Lock to the first T1 land factory encountered
         if (g_frontScoutRushFactoryId == -1) {
             g_frontScoutRushFactoryId = u.id;
+            FrontTankMass::SetMain(factoryName);   // owner: tank masses / bot waves only from this factory type
             GenericHelpers::LogUtil("[FRONT] ScoutRush locked to factory id=" + g_frontScoutRushFactoryId + " (" + factoryName + ")", 2);
         }
         if (u.id != g_frontScoutRushFactoryId) return null; // only the locked factory performs the rush
@@ -374,6 +378,10 @@ namespace RoleFront {
             // After scout rush, try one-time T1 raider opener for T1 bot lab
             IUnitTask@ raiderTask = Front_TryT1RaiderOpener(u, factoryName, side);
             if (raiderTask !is null) return raiderTask;
+
+            // Owner (2026-10-19): until a T2 factory stands, a roll every few minutes for a held bot wave
+            IUnitTask@ botWave = FrontTankMass::Try(u, factoryName, side, g_frontRaiderOpenerDone || FrontOpener::WasQueued("batch"));
+            if (botWave !is null) return botWave;
         }
 
         // T1 Vehicle Plant enforcement
@@ -400,6 +408,10 @@ namespace RoleFront {
             // After scout rush, try one-time T1 raider opener for T1 vehicle plant
             IUnitTask@ raiderTask2 = Front_TryT1RaiderOpener(u, factoryName, side);
             if (raiderTask2 !is null) return raiderTask2;
+
+            // Owner (2026-10-19): until a T2 factory stands, a roll every few minutes for a held medium tank mass
+            IUnitTask@ massTask = FrontTankMass::Try(u, factoryName, side, g_frontRaiderOpenerDone || FrontOpener::WasQueued("batch"));
+            if (massTask !is null) return massTask;
         }
 
         // T2 Bot Lab enforcement (Front-specific minimum T2 bot constructors)
@@ -436,6 +448,12 @@ namespace RoleFront {
                     }
                 }
             }
+        }
+
+        // Owner (2026-10-19): a T2 vehicle plant rolls every few minutes for a held Bull/Tiger/Prometheus mass
+        if (UnitHelpers::IsT2VehicleLab(factoryName)) {
+            IUnitTask@ massT2 = FrontTankMass::Try(u, factoryName, side, true);
+            if (massT2 !is null) return massT2;
         }
 
         IUnitTask@ siege = LandSiege::Produce(u);
@@ -530,7 +548,9 @@ namespace RoleFront {
     ******************************************************************************/
     
     IUnitTask@ Front_MilitaryAiMakeTask(CCircuitUnit@ unit) {
-        IUnitTask@ task = FrontOpener::MilitaryTask(unit);
+        IUnitTask@ task = FrontArtySquad::MilitaryTask(unit);   // owner: T2 artillery squads move with their lead
+        if (task is null) @task = FrontWaveEscort::MilitaryTask(unit);   // owner: T2 wave escorts follow their wave
+        if (task is null) @task = FrontOpener::MilitaryTask(unit);
         return task is null ? aiMilitaryMgr.DefaultMakeTask(unit) : task;
     }
 
@@ -540,6 +560,7 @@ namespace RoleFront {
     void Front_MilitaryAiUnitAdded(CCircuitUnit@ unit, Unit::UseAs usage) {
         if (unit is null) return;
         FrontOpener::Admit(unit);
+        if (!FrontArtySquad::UnitAdded(unit)) FrontWaveEscort::UnitAdded(unit);
         
         // Only apply to the first N units
         if (g_frontScoutAssignmentCount >= Global::RoleSettings::Front::ScoutAssignmentLimit) return;
@@ -552,6 +573,23 @@ namespace RoleFront {
             g_frontScoutAssignmentCount++;
             GenericHelpers::LogUtil("[FRONT] Assigned SCOUT attribute to " + name + " (" + g_frontScoutAssignmentCount + "/" + Global::RoleSettings::Front::ScoutAssignmentLimit + ")", 2);
         }
+    }
+
+    void Front_MilitaryAiUnitRemoved(CCircuitUnit@ unit, Unit::UseAs usage) {
+        FrontOpener::UnitRemoved(unit, usage);
+        FrontWaveEscort::UnitRemoved(unit);
+        FrontArtySquad::UnitRemoved(unit);
+    }
+
+    void Front_FactoryAiTaskRemoved(IUnitTask@ task, bool done) {
+        FrontOpener::RecruitRemoved(task, done);
+        FrontWaveEscort::RecruitRemoved(task, done);
+    }
+
+    void Front_MilitaryAiTaskRemoved(IUnitTask@ task, bool done) {
+        FrontOpener::TaskRemoved(task, done);
+        FrontWaveEscort::TaskRemoved(task);
+        FrontArtySquad::TaskRemoved(task);
     }
 
     /******************************************************************************
@@ -1047,10 +1085,10 @@ namespace RoleFront {
         @cfg.SelectFactoryHandler = cast<SelectFactoryDelegate@>(@Front_SelectFactoryHandler);
         @cfg.FactoryAiUnitAdded = cast<AiUnitAddedDelegate@>(@Front_FactoryAiUnitAdded);
         @cfg.FactoryAiUnitRemoved = cast<AiUnitRemovedDelegate@>(@Front_FactoryAiUnitRemoved);
-        @cfg.FactoryAiTaskRemovedHandler = cast<AiTaskRemovedDelegate@>(@FrontOpener::RecruitRemoved);
+        @cfg.FactoryAiTaskRemovedHandler = cast<AiTaskRemovedDelegate@>(@Front_FactoryAiTaskRemoved);
         @cfg.MilitaryAiMakeTaskHandler = cast<AiMakeTaskDelegate@>(@Front_MilitaryAiMakeTask);
-        @cfg.MilitaryAiUnitRemoved = cast<AiUnitRemovedDelegate@>(@FrontOpener::UnitRemoved);
-        @cfg.MilitaryAiTaskRemovedHandler = cast<AiTaskRemovedDelegate@>(@FrontOpener::TaskRemoved);
+        @cfg.MilitaryAiUnitRemoved = cast<AiUnitRemovedDelegate@>(@Front_MilitaryAiUnitRemoved);
+        @cfg.MilitaryAiTaskRemovedHandler = cast<AiTaskRemovedDelegate@>(@Front_MilitaryAiTaskRemoved);
 
         @cfg.MilitaryAiUnitAdded = cast<AiUnitAddedDelegate@>(@Front_MilitaryAiUnitAdded);
 

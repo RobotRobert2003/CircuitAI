@@ -132,6 +132,8 @@ namespace Main {
 		Military::UpdateEnemyCostCache();
         Aggression::Update();
         CommanderCombat::Update();
+        FrontWaveEscort::Update();   // T2 tank wave escorts follow their wave (no-op without a wave)
+        FrontArtySquad::Update();   // T2 artillery squads follow their lead (no-op without a squad)
 
 		if (Global::profileController !is null) {
 			Global::profileController.MainUpdate();
@@ -161,6 +163,18 @@ namespace Main {
 	{
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
         Global::RoleSettings::Front::VehicleTankOpenerChance = 0.5f;
+        // FRONT vehicles (owner, 2026-10-19): every 3 min from the opener to the first T2 factory, 50% for 5-8
+        // medium tanks held at the plant until the last is out (src/settings/roles/front.as VehicleTankMass*, off there)
+        Global::RoleSettings::Front::VehicleTankMassChance = 0.5f;
+        // ... and a T2 vehicle plant all game: every 3 min, 35% for 5-8 Bull/Tiger/Prometheus sent as one attack squad
+        // with a jammer, radar and flak vehicle built first, kept at the wave's safe centre (owner, 2026-10-19/20)
+        Global::RoleSettings::Front::VehicleT2TankMassChance = 0.35f;
+        Global::RoleSettings::Front::VehicleT2WaveEscorts = true;
+        // ... and 15% for a faction artillery squad instead (owner, 2026-10-20; systems/production/front_arty_squad.as)
+        Global::RoleSettings::Front::VehicleT2ArtySquadChance = 0.15f;
+        // FRONT bot labs (owner, 2026-10-19): every 3 min from the opener wave to the first T2 factory, 50% for 10-15
+        // Pawns/Grunts or 15-20 Goblins held at the lab until the last is out, then one attack wave (BotWave*, off in src)
+        Global::RoleSettings::Front::BotWaveChance = 0.5f;
 		// FRONT (owner, 2026-10-17): two FRONTs each build a spam lab for an edge lane, left and right
 		// (src/settings/shared/spam.as EdgeLanesEnabled, off there; systems/combat/edge_lanes.as)
 		Global::Spam::EdgeLanesEnabled = true;
