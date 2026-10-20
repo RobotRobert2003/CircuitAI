@@ -2,8 +2,8 @@
 // VehicleT2ArtySquadChance hit (instead of the Bull/Tiger/Prometheus wave) queues one faction squad:
 //   Armada: 1 Starlight (lead), 2 Bulls, 3 Mausers, 1 Ambassador, 1 Umbra, 1 Prophet, 1 Shredder
 //   Cortex: 2 Quakers (lead), 3 Banishers, 1 Negotiator, 1 Obscurer, 1 Omen, 1 Fury
-//   Legion: 3 Thanatos (lead), 2 Arquebus, 1 Boreas, 1 Cicero, 1 Pheme, 1 Charon
-// Legion's Thanatos and Arquebus are bots: they come from a finished T2 bot lab of ours; without one the
+//   Legion: 3 Cleavers (lead), 2 Prometheus, 2 Medusas, 1 Boreas, 1 Cicero, 1 Pheme, 1 Charon (owner, 2026-10-20)
+// A faction's bots, if any are listed, come from a finished T2 bot lab of ours; without one the
 // roll becomes a normal tank wave. Every member is enumerated as it comes out and held at the plant
 // until the squad is complete (or ArtySquadGatherSeconds pass). Then the lead unit (the first living
 // member of the lead type, else the longest-ranged member) walks toward the nearest known enemy and
@@ -56,9 +56,8 @@ namespace FrontArtySquad {
             lead = "cormart";
             vehicles = array<string> = {"cormart", "cormart", "corban", "corban", "corban", "corvroc", "coreter", "corvrad", "corsent"};
         } else if (side == "legion") {
-            lead = "leghrk";
-            bots = array<string> = {"leghrk", "leghrk", "leghrk", "legsrail", "legsrail"};
-            vehicles = array<string> = {"legavroc", "legavjam", "legavrad", "legvflak"};
+            lead = "legamcluster";
+            vehicles = array<string> = {"legamcluster", "legamcluster", "legamcluster", "legaheattank", "legaheattank", "legmed", "legmed", "legavroc", "legavjam", "legavrad", "legvflak"};
         } else lead = "";
     }
 

@@ -117,7 +117,7 @@ namespace Front {
             int WaveEscortUpdateSeconds = 2;
             float WaveEscortRepath = 120.0f;
             // Owner (2026-10-20): on the same T2 roll, VehicleT2ArtySquadChance for a faction artillery squad held until
-            // complete, then led by its Starlight/Quaker/Thanatos, which stops at ArtySquadRangeFraction of its range from
+            // complete, then led by its Starlight/Quaker/Cleaver, which stops at ArtySquadRangeFraction of its range from
             // the nearest known enemy; the rest follow ArtySquadFollowBehind behind, all on hold position and fire at will.
             // Off here (systems/production/front_arty_squad.as).
             float VehicleT2ArtySquadChance = 0.0f;
