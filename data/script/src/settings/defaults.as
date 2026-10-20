@@ -9,6 +9,7 @@
 #include "shared/spam.as"
 #include "shared/scout_raid.as"
 #include "shared/construction.as"
+#include "shared/idle_reclaim.as"
 #include "roles/tech.as"
 #include "roles/air.as"
 #include "roles/front.as"

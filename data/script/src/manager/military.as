@@ -128,6 +128,7 @@ namespace Military {
 	{
         TechHeavyDelivery::Removed(unit);
 		Team::Ferry::OnUnitRemoved(unit);
+		IdleReclaim::UnitRemoved(unit); // a lost unit marks a wreck site
 		TechFlank::UnitRemoved(unit);
         AmphibiousOps::UnitRemoved(unit);
         ScoutRaid::UnitRemoved(unit);

@@ -17,6 +17,7 @@
 #include "../systems/team/ferry.as"
 #include "../systems/construction/layout.as"
 #include "../systems/team/sea_assist.as"
+#include "../systems/construction/idle_reclaim.as"
 
 namespace Builder {
 	// CCircuitUnit is registered as asOBJ_NOCOUNT (see InitScript.cpp).
@@ -2040,6 +2041,7 @@ namespace Builder {
 			@t = aiBuilderMgr.DefaultMakeTask(u);
 			if (SeaLayout::Enabled()) @t = SeaBuild::LayoutTask(u,t);
 		}
+		@t = IdleReclaim::Offer(u, t); // owner, 2026-10-20: an idle T1 vehicle con reclaims a safe wreck site
 
 		// Record tracking for this builder if any (best-effort owner): grace ~3s, timeout ~45s
 		if (t !is null) {
@@ -2775,6 +2777,7 @@ namespace Builder {
 		if (unit is null) return;
 
 		Team::SeaAssist::OnUnitRemoved(unit);
+		IdleReclaim::UnitRemoved(unit); // a lost unit marks a wreck site
 
 		// Ensure any per-builder task mapping is cleared for this unit
 		ClearBuilderTaskByUnit(unit);
