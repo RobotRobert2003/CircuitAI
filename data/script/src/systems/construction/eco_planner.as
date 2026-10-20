@@ -379,8 +379,9 @@ namespace EcoPlanner {
         s.turretSlot = air ? AirEconomy::t1 + AirEconomy::t2 > 0 : Layout::CanPlaceTurret();
         // Turrets only: the commander's 300 and the constructors' 90s pass
         // through; played, they hid the shortage and no turret was ever built.
-        s.buildPowerNear = aiBuilderMgr.GetStaticBuildPowerNear(air ? Global::Map::StartPos : Layout::BaseCentre(),
-            air ? Global::RoleSettings::Air::HomeEconomyRadius : Global::RoleSettings::Tech::EcoBuildPowerRadius);
+        // owner 2026-10-20: once the forward cluster asks, the weaker block's (Layout::EconomyBuildPowerNear)
+        s.buildPowerNear = air ? aiBuilderMgr.GetStaticBuildPowerNear(Global::Map::StartPos, Global::RoleSettings::Air::HomeEconomyRadius)
+            : Layout::EconomyBuildPowerNear();
         s.builderIsT2 = (u !is null && u.circuitDef !is null) ? (UnitHelpers::GetConstructorTier(u.circuitDef) >= 2) : false;
         s.mexUpPos = AIFloat3(-1.0f, 0.0f, -1.0f);
         s.mexUpsQueued = 0;

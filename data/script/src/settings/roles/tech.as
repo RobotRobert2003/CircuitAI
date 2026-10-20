@@ -360,6 +360,12 @@ namespace Tech {
             float InvariantFloatPercent = 0.9f;             // D-076: INV-004 - the metal bank at this share of storage is floating
             float InvariantFloatSeconds = 60.0f;            // D-076: INV-004 - ... for this long while a structure is under construction with build power short
             bool ExpTurretCentreOut = true;                // D-077: turrets start at the box centre and grow outward as one connected cluster (NextSlotConnected); off = D-069 nearest-lab
+            bool LayoutForwardTurretsEarly = false;         // owner 2026-10-19: once the economy stands in the forward cluster, its turret slots are offered beside the main block's and the asking constructor takes the nearer (off = the forward block waits for the main block's last slot; balanced on)
+            bool LayoutForwardTurretDemand = false;         // owner 2026-10-20: the forward cluster asks for its own turrets: a dear frame there counts for power.t1, the economy's build-power target is read at the weaker block, and the weaker block's slot is taken first (off = turrets are demanded around the main block only; balanced on)
+            float LayoutForwardBuildPowerRadius = 450.0f;   // owner 2026-10-20: the forward cluster's static build power and dear frames are counted within this of its centre
+            int LayoutForwardTurretMinimum = 0;             // owner 2026-10-20: while the forward cluster's economy stands with fewer turrets than this taken there, T1 constructors (bots and aircraft) build its turrets before helping the economy (fwd.turrets; 0 = off; balanced 12)
+            int LayoutForwardTurretParallel = 3;            // owner 2026-10-20: ... at least this many of those turrets may be ordered or framed at once, whatever the turret calculation allows
+            int AfusAtOnce = 0;                             // owner 2026-10-20: advanced fusions ordered or framed at once, whoever orders them (the rush chain, the dedicated air constructor, the economy rows); the rest assist (0 = no limit; balanced 1)
             float ReclaimT1EnergyMargin = 1.25f;            // D-077: winds and solars are reclaimed once a fusion stands and energy income without them covers the pull by this
             float ReclaimAdvSolarMargin = 1.5f;             // D-077: advanced solars once income without every T1/adv source covers the pull by this; an advanced fusion reclaims all
             float ReclaimEnergyRadius = 2500.0f;            // D-077: energy structures within this of the base centre, nearest first
