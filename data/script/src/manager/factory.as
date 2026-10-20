@@ -391,6 +391,7 @@ namespace Factory {
             return;
 		GenericHelpers::LogUtil("Enter FactoryAiUnitRemoved", 4);
 		Spam::OnFactoryRemoved(unit);   // drop the factory spam route
+		IdleReclaim::UnitRemoved(unit); // a lost lab marks a wreck site
 		// Clear lab references when a lab dies
 		if (Factory::primaryT1BotLab is unit){ @Factory::primaryT1BotLab = null; }
 		if (Factory::primaryT2BotLab is unit){ @Factory::primaryT2BotLab = null; }
