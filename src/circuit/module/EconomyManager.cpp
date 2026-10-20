@@ -1022,6 +1022,13 @@ bool CEconomyManager::IsOwnSpot(const springai::AIFloat3& pos)
 		if (indexed) mexOwners[index] = owner;
 		return owner < 0 || owner == ownTeam;
 	}
+	// Owner 2026-10-20: when the opening window ends every open spot is
+	// released to any ally. The D-072 split below would keep a rear start's
+	// forward commander off the spots in front of it for the whole game; the
+	// ally-zone veto still keeps builders out of an ally's base.
+	if (mexNavigationEnabled) {
+		return true;
+	}
 	// D-072: the spot is ours when no ally's start position is nearer to it
 	// than our own (a Voronoi split of the map by start positions).
 	const float own = circuit->GetSetupManager()->GetStartPos().SqDistance2D(pos);

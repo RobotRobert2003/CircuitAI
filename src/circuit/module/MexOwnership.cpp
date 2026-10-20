@@ -140,8 +140,9 @@ bool CEconomyManager::IsMexExpansionAllowed(const AIFloat3& pos, bool allyAware)
     if (!mexNavigationEnabled) return !allyAware || (!circuit->GetTerrainManager()->IsZoneAlly(pos) && IsOwnSpot(pos));
     // While the opening window runs, start allocation is the only territorial
     // veto. Real occupied mexes and allied structure footprints are still
-    // protected by their existing owners. After the window the ally-zone veto
-    // and the D-072 Voronoi split (inside IsOwnSpot) hold again (D-327).
+    // protected by their existing owners. After the window only the ally-zone
+    // veto holds: IsOwnSpot releases every spot (owner 2026-10-20, was the
+    // D-072 Voronoi split again, D-327).
     if (IsMexOwnershipActive()) return IsOwnSpot(pos);
     return !allyAware || (!circuit->GetTerrainManager()->IsZoneAlly(pos) && IsOwnSpot(pos));
 }
