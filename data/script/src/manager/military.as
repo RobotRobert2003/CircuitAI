@@ -4,6 +4,7 @@
 #include "../systems/combat/porc_policy.as"
 #include "../systems/combat/spam.as"
 #include "../systems/combat/scout_raid.as"
+#include "../systems/combat/t3_unstick.as"
 #include "../systems/team/ferry.as"
 #include "../systems/amphibious/amphibious_ops.as"
 
@@ -114,6 +115,7 @@ namespace Military {
 	void AiUnitAdded(CCircuitUnit@ unit, Unit::UseAs usage)
 	{
 		Team::Ferry::OnUnitAdded(unit);   // claim a transport, ours or a gift
+		T3Unstick::UnitAdded(unit);       // watch T3 units for getting penned in (owner 2026-10-20)
 
 		// Delegate to role-specific handler if registered
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;

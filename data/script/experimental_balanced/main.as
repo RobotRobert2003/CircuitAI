@@ -128,6 +128,7 @@ namespace Main {
 		Military::UpdateEnemyCostCache();
         Aggression::Update();
         CommanderCombat::Update();
+        T3Unstick::Tick();      // free T3 units penned in by our T1 porc, eco and construction turrets
 
 		if (Global::profileController !is null) {
 			Global::profileController.MainUpdate();
@@ -155,6 +156,11 @@ namespace Main {
 	//Use this to modify global.as and apply difficulty/profile settings
 	void ApplyProfileSettings()
 	{
+        // Ally clear message protocol (owner, 2026-10-17; src/systems/team/ally_clear.as), used here by T3 unstick
+        Global::Team::AllyClearEnabled = true;
+        // T3 unstick (owner, 2026-10-20): a T3 that stops moving while ordered out is freed by reclaiming the T1 porc,
+        // T1 eco, T1 construction turrets, T2 flak and T2 pop-up artillery around it (src/settings/shared/t3_unstick.as, off there)
+        Global::T3Unstick::Enabled = true;
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
         Global::RoleSettings::Front::VehicleTankOpenerChance = 0.5f;
 		// FRONT (owner, 2026-10-17): two FRONTs each build a spam lab for an edge lane, left and right
