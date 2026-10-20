@@ -58,8 +58,7 @@ void CRangedEngagement::Release(CCircuitUnit* unit,bool commands)
     if(!commands || !unit || unit->IsDead()) return;
     if(target>=0) {
         TRY_UNIT(ai,unit,
-            float params[]={float(target)};
-            SendCustomCommand(ai->GetSkirmishAIId(),id,CMD_UNIT_CANCEL_TARGET,params);
+            unit->CancelTaskTarget(target);
         )
     }
     unit->TrySetMoveState(unit->GetCircuitDef()->GetMoveState());
@@ -100,14 +99,9 @@ void CRangedEngagement::SelectTarget(CCircuitUnit* unit,int selected,int weapon,
     }
     if(selected!=target || weapon!=weaponIndex) world.ReleaseShot(id);
     TRY_UNIT(ai,unit,
-        if(target>=0 && target!=selected) {
-            float params[]={float(target)};
-            SendCustomCommand(ai->GetSkirmishAIId(),id,CMD_UNIT_CANCEL_TARGET,params);
-        }
-        if(selected>=0) {
-            float params[]={float(selected)};
-            SendCustomCommand(ai->GetSkirmishAIId(),id,CMD_UNIT_SET_TARGET,params);
-        }
+        // Through the unit, so a D-352 commander lock keeps BAR's list.
+        if(target>=0 && target!=selected) unit->CancelTaskTarget(target);
+        if(selected>=0) unit->SendTaskTarget(selected);
     )
     if(weapon!=weaponIndex) {
         liveWeapon.reset(weapon>=0 ? unit->GetUnit()->GetWeapon(caps.weapons[weapon].mount.get()) : nullptr);

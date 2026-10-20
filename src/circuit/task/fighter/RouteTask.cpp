@@ -83,8 +83,7 @@ void CRouteTask::RemoveAssignee(CCircuitUnit* unit)
         // BAR accepts an ID-specific cancel, including pending out-of-range
         // targets. Do not cancel a player's replacement priority list.
         TRY_UNIT(manager->GetCircuit(), unit,
-            float params[] = {float(seaTarget)};
-            SendCustomCommand(manager->GetCircuit()->GetSkirmishAIId(), unit->GetId(), CMD_UNIT_CANCEL_TARGET, params);
+            unit->CancelTaskTarget(seaTarget);
         )
         unit->TrySetFireState(unit->GetCircuitDef()->GetFireState());
     }
@@ -301,8 +300,7 @@ void CRouteTask::IssuePriorityTarget(CCircuitUnit* unit, int id, bool naval, boo
         } else if (!def->HasSurfToAir()) return;
     }
     TRY_UNIT(circuit, unit,
-        float params[] = {float(id >= 0 ? id : seaTarget)};
-        SendCustomCommand(circuit->GetSkirmishAIId(), unit->GetId(), id >= 0 ? CMD_UNIT_SET_TARGET : CMD_UNIT_CANCEL_TARGET, params);
+        if (id >= 0) unit->SendTaskTarget(id); else unit->CancelTaskTarget(seaTarget);
         unit->TrySetFireState(id >= 0 ? CCircuitDef::FireType::OPEN : def->GetFireState());
     )
 }
