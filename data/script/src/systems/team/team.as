@@ -8,6 +8,7 @@
 #include "builder_recovery.as"
 #include "geo_release.as"
 #include "commander_energy.as"
+#include "ally_clear.as"
 
 namespace Team {
     // Return true if the def represents a T2 constructor (land or air)
@@ -54,6 +55,7 @@ namespace Team {
         if (Ferry::HandleMessage(msg, fromTeamId)) return;
         if (Donation::HandleMessage(msg, fromTeamId)) return;
         if (SeaAssist::HandleMessage(msg, fromTeamId)) return;
+        if (AllyClear::HandleMessage(msg, fromTeamId)) return;
         if (AmphibiousBeaches::HandleMessage(msg, fromTeamId)) return;
         Recovery::HandleMessage(msg, fromTeamId);
     }

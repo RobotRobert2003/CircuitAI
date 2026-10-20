@@ -2027,6 +2027,8 @@ namespace Builder {
 
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;
 		@t = SeaCoast::Build(u); // SEA-only lost-water recovery precedes discretionary spam.
+		if (t is null) @t = T3Unstick::BuilderTask(u); // owner, 2026-10-20: reclaim T1 porc/eco/turrets penning a T3
+		if (t is null) @t = Team::AllyClear::BuilderTask(u); // owner, 2026-10-17: reclaim allied buildings given to us
 		if (t is null) @t = EdgeLanes::BuilderTask(u); // owner, 2026-10-17: two FRONTs build the edge lane labs
 		if (t is null) @t = Spam::BuilderMakeTask(u);
 		if (t is null && MetalEconomy::Active() && !SeaLayout::Active() && Global::AISettings::Role != AiRole::AIR && Global::AISettings::Role != AiRole::TECH
@@ -2056,6 +2058,7 @@ namespace Builder {
 
 	void AiTaskAdded(IUnitTask@ task)
 	{
+		T3Unstick::TaskAdded(task);   // the engine's self-reclaim of a stuck T3 is aborted (owner, 2026-10-20)
 		if (Global::AISettings::Role == AiRole::TECH && Global::RoleSettings::Tech::ExperimentalBuild)
 			Invariants::ConstructionAdmitted(task);
 		if (Global::AISettings::Role == AiRole::TECH) TechReclaim::Audit(task);   // D-290: every reclaim of ours, named by path
