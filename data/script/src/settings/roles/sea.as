@@ -179,6 +179,13 @@ namespace Sea {
             int FleetRoutesPerTick = 16;        // combat re-routes per census, rest next census
             bool MergeChasingCohorts = true;    // one pack per hull chasing one target
             float ChaseMergeRadius = 900.0f;
+            // D-351: submarine routes go out one leg at a time (elmos); the
+            // next leg follows when the leg is walked. 0 = whole route.
+            float SubmarineLegLength = 1024.0f;
+            float FleetLegLength = 0.0f;          // surface hulls: whole route
+            // D-351: a cohort keeps its current objective unless another of the
+            // same rank scores this many times higher. 1 = no hold.
+            float TargetHoldRatio = 1.5f;
             float ForwardRepairBuffer = 250.0f;
             float ForwardRepairHealth = 0.75f;     // publish a point below this health
             float ForwardRepairMaxDistance = 2000.0f;

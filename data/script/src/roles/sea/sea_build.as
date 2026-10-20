@@ -204,7 +204,10 @@ namespace SeaBuild {
             const int limit=Global::RoleSettings::Sea::LayoutFallbackSeconds;
             // Only while energy is actually short: cheat/supplied economies and
             // a full bank legitimately need no naval energy yet.
-            if (limit>0 && ai.frame-firstHarborFrame>(limit+300)*SECOND
+            // D-351: only inside a window after the harbor (the fallback limit
+            // plus 5 to 15 minutes). A late dip in a healthy land-energy economy
+            // is not a stalled naval economy (Glacial team 4, 1,000 E/s, minute 34).
+            if (limit>0 && ai.frame-firstHarborFrame>(limit+300)*SECOND && ai.frame-firstHarborFrame<(limit+900)*SECOND
                 && aiEconomyMgr.energy.current<aiEconomyMgr.energy.storage*.5f
                 && SeaEconomy::Number(SeaEconomy::Constructor(side,false),true)>0) {
                 CCircuitDef@ tidal=ai.GetCircuitDef(UnitHelpers::GetTidalNameForSide(side));
@@ -1061,6 +1064,10 @@ namespace SeaBuild {
                 fallbackLog=ai.frame;
                 GenericHelpers::LogUtil("[SEA][Placement] fallback native "+name+" builder="+u.circuitDef.GetName()+" no layout site",1);
             }
+            // D-351: SEA owns the admitted order, so Tick's economy filter no
+            // longer aborts it a second later (the ship stopped and was
+            // re-ordered every second and the tidal never started).
+            SeaEconomy::Added(task);
             return task;
         }
         if (placed !is null) LayoutFallback(name,true);

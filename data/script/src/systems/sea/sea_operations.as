@@ -13,6 +13,8 @@ namespace SeaOperations {
         bool released=false;
         bool holdingFireline=false;
         int replacementReleased=-1, replacementSince=-1;
+        // D-351: the last route was cut to a leg; the flags to continue it.
+        bool legCut=false, legWithdrawing=false, legScout=false, legHold=false, legTransit=false, legCautious=true;
         bool perimeterAdvancing=false;
         bool perimeterAligned=false;
         int avoidUntil=0;
@@ -265,17 +267,30 @@ namespace SeaOperations {
             // path through terrain. The next threat census can choose again.
             points.resize(0); points.insertLast(g.centre);
         }
-        if (Global::RoleSettings::Sea::CoordinatedFleet && SeaSubmarines::Handles(lead.circuitDef)
-            && cautious && transit && !withdrawing && !aiTerrainMgr.IsAreaVisible(goal,128)) {
-            // Advance along the calculated water route, never cut straight
-            // across an island. Known clear destinations retain normal transit.
-            const float maximum=AiMax(128.0f,Global::RoleSettings::Sea::SubmarineAdvanceStep);
+        // The intended destination, before any leg cut (g.goal; objective
+        // comparisons use it, so a cut leg does not look like a moved goal).
+        const AIFloat3 intent=points[points.length()-1];
+        g.legCut=false;
+        g.legWithdrawing=withdrawing; g.legScout=scout; g.legHold=hold; g.legTransit=transit; g.legCautious=cautious;
+        // D-351: a submarine route is issued one leg at a time. A full route
+        // across the map was 100+ MOVEs per sub, replaced whenever the target
+        // changed (owner's lag report, Glacial 8v8: queues of 164-173 points).
+        // Unseen cautious transit keeps the shorter SubmarineAdvanceStep; every
+        // other submarine route (chase, station, perimeter, line) gets
+        // SubmarineLegLength. ContinueLeg issues the next leg when this one is
+        // walked. Surface routes use FleetLegLength (0 = whole route).
+        float maximum=0;
+        if (SeaSubmarines::Handles(lead.circuitDef)) {
+            const bool unseen=Global::RoleSettings::Sea::CoordinatedFleet && cautious && transit && !withdrawing && !aiTerrainMgr.IsAreaVisible(goal,128);
+            maximum=unseen ? AiMax(128.0f,Global::RoleSettings::Sea::SubmarineAdvanceStep) : Global::RoleSettings::Sea::SubmarineLegLength;
+        } else maximum=Global::RoleSettings::Sea::FleetLegLength;
+        if (maximum>0) {
             float travelled=0; AIFloat3 previous=g.centre;
             for (uint point=0;point<points.length();++point) {
                 const float length=sqrt(MapHelpers::SqDist(previous,points[point]));
                 if (travelled+length>maximum && length>0) {
                     points[point]=previous+(points[point]-previous)*((maximum-travelled)/length);
-                    points.resize(point+1); break;
+                    points.resize(point+1); g.legCut=true; break;
                 }
                 travelled+=length; previous=points[point];
             }
@@ -324,7 +339,7 @@ namespace SeaOperations {
             if (!aiMilitaryMgr.TransferUnit(u,g.route))
                 Invariants::Violation("INV-145",""+u.id,"SEA route handover failed");
         }
-        g.goal=points[points.length()-1]; g.ordered=ai.frame;
+        g.goal=intent; g.ordered=ai.frame;
         return true;
     }
     array<AIFloat3> coverPos; array<float> coverReach;
@@ -488,6 +503,21 @@ namespace SeaOperations {
         }
         return true;
     }
+    // D-351: a cut leg has been walked and the destination is still ahead:
+    // issue the next leg with the same flags. One IsAtEnd query per cohort
+    // per census; the route itself is the same cached native search.
+    bool ContinueLeg(Cohort@ g) {
+        if (!g.legCut || g.route is null || g.route.IsDead()) return false;
+        CCircuitUnit@ lead=ai.GetTeamUnit(g.ids[0]);
+        if (lead is null || !g.route.IsAtEnd(lead)) return false;
+        if (MapHelpers::SqDist(g.centre,g.goal)<=256.0f*256.0f) { g.legCut=false; return false; }
+        const int target=g.target;
+        if (Route(g,g.goal,g.legWithdrawing,g.legScout,g.legHold,g.legTransit,g.legCautious)) {
+            g.target=target; // Route keeps the objective; only the queue is new
+            return true;
+        }
+        return false;
+    }
     void RepairPolicy(Cohort@ g) {
         if (g.route is null || g.route.IsDead()) return;
         if (SeaSubmarines::HoldsFireline(ai.GetCircuitDef(g.defId))) {
@@ -593,7 +623,9 @@ namespace SeaOperations {
                 +" search="+g.search+" coast="+g.coastTarget,1);
         }
         GenericHelpers::LogUtil("[SEA][State] subs="+total[0]+" home="+nearHome[0]+" loose="+loose[0]+" retreat="+retreat[0]
-            +" surface="+total[1]+" home="+nearHome[1]+" loose="+loose[1]+" retreat="+retreat[1]+" homeTargets="+atHomeCodes,1);
+            +" surface="+total[1]+" home="+nearHome[1]+" loose="+loose[1]+" retreat="+retreat[1]
+            +" repairPoints="+SeaRetreat::repairEntries.length()+" repairRetreating="+SeaRetreat::RetreatingToPoint()
+            +" homeTargets="+atHomeCodes,1);
     }
     void Tick() {
         if (!SeaCombat::Active() || !Global::RoleSettings::Sea::FleetOperations) return;
@@ -634,6 +666,7 @@ namespace SeaOperations {
                     Invariants::Violation("INV-145",""+recruit.id,"SEA reinforcement handover failed");
             }
             RepairPolicy(g);
+            if (ContinueLeg(g)) continue;
             CCircuitDef@ def=ai.GetCircuitDef(g.defId);
             const bool scout=def.IsRoleAny(Unit::Role::SCOUT.mask);
             const bool siege=Siege(def);
@@ -749,6 +782,10 @@ namespace SeaOperations {
                 }
                 // Drones are 15-metal respawns; the carrier is the target.
                 if (contactDef>=0 && DroneCarrier(contactDef)) score*=Global::RoleSettings::Sea::DroneCarrierMultiplier;
+                // D-351: the current target is kept unless a rival of the same
+                // rank scores TargetHoldRatio times higher; objective flips were
+                // 3-9 a minute per sub cohort, each one a new route for every sub.
+                if (id==g.target && Global::RoleSettings::Sea::TargetHoldRatio>1) score*=Global::RoleSettings::Sea::TargetHoldRatio;
                 if (targetRank>bestTargetRank || (targetRank==bestTargetRank
                     && (id==preferredFlagship || (target!=preferredFlagship && score>bestScore)))) {
                     bestTargetRank=targetRank;

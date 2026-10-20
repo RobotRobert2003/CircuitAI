@@ -108,7 +108,11 @@ def prepare(a):
         '--modoption','deathmode=neverend','--modoption','startenergy=1000000','--modoption','startenergystorage=1000000',
         '--extra-widget',str(HERE/'widgets/sea_arena.lua'),
         '--extra-widget',str(HERE/'widgets/workforce_perf_watch.lua'),
-        *[x for w in (getattr(a,'extra_widget',None) or []) for x in ('--extra-widget',w)]],check=True)
+        *[x for w in (getattr(a,'extra_widget',None) or []) for x in ('--extra-widget',w)],
+        # D-351: a case may force role settings in the staged script ("settings":
+        # {"Key": "value"} is Sea.Key; "Role.Key" selects another role), so a
+        # fixture such as the crowded coast no longer needs a hand-edited data copy.
+        *[x for k,v in (case.get('settings') or {}).items() for x in ('--set',(k if '.' in k else 'Sea.'+k)+'='+str(v))]],check=True)
     script=d/'script.txt'; s=script.read_text();s=s.replace('[GAME]\n{','[GAME]\n{\n FixedRNGSeed='+str(a.seed)+';',1)
     s=apply_start_boxes(s,case.get('start_boxes', []))
     script.write_text(s)
