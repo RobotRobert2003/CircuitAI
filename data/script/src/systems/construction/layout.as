@@ -771,6 +771,42 @@ namespace Layout {
         return (fwd < main) ? fwd : main;
     }
 
+    // Owner 2026-10-20 (several games: the T1 constructors helped the forward cluster's
+    // advanced fusions and converters up while its turret bank stayed empty): until
+    // LayoutForwardTurretMinimum of its slots are taken, a T1 constructor's first job
+    // there is the next forward turret (fwd.turrets)
+    int ForwardTurretsTaken()
+    {
+        if (fwdGroup <= 0) return 0;
+        return aiTerrainMgr.GetGroupCount(fwdGroup, false) - aiTerrainMgr.GetGroupCount(fwdGroup, true);
+    }
+    bool ForwardTurretsShort()
+    {
+        const int minimum = Global::RoleSettings::Tech::LayoutForwardTurretMinimum;
+        if (minimum <= 0 || nano is null || !ForwardDemandOpen()) return false;
+        if (aiEconomyMgr.metal.current < nano.costM) return false;   // the bank pays the next one
+        return ForwardTurretsTaken() < minimum;
+    }
+    bool forceForwardSlot = false;   // AdmitNanoTask: the forward cluster's slot only
+    IUnitTask@ ForwardNanoTask(CCircuitUnit@ unit)
+    {
+        string why;
+        int budget = TurretsAllowed(why);
+        if (budget < Global::RoleSettings::Tech::LayoutForwardTurretParallel) budget = Global::RoleSettings::Tech::LayoutForwardTurretParallel;
+        forceForwardSlot = true;
+        IUnitTask@ t = NanoTask(unit, Task::Priority::HIGH, budget);
+        forceForwardSlot = false;
+        if (t !is null) {
+            GenericHelpers::LogUtil("[Layout] forward turret " + ForwardTurretsTaken() + " of " + Global::RoleSettings::Tech::LayoutForwardTurretMinimum
+                + " before the economy there, by " + unit.circuitDef.GetName() + " " + unit.id, 1);
+            return t;
+        }
+        // no new one may start: help a forward turret frame rather than the economy
+        CCircuitUnit@ frame = aiBuilderMgr.FindUnfinishedNear(fwdCentre, Global::RoleSettings::Tech::LayoutForwardBuildPowerRadius, nano);
+        if (frame is null || !unit.circuitDef.IsMobile()) return null;
+        return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame, 60 * SECOND));
+    }
+
     // Owner 2026-10-20 (live: the rush chain ordered an advanced fusion at 17:04 and the
     // dedicated air constructor framed a second at 17:13; the reactor gate knew only the
     // economy rows' own order): AfusAtOnce advanced fusions ordered or framed, whoever asks
@@ -1641,7 +1677,7 @@ namespace Layout {
         // concurrent project is affordable. Keep its admission gate shared.
         if (CompactEco::Active()) return CompactEco::NanoTask(unit, priority);
         if (crampedLayout) return CrampedNanoTask(unit, priority);
-        for (uint index = 0; index < overflowSupportGroups.length(); ++index) {
+        for (uint index = 0; !forceForwardSlot && index < overflowSupportGroups.length(); ++index) {
             const int slot = aiTerrainMgr.NextSlotAny(overflowSupportGroups[index], unit.GetPos(ai.frame));
             if (slot < 0) continue;
             IUnitTask@ support = aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::NANO, priority, nano,
@@ -1654,7 +1690,7 @@ namespace Layout {
         // throwaway (played: the first turrets and the turbines packed there, 700
         // elmos from the block); with the block at the home mexes every turret
         // goes into the block
-        if (!Global::RoleSettings::Tech::LayoutBoxAtStart && aiTerrainMgr.GetFactoryNanoAvailable() > 0) {
+        if (!forceForwardSlot && !Global::RoleSettings::Tech::LayoutBoxAtStart && aiTerrainMgr.GetFactoryNanoAvailable() > 0) {
             IUnitTask@ t = aiBuilderMgr.EnqueueFactoryNano(
                 TaskB::Common(Task::BuildType::NANO, priority, nano, Global::Map::StartPos, 0.0f, true, 120 * SECOND), unit);
             if (t !is null) return t;
@@ -1686,7 +1722,8 @@ namespace Layout {
                 const AIFloat3 at = unit.GetPos(ai.frame);
                 const int fid = aiTerrainMgr.NextSlotConnected(fwdGroup, fwdCentre);
                 const bool weaker = ForwardWeaker();
-                if (fid >= 0 && (id < 0 || weaker || MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(fid), at)
+                if (forceForwardSlot) id = fid;   // fwd.turrets: the forward slot or none
+                else if (fid >= 0 && (id < 0 || weaker || MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(fid), at)
                     < MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(id), at))) {
                     if (id >= 0) GenericHelpers::LogUtil("[Layout] turret slot " + fid + " in the forward cluster: "
                         + (weaker ? "the weaker block" : "nearer") + " for " + unit.circuitDef.GetName() + " " + unit.id, weaker ? 1 : 2);

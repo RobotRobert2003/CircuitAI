@@ -275,6 +275,8 @@ namespace TechRules {
     IUnitTask@ DoDefendMexes(Ctx@ c)    { return TechForward::DefendMexes(c.u); }  // D-109
     IUnitTask@ DoForwardT1(Ctx@ c)      { return TechForward::ForwardT1(c.u, c.mi); }   // D-109
     IUnitTask@ DoT1Turret(Ctx@ c)       { return Layout::NanoTask(c.u, Task::Priority::HIGH); }   // D-105
+    bool ForwardTurretsShort(Ctx@ c)    { return Layout::ForwardTurretsShort(); }   // owner 2026-10-20
+    IUnitTask@ DoForwardTurrets(Ctx@ c) { return Layout::ForwardNanoTask(c.u); }   // owner 2026-10-20
     // D-105, D-289: a turret with nothing high-priority in reach assists the
     // nearest producing factory in reach (the fallback, no longer only a metal sink)
     IUnitTask@ DoTurretFactory(Ctx@ c)
@@ -489,6 +491,7 @@ namespace TechRules {
         if (Global::Map::Config.TechCompactEconomy)
             table.insertLast(Rule("eco.compact.support", CON_T1, W0(), @DoCompactSupport, "D-307: one local turret for an active compact economy bank"));
         table.insertLast(Rule("gantry.support", CON_T1, W0(), @DoGantrySupport, "D-281: capable constructors carry an admitted gantry turret assignment before discretionary forward work"));
+        table.insertLast(Rule("fwd.turrets",       CON_T1,       W1(@ForwardTurretsShort), @DoForwardTurrets, "owner 2026-10-20: the forward cluster's economy stands with fewer than LayoutForwardTurretMinimum turrets: T1 constructors (bots and aircraft) build its next turret before helping the economy"));
         table.insertLast(Rule("air.dedicated",     CON_T2,       W0(), @DoAirDedicated, "D-107: the first two T2 air constructors: one only advanced energy converters, the other only advanced fusions, always"));
         table.insertLast(Rule("gantry.scale",      CON_T2,       W1(@GantryScaleDue), @DoGantryScale, "D-288 (owner): one gantry per GantryScaleMetalStep of 10 s minimum metal income: opens and feeds the front T3 cluster; lab.front and gantry.support also finish it"));
         table.insertLast(Rule("flank.factory",     CONSTRUCTORS, W0(), @DoFlankFactory, "D-136: from +200 metal a separate T2 lab feeds an accessible specialist land flank"));
@@ -598,7 +601,7 @@ namespace TechRules {
                 if (r.key == "eco.recover" || r.key == "eco.compact.support") continue;
                 if (r.key == "defence.fortify" || r.key == "mex.upgrade" || r.key == "mex.expand"
                     || r.key == "energy.reclaim" || r.key == "lab.t2" || r.key == "defence.base"
-                    || r.key == "power.t1" || r.key == "power.turret" || r.key == "turret.build"
+                    || r.key == "power.t1" || r.key == "fwd.turrets" || r.key == "power.turret" || r.key == "turret.build"
                     || r.key == "weapons.super" || r.key == "weapons.cluster" || r.key == "flank.factory"
                     || r.key == "air.dedicated" || r.key == "air.flex" || r.key == "fwd.t1" || r.key == "fwd.t2.defend"
                     || r.key == "energy.convert.float" || r.key == "energy.float" || r.key == "storage.metal") continue;
