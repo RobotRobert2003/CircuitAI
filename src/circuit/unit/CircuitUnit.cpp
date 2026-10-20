@@ -356,6 +356,11 @@ void CCircuitUnit::CmdStop(short options, int timeout)
 {
 	unit->Stop(options, timeout);
 	priorityTarget = -1; // BAR STOP cancels the priority list; allow a new intent.
+	taskTarget = -1;
+	if (commanderTarget >= 0) {  // D-352: STOP must not end a commander lock
+		float params[] = {float(commanderTarget)};
+		SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_SET_TARGET, params);
+	}
 }
 
 void CCircuitUnit::CmdSetTarget(CEnemyInfo* enemy)
@@ -368,8 +373,7 @@ void CCircuitUnit::CmdSetTarget(CEnemyInfo* enemy)
     // Unlike queued ATTACK, BAR priority fire also applies during the preceding
     // MOVE. OPEN fire is retained so incompatible mounts (dedicated AA) keep
     // choosing their own targets. Never enable the old global stub for all units.
-    float params[] = {float(next)};
-    SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_SET_TARGET, params);
+    SendTaskTarget(next);
     priorityTarget = next;
 }
 
@@ -378,11 +382,57 @@ void CCircuitUnit::ClearPriorityTarget()
     if (priorityTarget < 0) return;
     if (!isDead && manager != nullptr) {
         TRY_UNIT(manager->GetCircuit(), this,
-            float params[] = {float(priorityTarget)};
-            SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_CANCEL_TARGET, params);
+            CancelTaskTarget(priorityTarget);
         )
     }
     priorityTarget = -1;
+}
+
+void CCircuitUnit::SendTaskTarget(int targetId)
+{
+    taskTarget = targetId;
+    if (commanderTarget >= 0) return;  // restored when the commander lock ends
+    float params[] = {float(targetId)};
+    SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_SET_TARGET, params);
+}
+
+void CCircuitUnit::CancelTaskTarget(int targetId)
+{
+    if (taskTarget == targetId) taskTarget = -1;
+    if (commanderTarget >= 0) return;  // BAR's list holds only the commander
+    float params[] = {float(targetId)};
+    SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_CANCEL_TARGET, params);
+}
+
+bool CCircuitUnit::IsCommanderLocked(const CEnemyInfo* enemy) const
+{
+    return commanderTarget >= 0 && (enemy == nullptr || enemy->GetId() != commanderTarget);
+}
+
+void CCircuitUnit::SetCommanderTarget(int commId, int frame)
+{
+    if (commId < 0) {
+        if (commanderTarget < 0) return;
+        float params[] = {float(commanderTarget)};
+        SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_CANCEL_TARGET, params);
+        commanderTarget = -1;
+        if (taskTarget >= 0) SendTaskTarget(taskTarget);
+        return;
+    }
+    // BAR keeps the list across MOVE/FIGHT; STOP is repaired in CmdStop. The
+    // slow resend covers orders from elsewhere (player, gadgets).
+    if (commId == commanderTarget && frame < commanderFrame + FRAMES_PER_SEC * 3) return;
+    const bool acquired = commId != commanderTarget;
+    commanderTarget = commId;
+    commanderFrame = frame;
+    // Without SHIFT this replaces the list, so the commander is the first entry.
+    float params[] = {float(commId)};
+    SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_SET_TARGET, params);
+    // An explicit ATTACK on another unit outranks SET_TARGET in BAR's gadget.
+    // Drop it: the move/fight that follows it in the queue carries on.
+    if (acquired && command != nullptr && command->GetId() == CMD_ATTACK_GROUND) {
+        CmdRemove({CMD_ATTACK_GROUND}, UNIT_COMMAND_OPTION_ALT_KEY);
+    }
 }
 
 void CCircuitUnit::CmdCloak(bool state)
@@ -658,6 +708,10 @@ void CCircuitUnit::Attack(CEnemyInfo* enemy, bool isGround, int timeout, bool qu
 					unit->Attack(enemy->GetUnit(), UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY | UNIT_COMMAND_OPTION_SHIFT_KEY, timeout);
 				}
 			}
+		} else if (IsCommanderLocked(enemy)) {
+			// D-352: an ATTACK would outrank the commander's SET_TARGET;
+			// FIGHT keeps the advance and lets the priority target win.
+			CmdFightTo(pos, UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY, timeout);
 		} else {
 			if (isGround) {  // los-cheat related
 				CmdAttackGround(pos, UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY, timeout);
@@ -687,7 +741,9 @@ void CCircuitUnit::Attack(const AIFloat3& pos, CEnemyInfo* enemy, bool isGround,
 		} else {
 			CmdMoveTo(pos, UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY, timeout);
 		}
-		if (isGround) {  // los-cheat related
+		if (IsCommanderLocked(enemy)) {
+			// D-352: keep the move and fight legs, leave the shot to SET_TARGET
+		} else if (isGround) {  // los-cheat related
 			CmdAttackGround(enemy->GetPos(), UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY | UNIT_COMMAND_OPTION_SHIFT_KEY, timeout);
 		} else {
 			unit->Attack(enemy->GetUnit(), UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY | UNIT_COMMAND_OPTION_SHIFT_KEY, timeout);
