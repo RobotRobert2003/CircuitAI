@@ -717,6 +717,7 @@ namespace Layout {
         if (fwdGroup > 0) aiTerrainMgr.ReleaseGroup(fwdGroup);
         aiTerrainMgr.ReleaseZone(fwdZone);
         fwdZone = 0; fwdGroup = 0; ++fwdReplans; fwdTryFrame = -100000;
+        fwdEcoStands = false;
         aiTerrainMgr.SetLayoutInt(BOX + ".fwd_zone", 0);
         aiTerrainMgr.SetLayoutInt(BOX + ".fwd_group", 0);
         aiTerrainMgr.SetLayoutInt(BOX + ".fwd_replans", fwdReplans);
@@ -729,7 +730,39 @@ namespace Layout {
     bool ForwardTurretsOpen()
     {
         return Global::RoleSettings::Tech::LayoutForwardTurretsEarly && fwdZone != 0
-            && aiTerrainMgr.GetLayoutInt(BOX + ".fwd_started", 0) != 0;
+            && aiTerrainMgr.GetLayoutInt(BOX + ".fwd_started", 0) != 0
+            && (!Global::RoleSettings::Tech::LayoutForwardTurretDemand || ForwardEconomyStands());
+    }
+    // Owner 2026-10-20 (headless: fwd_started latched at 0:10 on a lab reservation at the
+    // box's edge, and 11 of 12 TECH teams built forward turrets minutes before any
+    // economy went there; one built 73, all lost, with none ever): the forward cluster
+    // asks for turrets only once one of our fusions, advanced fusions or advanced
+    // converters is framed or stands in it. Latched; a re-planned cluster starts again
+    bool fwdEcoStands = false;
+    int fwdEcoCheckFrame = -100000;
+    bool ForwardEconomyStands()
+    {
+        if (fwdZone == 0) return false;
+        if (fwdEcoStands) return true;
+        if (ai.frame - fwdEcoCheckFrame < 5 * SECOND) return false;
+        fwdEcoCheckFrame = ai.frame;
+        const string side = Global::AISettings::Side;
+        const string afus = UnitHelpers::GetAdvFusionNameForSide(side);
+        const string fus = UnitHelpers::GetFusionNameForSide(side);
+        const string conv = UnitHelpers::GetAdvEnergyConverterNameForSide(side);
+        const float r = Global::RoleSettings::Tech::LayoutForwardBuildPowerRadius;
+        array<Id>@ ids = ai.GetOwnedUnitIds();
+        for (uint i = 0; i < ids.length(); ++i) {
+            CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
+            if (u is null || u.circuitDef is null) continue;
+            const string name = u.circuitDef.GetName();
+            if (name != afus && name != fus && name != conv) continue;
+            if (MapHelpers::SqDist(u.GetPos(ai.frame), fwdCentre) > r * r) continue;
+            fwdEcoStands = true;
+            GenericHelpers::LogUtil("[Layout] forward cluster's economy: " + name + " " + u.id + " there; its turrets are asked for", 1);
+            return true;
+        }
+        return false;
     }
     bool ForwardGivenUp() { return fwdReplans >= Global::RoleSettings::Tech::LayoutForwardTries; }
 
@@ -747,7 +780,7 @@ namespace Layout {
     {
         if (!Global::RoleSettings::Tech::LayoutForwardTurretDemand || fwdZone == 0 || fwdGroup <= 0) return false;
         if (aiTerrainMgr.GetGroupCount(fwdGroup, true) == 0) return false;
-        return ForwardTurretsOpen() || ForwardDearFrames() > 0;
+        return ForwardEconomyStands();
     }
     float ForwardBuildPower()
     {
