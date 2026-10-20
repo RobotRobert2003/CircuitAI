@@ -67,6 +67,19 @@ namespace EdgeLanes {
     IUnitTask@ labTask;
     int labOrderFrame = -1;
     int labId = -1;
+    // Played 2026-10-20 (White Fire Remake, team 15): native placed each lane lab
+    // on the nearest free footprint, more than 96 elmos off the planned site, so
+    // Lab() never knew it; the order was sent again 273 times, 10 extra labs went
+    // up and the lane never spammed. The lab the order raised is now adopted, at
+    // most EdgeLabOrders orders are sent, and an order that dies with no frame
+    // waits EdgeLabRetrySeconds (EdgeLabDeadOrders of them end the lane)
+    int labOrders = 0;          // lab orders sent for this lane
+    int labDeadOrders = 0;      // lab orders that died with no frame
+    int labRetryFrame = -1;     // no new lab order before this frame
+    bool labGaveUp = false;
+    const int EdgeLabOrders = 2;
+    const int EdgeLabDeadOrders = 3;
+    const int EdgeLabRetrySeconds = 60;
     IUnitTask@ repeat;
     int planFrame = -100000;
     array<AIFloat3> badSites;   // sites whose turret spots the engine kept refusing
@@ -342,7 +355,20 @@ namespace EdgeLanes {
             labId = -1;
         }
         CCircuitDef@ d = LabDef();
-        if (d is null || site.x < 0.0f) return null;
+        if (d is null) return null;
+        // the frame our own order raised, wherever native put it
+        IBuilderTask@ bt = (labTask is null || labTask.IsDead()) ? null : cast<IBuilderTask>(labTask);
+        if (bt !is null && bt.target !is null && bt.target.circuitDef is d) {
+            labId = bt.target.id;
+            if (MapHelpers::SqDist(bt.target.GetPos(ai.frame), site) > 96.0f * 96.0f) {
+                GenericHelpers::LogUtil("[EdgeLanes] the " + Name(lane) + " lane lab " + labId + " went up at (" + int(bt.target.GetPos(ai.frame).x) + ","
+                    + int(bt.target.GetPos(ai.frame).z) + "), " + int(sqrt(MapHelpers::SqDist(bt.target.GetPos(ai.frame), site))) + " from the planned site; adopted", 1);
+                site = bt.target.GetPos(ai.frame);
+                rally.resize(0);
+            }
+            return bt.target;
+        }
+        if (site.x < 0.0f) return null;
         CCircuitUnit@ f = aiBuilderMgr.FindOwnNear(site, 96.0f, d);
         if (f is null) @f = aiBuilderMgr.FindUnfinishedNear(site, 96.0f, d);
         if (f !is null) labId = f.id;
@@ -506,6 +532,23 @@ namespace EdgeLanes {
         }
         IUnitTask@ joined = Join(labTask);
         if (joined !is null) return joined;
+        if (labTask !is null && labTask.IsDead()) {
+            // the order ended and Lab() found no lab of it: native had no site
+            @labTask = null;
+            ++labDeadOrders;
+            labRetryFrame = ai.frame + EdgeLabRetrySeconds * SECOND;
+            GenericHelpers::LogUtil("[EdgeLanes] the " + Name(lane) + " lane lab order ended with no lab (" + labDeadOrders + " of "
+                + EdgeLabDeadOrders + "); next try in " + EdgeLabRetrySeconds + " s", 1);
+        }
+        if (labDeadOrders >= EdgeLabDeadOrders || labOrders >= EdgeLabOrders) {
+            if (!labGaveUp) {
+                labGaveUp = true;
+                GenericHelpers::LogUtil("[EdgeLanes] the " + Name(lane) + " lane lab: " + labOrders + " order(s), " + labDeadOrders
+                    + " with no lab; no more lane lab orders", 1);
+            }
+            return null;
+        }
+        if (ai.frame < labRetryFrame) return null;
         if (labTask !is null && !labTask.IsDead()) {
             if (ai.frame - labOrderFrame < 300 * SECOND) return null;
             aiBuilderMgr.AbortTask(labTask);   // the order never became a frame: plan again
@@ -520,6 +563,8 @@ namespace EdgeLanes {
         if (lab.maxThisUnit <= lab.count) lab.maxThisUnit = lab.count + 1;
         if (!lab.IsAvailable(ai.frame)) return null;
         @labTask = aiBuilderMgr.Enqueue(TaskB::Factory(Task::Priority::HIGH, lab, site, product, 0.0f, false, true, 300 * SECOND));
+        if (labTask is null) return null;
+        ++labOrders;
         labOrderFrame = ai.frame;
         GenericHelpers::LogUtil("[EdgeLanes] " + u.circuitDef.GetName() + " " + u.id + " orders the " + Name(lane) + " lane "
             + lab.GetName() + " at (" + int(site.x) + "," + int(site.z) + ") (" + standing + " of 2 turrets stand)", 1);
