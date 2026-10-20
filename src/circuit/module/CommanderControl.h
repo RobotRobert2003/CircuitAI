@@ -40,6 +40,7 @@ private:
         // Throttles (owner 2026-10-19): a failed detour or a declined T3 waits
         // 1 s, +1 s per failure in a row, at most 3 s; success resets.
         int detourNext=0,detourFails=0,t3DeclineFails=0;
+        float detourDist=0.f; // distance to the front at the last detour MOVE
         // Same-goal MOVE resend backoff and fallback goal hold (owner 2026-10-19).
         int moveSent=-10000,moveResends=0,fallbackGoalSince=-10000;
         springai::AIFloat3 moveGoal{-1,0,-1};

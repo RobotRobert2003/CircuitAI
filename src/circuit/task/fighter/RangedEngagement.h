@@ -18,8 +18,8 @@ public:
     int Target() const { return target; }
     bool IsSustainedRush() const { return world.IsSustainedRush(id); }
 private:
-    void SelectTarget(CCircuitUnit* unit,int id,int weapon,float damage);
-    bool Move(CCircuitUnit* unit,const springai::AIFloat3& destination,bool escape);
+    void SelectTarget(CCircuitUnit* unit,int id,int weapon,float damage,float score=-1.f);
+    bool Move(CCircuitUnit* unit,const springai::AIFloat3& destination,bool escape,bool urgent=false);
     void Hold(CCircuitUnit* unit,bool unsafe=false);
     void Disperse(CCircuitUnit* unit);
     void UpdateCohort(CCircuitUnit* unit);
@@ -48,6 +48,7 @@ private:
     int moveObjective=-1, moveMode=-1;
     bool moving=false, issuing=false, released=false, cloakWanted=false, reorient=false;
     float reservedDamage=0.f;
+    float heldScore=0.f; int heldScoreFrame=-1; // current target's score, the tick it last passed the candidate filters
     std::vector<int> nearby;
     // D-295 assist state: reused query buffer (capacity retained), the
     // current assisted contact id (log once per change), and the INV-206

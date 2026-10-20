@@ -26,6 +26,10 @@ struct RangedPolicy {
     // MOVE replacements, and least seconds a live priority target is kept.
     float moveMinSeconds = 0.f;   // 0: off
     float targetMinSeconds = 0.f; // 0: off
+    // A pick scoring this many times the held target's score breaks the
+    // target_min_seconds hold at once. Above target_hysteresis (1.2), so only
+    // a clearly better target switches during the hold.
+    float targetSwitchRatio = 1.5f;
     float sensorOffset = 160.f;
     float cloakReserve = 3.f;
     float repairedTargetPenalty = .25f;
