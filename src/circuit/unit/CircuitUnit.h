@@ -170,6 +170,16 @@ public:
 	void CmdStop(short options = 0, int timeout = INT_MAX);
 	void CmdSetTarget(CEnemyInfo* enemy);
 	void ClearPriorityTarget();
+	// BAR SET_TARGET on behalf of a task. Held back, but remembered, while a
+	// commander target owns the unit's priority list; restored on its release.
+	void SendTaskTarget(int targetId);
+	void CancelTaskTarget(int targetId);
+	// Commander snipe (D-352): a scouted enemy commander in range replaces the
+	// priority list; the unit keeps its move and other orders. -1 releases.
+	void SetCommanderTarget(int commId, int frame);
+	int GetCommanderTarget() const { return commanderTarget; }
+	// A task's ATTACK on anything but the locked commander is withheld.
+	bool IsCommanderLocked(const CEnemyInfo* enemy) const;
 	void CmdCloak(bool state);
 	void CmdFireAtRadar(bool state);
 	void CmdFindPad(int timeout = INT_MAX);
@@ -285,6 +295,9 @@ private:
 	CEnemyInfo* target;
 	int targetTile;
 	int priorityTarget = -1; // ID only: never retain a dead enemy wrapper.
+	int taskTarget = -1;      // last SET_TARGET a task asked for (any path)
+	int commanderTarget = -1; // D-352 commander lock; owns BAR's priority list
+	int commanderFrame = -1;  // frame the commander SET_TARGET was last sent
     bool destroying = false; // set before destruction callbacks; IsDead keeps its existing unregister semantics
     springai::AIFloat3 retreatWaypoint;
     int retreatAnchor = -1;

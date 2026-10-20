@@ -276,6 +276,22 @@ public:
 		bool rebalance = true;  // release the surplus when two escorted squads merge
 	};
 	const SSensorInfo& GetSensorInfo() const { return sensorInfo; }
+
+	/*
+	 * D-352 commander snipe. Listed defs, and every armed mobile def at or
+	 * above `min_tech` (BAR customparams.techlevel), put a scouted enemy
+	 * commander within weapon range at the head of BAR's SET_TARGET list
+	 * (LOS, or its radar dot when cloaked). The unit keeps its move and other
+	 * orders; only its weapon target changes. Off unless the "commander_snipe"
+	 * block in behaviour.json enables it.
+	 */
+	struct SCommSnipeInfo {
+		bool isEnabled = false;
+		std::unordered_set<CCircuitDef::Id> defs;
+		int interval = 15;          // frames between scans
+		float acquireMargin = 64.f; // lock when within weapon range + this
+		float releaseMargin = 200.f; // keep it while within range + this
+	};
 	// A def whose escort is rationed: a mobile radar or jammer.
 	bool IsSensorUnit(const CCircuitDef* cdef) const;
 	// Live sensors already escorting `task`.
@@ -347,6 +363,7 @@ public:
 	float ClampMobileCostRatio() const;
 	void UpdateDefenceTasks();
 	void UpdateSensorGuards();
+	void UpdateCommanderSnipe();
 	/*
 	 * Where this AI is currently fighting: the leader position of the strongest
 	 * ATTACK squad, or the enemy centroid when we have no attack squad, or an
@@ -493,6 +510,7 @@ private:
 	SStockInfo stockInfo;
 	SNuclearInfo nuclearInfo;
 	SSensorInfo sensorInfo;
+	SCommSnipeInfo commSnipeInfo;
 
 	unsigned int preventCount = 0;
 	float amountFactor = 0.f;

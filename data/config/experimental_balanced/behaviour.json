@@ -151,6 +151,20 @@
 			"top_candidates": 3,    // aim at the nearest of the N most valuable uncovered squads
 			"rebalance": true       // release the surplus when two escorted squads merge
 		},
+		// D-352 commander snipe. A scouted enemy commander (in LOS, or its radar
+		// dot once cloaked) inside weapon range becomes the unit's Set Target, so
+		// it is shot before it can close to D-gun range. The unit keeps its move
+		// and other orders; only the weapon target changes. "units" always take
+		// part; "min_tech" adds every armed mobile def at that BAR techlevel.
+		"commander_snipe": {
+			"enabled": true,
+			"units": ["armfboy", "corsumo", "leginc"],  // Fatboy, Mammoth, Incinerator
+			"min_tech": 3,          // every T3 (0: listed units only)
+			"air": false,           // T3 aircraft keep their own targeting
+			"interval": 15,         // frames between scans
+			"acquire_margin": 64,   // lock when within weapon range + this
+			"release_margin": 200   // keep the lock while within weapon range + this
+		},
 		// read of "escort":  [number of builders with defenders, number of defenders for each builder, timeframe were only escorted builders are able to expand (=build mex, porc)]
 		// base radius: ai checks if is withing base_rad. if there is enemy it checks if it is withing comm radius which is variable and depend on distance from base
 		// if there is, then ai checks speed, direction and threat on enemys position. if all conditions positive => com attacks
