@@ -63,6 +63,7 @@ namespace Main {
         Global::Commander::FrontRecovery = true;
         Global::Commander::FrontMexSeconds = 1.f;
         Global::RoleSettings::Tech::EcoFlakEnabled = true;
+        Global::RoleSettings::Tech::LayoutForwardTurretsEarly = true; // owner 2026-10-19: the forward turret block fills once the economy moves into it
 		GenericHelpers::LogUtil("Running AiMain()", 1);
 
         // The opening Tick must search for gaps and raid just like later scouts.

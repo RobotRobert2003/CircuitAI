@@ -360,6 +360,7 @@ namespace Tech {
             float InvariantFloatPercent = 0.9f;             // D-076: INV-004 - the metal bank at this share of storage is floating
             float InvariantFloatSeconds = 60.0f;            // D-076: INV-004 - ... for this long while a structure is under construction with build power short
             bool ExpTurretCentreOut = true;                // D-077: turrets start at the box centre and grow outward as one connected cluster (NextSlotConnected); off = D-069 nearest-lab
+            bool LayoutForwardTurretsEarly = false;         // owner 2026-10-19: once the economy stands in the forward cluster, its turret slots are offered beside the main block's and the asking constructor takes the nearer (off = the forward block waits for the main block's last slot; balanced on)
             float ReclaimT1EnergyMargin = 1.25f;            // D-077: winds and solars are reclaimed once a fusion stands and energy income without them covers the pull by this
             float ReclaimAdvSolarMargin = 1.5f;             // D-077: advanced solars once income without every T1/adv source covers the pull by this; an advanced fusion reclaims all
             float ReclaimEnergyRadius = 2500.0f;            // D-077: energy structures within this of the base centre, nearest first

@@ -723,6 +723,14 @@ namespace Layout {
         PlanForwardBox();
     }
     bool ForwardPlanned() { return fwdZone != 0; }
+    // The forward cluster's turrets compete with the main block's once anything
+    // of ours is reserved and claimed, building or standing in its zone (CheckForward
+    // latches tech.box.fwd_started), not only after the main block's last slot
+    bool ForwardTurretsOpen()
+    {
+        return Global::RoleSettings::Tech::LayoutForwardTurretsEarly && fwdZone != 0
+            && aiTerrainMgr.GetLayoutInt(BOX + ".fwd_started", 0) != 0;
+    }
     bool ForwardGivenUp() { return fwdReplans >= Global::RoleSettings::Tech::LayoutForwardTries; }
 
     // Every box zone, the first first: the older box fills before the newer
@@ -1608,6 +1616,19 @@ namespace Layout {
             // from the second turret on the block grows from its own centroid
             const AIFloat3 seed = TurretSeed();
             id = aiTerrainMgr.NextSlotConnected(nanoGroup, seed);
+            if (fwdGroup > 0 && ForwardTurretsOpen()) {
+                // Owner 2026-10-19 (t2rush on All That Glitters: advanced fusions and
+                // converters went into the forward cluster from 23:06 while its 52 slots
+                // waited for the main block's last one at 31:50): once the economy stands
+                // there, the asking constructor takes the nearer block's next slot
+                const AIFloat3 at = unit.GetPos(ai.frame);
+                const int fid = aiTerrainMgr.NextSlotConnected(fwdGroup, fwdCentre);
+                if (fid >= 0 && (id < 0 || MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(fid), at)
+                    < MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(id), at))) {
+                    if (id >= 0) GenericHelpers::LogUtil("[Layout] turret slot " + fid + " in the forward cluster: nearer " + unit.circuitDef.GetName() + " " + unit.id + " than the main block's", 2);
+                    id = fid;
+                }
+            }
             if (id < 0 && fwdGroup > 0) id = aiTerrainMgr.NextSlotConnected(fwdGroup, fwdCentre);   // D-081: the forward cluster once the main block is full
             if (id >= 0) GenericHelpers::LogUtil("[Layout] turret slot " + id + ", " + int(sqrt(MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(id), boxCentre))) + " from the box centre (connected)", 2);
         }
