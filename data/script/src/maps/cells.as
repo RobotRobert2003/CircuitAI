@@ -25,22 +25,22 @@ namespace Cells {
 	// landLocked heuristic: not yet surveyed on this map; every spot passes false. A future
 	// pass may flag isolated starts that need hover/amphibious to break out.
 	StartSpot@[] spots = {
-		StartSpot(AIFloat3( 795, 0,  508), AiRole::FRONT, false), // P1  front
+		StartSpot(AIFloat3( 795, 0,  508), AiRole::TECH, false), // P1  front
 		StartSpot(AIFloat3(2366, 0, 1277), AiRole::FRONT, false), // P2  front
 		StartSpot(AIFloat3( 816, 0, 2782), AiRole::FRONT, false), // P3  front
 		StartSpot(AIFloat3(2319, 0, 4371), AiRole::FRONT, false), // P4  front
 		StartSpot(AIFloat3(2426, 0, 6093), AiRole::FRONT, false), // P5  front
 		StartSpot(AIFloat3( 929, 0, 7226), AiRole::FRONT, false), // P6  front
-		StartSpot(AIFloat3( 644, 0, 9556), AiRole::TECH, false), // P7  front
+		StartSpot(AIFloat3( 644, 0, 9556), AiRole::AIR, false), // P7  front
 		StartSpot(AIFloat3(2463, 0, 9643), AiRole::FRONT, false), // P8  front
 		StartSpot(AIFloat3(7731, 0,  581), AiRole::FRONT, false), // P9  front
-		StartSpot(AIFloat3(9568, 0,  640), AiRole::FRONT, false), // P10 front
+		StartSpot(AIFloat3(9568, 0,  640), AiRole::TECH, false), // P10 front
 		StartSpot(AIFloat3(9254, 0, 2990), AiRole::FRONT, false), // P11 front
 		StartSpot(AIFloat3(7763, 0, 4117), AiRole::FRONT, false), // P12 front
 		StartSpot(AIFloat3(7862, 0, 5823), AiRole::FRONT, false), // P13 front
 		StartSpot(AIFloat3(9338, 0, 7410), AiRole::FRONT, false), // P14 front
 		StartSpot(AIFloat3(7825, 0, 8929), AiRole::FRONT, false), // P15 front
-		StartSpot(AIFloat3(9409, 0, 9688), AiRole::FRONT, false) // P16 front
+		StartSpot(AIFloat3(9409, 0, 9688), AiRole::AIR, false) // P16 front
 	};
 
 	// Base per-map unit limits

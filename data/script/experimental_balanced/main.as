@@ -157,6 +157,9 @@ namespace Main {
 	{
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
         Global::RoleSettings::Front::VehicleTankOpenerChance = 0.5f;
+		// FRONT (owner, 2026-10-17): two FRONTs each build a spam lab for an edge lane, left and right
+		// (src/settings/shared/spam.as EdgeLanesEnabled, off there; systems/combat/edge_lanes.as)
+		Global::Spam::EdgeLanesEnabled = true;
 	}
 
 }  // namespace Main

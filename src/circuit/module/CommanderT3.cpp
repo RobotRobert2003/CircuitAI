@@ -95,7 +95,10 @@ void CCommanderControl::Decline(CCircuitUnit* unit,State& s,const commander::Con
     // enter 2x the commander's own range, which a 590-reach T3 already covers.
     EndT3(unit,s,frame,reason);
     s.t3Declined=target.id; s.t3DeclinedSeen=frame;
-    s.t3Reconsider=frame+int(options.t3RetrySeconds*FRAMES_PER_SEC);
+    // Backoff: t3_retry_seconds, +1 s per decline in a row, at most 3 s (owner
+    // 2026-10-19); the first shot of an engagement resets it.
+    s.t3Reconsider=frame+int((options.t3DeclineGate>0?std::min(3.f,options.t3RetrySeconds+s.t3DeclineFails):options.t3RetrySeconds)*FRAMES_PER_SEC);
+    if(options.t3DeclineGate>0) ++s.t3DeclineFails;
     if(std::string_view(reason)=="funding") {
         s.fundingBudget=s.budget; s.fundingTarget=target.id;
         s.fundingUntil=frame+int((options.t3RetrySeconds+3.f)*FRAMES_PER_SEC);
@@ -164,7 +167,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
     };
     // Account own shots (WeaponFired clears pending before this tick runs).
     if(s.t3Target>=0 && s.fired>s.t3LastShot) {
-        s.t3LastShot=s.fired; ++s.t3Shots; s.t3JukeSide=-s.t3JukeSide;
+        s.t3LastShot=s.fired; ++s.t3Shots; s.t3JukeSide=-s.t3JukeSide; s.t3DeclineFails=0;
         s.t3JukeUntil=s.fired+int(s.t3Juke>0?FRAMES_PER_SEC*.8f:0);
     }
     if(s.t3Target>=0 && s.pending>=0) {
@@ -236,10 +239,12 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         // fallback expires and decloaks in range (corves roster regression).
         // Reuse this contact/weapon pass: O(E*W), no additional engine query.
         const bool inReach=distance<=reach+c.radius;
-        if(c.id==s.t3Declined) {
-            if(distance<limit || inReach) s.t3DeclinedSeen=frame;
-            if(frame<s.t3Reconsider) continue;
-        }
+        if(c.id==s.t3Declined && (distance<limit || inReach)) s.t3DeclinedSeen=frame;
+        // Every new plan waits out the decline backoff, not only the last
+        // declined id: two T3s in view alternated plan/decline every tick
+        // (Entrenched Plains 2026-10-19, ~300 plans/min per commander).
+        if(options.t3DeclineGate>0) { if(frame<s.t3Reconsider && c.id!=s.t3Target) continue; }
+        else if(c.id==s.t3Declined && frame<s.t3Reconsider) continue;
         if(artillery && options.t3Hunt<=0 && distance>=limit && inReach && distance<standoffDistance) {
             standoffThreat=&c;standoffDistance=distance;standoffReach=reach;
         }

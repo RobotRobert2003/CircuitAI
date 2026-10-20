@@ -73,6 +73,13 @@ void CRangedEngagement::SelectTarget(CCircuitUnit* unit,int selected,int weapon,
         // an unchanged live intent must not be resent each decision tick.
         if(selected<0 || frame-targetFrame<30 || int(unit->GetUnit()->GetRulesParamFloat("unitTargetID",-1.f))==selected) return;
     }
+    // Owner 2026-10-19: a live priority target is kept for target_min_seconds;
+    // each swap costs CANCEL+SET. A lost target, a cancel (selected<0) or a
+    // pick worth 1.5x the reserved damage still switches at once.
+    const float hold=unit->GetCircuitDef()->GetRangedPolicy().targetMinSeconds;
+    if(target>=0 && selected>=0 && selected!=target && hold>0.f && frame-targetFrame<int(hold*FRAMES_PER_SEC)
+        && damage<reservedDamage*1.5f && ai->GetEnemyManager()->GetEnemyUnit(target)!=nullptr
+        && int(unit->GetUnit()->GetRulesParamFloat("unitTargetID",-1.f))==target) return;
     const int avoid=unit->GetCircuitDef()->GetRangedPolicy().avoidCategory;
     if(selected>=0 && avoid!=0) {
         // INV-207: every candidate loop filters identified avoided categories
@@ -127,7 +134,7 @@ bool CRangedEngagement::SafeMove(CCircuitUnit* unit,const AIFloat3& from,const A
 {
     const auto& p=unit->GetCircuitDef()->GetRangedPolicy();
     return p.coordinated && p.engagementSeconds>0.f ? world.CohortSafe(unit,from,to,margin,escape)
-        :world.Safe(from,to,margin,escape);
+        :world.Safe(from,to,margin,escape,p.pressStatic);
 }
 bool CRangedEngagement::LegalPath(CCircuitUnit* unit,const std::vector<AIFloat3>& route,bool escape)
 {
@@ -162,8 +169,8 @@ void CRangedEngagement::Disperse(CCircuitUnit* unit)
         AIFloat3 point=pos+AIFloat3(std::cos(angle),0.f,std::sin(angle))*policy.spacing*float(ring);
         CTerrainManager::CorrectPosition(point);
         point.y=ai->GetTerrainManager()->GetAreaData()->GetElevationAt(point.x,point.z);
-        if (world.FreeSlot(id,point,policy.spacing) && world.Safe(pos,point,policy.safetyMargin,true)
-            && world.DangerSign(point,policy.safetyMargin)==0.f
+        if (world.FreeSlot(id,point,policy.spacing) && world.Safe(pos,point,policy.safetyMargin,true,policy.pressStatic)
+            && world.DangerSign(point,policy.safetyMargin,policy.pressStatic)==0.f
             && ai->GetTerrainManager()->CanMoveToPos(unit->GetArea(),point)) {
             Move(unit,point,true); return;
         }
@@ -201,12 +208,18 @@ bool CRangedEngagement::Move(CCircuitUnit* unit,const AIFloat3& dest,bool escape
         if(live.SqLength2D()>4096.f && wanted.SqLength2D()>=live.SqLength2D()
             && product>0.f && product*product>.94f*live.SqLength2D()*wanted.SqLength2D()) return true;
     }
+    // Owner 2026-10-19: a live, still-legal move is replaced at most once per
+    // move_min_seconds; danger (urgent), escapes and an idle unit go at once.
+    // Kiting units were re-moved on every 8-frame decision (cortrem 2.5/s).
+    if(!urgentMove && !escape && moving && policy.moveMinSeconds>0.f
+        && ai->GetLastFrame()<lastMoveFrame+int(policy.moveMinSeconds*FRAMES_PER_SEC)
+        && ai->GetUnitAPI()->GetCMDQueueSize(id)>0 && LegalPath(unit,path,escape)) return true;
     if(!ai->GetTerrainManager()->CanMoveToPos(unit->GetArea(),dest) || !SafeMove(unit,pos,dest,policy.safetyMargin,escape)) return false;
     if(trace) ai->LOG("RANGED: move-replace unit=%d objective=%d mode=%d urgent=%d moving=%d pending=%d queue=%d from=%.1f,%.1f old=%.1f,%.1f new=%.1f,%.1f",
         id,moveObjective,moveMode,int(urgentMove),int(moving),int(query!=nullptr),
         ai->GetUnitAPI()->GetCMDQueueSize(id),pos.x,pos.z,destination.x,destination.z,dest.x,dest.z);
     completedMove=false;
-    destination=dest; query.reset(); const unsigned version=++generation;
+    destination=dest; query.reset(); const unsigned version=++generation; lastMoveFrame=ai->GetLastFrame();
     world.SetSlot(id,dest,policy.spacing,unit->GetCircuitDef()->GetCostM());
     auto* finder=ai->GetPathfinder();
     if(policy.coordinated && pos.SqDistance2D(dest)<=1024.f*1024.f) {
@@ -603,13 +616,16 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
     const bool forward=std::any_of(caps.weapons.begin(),caps.weapons.end(),[](const auto& w){return w.forward;});
     const float escapeSeconds=ranged::EscapeSeconds(caps.speed,caps.turnRate,caps.acceleration,forward,policy.reactionSeconds);
     for(int i:nearby) {
-        const auto& c=contacts[i]; if(c.hazardRadius<=0.f) continue;
+        // Owner 2026-10-19: a pressed static defence is fought, not escaped;
+        // only its death blast still pushes the hull back.
+        const auto& c=contacts[i]; const float hazard=CRangedWorld::HazardFor(c,policy.pressStatic);
+        if(hazard<=0.f) continue;
         // D-294: escaping a much faster avoided contact (Tick) is futile and
         // only spends MOVEs. It remains a hazard for Safe/DangerSign below.
         if(c.def && (c.def->GetCategory()&policy.avoidCategory)) continue;
         const float d=std::sqrt(pos.SqDistance2D(c.pos));
         const float closingSpeed=ranged::ClosingSpeed(P(pos),P(c.pos),P(c.velocity));
-        const float reach=c.hazardRadius+policy.safetyMargin+closingSpeed*escapeSeconds;
+        const float reach=hazard+policy.safetyMargin+closingSpeed*escapeSeconds;
         if(d<reach && reach-d>urgency) { closing=&c; urgency=reach-d; }
     }
     if(!policy.holdFireline && (closing || frame<withdrawalUntil)) {
@@ -621,7 +637,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             AIFloat3 escape=pos+away*std::min(600.f,separation);
             CTerrainManager::CorrectPosition(escape);
             escape.y=ai->GetTerrainManager()->GetAreaData()->GetElevationAt(escape.x,escape.z);
-            if(world.Safe(pos,escape,policy.safetyMargin,true)) {
+            if(world.Safe(pos,escape,policy.safetyMargin,true,policy.pressStatic)) {
                 // Forward-arc hulls commit to their exit; unrestricted turrets
                 // may retain a safe pursuer as target while MOVE remains owner.
                 if(forward) { SelectTarget(unit,-1,-1,0.f); reorient=true; }
@@ -682,6 +698,8 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             if(c.id==target) value*=policy.targetHysteresis;
             if(policy.mode==RangedPolicy::Mode::BOMBARDMENT && !c.mobile) value*=1.5f;
             if(closing && closing->id==c.id) value*=2.f;
+            // Owner 2026-10-19: the tower shooting at a pressing hull comes first.
+            if(CRangedWorld::Pressed(c,policy.pressStatic)) value*=2.f;
             if(value>bestScore || (value==bestScore && (best<0 || c.id<contacts[best].id))) {
                 best=i; bestWeapon=int(wi); bestScore=value; bestDamage=damage;
             }
@@ -708,7 +726,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             // finish. Real fire, new danger and the bounded deadline still
             // interrupt it. This is one local candidate, not another scan.
             AIFloat3 facing=c.pos-pos; facing.Normalize2D(); auto point=pos+facing*64.f;
-            if(world.Safe(pos,point,policy.safetyMargin) && world.FreeSlot(id,point,spacing)
+            if(world.Safe(pos,point,policy.safetyMargin,false,policy.pressStatic) && world.FreeSlot(id,point,spacing)
                 && Move(unit,point,false)) {
                 orientUntil=frame+std::max(30,int(escapeSeconds*30.f));
                 lastShotFrame=frame;
@@ -827,7 +845,8 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             point.y=ai->GetTerrainManager()->GetAreaData()->GetElevationAt(point.x,point.z);
             if(!ai->GetTerrainManager()->CanMoveToPos(unit->GetArea(),point)) { ++terrainRejected; continue; }
             if(!world.FreeSlot(id,point,spacing)) { ++slotRejected; continue; }
-            if(!world.Safe(pos,point,policy.safetyMargin,true) || world.DangerSign(point,policy.safetyMargin)>0.f) { ++coverageRejected; continue; }
+            if(!world.Safe(pos,point,policy.safetyMargin,true,policy.pressStatic)
+                || world.DangerSign(point,policy.safetyMargin,policy.pressStatic)>0.f) { ++coverageRejected; continue; }
             // D-295: an assist standoff stays behind the allied screen.
             if(assisting && policy.assistScreen && !world.HasScreen(id,point,c.pos)) { ++coverageRejected; continue; }
             if(!world.Trajectory(w,point,c.pos)) { ++fireRejected; continue; }
@@ -850,7 +869,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
         // that line, outside every known weapon/death-blast disc. This does not
         // invent a safe firing solution or relax path/splash/retreat checks.
         // Bounded 3x9 sites, only after the normal 17-site search fails.
-        const float radius = std::max(maxRange, c.hazardRadius + policy.safetyMargin) + policy.spacing;
+        const float radius = std::max(maxRange, CRangedWorld::HazardFor(c, policy.pressStatic) + policy.safetyMargin) + policy.spacing;
         for (int ring = 0; ring < 3; ++ring) for (int k = 0; k < 9; ++k) {
             const int side = k == 0 ? 0 : ((k % 2) ? (k + 1) / 2 : -k / 2);
             const float angle = baseAngle + side * .16f;
@@ -861,8 +880,8 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             // Advance, never replace an already closer position with rearward
             // staging. Slot reservations preserve spacing between the hulls.
             if (point.SqDistance2D(c.pos) >= pos.SqDistance2D(c.pos)
-                || !world.FreeSlot(id, point, spacing) || world.DangerSign(point, policy.safetyMargin) > 0.f
-                || !world.Safe(pos, point, policy.safetyMargin, true)
+                || !world.FreeSlot(id, point, spacing) || world.DangerSign(point, policy.safetyMargin, policy.pressStatic) > 0.f
+                || !world.Safe(pos, point, policy.safetyMargin, true, policy.pressStatic)
                 || !ai->GetTerrainManager()->CanMoveToPos(unit->GetArea(), point)) continue;
             const float score = pos.SqDistance2D(point);
             if (score < chosenScore) { chosenScore = score; chosen = point; found = true; }
@@ -873,7 +892,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
         // INV-205: the selected assist site is outside known static coverage
         // on its path and carries no danger sign. Same predicates as the
         // site loop; fires only on a regression. Two O(local) queries.
-        if(!world.Safe(pos,chosen,policy.safetyMargin,true) || world.DangerSign(chosen,policy.safetyMargin)>0)
+        if(!world.Safe(pos,chosen,policy.safetyMargin,true,policy.pressStatic) || world.DangerSign(chosen,policy.safetyMargin,policy.pressStatic)>0)
             ai->LOG("[INVARIANT] INV-205 ranged assist destination is covered unit=%d target=%d dest=%.0f,%.0f",id,c.id,chosen.x,chosen.z);
         if(c.id!=assistTarget) {
             assistTarget=c.id; assistInvariantLogged=false; assistIdleStreak=0;

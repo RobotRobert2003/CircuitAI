@@ -49,6 +49,7 @@ public:
         springai::AIFloat3 pos, velocity;
         float health = 1.f, radius = 16.f, cost = 1.f, groundRange = 0.f;
         float explosionRadius = 0.f, hazardRadius = 0.f;
+        float tech = 1.f; // BAR customparams.techlevel, 1 when absent
         bool los = false, armed = false, mobile = false;
     };
     struct Friend {
@@ -72,9 +73,17 @@ public:
     void Nearby(const springai::AIFloat3& pos, float radius, std::vector<int>& result) const;
     const std::vector<Contact>& Contacts() const { return contacts; }
     const std::vector<int>& Objectives() const { return objectives; }
-    bool Safe(const springai::AIFloat3& from, const springai::AIFloat3& to, float margin, bool escaping=false) const;
-    float Danger(const springai::AIFloat3& pos, float margin) const;
-    int DangerSign(const springai::AIFloat3& pos, float margin) const;
+    // press (owner 2026-10-19, RangedPolicy::pressStatic): armed static
+    // contacts of that tech level or lower count only with their death blast.
+    bool Safe(const springai::AIFloat3& from, const springai::AIFloat3& to, float margin, bool escaping=false, float press=0.f) const;
+    float Danger(const springai::AIFloat3& pos, float margin, float press=0.f) const;
+    int DangerSign(const springai::AIFloat3& pos, float margin, float press=0.f) const;
+    static bool Pressed(const Contact& c, float press) {
+        return press>0.f && c.def && c.armed && !c.mobile && c.tech<=press;
+    }
+    static float HazardFor(const Contact& c, float press) {
+        return Pressed(c,press) ? c.explosionRadius : c.hazardRadius;
+    }
     bool FriendlySplash(int id, const springai::AIFloat3& target, float radius) const;
     bool FriendlyLine(const Weapon& weapon, int id, const springai::AIFloat3& from, const springai::AIFloat3& target) const;
     bool HasScreen(int id, const springai::AIFloat3& from, const springai::AIFloat3& target) const;
@@ -135,7 +144,7 @@ private:
     float largestCohortHazard = 0.f;
     bool nonnegativeHazardCosts = true;
     bool finiteStaticHazards = true;
-    struct Metadata { float radar=0.f, jammer=0.f, los=0.f; int armor=0; float explosionRadius=0.f; };
+    struct Metadata { float radar=0.f, jammer=0.f, los=0.f; int armor=0; float explosionRadius=0.f; float tech=1.f; };
     std::unordered_map<int,Metadata> metadata;
     const Metadata& MetadataFor(CCircuitDef* def);
     std::unordered_map<int,Capabilities> capabilities;

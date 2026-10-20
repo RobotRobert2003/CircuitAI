@@ -129,7 +129,19 @@ void CCommanderControl::PlanFallback(CCircuitUnit* unit,State& s,int frame) {
     // out of the porc's own D-gun lane); replanning must not walk it back.
     if(chosen>=0 && chosen==s.fallbackPorc && s.fallbackGoal.SqDistance2D(goal)<=SQUARE(2.f*options.step+16.f)
         && s.fallbackGoal.SqDistance2D(home)<=SQUARE(perimeter)) goal=s.fallbackGoal;
+    // Owner 2026-10-19: a goal stands for fallback_goal_hold_seconds before a
+    // replan may move it (it flipped every second between a porc and the rear
+    // station). The first plan, and a held goal that is no longer reachable,
+    // change at once; the perimeter keeps the held goal's.
+    if(options.fallbackGoalHoldSeconds>0 && !firstPlan && goal.SqDistance2D(s.fallbackGoal)>64.f*64.f
+        && frame<s.fallbackGoalSince+int(options.fallbackGoalHoldSeconds*FRAMES_PER_SEC)
+        && ai->GetTerrainManager()->CanReachAt(unit,s.fallbackGoal,64)) {
+        goal=s.fallbackGoal; chosen=s.fallbackPorc;
+        perimeter=std::max(perimeter,s.fallbackBoundary.radius);
+        if(chosen>=0) if(auto* held=ai->GetFriendlyUnit(chosen)) line=held->GetUnit()->GetPos();
+    }
     if(firstPlan || chosen!=s.fallbackPorc || goal.SqDistance2D(s.fallbackGoal)>64.f*64.f) {
+        s.fallbackGoalSince=frame;
         ai->LOG("[CommanderFallback] unit=%i line porc=%i goal=%.0f,%.0f perimeter=%.0f candidates=%i",
             unit->GetId(),chosen,goal.x,goal.z,perimeter,int(porcs.size()));
         s.route.clear();

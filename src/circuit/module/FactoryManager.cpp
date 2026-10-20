@@ -503,6 +503,8 @@ void CFactoryManager::ReadConfig()
 			number("range_hysteresis", policy.hysteresis, 8.f, 256.f);
 			number("reaction_seconds", policy.reactionSeconds, .1f, 5.f);
 			number("target_hysteresis", policy.targetHysteresis, 1.f, 3.f);
+			number("move_min_seconds", policy.moveMinSeconds, 0.f, 3.f);
+			number("target_min_seconds", policy.targetMinSeconds, 0.f, 3.f);
 			number("sensor_offset", policy.sensorOffset, 32.f, 512.f);
 			number("cloak_reserve_seconds", policy.cloakReserve, 0.f, 30.f);
 			number("repaired_target_penalty", policy.repairedTargetPenalty, .01f, 1.f);
@@ -552,6 +554,10 @@ void CFactoryManager::ReadConfig()
                 }
             }
             number("evasion_limit", policy.evasionLimit, 0.f, 10.f);
+            // Owner 2026-10-19: the static press.
+            number("press_static", policy.pressStatic, 0.f, 3.f);
+            // The cohort controller has its own static admission (assault list).
+            if (policy.pressStatic > 0.f && policy.coordinated) valid = false;
             // D-295: assist is an individual-controller lever; a coordinated
             // cohort already has support_allies. Reject the combination.
             number("assist_radius", policy.assistRadius, 0.f, 6000.f);

@@ -37,6 +37,12 @@ private:
         int generation=0,seen=-10000,started=0,pending=-1,fired=-1,failed=0;
         int retry=0,target=-1,leaseUntil=0,next=0,lastLog=0,lastDamage=-1,frontFrame=-10000,frontYield=0;
         int frontMexFrame=-10000,frontProgressFrame=0;
+        // Throttles (owner 2026-10-19): a failed detour or a declined T3 waits
+        // 1 s, +1 s per failure in a row, at most 3 s; success resets.
+        int detourNext=0,detourFails=0,t3DeclineFails=0;
+        // Same-goal MOVE resend backoff and fallback goal hold (owner 2026-10-19).
+        int moveSent=-10000,moveResends=0,fallbackGoalSince=-10000;
+        springai::AIFloat3 moveGoal{-1,0,-1};
         springai::AIFloat3 frontProgressPos;
         // D-293 fallback: held until fallbackUntil, porc line replanned once/second.
         int fallbackUntil=-1,fallbackPlanned=-10000,fallbackPorc=-1,fallbackMoveUntil=-1;
@@ -82,7 +88,9 @@ private:
         bool enabled=false,advance=false,decoys=false,frontDuty=false,frontReady=false;
         bool work=true; // D-299 ladder and fallback hand-over (script Global::Commander::Work)
         bool frontRecovery=false;
-        float frontMexSeconds=0,frontStallSeconds=10;
+        float frontMexSeconds=0,frontStallSeconds=10,frontDetourSeconds=0; // 0: no detour backoff
+        float moveResendSeconds=0;   // 0: a swallowed/failed MOVE is resent every tick
+        float fallbackGoalHoldSeconds=0; // 0: the fallback goal may change every replan
         float scan=1000,leash=700,step=96,support=600,minValue=180,killReward=45;
         float hpReserve=.35f,retreat=.45f,recover=.8f,aggression=.25f;
         float shots=2,margin=150,escapeSeconds=4.3f,alignSeconds=.6f;
@@ -102,7 +110,7 @@ private:
         float t3Leash=900,t3HoldSeconds=4,t3DodgeSeconds=1.2f;
         float t3HuntLeash=1800; // artillery sits beyond the line; hunting it goes further
         float t3Screen=300; // friendly combat metal in the T3's reach before a 3+ shot kill
-        float t3Hunt=0,t3ArtilleryApproach=180,t3Trade=0,t3RetrySeconds=2;
+        float t3Hunt=0,t3ArtilleryApproach=180,t3Trade=0,t3RetrySeconds=2,t3DeclineGate=0; // gate: any new plan waits out a decline
         float t3CloakedVolleyRisk=1; // script tunes uncertain new targeting; in-flight damage stays full
         float t3BaitDef=-1,t3BaitCount=0,t3BaitMargin=150,t3BaitDistance=120,t3BaitSpacing=80,t3BaitTimeout=5;
         // D-299 FRONT work ladder. work_radius 0 = the commander's own LOS.

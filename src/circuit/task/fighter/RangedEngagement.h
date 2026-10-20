@@ -33,7 +33,7 @@ private:
     const CRangedWorld::Capabilities& caps;
     int id, target=-1, weaponIndex=-1, nextFrame=0, targetFrame=0;
     int lastReload=-1, burstUntil=0, withdrawalUntil=0, failures=0;
-    int lastProgressFrame=0;
+    int lastProgressFrame=0, lastMoveFrame=-10000;
     int lastShotFrame=0, orientUntil=0;
     int traceFrame=-150;
     size_t pathCursor=0;

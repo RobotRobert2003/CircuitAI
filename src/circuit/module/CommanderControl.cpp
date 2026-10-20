@@ -76,7 +76,10 @@ void CCommanderControl::Damaged(CCircuitUnit* unit) {
 }
 void CCommanderControl::MoveFailed(int id) {
     auto it=commanders.find(id); if(it==commanders.end()) return;
-    it->second.route.clear(); ++it->second.failed; it->second.next=0;
+    it->second.route.clear(); ++it->second.failed;
+    // A failed detour MOVE waits out its backoff; re-ticking at once resent
+    // it every 3 frames (Entrenched Plains 2026-10-19: ~500 MOVEs/min each).
+    if(ai->GetLastFrame()>=it->second.detourNext) it->second.next=0;
 }
 void CCommanderControl::WeaponFired(int id,int weapon) {
     auto it=commanders.find(id); auto* unit=ai->GetTeamUnit(id);
@@ -140,6 +143,8 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"front_distance",&options.frontDistance,200,10000},{"front_standoff",&options.frontStandoff,200,1500},
         {"front_radius",&options.frontRadius,100,1000},{"front_threat",&options.frontThreat,0,50},
         {"front_mex_seconds",&options.frontMexSeconds,0,30},{"front_stall_seconds",&options.frontStallSeconds,3,60},
+        {"front_detour_seconds",&options.frontDetourSeconds,0,3},{"t3_decline_gate",&options.t3DeclineGate,0,1},
+        {"move_resend_seconds",&options.moveResendSeconds,0,3},{"fallback_goal_hold_seconds",&options.fallbackGoalHoldSeconds,0,5},
         {"t3_intercept",&options.t3Intercept,0,1},{"t3_health",&options.t3Health,.1f,.5f},
         {"t3_distance",&options.t3Distance,250,2000},{"detection_margin",&options.detectionMargin,8,200},
         {"afus_defence_radius",&options.afusDefenceRadius,0,5000},
@@ -396,6 +401,19 @@ void CCommanderControl::Move(CCircuitUnit* unit,State& s,const AIFloat3& goal,in
     // Exact destination, ownership and live queue suffix must all agree. A
     // swallowed order or move failure is reissued; a moving target is new intent.
     if(!s.route.empty() && s.goal==goal && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) return;
+    // Owner 2026-10-19: the same goal is resent at most once per
+    // move_resend_seconds, +1 s per resend in a row, at most 3 s. A goal the
+    // engine keeps refusing was resent every tick (fallback line, All That
+    // Glitters: one commander 6 MOVEs/s to the same point). A new goal
+    // goes at once.
+    if(options.moveResendSeconds>0) {
+        if(s.moveGoal.SqDistance2D(goal)<16.f*16.f) {
+            const float wait=std::min(3.f,options.moveResendSeconds+s.moveResends);
+            if(frame<s.moveSent+int(wait*FRAMES_PER_SEC)) return;
+            ++s.moveResends;
+        } else s.moveResends=0;
+        s.moveGoal=goal; s.moveSent=frame;
+    }
     CheckPerimeter(unit,s,goal,frame,"move");
     s.goal=goal; s.route={{CMD_MOVE,0,frame+90,goal.x,goal.y,goal.z}};
     TRY_UNIT(ai,unit,unit->CmdMoveTo(goal,0,frame+90);)
@@ -806,7 +824,7 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         }
         s.deployed=true; Conceal(unit,s,false); Transition(unit,s,Mode::SUPPORT,frame);
         if(pos.SqDistance2D(goal)<=options.frontRadius*options.frontRadius*.25f) {
-            s.frontYield=frame+60;
+            s.frontYield=frame+60; s.detourFails=0;
             if(s.frontArrived<0) s.frontArrived=frame; // D-299 timed defence clock
             task->Resume(unit); // next builder callback selects front work
         } else {
@@ -830,15 +848,26 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
             next.y=ai->GetMap()->GetElevationAt(next.x,next.z);
             if(!s.route.empty() && s.goal.SqDistance2D(pos)>48*48
                 && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) return true;
-            if(Route(unit,pos,next)) Move(unit,s,next,frame);
+            // A detour MOVE gets its backoff to play out before the straight
+            // step and reach are re-sampled (both cost terrain queries).
+            if(frame<s.detourNext) return true;
+            if(Route(unit,pos,next)) { s.detourFails=0; Move(unit,s,next,frame); }
             else if(options.frontRecovery) {
                 // A blocked straight step is not an unreachable destination.
                 // Let Recoil route around terrain; local combat still preempts
                 // at the ordinary cadence. Recheck fresh reach before issuing.
-                if(ai->GetTerrainManager()->CanReachAt(unit,goal,64)) {
-                    ai->LOG("[CommanderFront] unit=%i detour x=%.0f z=%.0f frame=%i",unit->GetId(),goal.x,goal.z,frame);
+                // Three failed detours in a row: this front is not reachable
+                // in practice; take the unreachable exit and pick a new one.
+                if((options.frontDetourSeconds<=0 || s.detourFails<3) && ai->GetTerrainManager()->CanReachAt(unit,goal,64)) {
+                    ai->LOG("[CommanderFront] unit=%i detour x=%.0f z=%.0f frame=%i fails=%i",unit->GetId(),goal.x,goal.z,frame,s.detourFails);
                     Move(unit,s,goal,frame);
+                    if(options.frontDetourSeconds>0) {
+                        s.detourNext=frame+int(std::min(3.f,options.frontDetourSeconds+s.detourFails)*FRAMES_PER_SEC);
+                        ++s.detourFails;
+                    }
                 } else {
+                    if(s.detourFails>=3) ai->LOG("[CommanderFront] unit=%i detour gave up after %i tries frame=%i",unit->GetId(),s.detourFails,frame);
+                    s.detourFails=0;
                     s.frontYield=frame+2*FRAMES_PER_SEC;
                     s.front={-1,0,-1}; s.frontFrame=-10000; s.route.clear();
                     task->Resume(unit);

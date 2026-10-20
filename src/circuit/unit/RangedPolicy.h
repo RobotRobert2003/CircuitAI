@@ -22,6 +22,10 @@ struct RangedPolicy {
     float hysteresis = 48.f;
     float reactionSeconds = 1.f;
     float targetHysteresis = 1.2f;
+    // Order throttles (owner 2026-10-19): least seconds between non-urgent
+    // MOVE replacements, and least seconds a live priority target is kept.
+    float moveMinSeconds = 0.f;   // 0: off
+    float targetMinSeconds = 0.f; // 0: off
     float sensorOffset = 160.f;
     float cloakReserve = 3.f;
     float repairedTargetPenalty = .25f;
@@ -61,6 +65,12 @@ struct RangedPolicy {
     // D-294: 0 = off. Penalise a mobile target whose drift during projectile
     // flight exceeds evasionLimit*(splash+target radius); see ranged::Evasive.
     float evasionLimit = 0.f;
+    // Owner 2026-10-19: 0 = off. Armed static defences of this tech level or
+    // lower (BAR customparams.techlevel, 1 when absent) are not coverage this
+    // hull avoids: it picks firing sites, paths and stays inside their reach
+    // and favours them as targets. Their death blast still counts.
+    // Individual (non-coordinated) controller only.
+    float pressStatic = 0.f;
     // D-295: 0 = off. With no legal shot, seek the nearest LOS contact within
     // this radius that an allied screen is already fighting (CRangedWorld::Engaged).
     // Individual (non-coordinated) controller only.

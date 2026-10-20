@@ -43,6 +43,9 @@ const CRangedWorld::Metadata& CRangedWorld::MetadataFor(CCircuitDef* def)
     if (fresh) {
         auto* ud = def->GetDef();
         it->second = {float(ud->GetRadarRadius()), float(ud->GetJammerRadius()), def->GetLosRadius(), ud->GetArmorType()};
+        const auto& params = ud->GetCustomParams();
+        const auto level = params.find("techlevel");
+        if (level != params.end()) it->second.tech = float(std::atof(level->second.c_str()));
         const std::unique_ptr<springai::WeaponDef> explosion(ud->GetDeathExplosion());
         if(explosion) {
             const std::unique_ptr<springai::Damage> damage(explosion->GetDamage());
@@ -157,7 +160,7 @@ void CRangedWorld::Refresh()
         // Definition facts are immutable for this AI/game load. Resolve once
         // per type, not once per candidate mount in every shooter's hot loop.
         const auto& meta=MetadataFor(c.def);
-        c.armor=meta.armor; c.explosionRadius=meta.explosionRadius;
+        c.armor=meta.armor; c.explosionRadius=meta.explosionRadius; c.tech=meta.tech;
         c.hazardRadius=std::max(c.armed ? c.groundRange+c.radius : 0.f,c.explosionRadius);
         largestRange=std::max(largestRange,c.hazardRadius);
         // Reclaimers can be unarmed and exceed 600 elmos (including the
@@ -393,7 +396,7 @@ void CRangedWorld::Nearby(const AIFloat3& pos,float radius,std::vector<int>& res
         if(contacts[i].pos.SqDistance2D(pos)<=radius*radius) result.push_back(i);
     });
 }
-bool CRangedWorld::Safe(const AIFloat3& from,const AIFloat3& to,float margin,bool escaping) const
+bool CRangedWorld::Safe(const AIFloat3& from,const AIFloat3& to,float margin,bool escaping,float press) const
 {
     const AIFloat3 center=(from+to)*.5f;
     // Only static hazards can reject this predicate. Preserve the old bounds
@@ -402,7 +405,9 @@ bool CRangedWorld::Safe(const AIFloat3& from,const AIFloat3& to,float margin,boo
     const float query=(margin>=0.f && finiteStaticHazards?largestStaticRange:largestRange)+margin+std::sqrt(from.SqDistance2D(to))*.5f;
     const bool safe=!staticHazards.Any(P(center),query,[&](int i) {
         const auto& c=contacts[i];
-        const float radius=c.hazardRadius+margin;
+        const float hazard=HazardFor(c,press);
+        if(!(hazard>0.f)) return false;
+        const float radius=hazard+margin;
         if(escaping) return !ranged::SafeSegment(P(from),P(to),P(c.pos),radius);
         return !(ranged::SegmentDistanceSq(P(c.pos),P(from),P(to))>=radius*radius);
     });
@@ -412,8 +417,8 @@ bool CRangedWorld::Safe(const AIFloat3& from,const AIFloat3& to,float margin,boo
         // the old expensive query and checks static-bound reduction in-engine.
         bool legacy=true;
         enemies.Query(P(center),largestRange+margin+std::sqrt(from.SqDistance2D(to))*.5f,[&](int i) {
-            const auto& c=contacts[i]; if(!legacy || c.hazardRadius<=0.f || c.mobile) return;
-            const float radius=c.hazardRadius+margin;
+            const auto& c=contacts[i]; if(!legacy || HazardFor(c,press)<=0.f || c.mobile) return;
+            const float radius=HazardFor(c,press)+margin;
             legacy=escaping ? ranged::SafeSegment(P(from),P(to),P(c.pos),radius)
                 : ranged::SegmentDistanceSq(P(c.pos),P(from),P(to))>=radius*radius;
         });
@@ -421,16 +426,16 @@ bool CRangedWorld::Safe(const AIFloat3& from,const AIFloat3& to,float margin,boo
     }
     return safe;
 }
-float CRangedWorld::Danger(const AIFloat3& pos,float margin) const
+float CRangedWorld::Danger(const AIFloat3& pos,float margin,float press) const
 {
     float danger=0.f;
     enemies.Query(P(pos),largestRange+margin,[&](int i) {
-        const auto& c=contacts[i]; if(c.hazardRadius<=0.f) return;
-        if(pos.SqDistance2D(c.pos)<std::pow(c.hazardRadius+margin,2.f)) danger+=c.cost;
+        const auto& c=contacts[i]; const float hazard=HazardFor(c,press); if(hazard<=0.f) return;
+        if(pos.SqDistance2D(c.pos)<std::pow(hazard+margin,2.f)) danger+=c.cost;
     });
     return danger;
 }
-int CRangedWorld::DangerSign(const AIFloat3& pos,float margin) const
+int CRangedWorld::DangerSign(const AIFloat3& pos,float margin,float press) const
 {
     // Callers ask ==0 or >0, not a magnitude. Nonnegative finite contributions
     // permit existence short-circuiting without changing either comparison.
@@ -438,15 +443,15 @@ int CRangedWorld::DangerSign(const AIFloat3& pos,float margin) const
     // represents NaN, for which both original comparisons are false.
     int result;
     if(!nonnegativeHazardCosts) {
-        const float value=Danger(pos,margin);
+        const float value=Danger(pos,margin,press);
         result=value>0.f?1:value==0.f?0:-1;
     } else result=enemies.Any(P(pos),largestRange+margin,[&](int i) {
-        const auto& c=contacts[i];
-        return c.hazardRadius>0.f && c.cost>0.f
-            && pos.SqDistance2D(c.pos)<std::pow(c.hazardRadius+margin,2.f);
+        const auto& c=contacts[i]; const float hazard=HazardFor(c,press);
+        return hazard>0.f && c.cost>0.f
+            && pos.SqDistance2D(c.pos)<std::pow(hazard+margin,2.f);
     }) ? 1 : 0;
     if(verifyRangedQueries) {
-        const float value=Danger(pos,margin);
+        const float value=Danger(pos,margin,press);
         const int expected=value>0.f?1:value==0.f?0:-1;
         if(result!=expected) circuit->LOG("[INVARIANT] INV-161 ranged danger sign differs from ordered sum");
     }
