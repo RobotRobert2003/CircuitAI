@@ -832,6 +832,9 @@ namespace TechChain
         // short timeouts: an order nobody reaches is released in two minutes,
         // and the chain simply orders again
         IUnitTask@ t = Layout::Place(type, Task::Priority::HIGH, d, 120 * SECOND, u);
+        // owner 2026-10-20: the chain's reactor is the one reactor commitment the
+        // economy rows and the dedicated air constructor see (they assist it)
+        if (t !is null && type == Task::BuildType::ENERGY && key == "afus") Builder::_SetEnergyBuildTask(t);
         if (t is null) {
             // Layout owns supported expansion and its bounded retry. An
             // unrestricted native fallback bypasses that ownership and corridors.

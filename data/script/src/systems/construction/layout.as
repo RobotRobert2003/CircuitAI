@@ -733,6 +733,64 @@ namespace Layout {
     }
     bool ForwardGivenUp() { return fwdReplans >= Global::RoleSettings::Tech::LayoutForwardTries; }
 
+    // Owner 2026-10-20 (live t2rush on All That Glitters: the second advanced fusion
+    // and its converters went up in the forward cluster and no turret was ordered after
+    // 14:35; power.t1, the turret calculation and the economy's build-power target all
+    // read the main block only, which already stood): the forward cluster's own demand
+    int ForwardDearFrames()
+    {
+        if (fwdZone == 0) return 0;
+        return aiBuilderMgr.CountUnfinishedNear(fwdCentre, Global::RoleSettings::Tech::LayoutForwardBuildPowerRadius,
+            Global::RoleSettings::Tech::ChainParallelCostM, nano);
+    }
+    bool ForwardDemandOpen()
+    {
+        if (!Global::RoleSettings::Tech::LayoutForwardTurretDemand || fwdZone == 0 || fwdGroup <= 0) return false;
+        if (aiTerrainMgr.GetGroupCount(fwdGroup, true) == 0) return false;
+        return ForwardTurretsOpen() || ForwardDearFrames() > 0;
+    }
+    float ForwardBuildPower()
+    {
+        return aiBuilderMgr.GetStaticBuildPowerNear(fwdCentre, Global::RoleSettings::Tech::LayoutForwardBuildPowerRadius);
+    }
+    float MainBuildPower()
+    {
+        return aiBuilderMgr.GetStaticBuildPowerNear(BaseCentre(), Global::RoleSettings::Tech::EcoBuildPowerRadius);
+    }
+    // the forward cluster asks and stands with less static build power than the main block
+    bool ForwardWeaker()
+    {
+        return ForwardDemandOpen() && ForwardBuildPower() < MainBuildPower();
+    }
+    // the economy's static build power (EcoPlanner): the weaker block's once the forward cluster asks
+    float EconomyBuildPowerNear()
+    {
+        const float main = MainBuildPower();
+        if (!ForwardDemandOpen()) return main;
+        const float fwd = ForwardBuildPower();
+        return (fwd < main) ? fwd : main;
+    }
+
+    // Owner 2026-10-20 (live: the rush chain ordered an advanced fusion at 17:04 and the
+    // dedicated air constructor framed a second at 17:13; the reactor gate knew only the
+    // economy rows' own order): AfusAtOnce advanced fusions ordered or framed, whoever asks
+    int afusLimitLog = -100000;
+    bool AfusAtLimit(const CCircuitDef@ def)
+    {
+        const int limit = Global::RoleSettings::Tech::AfusAtOnce;
+        if (limit <= 0 || def is null || def.GetName() != UnitHelpers::GetAdvFusionNameForSide(Global::AISettings::Side)) return false;
+        CCircuitDef@ af = ai.GetCircuitDef(def.GetName());
+        if (af is null) return false;
+        const int framed = aiBuilderMgr.GetUnfinishedCount(af);
+        const int queued = aiBuilderMgr.GetQueuedBuildCount(int(Task::BuildType::ENERGY), af);
+        if (framed + queued < limit) return false;
+        if (ai.frame - afusLimitLog > 30 * SECOND) {
+            afusLimitLog = ai.frame;
+            GenericHelpers::LogUtil("[Layout] advanced fusion refused: " + framed + " framed, " + queued + " ordered, " + limit + " at once; assist it", 1);
+        }
+        return true;
+    }
+
     // Every box zone, the first first: the older box fills before the newer
     int ZoneCount() { return HasBox() ? 1 + int(extraZones.length()) : 0; }
     int ZoneAt(int i) { return (i == 0) ? boxZone : extraZones[i - 1]; }
@@ -1205,6 +1263,7 @@ namespace Layout {
     {
         if (def is null) return null;
         if (Global::AISettings::Role == AiRole::TECH) {
+            if (AfusAtLimit(def)) return null;   // owner 2026-10-20: one advanced fusion at a time
             IUnitTask@ replacement = ReplaceLost(type, def, builder);
             if (replacement !is null) return replacement;
             // The replacement-only income exemption cannot spill into expansion
@@ -1616,16 +1675,21 @@ namespace Layout {
             // from the second turret on the block grows from its own centroid
             const AIFloat3 seed = TurretSeed();
             id = aiTerrainMgr.NextSlotConnected(nanoGroup, seed);
-            if (fwdGroup > 0 && ForwardTurretsOpen()) {
+            if (fwdGroup > 0 && (ForwardTurretsOpen() || ForwardDemandOpen())) {
                 // Owner 2026-10-19 (t2rush on All That Glitters: advanced fusions and
                 // converters went into the forward cluster from 23:06 while its 52 slots
                 // waited for the main block's last one at 31:50): once the economy stands
                 // there, the asking constructor takes the nearer block's next slot
+                // Owner 2026-10-20: while the forward cluster has less static build power
+                // than the main block, its slot whatever the distance (the T1 constructors
+                // stand at the main block, so "nearer" kept the second round there)
                 const AIFloat3 at = unit.GetPos(ai.frame);
                 const int fid = aiTerrainMgr.NextSlotConnected(fwdGroup, fwdCentre);
-                if (fid >= 0 && (id < 0 || MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(fid), at)
+                const bool weaker = ForwardWeaker();
+                if (fid >= 0 && (id < 0 || weaker || MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(fid), at)
                     < MapHelpers::SqDist(aiTerrainMgr.GetReservationPos(id), at))) {
-                    if (id >= 0) GenericHelpers::LogUtil("[Layout] turret slot " + fid + " in the forward cluster: nearer " + unit.circuitDef.GetName() + " " + unit.id + " than the main block's", 2);
+                    if (id >= 0) GenericHelpers::LogUtil("[Layout] turret slot " + fid + " in the forward cluster: "
+                        + (weaker ? "the weaker block" : "nearer") + " for " + unit.circuitDef.GetName() + " " + unit.id, weaker ? 1 : 2);
                     id = fid;
                 }
             }

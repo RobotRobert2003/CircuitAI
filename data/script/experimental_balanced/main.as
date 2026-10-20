@@ -64,6 +64,8 @@ namespace Main {
         Global::Commander::FrontMexSeconds = 1.f;
         Global::RoleSettings::Tech::EcoFlakEnabled = true;
         Global::RoleSettings::Tech::LayoutForwardTurretsEarly = true; // owner 2026-10-19: the forward turret block fills once the economy moves into it
+        Global::RoleSettings::Tech::LayoutForwardTurretDemand = true; // owner 2026-10-20: the forward cluster's advanced fusions and converters order its turrets (second round)
+        Global::RoleSettings::Tech::AfusAtOnce = 1;                   // owner 2026-10-20: one advanced fusion at a time, whoever orders it
 		GenericHelpers::LogUtil("Running AiMain()", 1);
 
         // The opening Tick must search for gaps and raid just like later scouts.
