@@ -858,9 +858,13 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
                 // at the ordinary cadence. Recheck fresh reach before issuing.
                 // Three failed detours in a row: this front is not reachable
                 // in practice; take the unreachable exit and pick a new one.
+                // A detour that brought the commander 64 elmos closer since the
+                // last one is working, not failing: it does not spend retries.
+                const float goalDist=std::sqrt(pos.SqDistance2D(goal));
+                if(s.detourFails>0 && goalDist<s.detourDist-64.f) s.detourFails=0;
                 if((options.frontDetourSeconds<=0 || s.detourFails<3) && ai->GetTerrainManager()->CanReachAt(unit,goal,64)) {
                     ai->LOG("[CommanderFront] unit=%i detour x=%.0f z=%.0f frame=%i fails=%i",unit->GetId(),goal.x,goal.z,frame,s.detourFails);
-                    Move(unit,s,goal,frame);
+                    Move(unit,s,goal,frame); s.detourDist=goalDist;
                     if(options.frontDetourSeconds>0) {
                         s.detourNext=frame+int(std::min(3.f,options.frontDetourSeconds+s.detourFails)*FRAMES_PER_SEC);
                         ++s.detourFails;

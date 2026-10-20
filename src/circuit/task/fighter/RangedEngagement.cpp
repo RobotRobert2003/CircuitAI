@@ -65,7 +65,7 @@ void CRangedEngagement::Release(CCircuitUnit* unit,bool commands)
     unit->TrySetMoveState(unit->GetCircuitDef()->GetMoveState());
     unit->TrySetFireState(unit->GetCircuitDef()->GetFireState());
 }
-void CRangedEngagement::SelectTarget(CCircuitUnit* unit,int selected,int weapon,float damage)
+void CRangedEngagement::SelectTarget(CCircuitUnit* unit,int selected,int weapon,float damage,float score)
 {
     const int frame=ai->GetLastFrame();
     if(selected==target && weapon==weaponIndex) {
@@ -74,11 +74,16 @@ void CRangedEngagement::SelectTarget(CCircuitUnit* unit,int selected,int weapon,
         if(selected<0 || frame-targetFrame<30 || int(unit->GetUnit()->GetRulesParamFloat("unitTargetID",-1.f))==selected) return;
     }
     // Owner 2026-10-19: a live priority target is kept for target_min_seconds;
-    // each swap costs CANCEL+SET. A lost target, a cancel (selected<0) or a
-    // pick worth 1.5x the reserved damage still switches at once.
-    const float hold=unit->GetCircuitDef()->GetRangedPolicy().targetMinSeconds;
+    // each swap costs CANCEL+SET. The held target must have passed this tick's
+    // candidate filters (heldScoreFrame), and a pick scoring target_switch_ratio
+    // times its score (closing threats and pressed towers included) still
+    // switches at once.
+    const auto& holdPolicy=unit->GetCircuitDef()->GetRangedPolicy();
+    const float hold=holdPolicy.targetMinSeconds;
+    const float switchRatio=holdPolicy.targetSwitchRatio;
     if(target>=0 && selected>=0 && selected!=target && hold>0.f && frame-targetFrame<int(hold*FRAMES_PER_SEC)
-        && damage<reservedDamage*1.5f && ai->GetEnemyManager()->GetEnemyUnit(target)!=nullptr
+        && heldScoreFrame==frame && score>=0.f && score<heldScore*switchRatio
+        && ai->GetEnemyManager()->GetEnemyUnit(target)!=nullptr
         && int(unit->GetUnit()->GetRulesParamFloat("unitTargetID",-1.f))==target) return;
     const int avoid=unit->GetCircuitDef()->GetRangedPolicy().avoidCategory;
     if(selected>=0 && avoid!=0) {
@@ -176,7 +181,7 @@ void CRangedEngagement::Disperse(CCircuitUnit* unit)
         }
     }
 }
-bool CRangedEngagement::Move(CCircuitUnit* unit,const AIFloat3& dest,bool escape)
+bool CRangedEngagement::Move(CCircuitUnit* unit,const AIFloat3& dest,bool escape,bool urgent)
 {
     const auto& policy=unit->GetCircuitDef()->GetRangedPolicy();
     const auto pos=unit->GetPos(ai->GetLastFrame());
@@ -209,9 +214,11 @@ bool CRangedEngagement::Move(CCircuitUnit* unit,const AIFloat3& dest,bool escape
             && product>0.f && product*product>.94f*live.SqLength2D()*wanted.SqLength2D()) return true;
     }
     // Owner 2026-10-19: a live, still-legal move is replaced at most once per
-    // move_min_seconds; danger (urgent), escapes and an idle unit go at once.
+    // move_min_seconds; danger, threat escapes and an idle unit go at once.
     // Kiting units were re-moved on every 8-frame decision (cortrem 2.5/s).
-    if(!urgentMove && !escape && moving && policy.moveMinSeconds>0.f
+    // `escape` is only the path-safety test mode (most cohort and firing-site
+    // moves set it), so urgency is its own flag: the caller's, or the cohort's.
+    if(!urgent && !(policy.coordinated && urgentMove) && moving && policy.moveMinSeconds>0.f
         && ai->GetLastFrame()<lastMoveFrame+int(policy.moveMinSeconds*FRAMES_PER_SEC)
         && ai->GetUnitAPI()->GetCMDQueueSize(id)>0 && LegalPath(unit,path,escape)) return true;
     if(!ai->GetTerrainManager()->CanMoveToPos(unit->GetArea(),dest) || !SafeMove(unit,pos,dest,policy.safetyMargin,escape)) return false;
@@ -394,6 +401,7 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
             if(c.def->IsBuilder()) s*=2.f;
             if(c.id==target) s*=policy.targetHysteresis;
             if(world.Reserved(c.id,id)>=c.health) s*=.2f;
+            if(c.id==target && (heldScoreFrame!=frame || s>heldScore)) { heldScore=s; heldScoreFrame=frame; }
             if(s>score) { score=s; best=i; weapon=int(wi); damage=hit; }
         }
     }
@@ -428,7 +436,7 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
             :std::max(192.f,penetration+policy.hysteresis));
         withdrawalUntil=assessed && !disengage?frame+15:frame+30;
     } else if(frame<withdrawalUntil && moving) {
-        SelectTarget(unit,best>=0?contacts[best].id:-1,weapon,damage);
+        SelectTarget(unit,best>=0?contacts[best].id:-1,weapon,damage,score);
         return;
     } else if(incoming && !(policy.supportAllies && group.supporting && group.committed)
         && point.SqDistance2D(incoming->pos)<pos.SqDistance2D(incoming->pos)) {
@@ -520,13 +528,13 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
             if(group.sustainedRush && (candidate.x-pos.x)*(group.focus.x-pos.x)
                 +(candidate.z-pos.z)*(group.focus.z-pos.z)<0.f) continue;
             candidate.y=ai->GetTerrainManager()->GetAreaData()->GetElevationAt(candidate.x,candidate.z);
-            if(world.FreeSlot(id,candidate,policy.spacing) && Move(unit,candidate,true)) { placed=true; break; }
+            if(world.FreeSlot(id,candidate,policy.spacing) && Move(unit,candidate,true,danger!=nullptr)) { placed=true; break; }
         }
         // Spacing is subordinate to survival. A reserved retreat slot must not
         // leave the previous forward MOVE running into a closing assault.
         // Keep terrain/static validation, but allow a temporary crowded escape.
         if(!placed && danger) {
-            placed=Move(unit,point,true);
+            placed=Move(unit,point,true,true);
             if(!placed) Hold(unit,true);
         }
         // Commitment disables retreat, not physical firing lanes. Forcing an
@@ -540,7 +548,7 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     // MOVE plus BAR SET_TARGET permits firing while kiting without an ATTACK
     // order overriding the shared line. STOP above clears BAR priority target,
     // so repair it in the same decision after applying movement.
-    SelectTarget(unit,best>=0?contacts[best].id:-1,weapon,damage);
+    SelectTarget(unit,best>=0?contacts[best].id:-1,weapon,damage,score);
     if(trace && frame>=traceFrame+150) {
         traceFrame=frame;
         ai->LOG("COHORT: unit=%d members=%u mode=%d target=%d radius=%.0f dest=%.0f,%.0f danger=%d reason=%d loss=%.3f advantage=%.3f committed=%d supporting=%d screen=%.0f",
@@ -643,7 +651,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
                 if(forward) { SelectTarget(unit,-1,-1,0.f); reorient=true; }
                 orientUntil=0; // A newly closing threat preempts facing recovery.
                 withdrawalUntil=frame+std::max(30,int(escapeSeconds*30.f));
-                Move(unit,escape,true);
+                Move(unit,escape,true,true);
             }
         }
         if(forward) return;
@@ -700,6 +708,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             if(closing && closing->id==c.id) value*=2.f;
             // Owner 2026-10-19: the tower shooting at a pressing hull comes first.
             if(CRangedWorld::Pressed(c,policy.pressStatic)) value*=2.f;
+            if(c.id==target && (heldScoreFrame!=frame || value>heldScore)) { heldScore=value; heldScoreFrame=frame; }
             if(value>bestScore || (value==bestScore && (best<0 || c.id<contacts[best].id))) {
                 best=i; bestWeapon=int(wi); bestScore=value; bestDamage=damage;
             }
@@ -707,7 +716,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
     }
     if(best>=0) {
         const auto& c=contacts[best];
-        SelectTarget(unit,c.id,bestWeapon,bestDamage);
+        SelectTarget(unit,c.id,bestWeapon,bestDamage,bestScore);
         if(frame<withdrawalUntil) return;
         const float spacing=policy.spacing;
         if(frame<orientUntil) return;
@@ -738,7 +747,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
         }
         if(world.FreeSlot(id,pos,spacing) && !stalled) {
             Hold(unit);
-            SelectTarget(unit,c.id,bestWeapon,bestDamage);
+            SelectTarget(unit,c.id,bestWeapon,bestDamage,bestScore);
             world.SetSlot(id,pos,spacing,def->GetCostM());
             return;
         }
