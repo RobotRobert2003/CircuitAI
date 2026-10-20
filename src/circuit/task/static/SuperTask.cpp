@@ -814,7 +814,10 @@ bool CSuperTask::SelectEmpTarget(CCircuitUnit* unit, CCircuitDef* cdef)
 		// turret without any of them needing to be tagged.
 		value = e.cost;
 		return true;
-	});
+	// Unarmed enemies (anti-nuke, shields, AFUS, gantries) live in the peace
+	// pool, not the hostile one: without allEnemies the silo never saw any of
+	// the structures its ranking is for and only ever shot armed units.
+	}, 0.f, false, true);
 }
 
 bool CSuperTask::IsNukeSilo(CCircuitDef* cdef)
