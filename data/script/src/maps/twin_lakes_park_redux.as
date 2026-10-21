@@ -27,7 +27,7 @@ namespace TwinLakesParkRedux {
 	StartSpot@[] spots = {
 		StartSpot(AIFloat3( 2054, 0,  393), AiRole::FRONT, false), // P1  front
 		StartSpot(AIFloat3( 2004, 0, 1551), AiRole::FRONT, false), // P2  front
-		StartSpot(AIFloat3( 2503, 0, 3380), AiRole::FRONT, false), // P3  front
+		StartSpot(AIFloat3( 2503, 0, 3380), AiRole::SUPPORT, false), // P3  support
 		StartSpot(AIFloat3(  429, 0, 4393), AiRole::AIR,   false), // P4  air
 		StartSpot(AIFloat3( 1740, 0, 5131), AiRole::FRONT, false), // P5  front
 		StartSpot(AIFloat3( 1379, 0, 6570), AiRole::FRONT, false), // P6  front
@@ -35,7 +35,7 @@ namespace TwinLakesParkRedux {
 		StartSpot(AIFloat3( 2354, 0, 9420), AiRole::FRONT, false), // P8  front
 		StartSpot(AIFloat3(10250, 0, 9836), AiRole::FRONT, false), // P9  front
 		StartSpot(AIFloat3(10313, 0, 8702), AiRole::FRONT, false), // P10 front
-		StartSpot(AIFloat3( 9777, 0, 6856), AiRole::FRONT, false), // P11 front
+		StartSpot(AIFloat3( 9777, 0, 6856), AiRole::SUPPORT, false), // P11 support
 		StartSpot(AIFloat3(11900, 0, 5844), AiRole::AIR,   false), // P12 air
 		StartSpot(AIFloat3(10563, 0, 5113), AiRole::FRONT, false), // P13 front
 		StartSpot(AIFloat3(10908, 0, 3656), AiRole::FRONT, false), // P14 front
