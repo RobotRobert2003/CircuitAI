@@ -13,6 +13,15 @@ namespace Front {
             float GeothermalIncomeFraction = 0.5f;
             float GeothermalBootstrapEnergy = 120.0f;
 
+            // First factory at the spawn (owner, 2026-10-19; systems/construction/front_spawn_factory.as).
+            // Off here; experimental_balanced turns it on. Until a factory is framed: commander jobs further
+            // than the leash radius from the spawn become a solar at the spawn; from SpawnFactorySeconds,
+            // while energy income is short of native's start check, every non-energy job does too.
+            bool SpawnFactoryEnabled = false;
+            int SpawnFactorySeconds = 45;
+            float SpawnFactoryLeashRadius = 700.0f;   // 0 = no leash
+            int SpawnFactoryLeashMaxSeconds = 180;    // after this, native as before
+
             // Role switch cadence (seconds)
             int MinAiSwitchTime = 20;
             int MaxAiSwitchTime = 60;
@@ -63,6 +72,9 @@ namespace Front {
 
             // Time triggers for T2 lab construction
             int TimeTriggerForFirstT2LabSeconds = 22 * 60; // 22 minutes
+            // The time trigger above fires only while metal income is at least this (0 = no floor, as before).
+            // Stops a FRONT that lost its base from ordering a T2 lab/plant at +3 metal right after rebuilding a T1 factory.
+            float TimeTriggerForFirstT2LabMinMetalIncome = 0.0f;
             int TimeTriggerForT2EcoGatingSeconds = 20 * 60; // 20 minutes
 
             // Combat settings
@@ -83,7 +95,61 @@ namespace Front {
 
             // Economy Scaling Limits
             float MetalIncomePerLab = 35.0f;
-            float MetalIncomeForGantry = 250.0f;
+            float MetalIncomeForGantry = 175.0f;
+            // Owner (2026-10-16): once a fusion stands FRONT reclaims its winds and solars, those within
+            // ReclaimNearFactoryRadius of a factory first (played: Fatboys boxed in by advanced solars and
+            // winds round the labs), advanced solars too at ReclaimAdvSolarMargin or with an advanced fusion.
+            // Off here, on in experimental_balanced (systems/construction/front_reclaim.as).
+            bool ReclaimT1EnergyAfterFusion = false;
+            float ReclaimT1EnergyMargin = 1.25f;    // energy income without winds/solars covers the pull by this
+            float ReclaimAdvSolarMargin = 1.5f;     // ... without advanced solars as well
+            float ReclaimNearFactoryRadius = 900.0f;
+            float ReclaimEnergyRadius = 3000.0f;   // from the worker
+            int ReclaimEnergyConcurrent = 3;
+            // Owner (2026-10-16, 2026-10-17): FRONT's eco climbs to a gantry. Three fusions (winds, solars,
+            // advanced solars and T1 converters reclaimed once the first stands), one advanced fusion, a
+            // second (the fusions reclaimed as it builds), then the gantry, its EcoLadderGantryNanos turrets
+            // ordered from the moment it is framed. T2 converters from the first fusion while energy would
+            // be wasted (EcoLadderT2ConverterEnergy, EcoLadderT2ConverterReserve); past two advanced fusions,
+            // one more at a time until metal income reaches EcoLadderGantryMetalIncome, which the gantry
+            // waits for; once it stands with its turrets, advanced fusions resume. Converters only with the
+            // energy bank at EcoLadderConvertBankPercent. The stage caps the native eco too (fusions 3,
+            // advanced fusions 2, then EcoLadderMaxAdvFusions). Off here, on in experimental_balanced
+            // (systems/construction/front_eco_ladder.as). Log [FRONT][Eco].
+            bool EcoLadder = false;
+            float EcoLadderFusionMetalIncome = 20.0f;     // first, second and third fusion
+            float EcoLadderAdvFusionMetalIncome = 30.0f;  // first and second advanced fusion
+            float EcoLadderStoredFraction = 0.3f;         // or a bank of this share of its metal cost
+            int EcoLadderT1Converters = 5;                // unused since 2026-10-17 (no T1 converters once a fusion stands)
+            int EcoLadderT2ConvertersTwoFusions = 2;      // unused since 2026-10-17 (surplus-based)
+            int EcoLadderT2ConvertersPerAdvFusion = 3;    // unused since 2026-10-17 (surplus-based)
+            int EcoLadderMaxT2Converters = 30;
+            // T2 converters from the first fusion: one more while energy income beats the pull by a
+            // converter's draw plus this reserve and the bank is at EcoLadderConvertBankPercent (owner, 2026-10-17)
+            float EcoLadderT2ConverterEnergy = 600.0f;
+            float EcoLadderT2ConverterReserve = 200.0f;
+            float EcoLadderConvertFullPercent = 0.9f;     // or one more whenever the energy bank is this full
+            int EcoLadderMaxAdvFusions = 8;               // past two, one after another while metal income is under the gantry's, and after it
+            int EcoLadderGantryNanos = 6;                 // caretaker turrets on the gantry before advanced fusions resume
+            int EcoLadderFrameHelpers = 4;                // the ladder's constructors on a reactor frame at a time
+            float EcoLadderFrameHelpRadius = 3000.0f;     // a frame this near the constructor
+            float EcoLadderConvertBankPercent = 0.6f;
+            int EcoLadderGantryAfterAdvFusions = 2;       // the gantry step once this many advanced fusions stand (1 in experimental_balanced)
+            // FRONT recovery after losing the base (systems/construction/front_recovery.as); off here, on in experimental_balanced
+            bool Recovery = false;
+            float RecoveryEnterMetalIncome = 15.0f;      // recovery starts below this metal income...
+            float RecoveryMinPeakMetalIncome = 40.0f;    // ...once income had reached this
+            float RecoveryExitMetalIncome = 30.0f;       // and ends after RecoveryExitSeconds at or above this
+            int RecoveryExitSeconds = 30;
+            float RecoveryMexRadius = 2500.0f;           // mex spots retaken within this of the start (then of the worker)
+            int RecoveryMinT1Constructors = 3;           // the T1 factory makes this many constructors first
+            bool EcoLadderLaterAdvFusionAtStart = false;  // second and later advanced fusions tried at the start before the eco anchor
+            float EcoLadderGantryMetalIncome = 150.0f;    // the gantry waits for this metal income (owner, 2026-10-16)
+            float EcoLadderFusionReclaimMargin = 1.0f;    // income without the fusion covers the pull (always once the second advanced fusion stands)
+            float EcoLadderAnchorBack = 400.0f;           // eco this far behind the start, away from the map centre
+            int EcoLadderMetalStorages = 2;               // from the first advanced fusion, while storage is under a fusion's cost plus the spare
+            float EcoLadderStorageSpare = 1000.0f;
+            int EcoLadderLogSeconds = 60;
             float MetalIncomePerT1Builder = 20.0f;
             int MinBuilderCap = 5;
             float MetalIncomePerT2Builder = 40.0f;

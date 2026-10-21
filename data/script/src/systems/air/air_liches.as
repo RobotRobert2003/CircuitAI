@@ -65,6 +65,11 @@ when no weighted static target is feasible.
 
 ******************************************************************************/
 namespace AirLiches {
+    const int FallbackMobileAntiNukes = 7;
+    const int FallbackTurrets = 3;
+    const int FallbackEconomy = 4;
+    const int FallbackStructures = 0;
+
     const string Name = "armliche";
     dictionary held;               // id string -> true: finished Liches staged at home
     array<CAirWaveTask@> runs;     // live Liche operations
@@ -181,10 +186,10 @@ namespace AirLiches {
         // exclusion slots all go to the district.
         _Configure(wt, raidAim);
         // Spare payload is not wasted: after the first kill the run keeps descending the tiers.
-        wt.AddTargetFallback(7); // mobile anti-nukes
-        wt.AddTargetFallback(3); // turrets
-        wt.AddTargetFallback(4); // other economy and support structures
-        wt.AddTargetFallback(0); // remaining structures
+        wt.AddTargetFallback(FallbackMobileAntiNukes); // mobile anti-nukes
+        wt.AddTargetFallback(FallbackTurrets); // turrets
+        wt.AddTargetFallback(FallbackEconomy); // other economy and support structures
+        wt.AddTargetFallback(FallbackStructures); // remaining structures
         // Aim at the raid first: the native frontline scorer measures from the plan's aim.
         wt.SetPlan(Task::WaveMode::STRIKE, raidAim, Global::RoleSettings::Air::WaveFormDistance,
             Global::RoleSettings::Air::StrikeLaneSpacing, Global::RoleSettings::Air::WaveOverrun,
@@ -202,6 +207,11 @@ namespace AirLiches {
             raw.Abort();
             return 0;
         }
+        // Spare payload is not wasted: after the first kill the run keeps descending the tiers.
+        wt.AddTargetFallback(FallbackMobileAntiNukes); // mobile anti-nukes
+        wt.AddTargetFallback(FallbackTurrets); // turrets
+        wt.AddTargetFallback(FallbackEconomy); // other economy and support structures
+        wt.AddTargetFallback(FallbackStructures); // remaining structures
         wt.SetPlan(Task::WaveMode::STRIKE, wt.GetAim(), Global::RoleSettings::Air::WaveFormDistance,
             Global::RoleSettings::Air::StrikeLaneSpacing, Global::RoleSettings::Air::WaveOverrun,
             Global::RoleSettings::Air::WaveFormTimeoutSeconds * SECOND, 0, Task::WAVE_SMART_BEARING, 1);

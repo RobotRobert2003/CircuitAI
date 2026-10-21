@@ -1316,7 +1316,8 @@ namespace RoleTech
 			{
 				const bool landLocked = Global::Map::LandLocked;
 				string unitName;
-				if (landLocked)
+				// Owner (2026-10-16): with NoTelchines a Legion land-locked start takes the ground bot instead
+				if (landLocked && !(Global::Military::NoTelchines && UnitHelpers::GetAmphibiousT2BotForSide(side) == "legamph"))
 				{
 					// Amphibious choices per side
 					unitName = UnitHelpers::GetAmphibiousT2BotForSide(side);
@@ -2742,6 +2743,73 @@ namespace RoleTech
 		return Tech_T1BotConstructor_AiMakeTask(u, metalIncome, energyIncome, defaultTask);
 	}
 
+	int afusSiloLockFrame = 0;      // one AFUS silo order per 10 s
+	int afusSiloGateLogFrame = 0;   // throttles the AFUS silo gate log (30 s)
+	// Silo per advanced fusion (owner, 2026-10-17): a nuke rush wants 1 + completed AFUS silos, up to
+	// NukeLimit, one at a time, on the regular silo gates, packed on the base layout. Asked by the
+	// nuke.afus rule row (tech_rules.as) before the economy rows, and by the legacy T2 rung.
+	IUnitTask @Tech_AfusSilo(CCircuitUnit @u, float metalIncome, float energyIncome)
+	{
+		if (!Global::RoleSettings::Tech::NukeRushSiloPerAfus
+			|| !Global::RoleSettings::Tech::HasStrategy(Strategy::NUKE_RUSH))
+			return null;
+		// One at a time: the task-added counter lags a fresh enqueue, so the builder
+		// manager's own queue and a short lock also count (two T2 workers asked within
+		// 8 frames and both queued silo 2 in the All That Glitters test)
+		if (ai.frame < afusSiloLockFrame)
+			return null;
+		const int nukeTotal = EconomyHelpers::GetNukeSiloCount();
+		CCircuitDef @siloDef = ai.GetCircuitDef(TechChain::DefFor("silo"));
+		const int nukeQueued = AiMax(Builder::NukeSiloQueuedCount, siloDef is null ? 0
+			: aiBuilderMgr.GetQueuedBuildCount(int(Task::BuildType::BIG_GUN), siloDef));
+		if (nukeQueued > 0 || nukeTotal < 1)
+			return null;
+		int afusDone = 0;
+		array<string> afusNames = UnitHelpers::GetAllAdvancedFusionReactors();
+		for (uint i = 0; i < afusNames.length(); ++i)
+		{
+			CCircuitDef @d = ai.GetCircuitDef(afusNames[i]);
+			if (d !is null)
+				afusDone += d.count - aiBuilderMgr.GetUnfinishedCount(d);
+		}
+		const int wantSilos = AiMin(Global::RoleSettings::Tech::NukeLimit, 1 + afusDone);
+		if (nukeTotal >= wantSilos)
+			return null;
+		const float reqMi = Global::RoleSettings::Tech::NukeRushAfusSiloMetalIncome >= 0.0f
+			? Global::RoleSettings::Tech::NukeRushAfusSiloMetalIncome : Global::RoleSettings::Tech::MinimumMetalIncomeForNuke;
+		const float reqEi = Global::RoleSettings::Tech::NukeRushAfusSiloEnergyIncome >= 0.0f
+			? Global::RoleSettings::Tech::NukeRushAfusSiloEnergyIncome : Global::RoleSettings::Tech::MinimumEnergyIncomeForNuke;
+		if (!EconomyHelpers::ShouldBuildNuclearSilo(
+				/*mi*/ metalIncome,
+				/*ei*/ energyIncome,
+				/*queued*/ nukeQueued,
+				/*total*/ nukeTotal,
+				/*rushCount*/ wantSilos,
+				/*reqMiRush*/ reqMi,
+				/*reqEiRush*/ reqEi,
+				/*reqMiReg*/ reqMi,
+				/*reqEiReg*/ reqEi))
+		{
+			if (ai.frame >= afusSiloGateLogFrame)
+			{
+				afusSiloGateLogFrame = ai.frame + 30 * SECOND;
+				GenericHelpers::LogUtil("[TECH][NukeRush] AFUS silo waits on the gates: income " + int(metalIncome) + "/"
+					+ int(reqMi) + " metal, " + int(energyIncome) + "/"
+					+ int(reqEi) + " energy (" + nukeTotal + " silos, "
+					+ afusDone + " completed AFUS)", 1);
+			}
+			return null;
+		}
+		IUnitTask @t = TechChain::PackedSilo();
+		if (t is null)
+			@t = Builder::EnqueueNukeSilo(UnitHelpers::GetSideForUnitName(u.circuitDef.GetName()), Layout::BaseCentre(), SQUARE_SIZE * 32, SECOND * 300);
+		if (t !is null)
+			afusSiloLockFrame = ai.frame + 10 * SECOND;
+		if (t !is null)
+			GenericHelpers::LogUtil("[TECH][NukeRush] AFUS silo: silo " + (nukeTotal + 1) + " for " + afusDone
+				+ " completed AFUS (limit " + Global::RoleSettings::Tech::NukeLimit + ")", 1);
+		return t;
+	}
 	IUnitTask @Tech_T2BotConstructor_AiMakeTask(CCircuitUnit @u, bool isEnergyFull, float metalIncome, float energyIncome, float metalCurrent, bool isEnergyLessThan90Percent, IUnitTask @defaultTask)
 	{
 		{
@@ -2820,6 +2888,37 @@ namespace RoleTech
 			IUnitTask @tNuke = Builder::EnqueueNukeSilo(unitSide, anchor, SQUARE_SIZE * 32, SECOND * 300);
 			if (tNuke !is null)
 				return tNuke;
+		}
+
+		// Silo per advanced fusion (owner, 2026-10-17): see Tech_AfusSilo; also the nuke.afus rule row
+		IUnitTask @tAfusSiloRung = Tech_AfusSilo(u, metalIncome, energyIncome);
+		if (tAfusSiloRung !is null)
+			return tAfusSiloRung;
+
+		// Second nuke call (owner, 2026-10-16): a nuke rush asks again after NukeRushSecondCallSeconds,
+		// now up to NukeRushSecondCallLimit (else NukeLimit) silos, one at a time (none while one is queued)
+		const int secondCallLimit = Global::RoleSettings::Tech::NukeRushSecondCallLimit >= 0
+			? AiMin(Global::RoleSettings::Tech::NukeRushSecondCallLimit, Global::RoleSettings::Tech::NukeLimit)
+			: Global::RoleSettings::Tech::NukeLimit;
+		if (Global::RoleSettings::Tech::NukeRushSecondCallSeconds >= 0
+			&& Global::RoleSettings::Tech::HasStrategy(Strategy::NUKE_RUSH)
+			&& ai.frame >= Global::RoleSettings::Tech::NukeRushSecondCallSeconds * SECOND
+			&& nukeQueued <= 0 && nukeTotal >= 1
+			&& EconomyHelpers::ShouldRushNuke(
+				/*mi*/ metalIncome,
+				/*ei*/ energyIncome,
+				/*queued*/ nukeQueued,
+				/*total*/ nukeTotal,
+				/*rushCount*/ secondCallLimit,
+				/*reqMi*/ Global::RoleSettings::Tech::NukeRushSecondCallMetalIncome,
+				/*reqEi*/ Global::RoleSettings::Tech::NukeRushSecondCallEnergyIncome))
+		{
+			GenericHelpers::LogUtil("[TECH][NukeRush] second call: silo " + (nukeTotal + 1) + " of " + secondCallLimit, 1);
+			IUnitTask @tNuke2 = TechChain::PackedSilo();
+			if (tNuke2 is null)
+				@tNuke2 = Builder::EnqueueNukeSilo(unitSide, anchor, SQUARE_SIZE * 32, SECOND * 300);
+			if (tNuke2 !is null)
+				return tNuke2;
 		}
 
 		// Anti-nuke decision: ensure at least target number based on income-scaled allowance and minimum

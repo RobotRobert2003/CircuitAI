@@ -7,6 +7,8 @@ namespace Air {
             // AIR owns these settings and all air.* reservations. TECH never reads them.
             bool ExperimentalBuild = true;
             bool FundFirstLab = false; // balanced opt-in; later factories retain Transition
+            float EcoSlotRetrySeconds = 0.0f; // owner 2026-10-19: one reactor order per eco slot per this many s (0 = off; balanced 2)
+            bool FirstLabBankAssist = false; // helpers join the funded first lab once the bank covers what it still needs
             float FirstLabFundingSeconds = 180.0f;
             float FirstLabIncomeShare = 0.75f; // leave income and a bank for immediate defence
             bool ContinuousFactoryProduction = true; // refill on completion; funded T2 labs bypass discretionary growth holds
@@ -70,6 +72,15 @@ namespace Air {
             int FirstFusionTargetSeconds = 20 * 60;
             int FirstFusionLeadSeconds = 12 * 60;
             int PreFusionMexLimit = 6;
+            // Bank funding (balanced opt-in): with this much banked metal (often allied overflow),
+            // AIR funds energy, T1 constructors and T2 lab turrets even while its own mex income is low.
+            bool BankFunding = false;
+            float BankRichMetal = 1500.0f;
+            int BankRichT1Builders = 8;
+            // With BankFunding: when no free spot is left within HomeMexRadius and AIR owns fewer
+            // than HomeMexMinimum mexes, it expands out to FarMexRadius (one claim at a time).
+            int HomeMexMinimum = 6;
+            float FarMexRadius = 2800.0f;
             float FusionAccessMinMetal = 12.0f;
             float FusionAccessMinEnergy = 450.0f;
             float WarmFactoryGapSeconds = 0.5f; // prior until measured; not cold opening time
@@ -443,7 +454,7 @@ namespace Air {
 
             /******************** HEAVY AIR STRIKE POLICY (Legion/Cortex) ********************/
             // Maintain a bounded late-game heavy-air force for Legion/Cortex.
-            float T2HeavyAirIncomeThreshold = 250.0f;
+            float T2HeavyAirIncomeThreshold = 250.0f; // metal/s, 10 s minimum; also gates air_production.as heavy line
             int T2HeavyAirTargetCount = 6;
             int T2HeavyAirBatchPerFactory = 2;
 

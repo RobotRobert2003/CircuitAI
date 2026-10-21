@@ -11,6 +11,9 @@ namespace Global { namespace Commander {
     float FrontRadarSpacing=500.f, FrontLaserSpacing=300.f;
     bool FrontRecovery=false;
     float FrontMexSeconds=0.f, FrontStallSeconds=10.f;
+    // Order throttles (owner 2026-10-19); 0 = off. Balanced sets them in commander.json.
+    float FrontDetourSeconds=0.f, T3DeclineGate=0.f;
+    float MoveResendSeconds=0.f, FallbackGoalHoldSeconds=0.f;
     float T3Intercept=1.f, T3Health=.2f, T3Distance=1000.f, DetectionMargin=32.f;
     float AfusDefenceRadius=0.f; // balanced opts into cloaked tier-priority base defence
     array<string> AfusDefenceUnits={"armafus","corafus","legafus"};

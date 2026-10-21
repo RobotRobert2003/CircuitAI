@@ -614,6 +614,7 @@ namespace SeaOperations {
         }
         BuildTaskForces();
         const int contacts=aiBattle.GetSeaForceCount(); // legal SEA extension; AIR snapshot unchanged
+        int reroutes=0; // working-copy same-target cap; the rotating total-route budget also remains
         // D-348: at most FleetRoutesPerTick combat re-routes per census, and the
         // loop starts at a rotating offset so the budget never starves the same
         // groups. Skipped groups are reconsidered on the next census (1 s).
@@ -1055,8 +1056,15 @@ namespace SeaOperations {
             // immediate. Firing never waits on the queue (priority fire is
             // independent), so this only thins MOVE orders, not reactions.
             if (target>=0 && target==g.target && ai.frame-g.ordered<Global::RoleSettings::Sea::FleetRerouteSeconds*SECOND) continue;
+            // Working-copy cap applies only to same-target route attempts.
+            // Keep the existing fair total-route budget and count after the
+            // existing admission checks, so rejected goals do not consume it.
+            const bool sameTarget = target>=0 && target==g.target;
+            if (sameTarget && Global::RoleSettings::Sea::FleetReroutesPerTick>0
+                && reroutes>=Global::RoleSettings::Sea::FleetReroutesPerTick) continue;
             if (routeBudget<=0) continue;
             --routeBudget;
+            if (sameTarget) ++reroutes;
             if (Route(g,goal,false,scout,false,transit,target<0)) {
                 g.target=target;
                 if (target>=0 && targetSub && (targetFlags&128)==0) AntiSubFormation(g,targetPosition);

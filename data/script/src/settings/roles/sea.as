@@ -254,6 +254,9 @@ namespace Sea {
             int FleetReleaseCount = 7;
             int FleetReleaseSeconds = 60;
             int FleetSearchSeconds = 45;
+            // Owner 2026-10-19: same-target re-route floor per cohort and cap per
+            // tick (0 = off; experimental_balanced sets 3 s and 8).
+            int FleetReroutesPerTick = 0;
             array<string> CombatSubmarineDefinitions = { "armsub", "corsub", "legnavysub", "armserp", "corssub", "armsubk", "corshark", "leganavyheavysub", "leganavybattlesub" };
             float SubmarineShoreMinimumDistance = 0.0f;
             float SubmarineShoreRangeFraction = 0.95f;

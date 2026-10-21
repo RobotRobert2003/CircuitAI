@@ -61,6 +61,9 @@ namespace Spam {
         int EdgeUnitLanes = 3;               // a narrow band along the edge
         float EdgeUnitLaneSpacing = 96.0f;
         float EdgeReleaseRadius = 400.0f;    // within this of the far corner a unit leaves the lane for normal attacks
+        // owner, 2026-10-20: every spam lane releases its units at its end, as the edge lanes do (off here)
+        bool LaneReleaseAtEnd = false;
+        float LaneReleaseRadius = 400.0f;    // within this of a lane's last point a unit leaves it for normal attacks
         dictionary UnitByFactory = {
             {"armlab", "armpw"},   {"corlab", "corak"},    {"leglab", "leggob"},
             {"armvp", "armflash"}, {"corvp", "corgator"},  {"legvp", "leghades"}

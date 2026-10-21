@@ -4,7 +4,7 @@ namespace RoleSettings {
         // Early allocation by reachable walking distance from starting commanders.
         // At this game time, every ally may take unoccupied reachable spots.
         bool MexOwnershipEnabled = false;
-        float MexOwnershipSeconds = 600.0f; // 0 disables early protection
+        float MexOwnershipSeconds = 270.0f; // owner, 2026-10-19: 4:30 (was 600); 0 disables early protection
         /******************** MEX UPGRADE PRIORITY ********************/
         // A mex upgrade is the best metal-per-metal available and spots are
         // finite, so every role ranks it ahead of its energy ladder. Radius is

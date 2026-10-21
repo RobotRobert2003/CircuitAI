@@ -68,6 +68,10 @@ namespace CommanderCombat {
             Option("front_recovery",Global::Commander::FrontRecovery?1.f:0.f);
             Option("front_mex_seconds",Global::Commander::FrontMexSeconds);
             Option("front_stall_seconds",Global::Commander::FrontStallSeconds);
+            Option("front_detour_seconds",Global::Commander::FrontDetourSeconds);
+            Option("t3_decline_gate",Global::Commander::T3DeclineGate);
+            Option("move_resend_seconds",Global::Commander::MoveResendSeconds);
+            Option("fallback_goal_hold_seconds",Global::Commander::FallbackGoalHoldSeconds);
             Option("t3_intercept",Global::Commander::T3Intercept);
             Option("t3_health",Global::Commander::T3Health);
             Option("t3_distance",Global::Commander::T3Distance);

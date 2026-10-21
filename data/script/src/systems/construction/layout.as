@@ -1282,6 +1282,11 @@ namespace Layout {
     int noRoomSince = -1;     // D-099: INV-020
     int noRoomLog = -100000;
     string noRoomDef = "";
+    // Owner 2026-10-19: a structure that found no room waits before the full
+    // sweep runs again: LayoutNoRoomRetrySeconds, +1 s per miss in a row, at
+    // most 3 s (Entrenched Plains: 330 armafus sweeps a minute, 82 sites each).
+    dictionary noRoomUntil;   // def name -> frame the next sweep may run
+    dictionary noRoomMisses;  // def name -> misses in a row
 
     // A whole rectangular bank can be impossible on an island even when a
     // small reactor/support module fits. Search a fixed number of sites only
@@ -1401,6 +1406,8 @@ namespace Layout {
         }
         CheckForward(true);
         AllyClearEco();   // owner 2026-10-20
+        int noRoomAt = 0;
+        if (noRoomUntil.get(def.GetName(), noRoomAt) && ai.frame < noRoomAt) return null;
         int id = -1;
         // D-101 (owner's rule): advanced fusions and advanced converters go in sets,
         // the first flush against a turret, the rest lined up away from it; the
@@ -1445,6 +1452,13 @@ namespace Layout {
         if (id < 0) id = ReserveSupportedOverflow(def, builder);
         if (id < 0) {
             if (noRoomSince < 0) noRoomSince = ai.frame;
+            const float retry = Global::RoleSettings::Tech::LayoutNoRoomRetrySeconds;
+            if (retry > 0.0f) {
+                int misses = 0;
+                noRoomMisses.get(def.GetName(), misses);
+                noRoomUntil.set(def.GetName(), ai.frame + int(AiMin(3.0f, retry + float(misses)) * SECOND));
+                noRoomMisses.set(def.GetName(), misses + 1);
+            }
             // said once per def every 30 s (played: 4,139 lines in 20 minutes)
             if (def.GetName() != noRoomDef || ai.frame - noRoomLog > 30 * SECOND) {
                 noRoomDef = def.GetName(); noRoomLog = ai.frame;
@@ -1457,6 +1471,7 @@ namespace Layout {
             return null;
         }
         noRoomSince = -1;
+        noRoomMisses.set(def.GetName(), 0);
         const AIFloat3 pos = aiTerrainMgr.GetReservationPos(id);
         // INV-014 (D-082): every packed structure stands within a turret's reach of a slot
         if (aiTerrainMgr.CountGroupSlotsWithin(nanoGroup, pos, Global::RoleSettings::Tech::InvariantReachElmos) == 0

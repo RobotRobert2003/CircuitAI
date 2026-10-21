@@ -17,12 +17,24 @@
 #include "../../systems/production/front_arty_squad.as"
 #include "../../systems/combat/land_siege.as"
 #include "../../systems/construction/front_geothermal.as"
+#include "../../systems/construction/front_reclaim.as"
+#include "../../systems/construction/front_eco_ladder.as"
+#include "../../systems/construction/front_recovery.as"
 #include "../../systems/construction/commander_front.as"
+#include "../../systems/construction/front_spawn_factory.as"
 // Builder state and helpers for enqueueing structures like nanos
 #include "../../manager/builder.as"
 #include "../../manager/economy.as"
 
 namespace RoleFront {
+    const float MapCenterFraction = 0.5f;
+    const float NanoSearchAdvanceStep = 600.0f;
+    const float NanoSearchAngleStep = 0.7854f;
+    const float NanoSearchRingSpacing = 96.0f;
+    const float GantryFailedSiteRadius = 500.0f;
+    const float GantrySearchAngleStep = 0.5236f;
+    const float GantrySearchRingSpacing = 128.0f;
+
 
     /******************************************************************************
 
@@ -32,6 +44,7 @@ namespace RoleFront {
 
     void Front_Init() {
         FrontGeothermal::Reset();
+        FrontSpawnFactory::Reset();
         GenericHelpers::LogUtil("Front role initialization logic executed", 2);
 
         // Apply FRONT role settings
@@ -221,6 +234,7 @@ namespace RoleFront {
         float metalIncome = Economy::GetMinMetalIncomeLast10s();
         float energyIncome = Economy::GetMinEnergyIncomeLast10s();
         Front_IncomeLimits(metalIncome, energyIncome);
+        FrontRecovery::Update(metalIncome);
 
         // One-time switch for T1 combat units to 'raider' role when metal income > 250
         if (!g_frontT1CombatRoleSwitchDone && metalIncome > 250.0f) {
@@ -360,7 +374,7 @@ namespace RoleFront {
             if (botConstructorNames.length() > 0) {
                 string botConstructorName = botConstructorNames[0];
                 int existingBotConstructors = UnitDefHelpers::GetUnitDefCount(botConstructorName);
-                if (existingBotConstructors < Global::RoleSettings::Front::MinT1BotConstructorCount) {
+                if (existingBotConstructors < AiMax(Global::RoleSettings::Front::MinT1BotConstructorCount, FrontRecovery::MinT1Constructors())) {
                     CCircuitDef@ ctorDef = ai.GetCircuitDef(botConstructorName);
                     if (ctorDef !is null && ctorDef.IsAvailable(ai.frame)) {
                         const AIFloat3 pos = u.GetPos(ai.frame);
@@ -390,7 +404,7 @@ namespace RoleFront {
             if (vehicleConstructorNames.length() > 0) {
                 string vehicleConstructorName = vehicleConstructorNames[0];
                 int existingVehicleConstructors = UnitDefHelpers::GetUnitDefCount(vehicleConstructorName);
-                if (existingVehicleConstructors < Global::RoleSettings::Front::MinT1VehicleConstructorCount) {
+                if (existingVehicleConstructors < AiMax(Global::RoleSettings::Front::MinT1VehicleConstructorCount, FrontRecovery::MinT1Constructors())) {
                     CCircuitDef@ vdef = ai.GetCircuitDef(vehicleConstructorName);
                     if (vdef !is null && vdef.IsAvailable(ai.frame)) {
                         const AIFloat3 pos2 = u.GetPos(ai.frame);
@@ -607,16 +621,33 @@ namespace RoleFront {
             if(frontWork !is null) return frontWork;
         }
 
+        // Owner (2026-10-19): after losing the base, retake the mexes first (Front::Recovery)
+        IUnitTask@ recovery=FrontRecovery::Work(builder);
+        if (recovery !is null) return recovery;
         // Select explicit geo work before asking native to enqueue another
         // energy task. Overriding an already-created task would leak work.
         IUnitTask@ geothermal=FrontGeothermal::Work(builder);
         if (geothermal !is null) return geothermal;
+        // Owner (2026-10-16): after a fusion, winds and solars come down, those round the factories first
+        IUnitTask@ reclaim=FrontReclaim::Work(builder);
+        if (reclaim !is null) return reclaim;
+        // Owner (2026-10-16): fusion, second fusion, advanced fusion, second advanced fusion, gantry
+        IUnitTask@ ladderGantry=Front_TryLadderGantry(builder);
+        if (ladderGantry !is null) return ladderGantry;
+        IUnitTask@ ladder=FrontEcoLadder::Work(builder);
+        if (ladder !is null) return ladder;
         // Pre-create and cache a single default task instance; never recreate.
         IUnitTask@ defaultTask = Builder::MakeDefaultTaskWithLog(builder.id, "FRONT");
 
         const CCircuitDef@ udef = builder.circuitDef;
         if (udef is null) return defaultTask;
 
+        // Owner (2026-10-19): until the first factory is framed, the commander stays near the spawn
+        // and builds energy there, so native's plop factory goes up at home (front_spawn_factory.as)
+        if (UnitHelpers::IsCommander(udef)) {
+            IUnitTask@ steered = FrontSpawnFactory::Steer(builder, defaultTask);
+            if (steered !is defaultTask) return steered;
+        }
         // Early return: if the default task represents a resource expansion (MEX/GEO variants), keep it.
         IBuilderTask@ defaultBuilderTask = cast<IBuilderTask>(defaultTask);
         if (defaultBuilderTask !is null) {
@@ -788,6 +819,7 @@ namespace RoleFront {
         Front_IncomeLabLimits(metalIncome);
         Front_IncomeBuilderLimits(metalIncome);
         Front_IncomeNanoLimits(energyIncome);
+        FrontEcoLadder::ApplyCaps();   // Front::EcoLadder: the native eco follows the ladder's stage
 
         //Always apply map limits, regardless of how eco changes labs limits
         dictionary mapLimits = Global::Map::Config.UnitLimits;
@@ -811,8 +843,185 @@ namespace RoleFront {
 
         // Gantries
         array<string> gantries = UnitHelpers::GetAllGantries();
-        int gantryCap = (metalIncome >= Global::RoleSettings::Front::MetalIncomeForGantry) ? 1 : 0;
+        // Front::EcoLadder: no native gantry; the ladder raises the allowance. Played (h25):
+        // native gantries at stage 3, and a native order that never framed blocking the ladder's
+        int gantryCap = (!FrontEcoLadder::On() && metalIncome >= Global::RoleSettings::Front::MetalIncomeForGantry) ? 1 : 0;
+        if (g_frontGantryAllowance > gantryCap) gantryCap = g_frontGantryAllowance;   // never below what the ladder raised
         UnitHelpers::BatchApplyUnitCaps(gantries, gantryCap);
+    }
+
+    /******************************************************************************
+
+    ECO LADDER GANTRY (Global::RoleSettings::Front::EcoLadder*)
+
+    ******************************************************************************/
+
+    int g_frontGantryAllowance = 0;
+    // Our T2 factories and gantries that stand finished, with their turret counts
+    void Front_SpendFactories(array<CCircuitUnit@>@ found, array<int>@ nanos) {
+        array<string>@ keys = Factory::allFactories.getKeys();
+        for (uint i = 0; i < keys.length(); ++i) {
+            CCircuitUnit@ f = null;
+            if (!Factory::allFactories.get(keys[i], @f) || f is null || f.circuitDef is null || f.GetBuildProgress() < 1.0f) continue;
+            const string n = f.circuitDef.GetName();
+            if (!UnitHelpers::IsT2BotLab(n) && !UnitHelpers::IsT2VehicleLab(n) && !UnitHelpers::IsLandGantry(n)) continue;
+            found.insertLast(f); nanos.insertLast(Factory::_GetNanoCount(f));
+        }
+    }
+
+    // A site the engine accepts for a gantry: around each finished T2 factory of ours, then at
+    // 600/1200/1800 from the start toward the map centre, spiralling out 96 a ring.
+    // (played: the native EnqueueLandGantry tried only near the preferred factory spot: "no site at all")
+    bool Front_GantrySite(CCircuitDef@ gantry, AIFloat3 &out site) {
+        array<AIFloat3> anchors;
+        array<CCircuitUnit@> facs; array<int> nanos;
+        Front_SpendFactories(facs, nanos);
+        for (uint i = 0; i < facs.length(); ++i) anchors.insertLast(facs[i].GetPos(ai.frame));
+        const AIFloat3 start = Global::Map::StartPos;
+        const AIFloat3 centre(float(aiTerrainMgr.GetTerrainWidth()) * MapCenterFraction, 0.0f, float(aiTerrainMgr.GetTerrainHeight()) * MapCenterFraction);
+        const float d = sqrt(MapHelpers::SqDist(start, centre));
+        for (int k = 1; k <= 3 && d > 1.0f; ++k) {
+            const float f = AiMin(float(k) * NanoSearchAdvanceStep, d) / d;
+            anchors.insertLast(AIFloat3(start.x + (centre.x - start.x) * f, 0.0f, start.z + (centre.z - start.z) * f));
+        }
+        const int facing = LayoutHelpers::FacingToward(start, centre);
+        for (uint a = 0; a < anchors.length(); ++a) {
+            for (int ring = 1; ring <= 8; ++ring) {
+                for (int k = 0; k < 8; ++k) {
+                    const float ang = NanoSearchAngleStep * float(k);
+                    AIFloat3 p(anchors[a].x + cos(ang) * NanoSearchRingSpacing * float(ring), 0.0f, anchors[a].z + sin(ang) * NanoSearchRingSpacing * float(ring));
+                    if (p.x < 200.0f || p.z < 200.0f || p.x > float(aiTerrainMgr.GetTerrainWidth()) - 200.0f || p.z > float(aiTerrainMgr.GetTerrainHeight()) - 200.0f) continue;
+                    if (!aiTerrainMgr.CanReserveBuilding(gantry, p, facing)) continue;
+                    site = p;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Owner (2026-10-16): the eco ladder's last step (FrontEcoLadder::S_GANTRY, two advanced fusions
+    // standing): one land gantry, held until metal income reaches Front::EcoLadderGantryMetalIncome
+    // (150). Sited round our T2 factories, then round the eco anchor and the
+    // start, then engine-sited round the eco anchor. Played (h25, All That Glitters +75): "no gantry
+    // site", then a native gantry order that never framed held it silently for 10 minutes; every hold
+    // is logged now, and another order without a frame is waited on for 90 s only.
+    IUnitTask@ g_frontLadderGantryTask = null;
+    int g_frontLadderGantryRetry = -1;
+    int g_frontLadderGantryLog = -100000;
+    int g_frontStaleGantrySince = -1;   // first frame Builder counted a land gantry order with no frame of it
+    int g_frontLadderGantryTry = 0;     // engine-sited orders so far; each retry takes the next anchor
+    AIFloat3 g_frontLadderGantrySite;   // where the open order was placed
+    array<AIFloat3> g_frontFailedGantrySites;   // orders that died there with no frame
+    // Played (h27, Scylla +75, corner start): five engine-sited orders round the corner died, and the next
+    // one went back to the same spots; a spot within 500 of a dead order is skipped now
+    bool Front_GantrySiteFailed(const AIFloat3 &in p) {
+        for (uint i = 0; i < g_frontFailedGantrySites.length(); ++i)
+            if (MapHelpers::SqDist(p, g_frontFailedGantrySites[i]) < GantryFailedSiteRadius * GantryFailedSiteRadius) return true;
+        return false;
+    }
+    // Engine-sited anchors, one per retry: the start, then 600, 1200, 1800 and 2400 toward the centre, skipping
+    // any near a dead order. Played (h26, All That Glitters +75): the eco anchor alone sat on the map edge and
+    // every order died there within 7 s, four times; (h27, Scylla +75) the preferred factory spot in a corner
+    // start died too, so it is no longer tried.
+    // Owner (2026-10-17): FrontEcoLadder::GantryAnchors (behind and beside the start) instead of steps toward
+    // the centre; played (p17c, All That Glitters +75) the steps toward the centre were on the front line.
+    AIFloat3 Front_LadderGantryFallback(int k) {
+        array<AIFloat3>@ a = FrontEcoLadder::GantryAnchors();
+        const int n = int(a.length());
+        for (int j = 0; j < n; ++j) {
+            const AIFloat3 p = a[(k + j) % n];
+            if (!Front_GantrySiteFailed(p)) return p;
+        }
+        return a[k % n];   // all dead: go round again
+    }
+    // Logged at most once a minute: why the ladder's gantry is not ordered (played h25: silent for 10 min)
+    IUnitTask@ Front_LadderGantryHeld(const string &in why) {
+        if (ai.frame - g_frontLadderGantryLog >= 60 * SECOND) {
+            g_frontLadderGantryLog = ai.frame;
+            GenericHelpers::LogUtil("[FRONT][Eco] gantry held: " + why, 1);
+        }
+        return null;
+    }
+    // A site for the ladder's gantry: rings of 128 out to 2048 round FrontEcoLadder::GantryAnchors (behind
+    // and beside the start; owner, 2026-10-17: no longer round the T2 factories first, which stand forward).
+    // Played (h25, All That Glitters): "no gantry site" near the T2 factories.
+    bool Front_LadderGantrySite(CCircuitDef@ gantry, AIFloat3 &out site) {
+        const AIFloat3 start = Global::Map::StartPos;
+        const AIFloat3 centre(float(aiTerrainMgr.GetTerrainWidth()) * MapCenterFraction, 0.0f, float(aiTerrainMgr.GetTerrainHeight()) * MapCenterFraction);
+        const int facing = LayoutHelpers::FacingToward(start, centre);
+        array<AIFloat3>@ anchors = FrontEcoLadder::GantryAnchors();
+        for (uint a = 0; a < anchors.length(); ++a) {
+            for (int ring = 1; ring <= 16; ++ring) {
+                for (int k = 0; k < 12; ++k) {
+                    const float ang = GantrySearchAngleStep * float(k);
+                    AIFloat3 p(anchors[a].x + cos(ang) * GantrySearchRingSpacing * float(ring), 0.0f, anchors[a].z + sin(ang) * GantrySearchRingSpacing * float(ring));
+                    if (p.x < 200.0f || p.z < 200.0f || p.x > float(aiTerrainMgr.GetTerrainWidth()) - 200.0f || p.z > float(aiTerrainMgr.GetTerrainHeight()) - 200.0f) continue;
+                    if (Front_GantrySiteFailed(p) || !aiTerrainMgr.CanReserveBuilding(gantry, p, facing)) continue;
+                    site = p;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    IUnitTask@ Front_TryLadderGantry(CCircuitUnit@ u) {
+        if (!FrontEcoLadder::On() || FrontEcoLadder::Stage() != FrontEcoLadder::S_GANTRY || !FrontEcoLadder::IsLadderT2(u)) return null;
+        const string side = Global::AISettings::Side;
+        CCircuitDef@ gantry = ai.GetCircuitDef(UnitHelpers::GetLandGantryForSide(side));
+        if (gantry is null || !u.circuitDef.CanBuild(gantry)) return null;
+        const int ours = UnitDefHelpers::SumUnitDefCounts(UnitHelpers::GetAllGantries());   // standing and framed
+        if (ours > 0) return null;
+        if (g_frontLadderGantryTask !is null) {
+            if (!g_frontLadderGantryTask.IsDead()) return null;
+            // the order died with no frame: that spot is not tried again
+            @g_frontLadderGantryTask = null;
+            g_frontFailedGantrySites.insertLast(g_frontLadderGantrySite);
+            // native gantries are off while the ladder is on, so a queued gantry with nothing framed is our dead
+            // order. Played (h27, Scylla +75): the counter stayed up after the order died and the ladder then held
+            // on "another gantry order is queued with no frame" for the rest of the game
+            if (aiBuilderMgr.GetUnfinishedCount(gantry) == 0) { Builder::LandGantryQueuedCount = 0; g_frontStaleGantrySince = -1; }
+            g_frontLadderGantryRetry = ai.frame + 30 * SECOND;
+            GenericHelpers::LogUtil("[FRONT][Eco] gantry order died with no frame at " + int(g_frontLadderGantrySite.x) + "," + int(g_frontLadderGantrySite.z)
+                + " (" + g_frontFailedGantrySites.length() + " dead spots); retry in 30 s at the next site", 1);
+            return null;
+        }
+        // Another order (native or a stale counter) with no frame: wait 90 s for it, then order our own
+        if ((Builder::LandGantryQueuedCount + Builder::WaterGantryQueuedCount) > 0) {
+            if (g_frontStaleGantrySince < 0) g_frontStaleGantrySince = ai.frame;
+            if (ai.frame - g_frontStaleGantrySince < 90 * SECOND)
+                return Front_LadderGantryHeld("another gantry order is queued with no frame (" + ((ai.frame - g_frontStaleGantrySince) / SECOND) + " of 90 s)");
+        } else g_frontStaleGantrySince = -1;
+        if (ai.frame < g_frontLadderGantryRetry) return null;
+        const float mi = Economy::GetMinMetalIncomeLast10s();
+        if (mi < Global::RoleSettings::Front::EcoLadderGantryMetalIncome)
+            return Front_LadderGantryHeld("metal income +" + int(mi) + " of " + int(Global::RoleSettings::Front::EcoLadderGantryMetalIncome)
+                + " | advanced fusions " + FrontEcoLadder::AdvFusions() + "/" + FrontEcoLadder::AdvFusionsTotal());
+        if (g_frontGantryAllowance < 1) g_frontGantryAllowance = 1;
+        UnitHelpers::BatchApplyUnitCaps(UnitHelpers::GetAllGantries(), g_frontGantryAllowance);
+        dictionary mapLimits = Global::Map::Config.UnitLimits;   // map limits win
+        UnitHelpers::ApplyUnitLimits(mapLimits);
+        if (!gantry.IsAvailable(ai.frame))
+            return Front_LadderGantryHeld(gantry.GetName() + " unavailable (count " + gantry.count + ", cap " + gantry.maxThisUnit + ")");
+        AIFloat3 site;
+        bool sited = Front_LadderGantrySite(gantry, site);
+        float shake = SQUARE_SIZE * 4;
+        if (!sited) {
+            // no reservable footprint found: the engine places it itself, round the next fallback anchor
+            site = Front_LadderGantryFallback(g_frontLadderGantryTry++);
+            shake = SQUARE_SIZE * 48;
+        }
+        IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Factory(Task::Priority::NOW, gantry, site, gantry, shake, false, true, 600 * SECOND));
+        if (t is null) {
+            g_frontLadderGantryRetry = ai.frame + 60 * SECOND;
+            GenericHelpers::LogUtil("[FRONT][Eco] gantry could not be ordered at " + int(site.x) + "," + int(site.z) + (sited ? "" : " (engine-sited, try " + g_frontLadderGantryTry + ")") + "; retry in 60 s", 1);
+            return null;
+        }
+        Builder::MarkGantryEnqueued();
+        @g_frontLadderGantryTask = t; g_frontLadderGantrySite = site;
+        GenericHelpers::LogUtil("[FRONT][Eco] gantry " + gantry.GetName() + " ordered at " + int(site.x) + "," + int(site.z) + (sited ? " (reserved site)" : " (engine-sited, try " + g_frontLadderGantryTry + ")")
+            + " | M +" + int(mi) + " bank " + int(aiEconomyMgr.metal.current) + " by " + u.circuitDef.GetName() + " " + u.id, 1);
+        return t;
     }
 
     void Front_IncomeBuilderLimits(float metalIncome) {
@@ -888,6 +1097,9 @@ namespace RoleFront {
     IUnitTask@ Front_T1Constructor_AiMakeTask(CCircuitUnit@ u, IUnitTask@ defaultTask, float metalIncome, float energyIncome, bool isEnergyStalling, bool isEnergyFull) {
         // Econ snapshot is passed by caller (min over last 10s for incomes)
 
+        // Recovering (Front::Recovery): no T2 lab/plant, second T1 factory or nano until income is back
+        if (FrontRecovery::Active()) return defaultTask;
+
         AIFloat3 conLocation = u.GetPos(ai.frame);
         string unitSide = UnitHelpers::GetSideForUnitName(u.circuitDef.GetName());
 
@@ -903,7 +1115,8 @@ namespace RoleFront {
             //  3) stored metal >= T2 bot lab cost
             if (t2LabCount < 1) {
                 const float incomeTrigger = Global::RoleSettings::Front::MinimumMetalIncomeForFirstT2Lab;
-                const bool timeTriggerMet = (ai.frame >= (Global::RoleSettings::Front::TimeTriggerForFirstT2LabSeconds * SECOND));
+                const bool timeTriggerMet = (ai.frame >= (Global::RoleSettings::Front::TimeTriggerForFirstT2LabSeconds * SECOND))
+                    && (metalIncome >= Global::RoleSettings::Front::TimeTriggerForFirstT2LabMinMetalIncome);
                 const bool incomeTriggerMet = (metalIncome >= incomeTrigger);
                 // Resolve T2 lab cost for stored-metal trigger
                 bool storedMetalTriggerMet = false;
@@ -963,7 +1176,8 @@ namespace RoleFront {
             // Fast-track: if we have zero T2 vehicle labs and ANY trigger is met, build a T2 Vehicle Plant now.
             if (t2VehLabCount < 1) {
                 const float incomeTrigger = Global::RoleSettings::Front::MinimumMetalIncomeForFirstT2VehiclePlant;
-                const bool timeTriggerMet = (ai.frame >= (Global::RoleSettings::Front::TimeTriggerForFirstT2LabSeconds * SECOND));
+                const bool timeTriggerMet = (ai.frame >= (Global::RoleSettings::Front::TimeTriggerForFirstT2LabSeconds * SECOND))
+                    && (metalIncome >= Global::RoleSettings::Front::TimeTriggerForFirstT2LabMinMetalIncome);
                 const bool incomeTriggerMet = (metalIncome >= incomeTrigger);
                 
                 // Resolve T2 vehicle lab cost for stored-metal trigger
@@ -1025,7 +1239,7 @@ namespace RoleFront {
         // Eco gating: force economy builds for the first 20 minutes
         const bool forceEco = (ai.frame < (Global::RoleSettings::Front::TimeTriggerForT2EcoGatingSeconds * SECOND));
 
-        if (isPrimary) {
+        if (isPrimary && !FrontEcoLadder::On()) {   // Front::EcoLadder owns the reactors when on
             // Fusion Reactor
             if (EconomyHelpers::ShouldBuildFusionReactor(
                 /*mi*/ metalIncome,

@@ -47,6 +47,16 @@ namespace Support {
             float AdvancedSolarEnergyIncomeMinimum = 600.0f;
             // Stop building advanced solars if above this energy income level
             float AdvancedSolarEnergyIncomeMaximum = 1000.0f;
+            // Owner (2026-10-16): FRONT's fusion-era reclaim for SUPPORT. Once a fusion stands SUPPORT's
+            // builders reclaim its winds and solars, those within ReclaimNearFactoryRadius of a factory first,
+            // advanced solars too at ReclaimAdvSolarMargin or with an advanced fusion, and its planner stops
+            // ordering them. Off here, on in experimental_balanced (systems/construction/front_reclaim.as).
+            bool ReclaimT1EnergyAfterFusion = false;
+            float ReclaimT1EnergyMargin = 1.25f;    // energy income without winds/solars covers the pull by this
+            float ReclaimAdvSolarMargin = 1.5f;     // ... without advanced solars as well
+            float ReclaimNearFactoryRadius = 900.0f;
+            float ReclaimEnergyRadius = 3000.0f;   // from the worker
+            int ReclaimEnergyConcurrent = 3;
 
             // Legacy ladder only (ExperimentalBuild=false). The shared opening
             // uses TECH's map-aware T2 recipe instead of these admission gates.

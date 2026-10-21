@@ -2,6 +2,8 @@
 #include "../../helpers/construction/economy_helpers.as"
 #include "../../systems/air/air_reclaim.as"
 namespace AirBuild {
+    const float FloatingEnergyStorageFraction = 0.85f;
+
     IUnitTask@ starterReclaimTask;
     // One retained native task, committed only after successful enqueue. Removed
     // releases it; dead/completed tasks never reserve funds or block assistance.
@@ -10,6 +12,7 @@ namespace AirBuild {
     array<IUnitTask@> pendingOwnership;
     dictionary trace;
     dictionary nanoTrace;
+    dictionary labAssistTrace;
     dictionary guardLeases;
     dictionary guardLeaseFrames;
     dictionary commanderFactoryGuards;
@@ -230,6 +233,30 @@ namespace AirBuild {
             def.costE * fraction, def.GetBuildTime() * fraction, power,
             Global::RoleSettings::Air::FirstLabFundingSeconds, Global::RoleSettings::Air::FirstLabIncomeShare);
     }
+    // The bank already covers what the funded first lab still needs: extra build
+    // power only spends it sooner. The forecast above counts ongoing aircraft
+    // production as permanent usage, so it rejects helpers even with a full bank.
+    bool LabBankCovered(IBuilderTask@ lab)
+    {
+        if (!Global::RoleSettings::Air::FirstLabBankAssist || lab is null || lab.buildDef is null) return false;
+        const float left = lab.target is null ? 1.0f : AiMax(0.0f, 1.0f - lab.target.GetBuildProgress());
+        const float bankM = TeamEconomy::OwnMetal(TeamEconomy::CURRENT) - Global::RoleSettings::Air::WorkforceReserveMetal;
+        const float bankE = TeamEconomy::OwnEnergy(TeamEconomy::CURRENT) - Global::RoleSettings::Air::WorkforceReserveEnergy;
+        const bool energyOk = bankE >= left * lab.buildDef.costE
+            || (aiEconomyMgr.energy.storage > 0.0f && AirEconomy::bankE >= aiEconomyMgr.energy.storage * FloatingEnergyStorageFraction); // floating energy
+        return bankM >= left * lab.buildDef.costM && energyOk;
+    }
+    void LabAssistLog(CCircuitUnit@ u, IBuilderTask@ lab, const string &in reason)
+    {
+        const string key = "" + u.id;
+        if (labAssistTrace.exists(key) || lab is null || lab.buildDef is null) return;
+        labAssistTrace.set(key, int64(ai.frame));
+        const float left = lab.target is null ? 1.0f : AiMax(0.0f, 1.0f - lab.target.GetBuildProgress());
+        GenericHelpers::LogUtil("[AIR][LabAssist] builder=" + u.id
+            + " bankM=" + int(TeamEconomy::OwnMetal(TeamEconomy::CURRENT)) + " leftM=" + int(left * lab.buildDef.costM)
+            + " bankE=" + int(TeamEconomy::OwnEnergy(TeamEconomy::CURRENT)) + " leftE=" + int(left * lab.buildDef.costE)
+            + " reason=" + reason, 1);
+    }
     bool FirstLabFunded(CCircuitUnit@ worker, CCircuitDef@ def)
     {
         return Global::RoleSettings::Air::FundFirstLab && worker !is null && def !is null
@@ -252,6 +279,11 @@ namespace AirBuild {
         // native reachability/ownership checks reject unavailable allied spots.
         IUnitTask@ task = aiEconomyMgr.EnqueueMexWithin(worker, Global::Map::StartPos,
             Global::RoleSettings::Air::HomeMexRadius, 0, true);
+        // BankFunding: past an exhausted small home, take the nearest spot within FarMexRadius.
+        if (task is null && Global::RoleSettings::Air::BankFunding
+            && AirEconomy::MexCount() < Global::RoleSettings::Air::HomeMexMinimum
+            && aiEconomyMgr.GetMexTaskCountWithin(Global::Map::StartPos, Global::RoleSettings::Air::FarMexRadius) < 1)
+            @task = aiEconomyMgr.EnqueueMexWithin(worker, Global::Map::StartPos, Global::RoleSettings::Air::FarMexRadius, 0, true);
         IBuilderTask@ build = cast<IBuilderTask>(task);
         if (build is null || build.buildDef is null) return task;
         // Inspect the actual native-selected extractor, including content/mod
@@ -311,7 +343,8 @@ namespace AirBuild {
                 AirEconomy::bankM,aiEconomyMgr.metal.storage,lab.costM))
                 Invariants::Violation("INV-118","AIR","transition storage admitted without a full undersized pre-T2 bank");
         }
-        if (rule == "mex.expand" && build !is null && !AirHome::Within(build.GetBuildPos(), Global::RoleSettings::Air::HomeMexRadius))
+        if (rule == "mex.expand" && build !is null && !AirHome::Within(build.GetBuildPos(), Global::RoleSettings::Air::HomeMexRadius)
+            && !(Global::RoleSettings::Air::BankFunding && AirHome::Within(build.GetBuildPos(), Global::RoleSettings::Air::FarMexRadius)))
             Invariants::Violation("INV-092", "AIR", "new mex expansion ordered outside home area");
         if (build !is null && build.buildDef !is null && build.target is null
             && build.GetBuildType() == int(Task::BuildType::DEFENCE)
@@ -401,9 +434,10 @@ namespace AirBuild {
                 // this search, keeping it O(P), not O(P^2), with no stale cache.
                 if (!labChecked) {
                     const float already = AirWorkforce::Assigned(t.target, u);
-                    labAffordable = already <= 0 || LabBudget(t.buildDef,
-                        already + u.circuitDef.GetBuildSpeed(),
-                        AiMax(0.0f, 1.0f - t.target.GetBuildProgress()), t.target);
+                    if (already <= 0) labAffordable = true;
+                    else if (LabBankCovered(lab)) { labAffordable = true; LabAssistLog(u, lab, "bank"); }
+                    else if (LabBudget(t.buildDef, already + u.circuitDef.GetBuildSpeed(),
+                        AiMax(0.0f, 1.0f - t.target.GetBuildProgress()), t.target)) { labAffordable = true; LabAssistLog(u, lab, "forecast"); }
                     labChecked = true;
                 }
                 if (!labAffordable) continue;
@@ -586,6 +620,7 @@ namespace AirBuild {
             AirLayout::Bay@ candidate = AirLayout::bays[b];
             if (candidate.defName != name || candidate.cluster < 0 || candidate.factoryId >= 0) continue;
             @candidate = AirLayout::Activate(candidate);
+            if (candidate is null && AirLayout::held) return null;   // waiting for an ally to clear it (owner, 2026-10-17)
             if (candidate is null || aiTerrainMgr.GetReservationState(candidate.slot) != 0) continue;
             // Match native factory access admission before allocating work.
             // A refusal by this worker does not invalidate another's slot.
@@ -608,7 +643,7 @@ namespace AirBuild {
     }
     bool RequiresMexes(CCircuitDef@ d)
     {
-        return !MetalEconomy::Active() && IsReactor(d);
+        return !MetalEconomy::Active() && IsReactor(d) && !AirEconomy::BankRich();
     }
     IUnitTask@ Convert(CCircuitUnit@ u)
     {
@@ -707,11 +742,14 @@ namespace AirBuild {
             }
         }
         const bool mexesReady = AirEconomy::MexesReady();
+        // BankFunding: a rich bank pays for the first fusion (also during recovery) even
+        // while own mex income is low or the mex upgrades are still pending.
+        const bool bank = AirEconomy::BankRich();
         if (!emergency && t2 && mexesReady && reactorIncome && AirEconomy::metal >= 80.0f && AirEconomy::bankM > 5000.0f) names.insertLast(advancedFusion);
-        if (!emergency && t2 && mexesReady && AirEconomy::metal >= 30.0f && AirEconomy::bankM > 500.0f) names.insertLast(fusion);
+        if ((!emergency || bank) && t2 && (mexesReady || bank) && (AirEconomy::metal >= 30.0f || bank) && AirEconomy::bankM > 500.0f) names.insertLast(fusion);
         const float wind = (ai.GetWindMin() + ai.GetWindMax()) * 0.5f;
         const string advSolar = UnitHelpers::GetAdvSolarNameForSide(side);
-        if (!emergency && AirEconomy::metal >= 15.0f && AirEconomy::bankE >= 1800.0f && AirEconomy::Count(advSolar) < 6)
+        if ((!emergency || bank) && (AirEconomy::metal >= 15.0f || bank) && AirEconomy::bankE >= 1800.0f && AirEconomy::Count(advSolar) < 6)
             names.insertLast(advSolar);
         if (wind > Global::RoleSettings::Air::GoodWindMinimumEnergy && (!emergency || ai.GetWindMin() > 4.0f)) names.insertLast(UnitHelpers::GetWindNameForSide(side));
         if (!emergency && AirEconomy::metal > 15.0f && AirEconomy::bankE > 1500.0f) names.insertLast(UnitHelpers::GetAdvSolarNameForSide(side));
@@ -753,17 +791,23 @@ namespace AirBuild {
         }
         const bool openingSupport = AirEconomy::OpeningSupportNeeded();
         if (openingOnly && !openingSupport) return null;
-        if (!Can(u, d) || AirEconomy::recovery) return null;
+        // With BankFunding, recovery only stops T1 support; T2 lab bays are checked per bay below.
+        if (!Can(u, d) || (AirEconomy::recovery && !(AirEconomy::KeepT2Support() && AirEconomy::t2 > 0))) return null;
         if (BuildPowerMath::Batch(AirWorkforce::constructionPower, d.GetBuildTime(),
             Global::RoleSettings::Air::WorkforceSupportSeconds, AirWorkforce::pendingSupport,
             Global::RoleSettings::Air::WorkforceSupportBatchMax) <= 0) return null;
-        if (!openingOnly) {
+        if (!openingOnly && !AirEconomy::recovery) {
             IUnitTask@ local = AirEcoLayout::Nano(u, d);
             if (local !is null) { AirWorkforce::Admit(d, true, true); return local; }
         }
         AirEconomy::RefreshSupport();
+        // FirstLabBankAssist: while the bank covers the funded first lab, its bay
+        // gets its first support turret without the forecast (Batch/NanoTarget caps stay).
+        const bool labBank = LabBankCovered(FundedLab());
         for (uint b = 0; b < AirLayout::bays.length() && b < AirEconomy::nanoCount.length(); ++b) {
-            if ((openingOnly || AirEconomy::energy < 250.0f) && (!UnitHelpers::IsT1AircraftPlant(AirLayout::bays[b].defName)
+            const bool keepT2 = !openingOnly && AirEconomy::KeepT2Support() && UnitHelpers::IsT2AircraftPlant(AirLayout::bays[b].defName);
+            if (AirEconomy::recovery && !keepT2) continue;
+            if (!keepT2 && (openingOnly || AirEconomy::energy < 250.0f) && (!UnitHelpers::IsT1AircraftPlant(AirLayout::bays[b].defName)
                 || SupportCommitted(b) >= AirEconomy::OpeningNanoTarget())) continue;
             if (AirLayout::bays[b].factoryId < 0 || SupportCommitted(b) >= AirEconomy::NanoTarget(b)) continue;
             float work = 0, cm = 0, ce = 0;
@@ -773,14 +817,15 @@ namespace AirBuild {
             const float power = AirEconomy::power[b] + float(AiMax(0, SupportCommitted(b) - AirEconomy::nanoCount[b])) * d.GetBuildSpeed();
             const float delta = AiMax(0.0f, ProductionMath::Rate(work, power + d.GetBuildSpeed(), Global::RoleSettings::Air::WarmFactoryGapSeconds)
                 - ProductionMath::Rate(work, power, Global::RoleSettings::Air::WarmFactoryGapSeconds));
-            if (!AirWorkforce::Fund(d, u.circuitDef.GetBuildSpeed(), delta * cm, delta * ce)) continue;
+            const bool bankTurret = labBank && UnitHelpers::IsT2AircraftPlant(AirLayout::bays[b].defName) && SupportCommitted(b) == 0;
+            if (!bankTurret && !AirWorkforce::Fund(d, u.circuitDef.GetBuildSpeed(), delta * cm, delta * ce)) continue;
             AirLayout::RepairSupport(b, d);
             for (uint s = 0; s < AirLayout::bays[b].nanos.length(); ++s) {
                 const int slot = AirLayout::bays[b].nanos[s];
                 if (aiTerrainMgr.GetReservationState(slot) != 0) continue;
                 if (!aiTerrainMgr.CanReachAt(u, aiTerrainMgr.GetReservationPos(slot), u.circuitDef.GetBuildDistance())) continue;
                 IUnitTask@ t = AirLayout::Pinned(Task::BuildType::NANO, Task::Priority::HIGH, d, slot);
-                if (t !is null) { AirWorkforce::Admit(d, true); return t; }
+                if (t !is null) { AirWorkforce::Admit(d, !bankTurret); return t; }
             }
         }
         return null;

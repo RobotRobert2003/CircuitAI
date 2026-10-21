@@ -1,0 +1,447 @@
+{
+  "schema": 1,
+  "source_repository": "Barscrewl/SMRTBARb",
+  "source_branch": "smrtbarb/10-19-26-01",
+  "source_commit": "c75616f1b34c021694c0c8dc44b2f3503c8daf65",
+  "source_package_base": "3ad7c2989f029ad125b97b46c5e9762c1f87b2fc",
+  "target_repository": "S3KCentrifugal/CircuitAI",
+  "target_branch": "pending-all-76min2",
+  "target_base": "dd0fdf9d28d06c0f947a0a924d96f1107d05130f",
+  "scope": "Port every missing active script/config feature in the working copy. Keep newer pending-all behavior at overlaps. The working-copy uncommitted Twin Lakes map already matches pending-all.",
+  "areas": [
+    "AIR bank funding, first-lab bank assistance, heavy-air income threshold, Liche fallback targets and placement retry",
+    "FRONT economy ladder, recovery, spawn factory, energy reclaim and builder commitment",
+    "TECH bank/rush/gantry/silo policy, front-cluster admission and no-room retry",
+    "SUPPORT energy reclaim",
+    "Team pinpointer pool and constructor commitment",
+    "Gremlin economy-only fire, Thug/Mace/Barrage/Medusa fire-state fallback",
+    "Edge forward porc and lane endpoint release",
+    "SEA same-target route cap integrated with the existing rotating total budget",
+    "Shared commander mex cadence, construction levers and faction factory/build-chain/behavior tuning"
+  ],
+  "changed_runtime_files": [
+    "data/config/easy/factory.json",
+    "data/config/experimental_balanced/behaviour.json",
+    "data/config/experimental_balanced/behaviour_leg.json",
+    "data/config/experimental_balanced/build_chain.json",
+    "data/config/experimental_balanced/build_chain_leg.json",
+    "data/config/experimental_balanced/commander.json",
+    "data/config/experimental_balanced/factory.json",
+    "data/config/experimental_balanced/factory_leg.json",
+    "data/config/experimental_hard/factory.json",
+    "data/config/experimental_terrible/factory.json",
+    "data/config/factory.json",
+    "data/config/hard/factory.json",
+    "data/config/hard_aggressive/factory.json",
+    "data/config/medium/factory.json",
+    "data/script/experimental_balanced/main.as",
+    "data/script/src/manager/builder.as",
+    "data/script/src/manager/military.as",
+    "data/script/src/roles/air/air_build.as",
+    "data/script/src/roles/air/air_rules.as",
+    "data/script/src/roles/front/front.as",
+    "data/script/src/roles/support/support_build.as",
+    "data/script/src/roles/tech/tech.as",
+    "data/script/src/roles/tech/tech_chain.as",
+    "data/script/src/roles/tech/tech_factories.as",
+    "data/script/src/roles/tech/tech_gantry.as",
+    "data/script/src/roles/tech/tech_plan.as",
+    "data/script/src/roles/tech/tech_rules.as",
+    "data/script/src/settings/defaults.as",
+    "data/script/src/settings/roles/air.as",
+    "data/script/src/settings/roles/front.as",
+    "data/script/src/settings/roles/sea.as",
+    "data/script/src/settings/roles/support.as",
+    "data/script/src/settings/roles/tech.as",
+    "data/script/src/settings/shared/commander.as",
+    "data/script/src/settings/shared/construction.as",
+    "data/script/src/settings/shared/edge_porc.as",
+    "data/script/src/settings/shared/gremlin_eco_fire.as",
+    "data/script/src/settings/shared/military.as",
+    "data/script/src/settings/shared/pinpointer.as",
+    "data/script/src/settings/shared/spam.as",
+    "data/script/src/systems/air/air_eco_layout.as",
+    "data/script/src/systems/air/air_economy.as",
+    "data/script/src/systems/air/air_layout.as",
+    "data/script/src/systems/air/air_liches.as",
+    "data/script/src/systems/air/air_production.as",
+    "data/script/src/systems/air/air_workforce.as",
+    "data/script/src/systems/amphibious/amphibious_ops.as",
+    "data/script/src/systems/combat/commander_combat.as",
+    "data/script/src/systems/combat/edge_lanes.as",
+    "data/script/src/systems/combat/edge_porc.as",
+    "data/script/src/systems/combat/gremlin_eco_fire.as",
+    "data/script/src/systems/combat/spam.as",
+    "data/script/src/systems/combat/thug_fire_at_will.as",
+    "data/script/src/systems/construction/front_eco_ladder.as",
+    "data/script/src/systems/construction/front_reclaim.as",
+    "data/script/src/systems/construction/front_recovery.as",
+    "data/script/src/systems/construction/front_spawn_factory.as",
+    "data/script/src/systems/construction/layout.as",
+    "data/script/src/systems/production/factory_configs/factory_configs_vehicle.as",
+    "data/script/src/systems/sea/sea_operations.as",
+    "data/script/src/systems/team/pinpointer_pool.as",
+    "data/script/src/systems/team/team.as"
+  ],
+  "source_files_examined": 77,
+  "function_inventory": {
+    "source_functions": 2882,
+    "direct_or_newer_equivalent": 2882,
+    "missing": 0,
+    "new_functions_since_package": 201,
+    "moved_private_Liche_helpers": {
+      "_AddTier": "AirStrikeTiers::Roster::Add",
+      "_Remember": "AirStrikeTiers::Remember",
+      "_TargetTier": "AirStrikeTiers::Roster::TargetTier",
+      "_Threshold": "AirStrikeTiers::Roster::Threshold",
+      "_Tier": "AirStrikeTiers::Roster::DefTier"
+    }
+  },
+  "preserved_pending_features": [
+    "T3 unstick and wider ally-clear admission",
+    "Artillery squads and escort-first tank waves",
+    "Liche raid districts and shared bomber target tiers",
+    "Gladiator/Astraeus tuning",
+    "TECH forward-economy and one-AFUS guards",
+    "Edge-lab adoption, retry backoff and bounded orders",
+    "Existing naval rotating route budget and same-target interval"
+  ],
+  "overlap_review": [
+    {
+      "file": "data/config/experimental_balanced/factory_leg.json",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/config/experimental_balanced/factory_leg.json",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/experimental_balanced/main.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/experimental_balanced/main.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/experimental_balanced/main.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/experimental_balanced/main.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "decision": "combine pinpointer/edge porc with existing SEA/T3/ally-clear owners"
+    },
+    {
+      "file": "data/script/src/manager/military.as",
+      "decision": "keep existing owners and add working-copy unit hooks"
+    },
+    {
+      "file": "data/script/src/manager/military.as",
+      "decision": "keep existing owners and add working-copy unit hooks"
+    },
+    {
+      "file": "data/script/src/manager/military.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/roles/air/air.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/roles/air/air.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/roles/front/front.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/roles/front/front.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/roles/front/front.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/roles/front/front.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/roles/front/front.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/settings/defaults.as",
+      "decision": "include both new and existing settings"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/settings/shared/ally_clear.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/settings/shared/spam.as",
+      "decision": "add missing working-copy feature"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "add missing working-copy feature"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_liches.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/air/air_waves.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/combat/edge_lanes.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/combat/edge_lanes.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/combat/edge_lanes.as",
+      "decision": "add task commitment/repair ownership while preserving separate lab-adoption and retry fixes"
+    },
+    {
+      "file": "data/script/src/systems/combat/edge_lanes.as",
+      "decision": "add task commitment/repair ownership while preserving separate lab-adoption and retry fixes"
+    },
+    {
+      "file": "data/script/src/systems/combat/edge_lanes.as",
+      "decision": "add task commitment/repair ownership while preserving separate lab-adoption and retry fixes"
+    },
+    {
+      "file": "data/script/src/systems/combat/edge_lanes.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/combat/edge_lanes.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/combat/spam.as",
+      "decision": "add missing working-copy feature"
+    },
+    {
+      "file": "data/script/src/systems/combat/spam.as",
+      "decision": "add missing working-copy feature"
+    },
+    {
+      "file": "data/script/src/systems/combat/spam.as",
+      "decision": "add missing working-copy feature"
+    },
+    {
+      "file": "data/script/src/systems/construction/layout.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/construction/layout.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/construction/layout.as",
+      "decision": "retain economy ally clearing and add placement retry gate"
+    },
+    {
+      "file": "data/script/src/systems/construction/layout.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/construction/layout.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/production/front_tank_mass.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_tank_mass.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/production/front_tank_mass.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_tank_mass.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/production/front_wave_escort.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/sea/sea_operations.as",
+      "decision": "retain fair rotating total budget and add same-target cap"
+    },
+    {
+      "file": "data/script/src/systems/team/ally_clear.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/team/ally_clear.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/team/ally_clear.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/team/ally_clear.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/team/ally_clear.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/team/ally_clear.as",
+      "decision": "preserve pending-all addition"
+    },
+    {
+      "file": "data/script/src/systems/team/ally_clear.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/team/ally_clear.as",
+      "decision": "keep newer pending-all overlap"
+    },
+    {
+      "file": "data/script/src/systems/team/team.as",
+      "decision": "add missing working-copy feature"
+    }
+  ],
+  "integration_corrections": [
+    "Use the existing integer FleetRerouteSeconds declaration instead of declaring the same global twice. Add only FleetReroutesPerTick.",
+    "Combine the new same-target cap with the existing fair total-route budget after admission checks.",
+    "Keep existing profile overrides and add only missing working-copy settings. Explicitly retain the working-copy ThugFireAtWill tick alongside newer pending-all update hooks.",
+    "Name imported numerical geometry/multipliers/fallback categories at the tops of their consuming files. Values are unchanged."
+  ],
+  "installation_read_only_audit": {
+    "DLL_SHA256": "75c6bd8e8a47a273b6dff7946f0bfb55e86103c918d70a4aea67fcc833db9cdf",
+    "unit_features": "Fatboy press_static=1; Thug/Mace poke/firing settings enabled; commander_snipe enabled; script fire-state fallback installed and called",
+    "other_features": "AIR bank/first-lab/Liche/bomber tiers, FRONT eco/recovery/spawn factory, 3-pinpointer pool, edge porc, lane release and Gremlin fire enabled",
+    "existing_inactive_policy": "Thug repairer_focus absent in live, source and target; not restored without the canonical decision context",
+    "modified": false
+  },
+  "verification_records": {
+    "location": "External benchmark store: analyses/micro-extraction-20261021",
+    "coverage": "Short startup checks for experimental_balanced, experimental_hard and experimental_terrible. No full late-game behavior or serial performance clearance claimed.",
+    "available_static_checks": [
+      "script API against source and matched DLL",
+      "field isolation",
+      "JSON parse",
+      "changed-line whitespace"
+    ],
+    "unavailable_checks": "Canonical rjm.bar.docs checkout/unit cache absent; invariant, role-documentation and knowledge-unit checks unavailable."
+  }
+}

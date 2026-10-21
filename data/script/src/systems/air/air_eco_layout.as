@@ -34,6 +34,10 @@ namespace AirEcoLayout {
     array<Module@> modules;
     array<int> retryAfter = {0, 0}; // per kind: a failed fusion search never delays AFUS planning, and the reverse
     int planFrame = -100000;
+    // Owner 2026-10-19: one reactor order per slot per EcoSlotRetrySeconds.
+    // A pinned order marks its slot only on first assignment, so every idle
+    // builder re-ordered slot 40 every 8 frames (Entrenched Plains, 120/min).
+    dictionary slotAskedUntil; // slot id -> frame the slot may be ordered again
     dictionary supportPositions;
     string PositionKey(const AIFloat3 &in pos) { return "" + int(pos.x / 8.0f + .5f) + ":" + int(pos.z / 8.0f + .5f); }
     bool Owns(const AIFloat3 &in pos) { return supportPositions.exists(PositionKey(pos)); }
@@ -70,7 +74,7 @@ namespace AirEcoLayout {
     }
     void Init()
     {
-        modules.resize(0); retryAfter[0] = 0; retryAfter[1] = 0; planFrame = -100000;
+        modules.resize(0); retryAfter[0] = 0; retryAfter[1] = 0; planFrame = -100000; slotAskedUntil.deleteAll();
         ResetFallback();
         const int count = aiTerrainMgr.GetLayoutInt(Prefix() + "count", 0);
         for (int i = 0; i < count; ++i) {
@@ -354,9 +358,13 @@ namespace AirEcoLayout {
             for (uint s = reactor ? 0 : 1; s < limit; ++s) {
                 const int slot = m.slots[s];
                 if (aiTerrainMgr.GetReservationState(slot) != 0 || !aiTerrainMgr.IsReservationBuildable(slot)) continue;
+                const float slotRetry = Global::RoleSettings::Air::EcoSlotRetrySeconds;
+                int askedUntil = 0;
+                if (slotRetry > 0.0f && slotAskedUntil.get("" + slot, askedUntil) && ai.frame < askedUntil) continue;
                 if (!aiTerrainMgr.CanReachAt(u, aiTerrainMgr.GetReservationPos(slot), u.circuitDef.GetBuildDistance())) continue;
                 IUnitTask@ task = AirLayout::Pinned(type, priority, d, slot);
                 if (task is null) continue;
+                if (slotRetry > 0.0f) slotAskedUntil.set("" + slot, ai.frame + int(slotRetry * SECOND));
                 m.started = true; Save(m);
                 if (m.zone <= 0 || m.slots.length() != uint(1 + ConverterSlots(m.kind)))
                     Invariants::Violation("INV-107", m.key, "AIR economy module order lacks its complete reserved module");
@@ -391,5 +399,5 @@ namespace AirEcoLayout {
         }
         return null;
     }
-    void Leave() { modules.resize(0); supportPositions.deleteAll(); retryAfter[0] = 0; retryAfter[1] = 0; planFrame = -100000; ResetFallback(); }
+    void Leave() { modules.resize(0); supportPositions.deleteAll(); slotAskedUntil.deleteAll(); retryAfter[0] = 0; retryAfter[1] = 0; planFrame = -100000; ResetFallback(); }
 }

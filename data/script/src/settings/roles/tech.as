@@ -232,6 +232,10 @@ namespace Tech {
             float GantryMinimumBuilderPower = 100.0f;
             float GantryMaximumSurfaceThreat = 1.0f;
             float GantryExitProbeDistance = 320.0f;
+            float GantryNearMaxShare = 0.0f;               // owner 2026-10-17: a gantry's near pass up to this share toward the front, before the roomy search (0 = off; experimental_balanced opts in)
+            int GantryNearMinTurrets = 24;                 // its turret block holds at least this many
+            int GantryNearLateralSplit = 4;                // the near pass tries positions this many times closer across the line
+            float GantryNearExitLength = 480.0f;           // and nothing stands or is planned this far ahead of its exit
             int GantryTurretWaitSeconds = 90;
             int GantryAssistSeconds = 60;
             int GantryMaximumTaskBuilders = 2;
@@ -258,11 +262,21 @@ namespace Tech {
             // needs income >= (have + 1) x step x GantryScaleDropShare right now.
             bool GantryScaleEnabled = true;
             float GantryScaleMetalStep = 500.0f;
+            float GantryScaleFirstMetal = 400.0f;       // owner, 2026-10-19: the first gantry at this income (not the t3rush plan, which keeps GantryScaleMetalStep); 0 = the step
             float GantryScaleDropShare = 0.80f;
             float GantryScaleEnergyFloor = 0.0f;        // optional absolute E/s floor (0 = metal only, the owner's rule)
             int GantryScaleMax = 6;
             int GantryScaleGraceSeconds = 300;          // INV-199: due this long without progress (cooldown 120 s + turrets + order)
             int FrontT3TurretsFirst = 10;                  // D-119: the gantry is ordered once this many of its turrets stand; the rest keep filling
+            // T3RushTurretsMin / T3RushTurretsMax (owner, 2026-10-11, back on 2026-10-18): the t3rush gantry's cluster
+            // gets a random number of turrets in [Min, Max], rolled once a game, while its gantry goes up
+            // (FrontT3TurretsFirst of them before the order) (Max 0: off) ...
+            int T3RushTurretsMin = 0;
+            int T3RushTurretsMax = 0;
+            // ... and, once its gantry stands, that number climbs evenly over T3RushTurretsRampSeconds to
+            // T3RushTurretsRampTo, never past the block the layout reserved (0: it stays at the roll)
+            int T3RushTurretsRampSeconds = 0;
+            int T3RushTurretsRampTo = 0;
             int FrontReclaimAtCount = 3;                    // D-114: this many land factories on the map retire the base's land factories
             float FrontBaseRadius = 1200.0f;                // D-114: a land factory within this of the base centre is the base's
             int FrontBaseReclaimSeconds = 240;              // D-114: INV-044: a base land factory still standing this long after the count is reached
@@ -305,11 +319,12 @@ namespace Tech {
             string EndgamePlan = "auto";                   // D-080: nuke | t2rush | t3rush | lrpc | auto (deterministic from the team id) - what follows the rush objective
             float PlanCombatGate = 200.0f;                  // D-080: no mobile combat unit under this metal income (every plan)
             float PlanT3RushCombatGate = 500.0f;            // D-080: ... the t3rush plan's gate
+            float PlanT3RushEcoMetal = 1000.0f;             // owner, 2026-10-19: the t3rush plan's phase 2 keeps climbing the metal ladder to this while the gantry produces (0 = off)
             float PlanLrpcMetal = 300.0f;                   // D-080: the lrpc plan's income before the long-range cannon
             float PlanAirConstructorsFromMetal = 200.0f;    // D-080: from this income T2 construction aircraft are the mobile build power
             float PlanAirConstructorPerMetal = 40.0f;       // D-080: one T2 air constructor per this much income ...
             int PlanMaxAirConstructors = 12;                // D-080: ... at most this many
-            int LadderParallelAfus = 2;                     // D-080: advanced fusions under construction at once on the ladder while the metal bank is full
+            int LadderParallelAfus = 1;                     // D-080: advanced fusions under construction at once on the ladder while the metal bank is full (owner, 2026-10-19: 1, was 2; a full bank assists the one going up)
             float InvariantLabReachSeconds = 90.0f;         // D-085 INV-016 / D-088 INV-017 patience         // D-085: INV-016 - the advanced lab standing this long with no static build power within ExpLabBuildPowerReach is a violation
             float InvariantDearOrderSeconds = 45.0f;        // D-084: INV-015 - a dear chain order with no frame this long is a violation
             float InvariantLadderFloatSeconds = 60.0f;      // D-080: INV-011 - the metal bank full this long with an income step unmet is a violation
@@ -354,6 +369,7 @@ namespace Tech {
             float PowerTurretBatchSeconds = 20.0f;
             int PowerTurretsMax = 8;
             float PowerTurretBuildTime = 5300.0f;           // the T1 construction turret's buildtime (cornanotc, armnanotc, legnanotc: 5300 in BAR's unitdefs)
+            float LayoutNoRoomRetrySeconds = 0.0f;          // owner 2026-10-19: wait after a "no room" sweep (+1 s per miss in a row, at most 3 s; 0 = every ask; balanced 1)
             float InvariantNoRoomSeconds = 120.0f;          // D-099: INV-020's patience - the layout refusing economy structures for lack of room     // D-097: INV-019's patience
             float InvariantFrameRadius = 320.0f;            // D-076: INV-002 - build power counted within this of a frame
             float InvariantFrameSeconds = 60.0f;            // D-076: INV-002 - a frame with no build power for this long is abandoned
@@ -765,6 +781,22 @@ namespace Tech {
             // Regular thresholds: used for non-rush nuking policy
             float MinimumMetalIncomeForNuke = 600.0f;
             float MinimumEnergyIncomeForNuke = 10000.0f;
+            // Second nuke call (owner, 2026-10-16): a NUKE_RUSH TECH asks the silo question again from this
+            // game time on, now up to NukeLimit silos, one at a time, on the rush thresholds below. -1 = off
+            // (only the opening silo, as before); 1080 (18 min) in experimental_balanced.
+            int NukeRushSecondCallSeconds = -1;
+            float NukeRushSecondCallMetalIncome = 50.0f;
+            float NukeRushSecondCallEnergyIncome = 2000.0f;
+            // Most silos the timed second call above builds (-1 = NukeLimit); 8 in experimental_balanced
+            int NukeRushSecondCallLimit = -1;
+            // Silo per advanced fusion (owner, 2026-10-17): a NUKE_RUSH TECH adds one silo after each
+            // completed advanced fusion (want = 1 + completed AFUS, up to NukeLimit), one at a time, on the
+            // regular gates (MinimumMetalIncomeForNuke / MinimumEnergyIncomeForNuke), packed on the base
+            // layout next to the built turrets. Off here; on in experimental_balanced.
+            bool NukeRushSiloPerAfus = false;
+            // Its income gates; -1 = the regular gates (MinimumMetalIncomeForNuke / MinimumEnergyIncomeForNuke)
+            float NukeRushAfusSiloMetalIncome = -1.0f;
+            float NukeRushAfusSiloEnergyIncome = -1.0f;
             
             /******************** ANTI-NUKE THRESHOLDS ********************/
             // Minimum economy thresholds to allow building anti-nuke defenses

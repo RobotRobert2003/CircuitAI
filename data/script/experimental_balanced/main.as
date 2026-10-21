@@ -6,14 +6,15 @@
 
 namespace Main {
 
-	// Weighted strategy configuration for HARD difficulty.
-	// Values are likelihoods in [0.0, 1.0] for enabling a given strategy.
-	// Adjust these to tune how often a strategy is chosen at game start.
+    const int NukeRushSecondCallSeconds = 18 * 60;
+
+	// Two rolls (owner, 2026-10-17). Roll 1 picks exactly one main rush: nuke 25%, T3 35%, heavy (T2_RUSH) 25%, none 15% (Cent's standard weights, restored by the owner 2026-10-19).
+	// Roll 2, on its own: the spam rush, on top of whatever roll 1 gave (unchanged 85%).
 	namespace StrategyWeights {
-		float Tech_Spam_Rush = 0.85f;   // 85% chance
-		float Tech_T3_RUSH = 0.35f;   // 35% chance
-		float Tech_NUKE_RUSH = 0.25f; // 25% chance
-		float Tech_T2_RUSH = 0.25f; // Independent finite heavy-delivery rush
+		float Tech_NUKE_RUSH = 0.25f; // roll 1
+		float Tech_T3_RUSH = 0.35f;   // roll 1
+		float Tech_T2_RUSH = 0.25f;   // roll 1: the finite heavy-delivery rush (TechHeavyRush)
+		float Tech_Spam_Rush = 0.85f; // roll 2
 	}
 
 	// Decide a boolean from a probability using AiDice with two weights: off vs on.
@@ -32,29 +33,62 @@ namespace Main {
 		// Start fresh (no strategies), then enable per dice outcome
 		Global::RoleSettings::Tech::StrategyMask = 0;
 
-		if (DecideEnabled(StrategyWeights::Tech_Spam_Rush)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::SPAM_RUSH);
-		}
-		if (DecideEnabled(StrategyWeights::Tech_T3_RUSH)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::T3_RUSH);
-		}
-		if (DecideEnabled(StrategyWeights::Tech_NUKE_RUSH)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::NUKE_RUSH);
-		}
+		// Roll 1: one main rush, mutually exclusive (any weight left below 1.0 is "none")
+		const float wNuke = AiMax(0.0f, StrategyWeights::Tech_NUKE_RUSH);
+		const float wT3 = AiMax(0.0f, StrategyWeights::Tech_T3_RUSH);
+		const float wT2 = AiMax(0.0f, StrategyWeights::Tech_T2_RUSH);
+		array<float>@ w = array<float>(4);
+		w[0] = wNuke;
+		w[1] = wT3;
+		w[2] = wT2;
+		w[3] = AiMax(0.0f, 1.0f - wNuke - wT3 - wT2);
+		const int pick = AiDice(w);
+		if (pick == 0) Global::RoleSettings::Tech::EnableStrategy(Strategy::NUKE_RUSH);
+		else if (pick == 1) Global::RoleSettings::Tech::EnableStrategy(Strategy::T3_RUSH);
+		else if (pick == 2) Global::RoleSettings::Tech::EnableStrategy(Strategy::T2_RUSH);
 
-		// Append the new draw: preserve the order of the three established rolls.
-		if (DecideEnabled(StrategyWeights::Tech_T2_RUSH)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::T2_RUSH);
+		// Roll 2: the spam rush, on its own
+		const bool spam = DecideEnabled(StrategyWeights::Tech_Spam_Rush);
+		if (spam) {
+			Global::RoleSettings::Tech::EnableStrategy(Strategy::SPAM_RUSH);
 		}
 
 		GenericHelpers::LogUtil(
 			"[Strategy] (EXPERIMENTAL BALANCED) Decided: Tech mask=" + Global::RoleSettings::Tech::StrategyMask +
-			" (" + StrategyUtil::NamesFromMask(Global::RoleSettings::Tech::StrategyMask) + ")",
-			2);
+			" (" + StrategyUtil::NamesFromMask(Global::RoleSettings::Tech::StrategyMask) + "); roll 1: "
+			+ (pick == 0 ? "NUKE_RUSH" : pick == 1 ? "T3_RUSH" : pick == 2 ? "T2_RUSH (heavy rush)" : "none")
+			+ ", roll 2: spam rush " + (spam ? "on" : "off"),
+			1);
 	}
 
 	void AiMain()
 	{
+        // Missing working-copy policy. Existing pending-all overrides retain precedence.
+        Global::RoleSettings::Air::BankFunding = true; // AIR: bank funds energy/cons/T2 turrets; far mexes past a small home (owner 2026-10-17)
+        Global::RoleSettings::Air::FirstLabBankAssist = true; // AIR: idle T1 cons help the first T2 lab once the bank covers it (owner 2026-10-18)
+        Global::GremlinEcoFire::Enabled = true; // Gremlins scout, firing only at enemy economy (owner 2026-10-19)
+        Global::RoleSettings::Tech::LayoutNoRoomRetrySeconds = 1.0f; // owner 2026-10-19: no-room sweep backoff 1-3 s
+        Global::RoleSettings::Air::EcoSlotRetrySeconds = 2.0f;      // owner 2026-10-19: one AIR reactor order per slot per 2 s
+        Global::RoleSettings::Air::T2HeavyAirIncomeThreshold = 175.0f;
+        Global::RoleSettings::Tech::NukeRushSecondCallSeconds = NukeRushSecondCallSeconds;
+        Global::RoleSettings::Tech::NukeRushSecondCallLimit = 8;
+        Global::RoleSettings::Tech::NukeRushSiloPerAfus = true;
+        Global::RoleSettings::Tech::NukeLimit = 15;
+        Global::RoleSettings::Tech::NukeRushAfusSiloMetalIncome = 50.0f;
+        Global::RoleSettings::Tech::NukeRushAfusSiloEnergyIncome = 2000.0f;
+        Global::Military::NoTelchines = true;
+        Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion = true;
+        Global::RoleSettings::Front::EcoLadder = true;
+        Global::RoleSettings::Front::EcoLadderGantryMetalIncome = 175.0f;   // owner, 2026-10-18 (150 in src)
+        Global::RoleSettings::Front::EcoLadderGantryAfterAdvFusions = 1;
+        Global::RoleSettings::Front::EcoLadderLaterAdvFusionAtStart = true;
+        Global::RoleSettings::Front::SpawnFactoryEnabled = true;
+        Global::RoleSettings::Front::Recovery = true; // owner 2026-10-19: after losing the base, T1 eco and retake the mexes first (front_recovery.as)
+        Global::RoleSettings::Front::TimeTriggerForFirstT2LabMinMetalIncome = 20.0f; // 22-min T2 lab/plant trigger needs +20 metal (AI 11 ordered legavp at +3 after losing its base)
+        Global::RoleSettings::Support::ReclaimT1EnergyAfterFusion = true;
+        Global::Team::PinpointerPoolSize = 3;
+        Global::Spam::EdgePorcEnabled = true;
+        Global::Spam::LaneReleaseAtEnd = true;
 		Global::RoleSettings::MexOwnershipEnabled = true;
 		// Also initialize before setupMap (and when reconstructing a saved game).
 		aiEconomyMgr.SetMexOwnership(true, Global::RoleSettings::MexOwnershipSeconds);
@@ -69,6 +103,8 @@ namespace Main {
 		Global::RoleSettings::Air::BomberTiersEnabled = true;
         Global::Commander::AfusDefenceRadius = Global::Commander::BaseRadius;
         Global::Commander::FrontRecovery = true;
+        Global::RoleSettings::Sea::FleetRerouteSeconds = 3; // owner 2026-10-19: SEA cohort chasing one target re-routes at most every 3 s
+        Global::RoleSettings::Sea::FleetReroutesPerTick = 8;     // and at most 8 such re-routes per tick (Glacial Gap lag)
         Global::Commander::FrontMexSeconds = 1.f;
         Global::RoleSettings::Tech::EcoFlakEnabled = true;
         Global::LolCannon::Enabled = true; // Ragnarok/Calamity/Starfall only via the gated FRONT/TECH program (owner 2026-10-21)
@@ -134,6 +170,8 @@ namespace Main {
         Lanes::Poll(); // complete async surveys for every role before consumers run
         AmphibiousOps::Tick();
         ScoutRaid::Tick(); // D-296: no-op unless the profile JSON enables scout raids
+        GremlinEcoFire::Tick(); // Gremlins scout, firing only at enemy economy in reach
+        ThugFireAtWill::Tick(); // preserve the working-copy fire-state fallback after task changes
 		Commands::DrawTick();   // the widget's map drawing, paced under the server's flood guard
 		// Update cached enemy threat information roughly every 10 seconds (300 frames).
 		//if ((ai.frame % (10 * SECOND)) == 0) {
@@ -177,6 +215,15 @@ namespace Main {
         // T1 eco, T1 construction turrets, T2 flak and T2 pop-up artillery around it (src/settings/shared/t3_unstick.as, off there)
         Global::T3Unstick::Enabled = true;
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
+        // TECH t3rush gantry turrets (owner, 2026-10-18): a random 14-20 construction turrets while the gantry goes up,
+        // then a slower climb to 40 over the 5 minutes after it stands (src/settings/roles/tech.as T3RushTurrets*, off there)
+        Global::RoleSettings::Tech::T3RushTurretsMin = 14;
+        Global::RoleSettings::Tech::T3RushTurretsMax = 20;
+        Global::RoleSettings::Tech::T3RushTurretsRampSeconds = 300;
+        Global::RoleSettings::Tech::T3RushTurretsRampTo = 40;
+        // TECH gantry (owner, 2026-10-17): the nearest spot up to 40% toward the front first, cramped allowed,
+        // 24+ turrets, exit clear 480 ahead and leading to the front (src/settings/roles/tech.as GantryNearMaxShare, 0 there)
+        Global::RoleSettings::Tech::GantryNearMaxShare = 0.4f;
         Global::RoleSettings::Front::VehicleTankOpenerChance = 0.5f;
         // FRONT vehicles (owner, 2026-10-19): every 3 min from the opener to the first T2 factory, 50% for 5-8
         // medium tanks held at the plant until the last is out (src/settings/roles/front.as VehicleTankMass*, off there)

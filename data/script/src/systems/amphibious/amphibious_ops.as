@@ -76,6 +76,7 @@ namespace AmphibiousOps {
         return d.GetName() == "legamph" ? 0 : (d.GetName() == "armmar" ? 1 : -1);
     }
     bool TelchineStartAllowed() {
+        if (Global::Military::NoTelchines) return false;   // owner 2026-10-16: no Telchines from any role
         return AmphibiousMath::TelchineStartAllowed(Global::AISettings::Role == AiRole::TECH, Global::Map::LandLocked);
     }
     int Size(int kind) { return kind == 0 ? telSize : marSize; }

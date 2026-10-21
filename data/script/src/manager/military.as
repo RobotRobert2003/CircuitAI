@@ -5,6 +5,8 @@
 #include "../systems/combat/spam.as"
 #include "../systems/combat/scout_raid.as"
 #include "../systems/combat/t3_unstick.as"
+#include "../systems/combat/gremlin_eco_fire.as"
+#include "../systems/combat/thug_fire_at_will.as"
 #include "../systems/team/ferry.as"
 #include "../systems/amphibious/amphibious_ops.as"
 
@@ -116,6 +118,8 @@ namespace Military {
 	{
 		Team::Ferry::OnUnitAdded(unit);   // claim a transport, ours or a gift
 		T3Unstick::UnitAdded(unit);       // watch T3 units for getting penned in (owner 2026-10-20)
+		GremlinEcoFire::UnitAdded(unit);  // Gremlins fire only at enemy economy
+		ThugFireAtWill::UnitAdded(unit);  // Thugs and Maces always fire at will (owner 2026-10-19)
 
 		// Delegate to role-specific handler if registered
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;

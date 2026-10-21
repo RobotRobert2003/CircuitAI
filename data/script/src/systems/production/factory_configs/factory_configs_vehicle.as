@@ -67,8 +67,8 @@ namespace VehicleConfigs {
             cfg.AddRole("support",   array<string> = {"armgremlin"});
             cfg.AddRole("heavy",     array<string> = {});
 
-            cfg.SetTierProbabilities(0, array<float> = {0.18f, 0.10f, 0.18f, 0.10f, 0.10f, 0.10f, 0.08f, 0.08f, 0.06f, 0.02f});
-            cfg.SetTierProbabilities(1, array<float> = {0.14f, 0.08f, 0.18f, 0.10f, 0.10f, 0.14f, 0.08f, 0.08f, 0.06f, 0.04f});
+            cfg.SetTierProbabilities(0, array<float> = {0.18f, 0.02f, 0.18f, 0.10f, 0.10f, 0.10f, 0.08f, 0.08f, 0.06f, 0.02f});
+            cfg.SetTierProbabilities(1, array<float> = {0.14f, 0.02f, 0.18f, 0.10f, 0.10f, 0.14f, 0.08f, 0.08f, 0.06f, 0.04f});
 
             FactoryProduction::factoryConfigs.set("armavp", @cfg);
             GenericHelpers::LogUtil("[FactoryProduction] RegisterVehicleFactories: armavp registered", 3);
@@ -88,8 +88,8 @@ namespace VehicleConfigs {
             cfg.AddRole("support",   array<string> = {});
             cfg.AddRole("heavy",     array<string> = {"corban"});
 
-            cfg.SetTierProbabilities(0, array<float> = {0.18f, 0.10f, 0.18f, 0.10f, 0.10f, 0.10f, 0.08f, 0.04f, 0.04f, 0.08f});
-            cfg.SetTierProbabilities(1, array<float> = {0.14f, 0.08f, 0.18f, 0.10f, 0.10f, 0.12f, 0.08f, 0.04f, 0.04f, 0.08f});
+            cfg.SetTierProbabilities(0, array<float> = {0.18f, 0.02f, 0.18f, 0.10f, 0.10f, 0.10f, 0.08f, 0.04f, 0.04f, 0.08f});
+            cfg.SetTierProbabilities(1, array<float> = {0.14f, 0.02f, 0.18f, 0.10f, 0.10f, 0.12f, 0.08f, 0.04f, 0.04f, 0.08f});
 
             FactoryProduction::factoryConfigs.set("coravp", @cfg);
             GenericHelpers::LogUtil("[FactoryProduction] RegisterVehicleFactories: coravp registered", 3);
@@ -113,10 +113,10 @@ namespace VehicleConfigs {
             // [builder, scout, raider, riot, skirmish, assault, artillery, anti_air, support, heavy]
             cfg.SetTierProbabilities(0, array<float> = {0.05f, 0.65f, 0.30f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f});
             cfg.SetTierProbabilities(1, array<float> = {0.05f, 0.50f, 0.45f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f});
-            cfg.SetTierProbabilities(2, array<float> = {0.05f, 0.10f, 0.60f, 0.25f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f});
-            cfg.SetTierProbabilities(3, array<float> = {0.05f, 0.00f, 0.30f, 0.40f, 0.25f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f});
-            cfg.SetTierProbabilities(4, array<float> = {0.05f, 0.00f, 0.10f, 0.30f, 0.55f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f});
-            cfg.SetTierProbabilities(5, array<float> = {0.05f, 0.00f, 0.00f, 0.00f, 0.60f, 0.00f, 0.35f, 0.00f, 0.00f, 0.00f});
+            cfg.SetTierProbabilities(2, array<float> = {0.05f, 0.10f, 0.55f, 0.25f, 0.00f, 0.05f, 0.00f, 0.00f, 0.00f, 0.00f});
+            cfg.SetTierProbabilities(3, array<float> = {0.05f, 0.00f, 0.30f, 0.35f, 0.25f, 0.05f, 0.00f, 0.00f, 0.00f, 0.00f});
+            cfg.SetTierProbabilities(4, array<float> = {0.05f, 0.00f, 0.10f, 0.30f, 0.50f, 0.05f, 0.00f, 0.00f, 0.00f, 0.00f});
+            cfg.SetTierProbabilities(5, array<float> = {0.05f, 0.00f, 0.00f, 0.00f, 0.55f, 0.05f, 0.35f, 0.00f, 0.00f, 0.00f});
 
             FactoryProduction::factoryConfigs.set("legvp", @cfg);
             GenericHelpers::LogUtil("[FactoryProduction] RegisterVehicleFactories: legvp registered", 3);
@@ -144,11 +144,11 @@ namespace VehicleConfigs {
             // Tier 2
             cfg.SetTierProbabilities(2, array<float> = {0.30f, 0.01f, 0.00f, 0.00f, 0.35f, 0.00f, 0.30f, 0.04f, 0.01f, 0.00f});
             // Tier 3
-            cfg.SetTierProbabilities(3, array<float> = {0.30f, 0.01f, 0.00f, 0.00f, 0.20f, 0.07f, 0.19f, 0.04f, 0.08f, 0.11f});
+            cfg.SetTierProbabilities(3, array<float> = {0.30f, 0.01f, 0.00f, 0.00f, 0.15f, 0.07f, 0.19f, 0.04f, 0.13f, 0.11f});
             // Tier 4
-            cfg.SetTierProbabilities(4, array<float> = {0.31f, 0.01f, 0.00f, 0.00f, 0.00f, 0.12f, 0.25f, 0.04f, 0.08f, 0.19f});
+            cfg.SetTierProbabilities(4, array<float> = {0.31f, 0.01f, 0.00f, 0.00f, 0.00f, 0.12f, 0.20f, 0.04f, 0.13f, 0.19f});
             // Tier 5
-            cfg.SetTierProbabilities(5, array<float> = {0.31f, 0.01f, 0.00f, 0.00f, 0.00f, 0.12f, 0.25f, 0.04f, 0.01f, 0.27f});
+            cfg.SetTierProbabilities(5, array<float> = {0.31f, 0.01f, 0.00f, 0.00f, 0.00f, 0.12f, 0.25f, 0.04f, 0.06f, 0.22f});
 
             FactoryProduction::factoryConfigs.set("legavp", @cfg);
             GenericHelpers::LogUtil("[FactoryProduction] RegisterVehicleFactories: legavp registered", 3);

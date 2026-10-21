@@ -433,6 +433,7 @@ namespace TechRules {
             if (EcoPlanner::Affordable(opts[i], c.eco)) return ByKey(c, opts[i].key);
         return null;
     }
+    IUnitTask@ DoNukeAfus(Ctx@ c)       { return RoleTech::Tech_AfusSilo(c.u, c.mi, c.ei); }
     IUnitTask@ DoLegacy(Ctx@ c)
     {
         if (c.who == COMMANDER) return RoleTech::Tech_Commander_AiMakeTask(c.u, null, c.mi);
@@ -488,6 +489,7 @@ namespace TechRules {
         table.insertLast(Rule("keep.current",      MOBILE,       W0(), @DoKeepCurrent,  "the construction the builder is on, when native re-asks"));
         table.insertLast(Rule("eco.recover",       MOBILE,       W0(), @DoRecovery, "D-306: restore safe lost layout capacity before discretionary growth"));
         table.insertLast(Rule("eco.flak", CON_T2, W0(), @DoEcoFlak, "D-321: perimeter flak minimum, air response and replacement; shared cooldown and per-cluster cap"));
+        table.insertLast(Rule("nuke.afus",         CON_T2,       W0(), @DoNukeAfus,     "owner 2026-10-17: a nuke rush adds a silo after each completed advanced fusion (1 + AFUS, NukeLimit), one at a time, on the regular silo gates, packed on the base layout"));
         if (Global::Map::Config.TechCompactEconomy)
             table.insertLast(Rule("eco.compact.support", CON_T1, W0(), @DoCompactSupport, "D-307: one local turret for an active compact economy bank"));
         table.insertLast(Rule("gantry.support", CON_T1, W0(), @DoGantrySupport, "D-281: capable constructors carry an admitted gantry turret assignment before discretionary forward work"));

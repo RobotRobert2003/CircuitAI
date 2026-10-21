@@ -27,6 +27,8 @@
 #include "tech_gantry.as"
 
 namespace TechFactories {
+    const float FootprintHalfScale = 0.5f;
+
 
     float Sq(float v) { return v * v; }
 
@@ -247,11 +249,11 @@ namespace TechFactories {
     bool Fits(CCircuitDef@ lab, CCircuitDef@ nano, const AIFloat3& in p, int facing, int rows, bool roomy)
     {
         const float cell = SQUARE_SIZE * 2;
-        const float halfAcross = float(Layout::Across(lab, facing)) * 0.5f * cell;
+        const float halfAcross = float(Layout::Across(lab, facing)) * FootprintHalfScale * cell;
         const float depth = float(Layout::Along(lab, facing) + rows * Layout::Along(nano, facing));
-        const float halfAlong = depth * 0.5f * cell;
+        const float halfAlong = depth * FootprintHalfScale * cell;
         // the cluster's centre: half the turret block behind the factory's centre
-        const AIFloat3 centre = p - Layout::Fwd(facing) * (float(rows * Layout::Along(nano, facing)) * 0.5f * cell);
+        const AIFloat3 centre = p - Layout::Fwd(facing) * (float(rows * Layout::Along(nano, facing)) * FootprintHalfScale * cell);
         const float m = 64.0f;
         if (p.x < m || p.z < m || p.x > float(AiTerrainWidth()) - m || p.z > float(AiTerrainHeight()) - m) return false;
         if (aiTerrainMgr.FlatFraction(centre, facing, halfAcross, halfAlong, Global::RoleSettings::Tech::LayoutBoxMaxSlope)
@@ -304,10 +306,10 @@ namespace TechFactories {
         const int lane = Global::RoleSettings::Tech::FrontT3LaneCells;
         const int depth = Layout::Along(lab, facing) + rows * Layout::Along(nano, facing) + 2 * lane;
         const int wide = RowPitchCells(lab, nano, facing) - Global::RoleSettings::Tech::FrontRowGapCells;
-        halfAcross = float(lane) * 0.5f * cell;
-        halfAlong = float(depth) * 0.5f * cell;
-        const float back = float(rows * Layout::Along(nano, facing)) * 0.5f * cell;   // the cluster's centre is behind the lab's
-        centre = slot + Layout::Side(facing) * (float(dir) * (float(wide) * 0.5f + float(lane) * 0.5f) * cell) - Layout::Fwd(facing) * back;
+        halfAcross = float(lane) * FootprintHalfScale * cell;
+        halfAlong = float(depth) * FootprintHalfScale * cell;
+        const float back = float(rows * Layout::Along(nano, facing)) * FootprintHalfScale * cell;   // the cluster's centre is behind the lab's
+        centre = slot + Layout::Side(facing) * (float(dir) * (float(wide) * FootprintHalfScale + float(lane) * FootprintHalfScale) * cell) - Layout::Fwd(facing) * back;
     }
     bool LanePassable(CCircuitDef@ nano, const AIFloat3& in centre, float halfAcross, float halfAlong, int facing)
     {
@@ -334,9 +336,9 @@ namespace TechFactories {
     string WhyNotFits(CCircuitDef@ lab, CCircuitDef@ nano, const AIFloat3& in p, int facing, int rows)
     {
         const float cell = SQUARE_SIZE * 2;
-        const float halfAcross = float(Layout::Across(lab, facing)) * 0.5f * cell;
-        const float halfAlong = float(Layout::Along(lab, facing) + rows * Layout::Along(nano, facing)) * 0.5f * cell;
-        const AIFloat3 centre = p - Layout::Fwd(facing) * (float(rows * Layout::Along(nano, facing)) * 0.5f * cell);
+        const float halfAcross = float(Layout::Across(lab, facing)) * FootprintHalfScale * cell;
+        const float halfAlong = float(Layout::Along(lab, facing) + rows * Layout::Along(nano, facing)) * FootprintHalfScale * cell;
+        const AIFloat3 centre = p - Layout::Fwd(facing) * (float(rows * Layout::Along(nano, facing)) * FootprintHalfScale * cell);
         const float m = 64.0f;
         if (p.x < m || p.z < m || p.x > float(AiTerrainWidth()) - m || p.z > float(AiTerrainHeight()) - m) return "off the map";
         if (aiTerrainMgr.FlatFraction(centre, facing, halfAcross, halfAlong, Global::RoleSettings::Tech::LayoutBoxMaxSlope)
@@ -346,11 +348,11 @@ namespace TechFactories {
             int held = 0, cells = 0;
             const int ax = Layout::Across(lab, facing), al = Layout::Along(lab, facing);
             for (int i = 0; i < ax; ++i) for (int j = 0; j < al; ++j) {
-                const AIFloat3 q = p + Layout::Side(facing) * ((float(i) - float(ax - 1) * 0.5f) * cell) + Layout::Fwd(facing) * ((float(j) - float(al - 1) * 0.5f) * cell);
+                const AIFloat3 q = p + Layout::Side(facing) * ((float(i) - float(ax - 1) * FootprintHalfScale) * cell) + Layout::Fwd(facing) * ((float(j) - float(al - 1) * FootprintHalfScale) * cell);
                 ++cells;
                 if (aiTerrainMgr.IsReserved(q)) ++held;
             }
-            const float b = aiTerrainMgr.BuildableFraction(lab, p, halfAcross, float(al) * 0.5f * cell, facing);
+            const float b = aiTerrainMgr.BuildableFraction(lab, p, halfAcross, float(al) * FootprintHalfScale * cell, facing);
             return "the footprint is taken or refused (" + held + " of " + cells + " cells reserved by us, " + int(b * 100.0f) + "% buildable)";
         }
         if (!aiTerrainMgr.IsExitClear(lab, p, facing, 320.0f, 32.0f)) return "the exit is blocked";
@@ -469,32 +471,72 @@ namespace TechFactories {
         const int wide = (Layout::Across(lab, facing) > cols * Layout::Across(nano, facing)) ? Layout::Across(lab, facing) : cols * Layout::Across(nano, facing);
         const float pitch = float(wide + Global::RoleSettings::Tech::SpamLabGapCells) * SQUARE_SIZE * 2;
         const float start = (reachShare > Global::RoleSettings::Tech::FrontMinShare) ? reachShare : Global::RoleSettings::Tech::FrontMinShare;
-        for (int pass = 0; pass < 2; ++pass) {
+        // Owner, 2026-10-17 (played on Mescaline_V2: the engine refused most ground
+        // near the base for Legion's 12x12 gantry, so the first roomy spot was 60%
+        // toward the front): a gantry first takes the nearest spot up to
+        // GantryNearMaxShare, cramped allowed, on a finer lateral grid, with at least
+        // GantryNearMinTurrets turrets behind it and its exit clear ahead and leading
+        // to the front
+        const bool nearT3 = tier >= 3 && Global::RoleSettings::Tech::GantryNearMaxShare > 0.0f;
+        const int split = AiMax(1, Global::RoleSettings::Tech::GantryNearLateralSplit);
+        for (int pass = nearT3 ? -1 : 0; pass < 2; ++pass) {
+            const bool near = (pass < 0);
             const bool roomy = (pass == 0);
-            for (float s = start; s <= Global::RoleSettings::Tech::FrontMaxShare + 0.001f; s += Global::RoleSettings::Tech::FrontShareStep) {
+            const float sMax = near ? Global::RoleSettings::Tech::GantryNearMaxShare : Global::RoleSettings::Tech::FrontMaxShare;
+            const int tries = near ? Global::RoleSettings::Tech::FrontLateralTries * split : Global::RoleSettings::Tech::FrontLateralTries;
+            const float step = near ? pitch / float(split) : pitch;
+            for (float s = start; s <= sMax + 0.001f; s += Global::RoleSettings::Tech::FrontShareStep) {
                 const float bx = home.x + ux * s * dist, bz = home.z + uz * s * dist;
-                for (int k = 0; k <= 2 * Global::RoleSettings::Tech::FrontLateralTries; ++k) {
-                    const float off = (k == 0) ? 0.0f : float((k + 1) / 2) * pitch * ((k % 2 == 1) ? 1.0f : -1.0f);
+                for (int k = 0; k <= 2 * tries; ++k) {
+                    const float off = (k == 0) ? 0.0f : float((k + 1) / 2) * step * ((k % 2 == 1) ? 1.0f : -1.0f);
                     const AIFloat3 p(bx - uz * off, home.y, bz + ux * off);
                     // D-119: a gantry needs room for its smallest block; the biggest that fits is taken below
                     if (!Fits(lab, nano, p, facing, (tier >= 3) ? T3Blocks[T3Blocks.length() - 1] : rows, roomy)) continue;
                     if (tier >= 3 && earlyGantry && !TechGantry::ReachableBattlefield(p, facing)) continue;
+                    if (near && (!aiTerrainMgr.IsExitClear(lab, p, facing, Global::RoleSettings::Tech::GantryNearExitLength, 32.0f)
+                        || !TechGantry::ReachableBattlefield(p, facing))) continue;
                     const int id = aiTerrainMgr.ReserveBuilding(lab, p, facing);
                     if (id < 0) continue;
                     const AIFloat3 lp = aiTerrainMgr.GetReservationPos(id);
                     int g = 0;
                     int bc = cols, br = rows;
                     // D-119 (owner): a gantry's block holds up to 50 turrets; where the
-                    // ground is smaller, the biggest block that fits
+                    // ground is smaller, the biggest block that fits. Owner, 2026-10-17:
+                    // short of a full block, the gantry keeps the block that holds the
+                    // most turrets (played on Mescaline_V2: Legion's gantry yard took 4
+                    // slots of every size, 46 of 50 ... 16 of 18, so only the 3x2 block
+                    // was full and both gantries planned 6 turrets on open ground)
+                    int held = 0, bestO = -1, bestN = 0;
                     for (uint o = 0; o < T3Blocks.length(); o += 2) {
                         if (tier < 3 && o > 0) break;
                         if (tier >= 3) { bc = T3Blocks[o]; br = T3Blocks[o + 1]; }
                         g = aiTerrainMgr.ReserveNanoBlockAt(nano, lab, lp, facing, bc, br, 0);
-                        if (g > 0 && aiTerrainMgr.GetGroupCount(g, false) >= bc * br && aiTerrainMgr.GetGroupActivationState(g) == 0) break;
+                        const int n = (g > 0 && aiTerrainMgr.GetGroupActivationState(g) == 0) ? aiTerrainMgr.GetGroupCount(g, false) : 0;
+                        // a full block holding at least as many as the best partial one ends the search
+                        if (n >= bc * br && n >= bestN) { held = n; bestO = -1; break; }
+                        if (tier >= 3 && n > bestN) { bestN = n; bestO = int(o); }
                         if (g > 0) {
                             const int groupZone = aiTerrainMgr.GetGroupZone(g);
                             if (groupZone > 0) aiTerrainMgr.ReleaseZone(groupZone); else aiTerrainMgr.ReleaseGroup(g);
                         }
+                        g = 0;
+                    }
+                    if (g <= 0 && bestO >= 0) {
+                        // the fullest partial block, laid again (each try released its zone)
+                        bc = T3Blocks[bestO]; br = T3Blocks[bestO + 1];
+                        g = aiTerrainMgr.ReserveNanoBlockAt(nano, lab, lp, facing, bc, br, 0);
+                        held = (g > 0 && aiTerrainMgr.GetGroupActivationState(g) == 0) ? aiTerrainMgr.GetGroupCount(g, false) : 0;
+                        if (held <= 0 && g > 0) {
+                            const int groupZone = aiTerrainMgr.GetGroupZone(g);
+                            if (groupZone > 0) aiTerrainMgr.ReleaseZone(groupZone); else aiTerrainMgr.ReleaseGroup(g);
+                        }
+                        if (held <= 0) g = 0;
+                        else GenericHelpers::LogUtil("[TECH][Factories] " + lab.GetName() + " at (" + int(lp.x) + ", " + int(lp.z) + "): no full turret block; "
+                            + bc + "x" + br + " holds " + held + " of " + (bc * br) + ", the most of any size (D-119)", 1);
+                    }
+                    if (g > 0 && near && held < Global::RoleSettings::Tech::GantryNearMinTurrets) {
+                        const int groupZone = aiTerrainMgr.GetGroupZone(g);
+                        if (groupZone > 0) aiTerrainMgr.ReleaseZone(groupZone); else aiTerrainMgr.ReleaseGroup(g);
                         g = 0;
                     }
                     if (g <= 0) {
@@ -514,7 +556,7 @@ namespace TechFactories {
                             continue;
                         }
                     }
-                    Cluster@ c = NewCluster(lab, tier, id, lp, facing, g, cols * rows, s);
+                    Cluster@ c = NewCluster(lab, tier, id, lp, facing, g, held, s);
                     c.earlyGantry = earlyGantry;
                     if (tier >= 3 && !ahead) Builder::MarkGantryEnqueued();
                     if (tier == 1) {
@@ -531,7 +573,7 @@ namespace TechFactories {
                     }
                     if (!ahead && s > reachShare) reachShare = s;
                     GenericHelpers::LogUtil("[TECH][Factories] T" + tier + " cluster " + clusters.length() + " for " + lab.GetName() + " at (" + int(lp.x) + ", " + int(lp.z)
-                        + "), " + int(s * 100.0f) + "% toward the front, " + (cols * rows) + " turrets behind it" + (roomy ? "" : " (close to other buildings: no roomier spot)") + " (D-114)", 1);
+                        + "), " + int(s * 100.0f) + "% toward the front, " + held + " turrets behind it" + (near ? " (near pass: cramped allowed, exit clear)" : roomy ? "" : " (close to other buildings: no roomier spot)") + " (D-114)", 1);
                     return c;
                 }
             }
@@ -571,6 +613,25 @@ namespace TechFactories {
         return t;
     }
 
+    // The ground a cluster plans (its factory and the turret block behind it),
+    // as an axis-aligned rectangle, for Team::AllyClear (owner, 2026-10-17)
+    void ClusterRect(Cluster@ c, AIFloat3 &out centre, float &out hx, float &out hz)
+    {
+        CCircuitDef@ lab = ai.GetCircuitDef(c.defName);
+        CCircuitDef@ nano = Nano();
+        int cols, rows;
+        TurretBlock(c.tier, cols, rows);
+        const float cell = SQUARE_SIZE * 2;
+        const int f = c.facing;
+        const float across = (lab is null || nano is null) ? 96.0f
+            : float(AiMax(Layout::Across(lab, f), cols * Layout::Across(nano, f))) * FootprintHalfScale * cell;
+        const float along = (lab is null || nano is null) ? 96.0f
+            : float(Layout::Along(lab, f) + rows * Layout::Along(nano, f)) * FootprintHalfScale * cell;
+        centre = (nano is null) ? c.pos : c.pos - Layout::Fwd(f) * (float(rows * Layout::Along(nano, f)) * FootprintHalfScale * cell);
+        hx = ((f & 1) == 1) ? along : across;
+        hz = ((f & 1) == 1) ? across : along;
+    }
+
     Cluster@ ReadyCluster(Cluster@ c)
     {
         if (c is null || c.started) return c;
@@ -582,6 +643,13 @@ namespace TechFactories {
             return c;
         }
         if (groupState == 0 && aiTerrainMgr.IsReservationBuildable(c.labRes)) return c;
+        {
+            // owner, 2026-10-17: an allied SMRTBARb's T1 porc/eco on the plan is
+            // handed over and reclaimed before the site is given up
+            AIFloat3 rc; float rhx, rhz;
+            ClusterRect(c, rc, rhx, rhz);
+            if (Team::AllyClear::Hold("tech." + c.labRes, rc, rhx, rhz)) return null;
+        }
         GenericHelpers::LogUtil("[TECH][Expansion] relocate blocked unused " + c.defName + " slot=" + c.labRes, 1);
         const int zone = aiTerrainMgr.GetGroupZone(c.nanoGroup);
         if (zone > 0) aiTerrainMgr.ReleaseZone(zone); else aiTerrainMgr.ReleaseGroup(c.nanoGroup);
@@ -678,6 +746,13 @@ namespace TechFactories {
         // turret is ordered but not started, the cluster waits (INV-045)
         const int done = FinishedTurrets(c);
         if (done < first) {
+            // owner, 2026-10-17: a turret slot idle for 60 s may be held by an
+            // allied SMRTBARb's T1 porc/eco: ask for it before giving the slot up
+            if (c.turretFrame >= 0 && ai.frame - c.turretFrame >= 60 * SECOND) {
+                AIFloat3 rc; float rhx, rhz;
+                ClusterRect(c, rc, rhx, rhz);
+                if (Team::AllyClear::Hold("tech.block." + c.labRes, rc, rhx, rhz)) return null;
+            }
             // a slot the engine refused (a dead slot) never fills: with no turret
             // work for 240 s, the factory goes up behind the turrets that stand
             if (done == 0 || c.turretFrame < 0 || ai.frame - c.turretFrame < 240 * SECOND) return null;

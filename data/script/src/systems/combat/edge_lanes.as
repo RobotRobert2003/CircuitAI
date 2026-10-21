@@ -459,10 +459,37 @@ namespace EdgeLanes {
         return (t.GetUnits().length() < 2) ? t : null;
     }
 
+    // The cluster's own orders: the turret and lab orders and the repairs of their frames
+    array<IUnitTask@> helpTasks;
+    bool OwnsTask(IUnitTask@ t)
+    {
+        if (t is null || t.IsDead()) return false;
+        if (t is turretTask[0] || t is turretTask[1] || t is labTask) return true;
+        for (uint i = 0; i < helpTasks.length(); ++i) if (t is helpTasks[i]) return true;
+        return false;
+    }
+    IUnitTask@ Help(CCircuitUnit@ frame)
+    {
+        for (int i = int(helpTasks.length()) - 1; i >= 0; --i)
+            if (helpTasks[i] is null || helpTasks[i].IsDead()) helpTasks.removeAt(i);
+        IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame, 30 * SECOND));
+        if (t !is null) helpTasks.insertLast(t);
+        return t;
+    }
+
     // Builder::AiMakeTask asks here before Spam
     IUnitTask@ BuilderTask(CCircuitUnit@ u)
     {
-        if (!Enabled() || !funded || u is null || !u.circuitDef.IsMobile() || UnitHelpers::IsCommander(u.circuitDef)) return null;
+        if (!Enabled() || u is null || !u.circuitDef.IsMobile() || UnitHelpers::IsCommander(u.circuitDef)) return null;
+        // A builder on a cluster order keeps it. Native re-asks a builder every few
+        // seconds and swaps when the answer is another kind; this used to answer null
+        // for any builder already on a construction, so FRONT's reclaim and eco
+        // ladder took it. Played 2026-10-19 (All That Simmers): team 15's turret 1
+        // builder went to reclaim a solar in the same frame, the order sat 120 s
+        // unbuilt and the right lane never had a turret; team 12's lab builder went
+        // to help an advanced fusion in the same frame.
+        if (OwnsTask(u.task)) return u.task;
+        if (!funded) return null;
         if (Decide() == 0) return null;
         IBuilderTask@ current = u.task is null ? null : cast<IBuilderTask>(u.task);
         if (current !is null && Task::BuildType(current.GetBuildType()) < Task::BuildType::REPAIR) return null;
@@ -479,7 +506,7 @@ namespace EdgeLanes {
             CCircuitUnit@ t = aiBuilderMgr.FindOwnNear(turretSite[i], 56.0f, nano);
             if (t !is null && t.GetBuildProgress() >= 1.0f) { ++standing; turretFrame[i] = -1; turretFails[i] = 0; turretOrder[i] = -1; continue; }
             if (t is null) @t = aiBuilderMgr.FindUnfinishedNear(turretSite[i], 56.0f, nano);
-            if (t !is null) { turretOrder[i] = -1; return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, t, 30 * SECOND)); }
+            if (t !is null) { turretOrder[i] = -1; return Help(t); }
             IUnitTask@ joined = Join(turretTask[i]);
             if (joined !is null) return joined;
             if (turretTask[i] !is null && !turretTask[i].IsDead()) { pending = true; continue; }
@@ -502,7 +529,7 @@ namespace EdgeLanes {
         // 2. the lab, once both turrets stand (or the turret orders gave up)
         CCircuitUnit@ f = Lab();
         if (f !is null) {
-            if (f.GetBuildProgress() < 1.0f) return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, f, 30 * SECOND));
+            if (f.GetBuildProgress() < 1.0f) return Help(f);
             return null;   // it stands; its turrets assist it
         }
         if (pending) return null;   // a turret order still lives: the cluster waits
