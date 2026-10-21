@@ -346,6 +346,8 @@ namespace RoleAir {
 
         Air_ApplyStartLimits();
         AirWaves::Init();
+        AirLiches::Init();
+        AirBomberTargets::Init();
 
         // Initialize dynamic factory production system for AIR role when enabled
         if (Global::RoleSettings::Air::UseDynamicFactoryProduction) {
@@ -405,6 +407,8 @@ namespace RoleAir {
         }
         // T2 bomber waves: launch when the hold reaches the target, size the next wave
         AirWaves::Update();
+        AirLiches::Update(); // Liche runs: in-flight target hierarchy
+        AirBomberTargets::Update(); // T2 bomber waves: the same hierarchy over economy targets
         //LogUtil("Air update logic executed", 5);
     }
 
@@ -735,6 +739,8 @@ namespace RoleAir {
         if (navalTask !is null) return navalTask;
         IUnitTask@ homeTask = AirProduction::HomeTask(u);
         if (homeTask !is null) return homeTask;
+        IUnitTask@ licheTask = AirLiches::MakeTask(u);
+        if (licheTask !is null) return licheTask;
         IUnitTask@ raidTask = AirRaids::MakeTask(u);
         if (raidTask !is null) return raidTask;
         IUnitTask@ waveTask = AirWaves::MakeTask(u);
@@ -746,6 +752,7 @@ namespace RoleAir {
     {
         AirProduction::Removed(unit);
         AirWaves::OnUnitRemoved(unit);
+        AirLiches::Removed(unit);
     }
 
     void Air_MilitaryAiTaskRemoved(IUnitTask@ task, bool done)

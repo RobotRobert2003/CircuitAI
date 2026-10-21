@@ -59,6 +59,14 @@ namespace Main {
 		// Also initialize before setupMap (and when reconstructing a saved game).
 		aiEconomyMgr.SetMexOwnership(true, Global::RoleSettings::MexOwnershipSeconds);
 		Global::RoleSettings::Air::FundFirstLab = true;
+		// AIR Armada (owner, 2026-10-17): Liches from 150 metal/s (10 s minimum), launched with each bomber wave,
+		// own tiered targets: shields, Pulsar class, anti-nukes/silos, geo, gantries, T2 factories
+		// (src/settings/roles/air.as LichesEnabled, off there; systems/air/air_liches.as)
+		Global::RoleSettings::Air::LichesEnabled = true;
+		// AIR (owner, 2026-10-21): T2 bombers pick tiered economy targets the Liche way (advanced fusion, fusion,
+		// T2 converter, advanced geo, factory); the Liches fly with the raid and pick inside its district
+		// (src/settings/roles/air.as BomberTiersEnabled, off there; systems/air/air_strike_tiers.as)
+		Global::RoleSettings::Air::BomberTiersEnabled = true;
         Global::Commander::AfusDefenceRadius = Global::Commander::BaseRadius;
         Global::Commander::FrontRecovery = true;
         Global::Commander::FrontMexSeconds = 1.f;

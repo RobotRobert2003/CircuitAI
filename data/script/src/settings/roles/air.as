@@ -447,6 +447,47 @@ namespace Air {
             int T2HeavyAirTargetCount = 6;
             int T2HeavyAirBatchPerFactory = 2;
 
+            /******************** LICHES (Armada T2 nuclear bomber, systems/air/air_liches.as) ********************/
+            // Off here; experimental_balanced turns it on. Liches are built from the T2 plants once the
+            // 10 s minimum metal income reaches LicheMetalIncome (latched for the game), held at home,
+            // and launched with each offensive T2 bomber wave as their own operation with their own targets,
+            // picked inside the wave's district (LicheRaidRadius).
+            bool LichesEnabled = false;
+            float LicheMetalIncome = 150.0f;   // metal/s, 10 s minimum (Economy::GetMinMetalIncomeLast10s)
+            int LicheReserve = 8;              // Liches held or building beyond those already on a run
+            int LicheOrderEvery = 3;           // every Nth T2 bomber order is a Liche while bombers are also wanted
+            // Target weights by tier (owner, 2026-10-17). Each def's native weight is TierWeight * 1000 / its metal
+            // cost: the native scorer multiplies by cost, so cost cancels and only the tier, distance and route
+            // risk decide. Keep each tier far enough above the next (20x) that a cheaper def of a lower tier never
+            // outranks a dearer one of a higher tier; Init logs a warning when it would.
+            float LicheWeightShields = 3200000.0f;    // 1) Keeper, Overseer, Soteria
+            float LicheWeightHeavyDefence = 160000.0f; // 2) Pulsar, Bulwark, Bastion, Cerberus
+            float LicheWeightStrategic = 8000.0f;     // 3) anti-nukes (static and mobile), nuke silos, Rampart, advanced geo
+            float LicheWeightGeo = 400.0f;            // 4) geothermal, Prude
+            float LicheWeightGantry = 20.0f;          // 5) T3 gantries
+            float LicheWeightT2Factory = 1.0f;        // 6) T2 air, vehicle, bot and sea factories
+            // In flight a visible higher-tier target this close to the Liches takes over. Half the T2 bombers'
+            // StrikeImmediateRadius (1800): the Liche's homing missile (range 250) needs no long lined-up run,
+            // so it picks targets closer in front (owner, 2026-10-17).
+            float LicheImmediateRadius = 900.0f;
+            // The Liches fly with the T2 bomber raid: their target, every later one and the in-flight handoff
+            // all stay within this distance of the raid's aim (owner, 2026-10-21). Native exclusion makes the
+            // edge an octagon reaching about 1.08x this.
+            float LicheRaidRadius = 2400.0f;
+
+            /******************** T2 BOMBER TARGET TIERS (systems/air/air_strike_tiers.as) ********************/
+            // Off here; experimental_balanced turns it on. The T2 bomber waves (Blizzard, Hailstorm, Phoenix) pick
+            // their economy targets the way the Liches pick theirs: by tier, cost cancelled, then distance and route
+            // risk, and in flight only a strictly higher tier within StrikeImmediateRadius takes over (owner,
+            // 2026-10-21). Keep each tier 20x above the next. Off, the waves keep AirOperations::Configure's
+            // cost-scaled weights and StrikeImmediatePriority.
+            bool BomberTiersEnabled = false;
+            float BomberWeightAdvFusion = 160000.0f; // 1) advanced fusions
+            float BomberWeightFusion = 8000.0f;      // 2) fusions, cloakable fusion
+            float BomberWeightConverter = 400.0f;    // 3) T2 energy converters, naval T2 converters
+            float BomberWeightAdvGeo = 20.0f;        // 4) advanced geothermals, Prude
+            float BomberWeightFactory = 1.0f;        // 5) factories, all tiers
+
             /******************** COMMANDER FACTORY ASSIST ********************/
             // Maximum time spent assisting the opening aircraft plant. Assistance
             // ends sooner as soon as the first construction aircraft is complete.
