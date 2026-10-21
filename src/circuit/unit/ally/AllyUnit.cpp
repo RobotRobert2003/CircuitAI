@@ -6,6 +6,8 @@
  */
 
 #include "unit/ally/AllyUnit.h"
+#include "task/UnitTask.h"
+#include "util/LifetimeRegistry.h"
 #include "util/Utils.h"
 #include "terrain/TerrainData.h"
 
@@ -24,6 +26,16 @@ CAllyUnit::CAllyUnit(Id unitId, springai::Unit* unit, CCircuitDef* cdef)
 
 CAllyUnit::~CAllyUnit()
 {
+}
+
+IUnitTask* CAllyUnit::GetLiveTask() const
+{
+	return LiveReference(task, taskGeneration, IUnitTask::LiveGeneration);
+}
+
+bool CAllyUnit::SetOwnedTask(IUnitTask* replacement)
+{
+	return ReplaceLiveReference(task, taskGeneration, replacement, IUnitTask::LiveGeneration);
 }
 
 const AIFloat3& CAllyUnit::GetPos(int frame)

@@ -138,6 +138,8 @@ public:
 	virtual ~CFactoryManager();
 
 	void InitHandlers();
+	IUnitTask* ValidateTask(CCircuitUnit* unit, const char* event);
+	void DispatchIdle(CCircuitUnit* unit);
 	bool RegisterScriptFactory(CCircuitDef* def, const CCircuitDef* prototype);
 private:
 	void ReadConfig();

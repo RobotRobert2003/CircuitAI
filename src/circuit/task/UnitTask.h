@@ -19,6 +19,7 @@
 #include <set>
 #include <map>
 #include <memory>
+#include <cstdint>
 
 namespace springai {
 	class Unit;
@@ -45,6 +46,7 @@ protected:
 	virtual ~IUnitTask();
 public:
 	virtual void ClearRelease();
+	static std::uint64_t LiveGeneration(const IUnitTask* task);
 
 	virtual bool CanAssignTo(CCircuitUnit* unit) const;
 	virtual void AssignTo(CCircuitUnit* unit);

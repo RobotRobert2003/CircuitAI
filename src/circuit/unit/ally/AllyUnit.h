@@ -9,6 +9,7 @@
 #define SRC_CIRCUIT_UNIT_ALLY_ALLYUNIT_H_
 
 #include "unit/CoreUnit.h"
+#include <cstdint>
 
 namespace circuit {
 
@@ -24,12 +25,15 @@ public:
 
 	CCircuitDef* GetCircuitDef() const { return circuitDef; }
 	IUnitTask* GetTask() const { return task; }
+	IUnitTask* GetLiveTask() const;
 	const springai::AIFloat3& GetPos(int frame);
 	const springai::AIFloat3& GetLastPos() const { return position; }
 
 protected:
+	bool SetOwnedTask(IUnitTask* replacement);
 	CCircuitDef* circuitDef;
 	IUnitTask* task;  // nullptr - ally or no handler (unable to control).
+	std::uint64_t taskGeneration = 0;
 
 	int posFrame;
 	springai::AIFloat3 position;

@@ -24,6 +24,7 @@
 #include "terrain/BattleAnalysis.h"
 #include "terrain/path/PathFinder.h"
 #include "task/PlayerTask.h"
+#include "task/IdleTask.h"
 #include "unit/CircuitUnit.h"
 #include "unit/enemy/EnemyUnit.h"
 #include "util/GameAttribute.h"
@@ -1254,11 +1255,24 @@ int CCircuitAI::UnitFinished(CCircuitUnit* unit)
 
 int CCircuitAI::UnitIdle(CCircuitUnit* unit)
 {
-	if (unit->IsStuck()) {
+	if (unit->IsDead() || unit->IsStuck()) {
 		return 0;  // signaling: OK
 	}
 
+	const auto id = unit->GetId();
 	for (auto& module : modules) {
+		// A previous handler may transfer/reassign the unit. Validate before
+		// calling any manager, including Builder before Factory's own guard.
+		if (GetTeamUnit(id) != unit || unit->IsDead()) return 0;
+		IUnitTask* task = unit->GetLiveTask();
+		if (task == nullptr) {
+			LOG("[TaskLifetime] event=unit-idle unit=%i raw=%p frame=%i", unit->GetId(),
+				static_cast<void*>(unit->GetTask()), lastFrame);
+			if (unit->GetManager() != nullptr) unit->GetManager()->GetIdleTask()->AssignTo(unit);
+			return 0;
+		}
+		if (task->IsDead()) return 0; // removal hooks have not finished Stop yet
+		auto retained = RetainReference(task);
 		module->UnitIdle(unit);
 	}
 

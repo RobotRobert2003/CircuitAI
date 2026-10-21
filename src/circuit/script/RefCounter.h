@@ -12,8 +12,23 @@
 #include "angelscript/include/angelscript.h"
 
 #include <atomic>
+#include <memory>
 
 namespace circuit {
+
+template<class T>
+struct ReleaseReference {
+    void operator()(T* object) const { object->Release(); }
+};
+
+// The caller validates lifetime before acquiring. Keeps a callback's receiver
+// alive even when reassignment drops its last unit/manager/script reference.
+template<class T>
+std::unique_ptr<T, ReleaseReference<T>> RetainReference(T* object)
+{
+    if (object != nullptr) object->AddRef();
+    return std::unique_ptr<T, ReleaseReference<T>>(object);
+}
 
 // O(1), allocation-free replacement of an owned intrusive reference. Retain
 // first so self-assignment is safe even after the external owner releases it.

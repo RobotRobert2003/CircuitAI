@@ -103,7 +103,7 @@ CCircuitUnit::~CCircuitUnit()
 {
 	// The script-visible task property must remain valid for the full unit
 	// lifetime, including after its manager removes a dead task from its list.
-	AssignOwnedReference(task, static_cast<IUnitTask*>(nullptr));
+	SetOwnedTask(nullptr);
 	delete command;
 	delete dgun;
 	delete weapon;
@@ -114,7 +114,10 @@ void CCircuitUnit::SetTask(IUnitTask* task)
 {
 	// Acquire before releasing: assignment to the same task is legal. Task
 	// assignee sets borrow units, so this strong edge introduces no cycle.
-	AssignOwnedReference(this->task, task);
+	if (!SetOwnedTask(task)) {
+		manager->GetCircuit()->LOG("[TaskLifetime] unit=%i refused unregistered task=%p", id, static_cast<void*>(task));
+		return;
+	}
 	SetTaskFrame(manager->GetCircuit()->GetLastFrame());
 	taskState = ETaskState::NONE;
 }

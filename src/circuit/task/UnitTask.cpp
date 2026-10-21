@@ -16,12 +16,26 @@
 #include "CircuitAI.h"
 #include "module/BuilderManager.h"
 #include "util/Utils.h"
+#include "util/LifetimeRegistry.h"
 
 #include "Log.h"
 
 namespace circuit {
 
 using namespace springai;
+
+namespace {
+LifetimeRegistry<IUnitTask>& TaskLifetimes()
+{
+	static LifetimeRegistry<IUnitTask> lifetimes;
+	return lifetimes;
+}
+}
+
+std::uint64_t IUnitTask::LiveGeneration(const IUnitTask* task)
+{
+	return TaskLifetimes().Find(task);
+}
 
 IUnitTask::IUnitTask(ITaskModule* mgr, Priority priority, Type type, int timeout)
 		: manager(mgr)
@@ -33,6 +47,7 @@ IUnitTask::IUnitTask(ITaskModule* mgr, Priority priority, Type type, int timeout
 		, isDead(false)
 {
 	lastTouched = manager->GetCircuit()->GetLastFrame();
+	TaskLifetimes().Insert(this);
 }
 
 IUnitTask::IUnitTask(ITaskModule* mgr, Type type)
@@ -45,10 +60,12 @@ IUnitTask::IUnitTask(ITaskModule* mgr, Type type)
 		, updCount(0)
 		, isDead(false)
 {
+	TaskLifetimes().Insert(this);
 }
 
 IUnitTask::~IUnitTask()
 {
+	TaskLifetimes().Erase(this);
 }
 
 void IUnitTask::ClearRelease()

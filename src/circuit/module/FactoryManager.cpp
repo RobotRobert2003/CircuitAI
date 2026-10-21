@@ -93,13 +93,42 @@ CFactoryManager::~CFactoryManager()
 {
 }
 
+IUnitTask* CFactoryManager::ValidateTask(CCircuitUnit* unit, const char* event)
+{
+	IUnitTask* task = unit->GetLiveTask();
+	// NIL intentionally keeps no assignee set (CNilTask::AssignTo).
+	if (task != nullptr && (task->GetType() == IUnitTask::Type::NIL
+		|| task->GetAssignees().contains(unit))) return task;
+	circuit->LOG("[TaskLifetime] event=%s unit=%i def=%s raw=%p live=%i frame=%i",
+		event, unit->GetId(), unit->GetCircuitDef()->GetDef()->GetName(),
+		static_cast<void*>(unit->GetTask()), task != nullptr, circuit->GetLastFrame());
+	return nullptr;
+}
+
+void CFactoryManager::DispatchIdle(CCircuitUnit* unit)
+{
+	if (unit->IsDead()) return;
+	IUnitTask* task = ValidateTask(unit, "idle");
+	if (task == nullptr) {
+		// The generation-checked setter never releases an expired pointer. Resume
+		// the existing idle scheduler instead of issuing an order in this callback.
+		if (unit->GetManager() == this) idleTask->AssignTo(unit);
+		return;
+	}
+	if (task->IsDead()) return; // task removal hooks may re-enter before Stop
+	// Builder-owned reclaim on a factory-owned nano is valid: preserve its
+	// current owner. Pin across callbacks that replace its final strong edge.
+	auto retained = RetainReference(task);
+	task->OnUnitIdle(unit);
+}
+
 void CFactoryManager::InitHandlers()
 {
 	/*
 	 * factory handlers
 	 */
 	auto factoryCreatedHandler = [this](CCircuitUnit* unit, CCircuitUnit* builder) {
-		if (unit->GetTask() == nullptr) {
+		if (unit->GetLiveTask() == nullptr) {
 			unit->SetManager(this);
 			nilTask->AssignTo(unit);
 			this->circuit->AddActionUnit(unit);
@@ -119,7 +148,7 @@ void CFactoryManager::InitHandlers()
 		}
 	};
 	auto factoryFinishedHandler = [this](CCircuitUnit* unit) {
-		if (unit->GetTask() == nullptr) {
+		if (unit->GetLiveTask() == nullptr) {
 			unit->SetManager(this);
 			this->circuit->AddActionUnit(unit);
 		}
@@ -161,14 +190,14 @@ void CFactoryManager::InitHandlers()
 		lastSwitchFrame = this->circuit->GetLastFrame();
 		EnableFactory(unit);
 	};
-	auto factoryIdleHandler = [](CCircuitUnit* unit) {
-		unit->GetTask()->OnUnitIdle(unit);
+	auto factoryIdleHandler = [this](CCircuitUnit* unit) {
+		DispatchIdle(unit);
 	};
 	auto factoryDestroyedHandler = [this](CCircuitUnit* unit, CEnemyInfo* attacker) {
 		completionRefills.erase(unit->GetId()); // includes transfers and ID reuse
-		IUnitTask* task = unit->GetTask();
-		task->OnUnitDestroyed(unit, attacker);  // can change task
-		unit->GetTask()->RemoveAssignee(unit);  // Remove unit from IdleTask
+		auto task = RetainReference(ValidateTask(unit, "factory-destroyed"));
+		if (task != nullptr && !task->IsDead()) task->OnUnitDestroyed(unit, attacker);
+		if (auto current = RetainReference(unit->GetLiveTask())) current->RemoveAssignee(unit);
 
 		// NOTE: Do not del if factory rotation wanted
 		DelFactory(unit->GetCircuitDef());
@@ -187,14 +216,14 @@ void CFactoryManager::InitHandlers()
 	 * armnanotc handlers
 	 */
 	auto assistCreatedHandler = [this](CCircuitUnit* unit, CCircuitUnit* builder) {
-		if (unit->GetTask() == nullptr) {
+		if (unit->GetLiveTask() == nullptr) {
 			unit->SetManager(this);
 			nilTask->AssignTo(unit);
 			this->circuit->AddActionUnit(unit);
 		}
 	};
 	auto assistFinishedHandler = [this](CCircuitUnit* unit) {
-		if (unit->GetTask() == nullptr) {
+		if (unit->GetLiveTask() == nullptr) {
 			unit->SetManager(this);
 			this->circuit->AddActionUnit(unit);
 		}
@@ -253,15 +282,15 @@ void CFactoryManager::InitHandlers()
 
 		UnitAdded(unit, UseAs::ASSIST);
 	};
-	auto assistIdleHandler = [](CCircuitUnit* unit) {
-		unit->GetTask()->OnUnitIdle(unit);
+	auto assistIdleHandler = [this](CCircuitUnit* unit) {
+		DispatchIdle(unit);
 	};
 	auto assistDestroyedHandler = [this](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetTask();
-		task->OnUnitDestroyed(unit, attacker);  // can change task
-		unit->GetTask()->RemoveAssignee(unit);  // Remove unit from IdleTask
+		auto task = RetainReference(ValidateTask(unit, "assist-destroyed"));
+		if (task != nullptr && !task->IsDead()) task->OnUnitDestroyed(unit, attacker);
+		if (auto current = RetainReference(unit->GetLiveTask())) current->RemoveAssignee(unit);
 
-		if (task->GetType() == IUnitTask::Type::NIL) {
+		if (task != nullptr && task->GetType() == IUnitTask::Type::NIL) {
 			return;
 		}
 		const AIFloat3& assPos = unit->GetPos(this->circuit->GetLastFrame());
@@ -956,7 +985,7 @@ int CFactoryManager::UnitCreated(CCircuitUnit* unit, CCircuitUnit* builder)
 		search->second(unit, builder);
 	}
 
-	if (unit->GetTask() == nullptr) {  // all units without handlers
+	if (unit->GetLiveTask() == nullptr) {  // all units without handlers
 		unit->SetManager(this);
 		nilTask->AssignTo(unit);
 		circuit->AddActionUnit(unit);
@@ -966,7 +995,8 @@ int CFactoryManager::UnitCreated(CCircuitUnit* unit, CCircuitUnit* builder)
 		return 0; //signaling: OK
 	}
 
-	IUnitTask* task = builder->GetTask();
+	auto retained = RetainReference(builder->GetLiveTask());
+	IUnitTask* task = retained.get();
 	if ((task == nullptr) || (task->GetType() != IUnitTask::Type::FACTORY)) {
 		return 0; //signaling: OK
 	}
@@ -1012,7 +1042,7 @@ int CFactoryManager::UnitFinished(CCircuitUnit* unit)
 			for (const auto id : refill) {
 				CCircuitUnit* factory = circuit->GetTeamUnit(id);
 				if (factory == nullptr || factory->IsDead() || factory->GetManager() != this
-					|| factory->GetTask() != idleTask || !factory->IsProductionEnabled()
+					|| factory->GetLiveTask() != idleTask || !factory->IsProductionEnabled()
 					|| !factoryScript->CanRefillImmediately(factory)) continue;
 				const auto ticket = ++nextRefillTicket;
 				completionRefills[id] = ticket;
@@ -1041,7 +1071,7 @@ void CFactoryManager::RefillCompletedFactory(CCircuitUnit::Id id, unsigned long 
 	completionRefills.erase(pending);
 	CCircuitUnit* factory = circuit->GetTeamUnit(id);
 	if (factory == nullptr || factory->IsDead() || factory->GetManager() != this
-		|| factory->GetTask() != idleTask || !factory->IsProductionEnabled()
+		|| factory->GetLiveTask() != idleTask || !factory->IsProductionEnabled()
 		|| !static_cast<CFactoryScript*>(script)->CanRefillImmediately(factory)) return;
 	// One simulation-thread turn lets the engine finish/pop the old build and
 	// deliver its idle notification before the new owner emits a command.
@@ -1050,10 +1080,12 @@ void CFactoryManager::RefillCompletedFactory(CCircuitUnit::Id id, unsigned long 
 	// and role are revalidated. No borrowed unit/task crosses the scheduler.
 	AssignTask(factory);
 	factory = circuit->GetTeamUnit(id);
-	if (factory != nullptr && !factory->IsDead() && factory->GetManager() == this
-		&& factory->GetTask() != idleTask && factory->GetTask()->GetType() != IUnitTask::Type::PLAYER) {
-		if (auto* next = dynamic_cast<CRecruitTask*>(factory->GetTask())) next->SetCompletionRefill(true);
-		factory->GetTask()->Start(factory);
+	if (factory != nullptr && !factory->IsDead() && factory->GetManager() == this) {
+		auto nextTask = RetainReference(ValidateTask(factory, "refill"));
+		if (nextTask == nullptr || nextTask->IsDead() || nextTask.get() == idleTask
+			|| nextTask->GetType() == IUnitTask::Type::PLAYER) return;
+		if (auto* next = dynamic_cast<CRecruitTask*>(nextTask.get())) next->SetCompletionRefill(true);
+		nextTask->Start(factory);
 	}
 }
 
@@ -1674,7 +1706,8 @@ void CFactoryManager::DisableFactory(CCircuitUnit* unit)
 		}
 	};
 
-	if (unit->GetTask()->GetType() == IUnitTask::Type::NIL) {
+	IUnitTask* currentTask = unit->GetLiveTask();
+	if (currentTask != nullptr && currentTask->GetType() == IUnitTask::Type::NIL) {
 		checkBuilderFactory(circuit->GetLastFrame());
 		return;
 	}
@@ -1923,8 +1956,10 @@ void CFactoryManager::UpdateEnemyReclaim()
 	for (const auto& entry : assists) enemyReclaimUnits.push_back(entry.first->GetId());
 	for (int id : enemyReclaimUnits) {
 		CCircuitUnit* unit = circuit->GetTeamUnit(id);
-		if (unit == nullptr || unit->IsDead() || unit->GetTask() == nullptr) continue;
-		IUnitTask* current = unit->GetTask();
+		if (unit == nullptr || unit->IsDead()) continue;
+		auto retained = RetainReference(ValidateTask(unit, "enemy-reclaim"));
+		IUnitTask* current = retained.get();
+		if (current == nullptr || current->IsDead()) continue;
 		CCircuitDef* def = unit->GetCircuitDef();
 		if (!enemy_reclaim::EligibleTurret(def->IsMobile(), def->IsAssist(), def->IsAbleToReclaim(),
 				!unit->GetUnit()->IsBeingBuilt(), current->GetType() == IUnitTask::Type::PLAYER)) continue;
@@ -1957,7 +1992,7 @@ void CFactoryManager::UpdateEnemyReclaim()
 			updateTasks.push_back(active);
 			TaskAdded(active);
 			unit = circuit->GetTeamUnit(id);
-			if (unit == nullptr || unit->IsDead() || active->IsDead() || unit->GetTask() != current) {
+			if (unit == nullptr || unit->IsDead() || active->IsDead() || unit->GetLiveTask() != current) {
 				if (!active->IsDead()) AbortTask(active);
 				continue;
 			}
@@ -1967,7 +2002,7 @@ void CFactoryManager::UpdateEnemyReclaim()
 			current->RemoveAssignee(unit);
 			unit = circuit->GetTeamUnit(id);
 			if (unit == nullptr || unit->IsDead() || active->IsDead()
-				|| unit->GetTask() != oldManager->GetIdleTask()) {
+				|| unit->GetLiveTask() != oldManager->GetIdleTask()) {
 				if (!active->IsDead()) AbortTask(active);
 				continue;
 			}
@@ -1978,7 +2013,7 @@ void CFactoryManager::UpdateEnemyReclaim()
 		} else {
 			active->ReclaimEnemy(unit, targetId);
 		}
-		if (unit->GetTask() != active || active->IsDead() || active->GetPriority() != IUnitTask::Priority::NOW) ++enemyReclaimMisses;
+		if (unit->GetLiveTask() != active || active->IsDead() || active->GetPriority() != IUnitTask::Priority::NOW) ++enemyReclaimMisses;
 	}
 }
 
@@ -1987,7 +2022,8 @@ void CFactoryManager::Watchdog()
 	ZoneScopedN(__PRETTY_FUNCTION__);
 
 	auto checkIdler = [this](CCircuitUnit* unit) {
-		if (unit->GetTask()->GetType() == IUnitTask::Type::PLAYER) {
+		IUnitTask* task = unit->GetLiveTask();
+		if (task != nullptr && task->GetType() == IUnitTask::Type::PLAYER) {
 			return;
 		}
 		if (!this->circuit->GetCallback()->Unit_HasCommands(unit->GetId())) {

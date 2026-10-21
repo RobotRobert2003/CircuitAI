@@ -84,15 +84,19 @@ void CIdleTask::Update()
 		if (ass->IsDead() || (units.find(ass) == units.end())) {
 			continue;  // left the idle task while an earlier unit was assigned
 		}
-		if (ass->GetTask() != this) {
+		if (ass->GetLiveTask() != this) {
 			// Never restart another manager's active task through a stale idle
 			// membership. Erase bookkeeping directly: RemoveAssignee clears actions
 			// and would disrupt the legitimate owner we are protecting.
 			units.erase(ass);
 			continue;
 		}
-		manager->AssignTask(ass);  // should RemoveAssignee() on AssignTo()
-		ass->GetTask()->Start(ass);
+		const auto id = ass->GetId();
+		manager->AssignTask(ass);  // script may transfer or reassign this unit
+		ass = manager->GetCircuit()->GetTeamUnit(id);
+		if (ass == nullptr || ass->IsDead()) continue;
+		auto current = RetainReference(ass->GetLiveTask());
+		if (current != nullptr && !current->IsDead()) current->Start(ass);
 	}
 }
 

@@ -68,8 +68,14 @@ void ITaskModule::Release()
 
 void ITaskModule::AssignTask(CCircuitUnit* unit, IUnitTask* task)
 {
-	if (unit->GetTask()->IsEnemyReclaim() && task->GetType() != IUnitTask::Type::PLAYER) {
-		if (task != unit->GetTask() && task->GetAssignees().empty()) task->GetManager()->DiscardUnusedTask(task);
+	auto current = RetainReference(unit->GetLiveTask());
+	auto next = RetainReference(IUnitTask::LiveGeneration(task) != 0 ? task : nullptr);
+	if (current == nullptr || next == nullptr || next->IsDead()) {
+		GetCircuit()->LOG("[TaskLifetime] event=assign unit=%i invalid current or replacement", unit->GetId());
+		return;
+	}
+	if (current->IsEnemyReclaim() && task->GetType() != IUnitTask::Type::PLAYER) {
+		if (task != current.get() && task->GetAssignees().empty()) task->GetManager()->DiscardUnusedTask(task);
 		return;
 	}
 	{
@@ -80,18 +86,29 @@ void ITaskModule::AssignTask(CCircuitUnit* unit, IUnitTask* task)
 					int(unit->GetTask()->GetType()), int(task->GetType()));
 		}
 	}
-	unit->GetTask()->RemoveAssignee(unit);
+	const auto id = unit->GetId();
+	current->RemoveAssignee(unit);
+	if (GetCircuit()->GetTeamUnit(id) != unit || unit->IsDead() || next->IsDead()) return;
 	task->AssignTo(unit);
-	task->Start(unit);
+	if (GetCircuit()->GetTeamUnit(id) == unit && !unit->IsDead() && unit->GetLiveTask() == task && !next->IsDead()) task->Start(unit);
 }
 
 void ITaskModule::AssignTask(CCircuitUnit* unit)
 {
-	if (unit->GetTask()->IsEnemyReclaim()) return;
-	IUnitTask* task = MakeTask(unit);
-	if (task == nullptr) {
+	auto current = RetainReference(unit->GetLiveTask());
+	if (current == nullptr) {
+		GetCircuit()->LOG("[TaskLifetime] event=make-task unit=%i invalid current task", unit->GetId());
 		return;
 	}
+	if (current->IsEnemyReclaim()) return;
+	const auto id = unit->GetId();
+	IUnitTask* task = MakeTask(unit);
+	if (task == nullptr || IUnitTask::LiveGeneration(task) == 0) {
+		return;
+	}
+	auto next = RetainReference(task);
+	if (GetCircuit()->GetTeamUnit(id) != unit || unit->IsDead()
+		|| unit->GetLiveTask() != current.get() || next->IsDead()) return;
 	if (task->GetManager() != this) {
 		// Script returned a task owned by another manager (seen: a factory Wait for a
 		// nuke silo). IUnitTask::AssignTo only removes the unit from the task owner's
