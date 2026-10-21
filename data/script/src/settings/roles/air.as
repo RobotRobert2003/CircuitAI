@@ -36,6 +36,10 @@ namespace Air {
             int MaxT1EconomyBuilders = 40;
             int MaxT2EconomyBuilders = 24;
             float HomeMexRadius = 1400.0f;
+            // D-352: race-won spots (summits, islands) the team owns through the theatre rules.
+            float TheatreMexMetal = 6.0f;      // metal income before a con air leaves the home area for one (AIR sits near 7 for the first ten minutes of an 8v8)
+            float TheatreMexRadius = 5000.0f;  // from the start
+            float TheatreMexThreat = 0.5f;     // skip a spot whose enemy clock has passed while air threat there exceeds this
             float HomeEconomyRadius = 2400.0f;
             float HomeDefenceRadius = 1500.0f;
             float AntiNukeCoreRadius = 800.0f;

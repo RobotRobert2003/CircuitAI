@@ -8,6 +8,12 @@ namespace Tactical {
             // without a factory task. Keep normal productive openings intact.
             float OpeningRecoveryRadius = 1024.0f;
             int OpeningRecoveryTimeoutSeconds = 60;
+            // D-352: a race-won spot the team owns beyond the home area (a summit, an
+            // island only hovers and aircraft reach) is ordered by an idle hover
+            // constructor once income allows, one remote job at a time.
+            float TheatreMexMetal = 8.0f;      // metal income before a hover constructor leaves the home area for one
+            float TheatreMexRadius = 6000.0f;  // from the start (Supreme's west summits are 5,600 elmos from the TACTICAL start)
+            float TheatreMexThreat = 0.5f;     // skip a spot whose enemy clock has passed while surface threat there exceeds this
             /******************** SEA BASE SETTINGS ********************/
             // All settings applied to sea role at game start, logic can change throughout game
             float AllyRange = 3000.0f;

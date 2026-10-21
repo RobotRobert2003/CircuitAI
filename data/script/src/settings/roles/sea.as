@@ -380,6 +380,7 @@ namespace Sea {
             float SeaplaneMetalReserve = 500.0f; // retained in addition to the full platform cost
             float SeaplaneEnergyReserve = 1000.0f;
             float NearbyMexRadius = 2400.0f; // fixed home harbor radius, not an ever-moving expansion centre
+            float HomeMexRadius = 0.0f; // D-352: SEA's land spots around its commander (0 = the shared MexClaim::HomeRadius)
             bool ExpandMexClusters = true; // SEA only, independent of experimental economy/layouts
             float ExpansionMexRadius = 3600.0f; // follows the constructor; no home-radius or income ceiling
             float ExpansionClusterRadius = 600.0f;

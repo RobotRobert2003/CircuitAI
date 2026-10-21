@@ -462,6 +462,15 @@ static float CCircuitAI_Tidal(CCircuitAI* circuit) { return circuit->GetMap()->G
 static float CCircuitAI_IncomeMultiplier(CCircuitAI* circuit) { return circuit->GetGame()->GetTeamIncomeMultiplier(circuit->GetTeamId()); }
 static int CCircuitAI_MetalSpots(CCircuitAI* circuit) { return (int)circuit->GetMetalManager()->GetSpots().size(); }
 // Read-only strategic survey; reuse the resource manager's engine feature scan.
+// D-352: spot enumeration for the roles' value-ordered expansion and the territory overlay.
+static AIFloat3 CCircuitAI_MetalSpot(CCircuitAI* circuit, int index) {
+	const auto& spots = circuit->GetMetalManager()->GetSpots();
+	return (index >= 0 && std::size_t(index) < spots.size()) ? spots[index].position : AIFloat3(-1.f, 0.f, -1.f);
+}
+static float CCircuitAI_MetalSpotIncome(CCircuitAI* circuit, int index) {
+	const auto& spots = circuit->GetMetalManager()->GetSpots();
+	return (index >= 0 && std::size_t(index) < spots.size()) ? spots[index].income : 0.f;
+}
 static int CCircuitAI_GeoSpots(CCircuitAI* circuit) { return (int)circuit->GetEnergyManager()->GetSpots().size(); }
 static AIFloat3 CCircuitAI_GeoSpot(CCircuitAI* circuit, int index) {
 	const auto& spots = circuit->GetEnergyManager()->GetSpots();
@@ -1415,6 +1424,8 @@ void CInitScript::RegisterMgr()
 	r = engine->RegisterObjectMethod("CCircuitAI", "float GetWindCur() const", asFUNCTION(CCircuitAI_WindCur), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "float GetTidalStrength() const", asFUNCTION(CCircuitAI_Tidal), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "int GetMetalSpotCount() const", asFUNCTION(CCircuitAI_MetalSpots), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CCircuitAI", "AIFloat3 GetMetalSpot(int) const", asFUNCTION(CCircuitAI_MetalSpot), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-352
+	r = engine->RegisterObjectMethod("CCircuitAI", "float GetMetalSpotIncome(int) const", asFUNCTION(CCircuitAI_MetalSpotIncome), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-352
 	r = engine->RegisterObjectMethod("CCircuitAI", "int GetGeoSpotCount() const", asFUNCTION(CCircuitAI_GeoSpots), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "AIFloat3 GetGeoSpot(int) const", asFUNCTION(CCircuitAI_GeoSpot), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "float GetIncomeMultiplier() const", asFUNCTION(CCircuitAI_IncomeMultiplier), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);

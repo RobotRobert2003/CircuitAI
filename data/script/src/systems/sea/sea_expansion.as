@@ -218,10 +218,42 @@ namespace SeaExpansion {
         IBuilderTask@ mex=null;
         array<AIFloat3> excluded;
         const float nearby=Global::RoleSettings::Sea::NearbyMexRadius;
+        // D-352: the owned-spot list in value-per-second order is the candidate
+        // set first (section 3.6 of the proposal): the yard's own shelf before
+        // the far middle of the sea, whatever radius the ship happens to be in.
+        // A spot whose enemy clock is earlier than our arrival is still taken,
+        // under the same escort and safe-approach admission, after the rest.
+        if (Team::MexClaim::Enabled()) {
+            array<AIFloat3> owned; array<float> value;
+            const int spotCount=ai.GetMetalSpotCount();
+            for (int i=0;i<spotCount;++i) {
+                const AIFloat3 p=ai.GetMetalSpot(i);
+                if (p.x<0 || aiEconomyMgr.MexSpotOwner(p)!=ai.teamId || (aiEconomyMgr.MexTheatre(p)&2)==0) continue;
+                float v=aiEconomyMgr.MexSpotValue(p,ai.teamId);
+                if (aiEconomyMgr.MexSpotEnemySeconds(p)*SECOND<float(ai.frame)) v*=0.5f;  // contested water after the home shelf
+                owned.insertLast(p); value.insertLast(v);
+            }
+            // insertion sort, descending value; a few dozen spots at most
+            for (uint a=1;a<owned.length();++a) { uint b=a; while (b>0 && value[b-1]<value[b]) { const float tv=value[b]; value[b]=value[b-1]; value[b-1]=tv; const AIFloat3 tp=owned[b]; owned[b]=owned[b-1]; owned[b-1]=tp; --b; } }
+            int tried=0;
+            for (uint i=0;i<owned.length() && tried<Global::RoleSettings::Sea::ExpansionCandidates;++i) {
+                @task=aiEconomyMgr.EnqueueMexAvoiding(u,owned[i],SQUARE_SIZE*8,true,excluded);
+                @mex=cast<IBuilderTask>(task);
+                if (mex is null) continue;
+                ++tried;
+                const AIFloat3 candidate=mex.GetBuildPos();
+                const bool usable=aiEconomyMgr.IsMexTaskUsable(task);
+                if (usable && aiTerrainMgr.CanReachAt(u,candidate,u.circuitDef.GetBuildDistance())
+                    && SafeApproach(from,candidate) && Escorted(candidate)) break;
+                excluded.insertLast(candidate);
+                if (mex.target is null && mex.GetUnits().length()==0) aiBuilderMgr.AbortTask(task);
+                @mex=null; @task=null;
+            }
+        }
         // Bounded candidate attempts. Exclusion applies to adoption as well as
         // new spot claims, so an unsafe unfinished mex cannot mask another site.
         // Rejected unassigned tasks are released; another worker's task is not.
-        for (int attempt=0;attempt<Global::RoleSettings::Sea::ExpansionCandidates;++attempt) {
+        for (int attempt=0;mex is null && attempt<Global::RoleSettings::Sea::ExpansionCandidates;++attempt) {
             if (MapHelpers::SqDist(from,home)<=nearby*nearby)
                 @task=aiEconomyMgr.EnqueueMexAvoiding(u,home,nearby,true,excluded);
             if (task is null) @task=aiEconomyMgr.EnqueueMexAvoiding(u,from,Global::RoleSettings::Sea::ExpansionMexRadius,true,excluded);
