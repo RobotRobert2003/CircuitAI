@@ -5,6 +5,7 @@
 #include "../../global.as"
 #include "../../helpers/common/generic_helpers.as"
 #include "../../helpers/units/unit_helpers.as"
+#include "../../helpers/math/placement_math.as"
 #include "../../manager/builder.as"
 #include "../../systems/construction/layout.as"
 #include "../../systems/combat/spam.as"
@@ -1046,6 +1047,7 @@ namespace TechWeapons {
     bool Site(Slot@ s, CCircuitDef@ d, AIFloat3& out at)
     {
         at = s.pos;
+        const int footprintX = d.GetFootprintX(), footprintZ = d.GetFootprintZ();
         if (IsTorp(s.role)) {
             const float r = d.GetMaxRange(RANGE_WATER) > 0.0f ? d.GetMaxRange(RANGE_WATER) : 500.0f;
             if (!aiBattle.TorpedoSiteOK(d, at, r, s.role == "dcharge")) return false;
@@ -1057,6 +1059,14 @@ namespace TechWeapons {
             for (int k = 0; k < (ring == 0 ? 1 : 8); ++k) {
                 const float a = 0.7854f * k;
                 AIFloat3 p(s.pos.x + cos(a) * 48.0f * ring, 0.0f, s.pos.z + sin(a) * 48.0f * ring);
+                // Facing is zero throughout Site/Order. Snap before lane and
+                // wall checks: otherwise Order can reject the snapped site and
+                // every builder ask reserves/releases it again without setting
+                // orderedFrame. Constant work per candidate, no cached state or
+                // reservation mutations; rejected sites keep searching this ring.
+                // Regression: tests/placement_math_tests.as lane-boundary cases.
+                p.x = PlacementMath::SnapBuildCoordinate(p.x, footprintX);
+                p.z = PlacementMath::SnapBuildCoordinate(p.z, footprintZ);
                 if (!OnMap(p) || aiBattle.IsFriendlyLane(p) || !WallHelpers::Allowed(d, p)) continue;
                 if (IsTorp(s.role) && ring > 0) {
                     const float r = d.GetMaxRange(RANGE_WATER) > 0.0f ? d.GetMaxRange(RANGE_WATER) : 500.0f;

@@ -4,6 +4,17 @@ namespace PlacementMath {
     // Zero/One are integer identities; ZeroValue/UnitValue are float identities.
     const float ZeroValue = 0.0f;
 
+    // Nonnegative map coordinates; footprint is in 16-elmo blocking cells.
+    // Matches CTerrainManager::Pos2BuildPos: odd footprints have an 8-elmo
+    // centre offset. Keep policy checks on the same site the engine reserves.
+    float SnapBuildCoordinate(float coordinate, int footprint)
+    {
+        if (coordinate < ZeroValue || footprint <= 0) return -1.0f;
+        const bool offset = (footprint & 1) != 0;
+        const float shifted = offset ? coordinate : coordinate + 8.0f;
+        return float(int(shifted / 16.0f)) * 16.0f + (offset ? 8.0f : ZeroValue);
+    }
+
     bool FriendlyTerritory(float allyDistanceSquared, float enemyDistanceSquared)
     {
         return allyDistanceSquared >= ZeroValue && enemyDistanceSquared >= ZeroValue
