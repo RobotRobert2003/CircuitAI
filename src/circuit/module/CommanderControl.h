@@ -188,6 +188,7 @@ private:
     // Priority D-gun override (CommanderIntercept.cpp), ahead of the T3 plan.
     std::set<int> priorityDefs; bool priorityResolved=false;
     bool PriorityDGun(CCircuitUnit* unit,State& state,int frame);
+    bool PriorityApproach(CCircuitUnit* unit,State& state,const commander::Contact& target,float distance,int frame);
     bool FallbackActive(const State& state,int frame) const { return state.fallback && frame<state.fallbackUntil; }
     // Engine reachability indexes sectors by position without bounds checks
     // (KI register, GetClosestSector). Reject garbage/off-map points first.

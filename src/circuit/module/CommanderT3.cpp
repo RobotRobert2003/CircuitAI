@@ -492,7 +492,9 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
     const bool lockout=unit->GetUnit()->GetRulesParamFloat("cannotcloak",0)>0;
     // Before the first shot the plan needs concealment it can afford; known
     // detection hands the commander back to the fallback (it is visible).
-    if(!engaged && spendable<shot+cap.cloakMoving*options.escapeSeconds) { Decline(unit,s,*target,frame,"funding"); return false; }
+    // Already detected: cloak buys nothing, so the shot alone is the funding
+    // (White Fire 2026-10-20: 63 funding declines re-planned every 1-3 s).
+    if(!engaged && spendable<shot+(safeHere?cap.cloakMoving*options.escapeSeconds:0.f)) { Decline(unit,s,*target,frame,"funding"); return false; }
     s.fundingBudget=0;
     // Revealed (radar, proximity, a hidden camera): press on only when the
     // remaining run-in in the open is survivable by the exposure model;
@@ -562,7 +564,10 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         std::max(0.f,targetReach+50.f-nearest)/std::max(1.f,cap.speed));
     const auto& explosion=DefinitionFor(targetDef);
     const int armor=def->GetDef()->GetArmorType();
-    const float blast=explosion.blastDamage.empty()?0.f:commander::BlastDamage(
+    // The death blast only follows a killing shot (White Fire 2026-10-20: a
+    // 2-shot Juggernaut was charged its blast on the first shot, 14 refusals).
+    const bool killing=target->health<=target->damage*1.15f;
+    const float blast=!killing || explosion.blastDamage.empty()?0.f:commander::BlastDamage(
         explosion.blastDamage[std::min(size_t(std::max(0,armor)),explosion.blastDamage.size()-1)],
         explosion.blastRadius,explosion.blastEdge,nearest-cap.radius);
     // D-gun volumetric hits can kill earlier than the conservative shot count.

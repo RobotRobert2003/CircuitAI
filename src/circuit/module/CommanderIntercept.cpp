@@ -12,6 +12,7 @@
 #include "spring/SpringCallback.h"
 #include "spring/SpringUnit.h"
 #include "spring/SpringMap.h"
+#include "terrain/TerrainManager.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 #include "Log.h"
@@ -24,6 +25,7 @@ namespace circuit {
 using springai::AIFloat3;
 using commander::Point;
 static Point P(const AIFloat3& p) { return {p.x,p.z}; }
+static AIFloat3 F(Point p,float y=0) { return {p.x,y,p.z}; }
 
 const CCommanderControl::Definition& CCommanderControl::DefinitionFor(CCircuitDef* def) {
     auto [it,inserted]=definitions.try_emplace(def->GetId());
@@ -144,7 +146,8 @@ bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& 
             const auto& explosion=DefinitionFor(targetDef);
             if(!explosion.t3 && !s.afusEngagement) continue;
             t3=true;
-            if(!explosion.blastDamage.empty()) blast+=commander::BlastDamage(
+            // Only a killing hit sets off the death blast.
+            if(!explosion.blastDamage.empty() && c.health<=c.damage*1.15f) blast+=commander::BlastDamage(
                 explosion.blastDamage[std::min(size_t(armor),explosion.blastDamage.size()-1)],
                 explosion.blastRadius,explosion.blastEdge,commander::Length(hit-P(pos))-cap.radius);
         }
@@ -209,13 +212,20 @@ bool CCommanderControl::PriorityDGun(CCircuitUnit* unit,State& s,int frame) {
     // Nearest listed unit in reach: the shot's lane must pass through its body
     // (half its radius past the D-gun's end), on the surface, and no friendly
     // commander in the lane. Other friendlies in the lane are accepted losses.
+    // Out of reach but within t3_distance, the nearest one is closed on
+    // directly instead (no hidden-station, funding or screen declines).
     const commander::Contact* target=nullptr; commander::Line best; float nearest=1e9f;
+    const commander::Contact* chase=nullptr; float chaseDistance=std::min(options.scan,options.t3Distance);
     for(const auto& c:contacts) {
         if(c.friendly || c.blocker || !c.targetable) continue;
         auto* enemy=ai->GetEnemyInfo(c.id);
         if(!enemy || !enemy->GetCircuitDef() || !priorityDefs.count(enemy->GetCircuitDef()->GetId())) continue;
         const float distance=commander::Length(c.pos-P(pos));
-        if(distance>range+c.radius*.5f || distance>=nearest) continue;
+        if(distance>range+c.radius*.5f) {
+            if(distance<chaseDistance) { chaseDistance=distance; chase=&c; }
+            continue;
+        }
+        if(distance>=nearest) continue;
         if(std::abs(c.height-std::max(0.f,pos.y))>range*.5f) continue;
         const Point lead=c.pos+c.velocity*(distance/speed);
         commander::Line line; line.direction=commander::Normal(lead-P(pos));
@@ -233,7 +243,10 @@ bool CCommanderControl::PriorityDGun(CCircuitUnit* unit,State& s,int frame) {
         line.target=c.id; line.value=c.cost; line.requiredHit=true;
         target=&c; best=line; nearest=distance;
     }
-    if(!target) { s.priorityInReach=-1; return false; }
+    if(!target) {
+        s.priorityInReach=-1;
+        return chase!=nullptr && PriorityApproach(unit,s,*chase,chaseDistance,frame);
+    }
     if(s.priorityTarget!=target->id || s.priorityInReach<0) {
         s.priorityTarget=target->id; s.priorityInReach=frame;
         ai->LOG("[CommanderPriority] unit=%i target=%i def=%s action=in_reach distance=%.0f range=%.0f frame=%i",
@@ -264,6 +277,47 @@ bool CCommanderControl::PriorityDGun(CCircuitUnit* unit,State& s,int frame) {
     s.priorityShot=frame;
     ai->LOG("[CommanderPriority] unit=%i target=%i action=fire distance=%.0f in_reach=%.1fs energy=%.0f frame=%i",
         unit->GetId(),target->id,nearest,float(frame-s.priorityInReach)/FRAMES_PER_SEC,bank,frame);
+    return true;
+}
+
+bool CCommanderControl::PriorityApproach(CCircuitUnit* unit,State& s,const commander::Contact& target,float distance,int frame) {
+    auto* def=unit->GetCircuitDef();
+    const auto& cap=ai->GetMilitaryManager()->GetRangedWorld()->CapabilitiesFor(def);
+    const float shot=def->GetDGunDef()->GetCostE(),bank=ai->GetEconomyManager()->GetEnergyCur();
+    if(bank<shot) return false; // nothing to shoot with on arrival: ordinary withdrawal
+    const AIFloat3 pos=unit->GetPos(frame);
+    const float range=unit->GetDGunRange()-12;
+    const float speed=std::max(1.f,cap.speed);
+    // Meet it where it will be: lead by our travel time, stand range-40 off
+    // its centre on our side (the T3 plan's own station distance).
+    const Point lead=target.pos+target.velocity*std::min(3.f,distance/speed);
+    AIFloat3 goal=F(lead+commander::Normal(P(pos)-lead)*std::max(0.f,range-40.f));
+    goal.y=ai->GetMap()->GetElevationAt(goal.x,goal.z);
+    if(goal.y<0 || !OnMap(goal) || !ai->GetTerrainManager()->CanReachAt(unit,goal,64)) {
+        goal=F(target.pos); goal.y=ai->GetMap()->GetElevationAt(goal.x,goal.z);
+        if(goal.y<0 || !OnMap(goal) || !ai->GetTerrainManager()->CanReachAt(unit,goal,64)) return false;
+    }
+    auto* task=dynamic_cast<CCommanderTask*>(unit->GetTask());
+    if(!task) {
+        auto* current=unit->GetTask();
+        task=ai->GetBuilderManager()->EnqueueCommander(current);
+        ai->GetBuilderManager()->AssignTask(unit,task);
+        if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return false; }
+        s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); s.failed=0; ++operation;
+        unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
+        TRY_UNIT(ai,unit,unit->CmdStop();)
+    }
+    if(task->GetAssignees().size()!=1 || !task->GetAssignees().count(unit) || unit->GetDGunAct()) {
+        ai->LOG("[INVARIANT] INV-214 commander priority approach has competing owner unit=%i",unit->GetId());
+        task->Resume(unit); return true;
+    }
+    // Cloak the walk in when the bank also covers the shot; otherwise walk in
+    // visible. Either way the commander keeps closing.
+    const bool cloak=cap.cloak && bank>=shot+cap.cloakMoving*(distance/speed+1.f);
+    Conceal(unit,s,cloak); Transition(unit,s,Mode::APPROACH,frame);
+    Move(unit,s,goal,frame);
+    if(frame%30<3) ai->LOG("[CommanderPriority] unit=%i target=%i action=approach distance=%.0f goal=%.0f,%.0f cloak=%i frame=%i",
+        unit->GetId(),target.id,distance,goal.x,goal.z,int(cloak),frame);
     return true;
 }
 
