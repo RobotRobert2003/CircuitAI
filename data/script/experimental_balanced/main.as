@@ -55,6 +55,7 @@ namespace Main {
 
 	void AiMain()
 	{
+        ThugFireAtWill::Enabled = true;
 		Global::RoleSettings::MexOwnershipEnabled = true;
 		// Also initialize before setupMap (and when reconstructing a saved game).
 		aiEconomyMgr.SetMexOwnership(true, Global::RoleSettings::MexOwnershipSeconds);
@@ -128,6 +129,7 @@ namespace Main {
 		Military::UpdateEnemyCostCache();
         Aggression::Update();
         CommanderCombat::Update();
+        ThugFireAtWill::Tick(); // restore OPEN after task handovers (Thug/Mace only)
 
 		if (Global::profileController !is null) {
 			Global::profileController.MainUpdate();

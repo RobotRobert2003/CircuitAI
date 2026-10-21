@@ -1,3 +1,4 @@
+#include "../systems/combat/thug_fire_at_will.as"
 #include "../define.as"
 #include "../unit.as"
 #include "../helpers/common/generic_helpers.as"
@@ -113,6 +114,7 @@ namespace Military {
 
 	void AiUnitAdded(CCircuitUnit@ unit, Unit::UseAs usage)
 	{
+		ThugFireAtWill::UnitAdded(unit); // preserve the working-copy unit fire-state fallback
 		Team::Ferry::OnUnitAdded(unit);   // claim a transport, ours or a gift
 
 		// Delegate to role-specific handler if registered
