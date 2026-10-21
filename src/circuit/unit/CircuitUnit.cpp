@@ -29,6 +29,9 @@
 #include "WrappWeaponMount.h"
 
 namespace circuit {
+namespace {
+constexpr int COMMANDER_TARGET_RESEND_SECONDS = 3;
+}
 
 using namespace springai;
 
@@ -421,7 +424,7 @@ void CCircuitUnit::SetCommanderTarget(int commId, int frame)
     }
     // BAR keeps the list across MOVE/FIGHT; STOP is repaired in CmdStop. The
     // slow resend covers orders from elsewhere (player, gadgets).
-    if (commId == commanderTarget && frame < commanderFrame + FRAMES_PER_SEC * 3) return;
+    if (commId == commanderTarget && frame < commanderFrame + FRAMES_PER_SEC * COMMANDER_TARGET_RESEND_SECONDS) return;
     const bool acquired = commId != commanderTarget;
     commanderTarget = commId;
     commanderFrame = frame;

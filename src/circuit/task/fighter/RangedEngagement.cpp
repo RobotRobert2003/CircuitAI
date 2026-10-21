@@ -24,6 +24,10 @@
 #include <cstdlib>
 
 namespace circuit {
+namespace {
+constexpr float POKE_DIRECTION_MIN_LENGTH_SQ = .5f;
+constexpr float PRESSED_STATIC_TARGET_MULTIPLIER = 2.f;
+}
 using springai::AIFloat3;
 static ranged::Point P(const AIFloat3& p) { return {p.x,p.z}; }
 static const bool trace = std::getenv("CIRCUIT_RANGED_TRACE") != nullptr;
@@ -39,7 +43,11 @@ CRangedEngagement::CRangedEngagement(CCircuitAI* ai,IUnitTask* owner,CCircuitUni
     // Priority targets are explicit user targets in BAR and can fire on HOLD.
     // Automatic fire would bypass precision/splash selection while approaching
     // the firing band (the engine includes target radius in reach).
-    unit->TrySetFireState(CCircuitDef::HOLD);
+    const auto& policy=unit->GetCircuitDef()->GetRangedPolicy();
+    // Fast-reload Thugs/Maces otherwise remain silent between priority picks.
+    // The individual controller retains precision HOLD behavior.
+    const bool open=policy.coordinated && policy.fireAtWill;
+    unit->TrySetFireState(open?CCircuitDef::FireType::OPEN:CCircuitDef::HOLD);
     ai->LOG("RANGED: assigned %s(%d) weapons=%u",unit->GetCircuitDef()->GetDef()->GetName(),id,unsigned(caps.weapons.size()));
     if(caps.weapons.empty()) ai->LOG("[INVARIANT] INV-147 ranged unit %d has no compatible loaded weapon",id);
     if(trace) for(const auto& w:caps.weapons) ai->LOG("RANGED: weapon unit=%d index=%d range=%.1f speed=%.3f gravity=%.3f category=%d forward=%d",id,w.index,w.range,w.speed,w.gravity,w.category,int(w.forward));
@@ -454,13 +462,13 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
         phase=fraction<1.f?1:0;
         const float reach=world.Range(caps.weapons.front(),pos,closest->pos)*fraction;
         AIFloat3 away=pos-closest->pos; away.Normalize2D();
-        if(away.SqLength2D()<.5f) away=group.back;
+        if(away.SqLength2D()<POKE_DIRECTION_MIN_LENGTH_SQ) away=group.back;
         point=closest->pos+away*reach;
     }
     if(group.sustainedRush) { danger=nullptr; incoming=nullptr; withdrawalUntil=0; }
     if(danger) {
         AIFloat3 away=pos-danger->pos; away.Normalize2D();
-        if(away.SqLength2D()<.5f) away=group.back;
+        if(away.SqLength2D()<POKE_DIRECTION_MIN_LENGTH_SQ) away=group.back;
         const bool disengage=!group.committed || group.mode==cohort::Mode::WITHDRAW || !danger->mobile
             || danger->def->IsEnemyRoleAny(CCircuitDef::COMM) || danger->def->IsAbleToReclaim()
             || (!(policy.supportAllies && group.supporting)
@@ -748,7 +756,7 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             if(policy.mode==RangedPolicy::Mode::BOMBARDMENT && !c.mobile) value*=1.5f;
             if(closing && closing->id==c.id) value*=2.f;
             // Owner 2026-10-19: the tower shooting at a pressing hull comes first.
-            if(CRangedWorld::Pressed(c,policy.pressStatic)) value*=2.f;
+            if(CRangedWorld::Pressed(c,policy.pressStatic)) value*=PRESSED_STATIC_TARGET_MULTIPLIER;
             if(c.id==target && (heldScoreFrame!=frame || value>heldScore)) { heldScore=value; heldScoreFrame=frame; }
             if(value>bestScore || (value==bestScore && (best<0 || c.id<contacts[best].id))) {
                 best=i; bestWeapon=int(wi); bestScore=value; bestDamage=damage;

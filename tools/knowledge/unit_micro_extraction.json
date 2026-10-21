@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "repository": "S3KCentrifugal/CircuitAI",
+  "source_branch": "pending-all-76min2",
+  "source_commit": "dd0fdf9d28d06c0f947a0a924d96f1107d05130f",
+  "base_branch": "smrt-test",
+  "base_commit": "d517235bbca34fe3d93558eb034e4df6d80bd862",
+  "units": {"Fatboy": "armfboy", "Thug": "corthud", "Mace": "armham"},
+  "extracted": [
+    {
+      "source_commit": "ccce09009ba14e7d471c7c0407649819c06b30ef",
+      "change": "Thug/Mace closest-peer poke cadence, dominant band, local assessed metal, urgent phase transitions and mirror arena",
+      "files": ["src/circuit/module/FactoryManager.cpp", "src/circuit/task/fighter/GroundCohorts.cpp", "src/circuit/task/fighter/RangedEngagement.cpp", "src/circuit/task/fighter/RangedEngagement.h", "src/circuit/task/fighter/RangedWorld.h", "src/circuit/terrain/GroundCohort.h", "src/circuit/unit/RangedPolicy.h", "tests/ground_cohort_test.cpp", "tools/playtest/cases/shared/combat/thug-poke-mirror.json"]
+    },
+    {
+      "source_commit": "f891617ede01d57a916d8055a82672f6b4d28ae6",
+      "change": "PRESS, EVEN and OUTMATCHED regimes, health limits and last-shot pause",
+      "files": ["src/circuit/module/FactoryManager.cpp", "src/circuit/task/fighter/RangedEngagement.cpp", "src/circuit/terrain/GroundCohort.h", "src/circuit/unit/RangedPolicy.h", "tests/ground_cohort_test.cpp"]
+    },
+    {
+      "source_commit": "bd538df59ef928329b39403fe0b2b4cbe5462bdc",
+      "change": "Coordinated fire-at-will constructor branch, plus its shared JSON parser and policy field only",
+      "files": ["src/circuit/module/FactoryManager.cpp", "src/circuit/task/fighter/RangedEngagement.cpp", "src/circuit/unit/RangedPolicy.h"],
+      "adaptation": "A local constructor boolean replaces the source's fireOpen member because the individual Medusa state machine is excluded. Coordinated units keep OPEN for the task lifetime and Release restores the configured fire state."
+    },
+    {
+      "source_commit": "4bfd1aa73ae2ded8210895800e184f5bc93947df",
+      "change": "Commander priority targeting used by Fatboys, including scheduling, configuration, task-target arbitration, STOP restoration and explicit ATTACK replacement",
+      "files": ["data/config/experimental_balanced/behaviour.json", "src/circuit/module/MilitaryManager.cpp", "src/circuit/module/MilitaryManager.h", "src/circuit/task/fighter/RangedEngagement.cpp", "src/circuit/task/fighter/RouteTask.cpp", "src/circuit/unit/CircuitUnit.cpp", "src/circuit/unit/CircuitUnit.h"],
+      "shared_scope": "Preserves the original configurable Mammoth, Incinerator and mobile T3 admission too. Aircraft remain excluded by the profile. Task target wrappers are required to prevent other tasks from overwriting a commander lock."
+    },
+    {
+      "source_commit": "a21974bf0e53df670df9e8113c6ae5dadcd59138",
+      "change": "Supplied four-Fatboy, three-HLT arena",
+      "files": ["tools/playtest/cases/shared/combat/fatboy-hlt-press.json"]
+    },
+    {
+      "source_commit": "dd0fdf9d28d06c0f947a0a924d96f1107d05130f",
+      "change": "Activate the three units' missing ranged policy settings from SMRTBARb-10-19-port c75616f, independently synchronized back to pending-all",
+      "files": ["data/config/experimental_balanced/behaviour.json"],
+      "values": {
+        "Thug and Mace": {"range_fraction": 0.95, "poke_in": 0.95, "poke_in_dominant": 0.9, "poke_out": 1.05, "poke_ratio": 1.5, "poke_health": 0.8, "poke_press_health": 0.5, "poke_pause_seconds": 5, "fire_at_will": true, "move_min_seconds": 1, "target_min_seconds": 1},
+        "Fatboy": {"press_static": 1, "move_min_seconds": 1, "target_min_seconds": 1}
+      }
+    }
+  ],
+  "inherited_from_base": [
+    {"change": "Fatboy static press and all coverage, path and target-score call sites", "reference_commit": "5d24bb1a1b815582cbec6559e96d8456b8c0558b", "files": ["src/circuit/task/fighter/RangedWorld.cpp", "src/circuit/task/fighter/RangedWorld.h", "src/circuit/task/fighter/RangedEngagement.cpp", "src/circuit/module/FactoryManager.cpp", "src/circuit/unit/RangedPolicy.h"]},
+    {"change": "Fatboy identified-ground-scout avoidance with legal slow-radar blind fire and evasive-target penalties", "reference_commits": ["e8428f64", "de4f1b43", "0e29f5dd", "f641c7ed"]},
+    {"change": "Thug/Mace grouping, formation screening, sustained rush, repairer-focus mechanism and existing arenas", "reference_commits": ["95df7f71", "84b02f6c"]},
+    {"change": "MOVE and target throttles, independent urgency, candidate revalidation and configurable target_switch_ratio", "reference_commit": "d517235bbca34fe3d93558eb034e4df6d80bd862"}
+  ],
+  "intentional_exclusions": [
+    {"source_commits": ["b1af6bf1", "73aa93f8"], "reason": "Individual Medusa fire-at-will/spam suppression is independent. Only the fire_at_will field/parser needed by coordinated Thugs and Maces is carried over."},
+    {"area": "Other pending-all features", "reason": "No SEA behavior, EMP shields, commander D-gun, scout/builder throttles, map-role changes, factory weights or AIR/TECH policy is extracted."},
+    {"area": "SMRTBARb script-side ThugFireAtWill fallback", "reason": "Not present in the source pending-all branch. The extracted native controller and JSON flag already provide this behavior without another periodic script scan."},
+    {"area": "data_sample", "reason": "Reference-only tree is unchanged."}
+  ],
+  "constant_policy": "Poke defaults and validation bounds, direction tolerance, static-target multiplier, commander scan defaults, submerged cutoff and lock resend interval use named values at the top of their consuming native files. New poke test inputs and expectations also use named file-level fixture values. Gameplay tuning remains in JSON.",
+  "cost_review": "Poke reuses the existing per-unit nearby-contact traversal and AssessCohort's existing force values. It adds no traversal or allocation. Commander snipe retains the source's per-interval O(E + U + S*C) work and temporary O(C) commander vector, where E is known enemies, U owned units, S eligible snipers and C visible/scouted commanders. No performance improvement is claimed.",
+  "verification": {
+    "native_integration": "Built with native MinGW against the existing Recoil wrapper, using an isolated source snapshot under BAR",
+    "native_tests": "32 of 32 native test executables passed; the first sandboxed attempt stopped at widget_state_test atomic-file permissions, then the complete suite passed with the required access",
+    "script_api": "359 used members, 0 findings against source registrations and the built DLL",
+    "field_isolation": "0 findings",
+    "fatboy_arena": {"mode": "visual", "requested_speed": 20, "achieved_simulation_speed": 16.657900630888275, "enemy_kills": 3, "friendly_losses": 0, "shooters": 4, "shots": 12, "numerical_assertions": "PASS"},
+    "thug_mirror_arena": {"mode": "fast", "requested_speed": 20, "achieved_simulation_speed": 18.877669540761627, "enemy_kills": 6, "friendly_losses": 6, "shooters": 6, "shots": 98, "watcher": "PASS", "numerical_assertions": "FAIL: ranged casualties", "cleanup": "Initial cleanup raced the exiting engine with WinError 31. A subsequent identity-checked stop confirmed no owned engine remained."},
+    "timing_caveat": "Functional arenas overlapped native correctness compilation. These speeds are qualified observations, not uncontended performance evidence.",
+    "commander_snipe": "Built and Checked only; no focused runtime case played",
+    "performance": "No serial before/after performance clearance. Correctness failure must be resolved before timing comparisons.",
+    "canonical_documentation": "The sibling rjm.bar.docs checkout is absent, so engineering-guide/decision/known-issue references and invariant/doc-link checks could not be completed. This manifest records the extraction decisions and open findings without recreating a parallel documentation tree."
+  },
+  "open_findings": [
+    {"id": "MICRO-1", "problem": "The mirror arena reports all six Thugs lost after killing six Maces, despite watcher PASS.", "next_step": "Compare retained death events and fixture cleanup against the pinned smrt-test baseline using the same scenario before attributing casualties to poke changes. Do not claim tactical regression clearance.", "state": "Unresolved"},
+    {"id": "MICRO-2", "problem": "The inherited Fatboy arena permits zero kills and loss of all four units. Its assertions alone cannot establish successful pressing.", "next_step": "Strengthen tools/playtest/cases/shared/combat/fatboy-hlt-press.json in a separately reviewed fixture change. This run independently observed three kills and zero losses.", "state": "Unresolved fixture limitation"},
+    {"id": "MICRO-3", "problem": "The inherited Thug repairer-focus mechanism exists, but repairer_focus is absent from both current source and base profiles following an older data sync.", "next_step": "Review the original 95df7f71 policy and canonical decision record before deciding whether to restore its 100.0 setting. The extraction deliberately preserves current source behavior.", "state": "Existing inactive policy, not changed here"}
+  ]
+}

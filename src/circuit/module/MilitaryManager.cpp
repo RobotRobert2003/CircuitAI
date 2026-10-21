@@ -62,6 +62,13 @@
 #include <map>
 
 namespace circuit {
+namespace {
+constexpr float COMMANDER_SNIPE_DEFAULT_MIN_TECH = 3.f;
+constexpr int COMMANDER_SNIPE_DEFAULT_INTERVAL_FRAMES = 15;
+constexpr float COMMANDER_SNIPE_DEFAULT_ACQUIRE_MARGIN = 64.f;
+constexpr float COMMANDER_SNIPE_DEFAULT_RELEASE_MARGIN = 200.f;
+constexpr float COMMANDER_SNIPE_SUBMERGED_HEIGHT = -8.f;
+}
 
 void CMilitaryManager::SetAggressionDelta(float value)
 {
@@ -602,7 +609,7 @@ void CMilitaryManager::ReadConfig()
 	commSnipeInfo.isEnabled = false;
 	commSnipeInfo.defs.clear();
 	if (!snipeCfg.isNull() && snipeCfg.get("enabled", true).asBool()) {
-		const float minTech = snipeCfg.get("min_tech", 3.f).asFloat();
+		const float minTech = snipeCfg.get("min_tech", COMMANDER_SNIPE_DEFAULT_MIN_TECH).asFloat();
 		const bool withAir = snipeCfg.get("air", false).asBool();
 		std::set<std::string> names;
 		for (const auto& name : snipeCfg["units"]) names.insert(name.asString());
@@ -617,9 +624,9 @@ void CMilitaryManager::ReadConfig()
 			const auto level = cp.find("techlevel");
 			if (level != cp.end() && std::atof(level->second.c_str()) >= minTech) commSnipeInfo.defs.insert(d.GetId());
 		}
-		commSnipeInfo.interval = std::max(1, snipeCfg.get("interval", 15).asInt());
-		commSnipeInfo.acquireMargin = snipeCfg.get("acquire_margin", 64.f).asFloat();
-		commSnipeInfo.releaseMargin = std::max(commSnipeInfo.acquireMargin, snipeCfg.get("release_margin", 200.f).asFloat());
+		commSnipeInfo.interval = std::max(1, snipeCfg.get("interval", COMMANDER_SNIPE_DEFAULT_INTERVAL_FRAMES).asInt());
+		commSnipeInfo.acquireMargin = snipeCfg.get("acquire_margin", COMMANDER_SNIPE_DEFAULT_ACQUIRE_MARGIN).asFloat();
+		commSnipeInfo.releaseMargin = std::max(commSnipeInfo.acquireMargin, snipeCfg.get("release_margin", COMMANDER_SNIPE_DEFAULT_RELEASE_MARGIN).asFloat());
 		commSnipeInfo.isEnabled = !commSnipeInfo.defs.empty();
 	}
 	circuit->LOG("CONFIG %s: commander snipe %s | defs=%u interval=%i acquire=+%.0f release=+%.0f",
@@ -1993,7 +2000,7 @@ void CMilitaryManager::UpdateCommanderSnipe()
 		int best = -1;
 		float bestSq = std::numeric_limits<float>::max();
 		for (const SComm& c : comms) {
-			const bool submerged = c.pos.y < -8.f;
+			const bool submerged = c.pos.y < COMMANDER_SNIPE_SUBMERGED_HEIGHT;
 			const float range = cdef->GetMaxRange(submerged ? CCircuitDef::RangeType::WATER : CCircuitDef::RangeType::LAND);
 			if (range <= 0.f) continue;
 			const float reach = range + (c.id == locked ? commSnipeInfo.releaseMargin : commSnipeInfo.acquireMargin);
@@ -2398,10 +2405,8 @@ IUnitTask* CMilitaryManager::DefaultMakeTask(CCircuitUnit* unit)
 	 */
 	if (cdef->IsRoleTrans()) {
 		task = Enqueue(TaskF::Common(IFighterTask::FightType::FERRY));
-	} else if (cdef->IsRoleScout() && (GetTasks(IFighterTask::FightType::SCOUT).size() < maxScouts)) {
-
-		task = Enqueue(TaskF::Common(IFighterTask::FightType::SCOUT));
-
+	} else if (cdef->IsRoleScout() && (GetTasks(IFighterTask::FightType::SCOUT).size() < maxScouts)) {
+		task = Enqueue(TaskF::Common(IFighterTask::FightType::SCOUT));
 	} else if (cdef->IsRoleSupport()) {
 		if (!HasRangedUnits() && /*cdef->IsAttacker() && */GetTasks(IFighterTask::FightType::ATTACK).empty() && GetTasks(IFighterTask::FightType::DEFEND).empty()) {
 			task = Enqueue(TaskF::Defend(IFighterTask::FightType::ATTACK, IFighterTask::FightType::SUPPORT, minAttackers));
