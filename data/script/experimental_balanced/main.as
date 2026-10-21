@@ -63,6 +63,7 @@ namespace Main {
 
 	void AiMain()
 	{
+        ThugFireAtWill::Enabled = true;
         // Missing working-copy policy. Existing pending-all overrides retain precedence.
         Global::RoleSettings::Air::BankFunding = true; // AIR: bank funds energy/cons/T2 turrets; far mexes past a small home (owner 2026-10-17)
         Global::RoleSettings::Air::FirstLabBankAssist = true; // AIR: idle T1 cons help the first T2 lab once the bank covers it (owner 2026-10-18)

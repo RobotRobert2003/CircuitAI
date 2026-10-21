@@ -424,7 +424,8 @@
     "Use the existing integer FleetRerouteSeconds declaration instead of declaring the same global twice. Add only FleetReroutesPerTick.",
     "Combine the new same-target cap with the existing fair total-route budget after admission checks.",
     "Keep existing profile overrides and add only missing working-copy settings. Explicitly retain the working-copy ThugFireAtWill tick alongside newer pending-all update hooks.",
-    "Name imported numerical geometry/multipliers/fallback categories at the tops of their consuming files. Values are unchanged."
+    "Name imported numerical geometry/multipliers/fallback categories at the tops of their consuming files. Values are unchanged.",
+    "Enable ThugFireAtWill tracking only in the balanced profile that calls Tick. Other profiles must not accumulate hull records without running the cleanup loop. Primary fire-state behavior and cadence are unchanged."
   ],
   "installation_read_only_audit": {
     "DLL_SHA256": "75c6bd8e8a47a273b6dff7946f0bfb55e86103c918d70a4aea67fcc833db9cdf",

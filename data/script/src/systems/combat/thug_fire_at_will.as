@@ -16,6 +16,7 @@
 // Cost: O(T) per second for T Thugs and Maces; one fire-state command per
 // unit per task change, plus one per ResendSeconds.
 namespace ThugFireAtWill {
+    bool Enabled = false; // the profile that polls Tick owns the tracked hulls
     const int OPEN = 2;
     const int ResendSeconds = 15;
     const int SummarySeconds = 300;
@@ -40,7 +41,7 @@ namespace ThugFireAtWill {
     // Military::AiUnitAdded
     void UnitAdded(CCircuitUnit@ unit)
     {
-        if (!Watched(unit)) return;
+        if (!Enabled || !Watched(unit)) return;
         for (uint i = 0; i < hulls.length(); ++i) if (hulls[i].id == unit.id) return;
         Hull h;
         h.id = unit.id;
@@ -50,7 +51,7 @@ namespace ThugFireAtWill {
     // Main::AiUpdate (every 30 frames); self-limited to once per second.
     void Tick()
     {
-        if (ai.frame < lastTick + SECOND) return;
+        if (!Enabled || ai.frame < lastTick + SECOND) return;
         lastTick = ai.frame;
         const int resend = ResendSeconds * SECOND;
         for (int i = int(hulls.length()) - 1; i >= 0; --i) {
