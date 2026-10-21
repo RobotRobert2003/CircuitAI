@@ -16,4 +16,15 @@ namespace Global { namespace Team {
         "armwin", "armsolar", "armmakr", "armestor",
         "corwin", "corsolar", "cormakr", "corestor",
         "legwin", "legsolar", "legeconv", "legestor" };
+    // T1 construction turrets, land and floating (owner, 2026-10-20)
+    array<string> AllyClearTurrets = {
+        "armnanotc", "armnanotcplat", "cornanotc", "cornanotcplat", "legnanotc", "legnanotcplat" };
+    // T2 radars and T2 jammers (owner, 2026-10-20)
+    array<string> AllyClearIntel = {
+        "armarad", "corarad", "legarad", "armveil", "corshroud", "legajam" };
+    // TECH's economy ground (owner, 2026-10-20): its turret box, the box grown
+    // behind it and the forward cluster are asked about as well as blocked
+    // factory sites, each at most once per AllyClearRetrySeconds (only while
+    // AllyClearEnabled, which experimental_balanced turns on)
+    bool AllyClearEcoAsk = true;
 } }

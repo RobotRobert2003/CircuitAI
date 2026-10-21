@@ -16,7 +16,9 @@ hand-over (geo_release.as): the planner asks, the allied owner gives its own
 matching buildings, the planner reclaims them as its own and keeps the metal.
 
   1. TECH (TechFactories::ReadyCluster) or AIR (AirLayout::Activate) is about
-     to give up a planned site because it is blocked. Before relocating it
+     to give up a planned site because it is blocked; TECH's economy ground
+     (Layout::AllyClearEco: the turret box, the box grown behind it and the
+     forward cluster) is asked about whenever it places economy. Before relocating it
      calls Hold(key, centre, halfX, halfZ): the first call broadcasts
      allyclear|request|key|x|z|hx|hz to the allied SMRTBARbs and holds the
      site for ReplySeconds.
@@ -30,7 +32,8 @@ matching buildings, the planner reclaims them as its own and keeps the metal.
      or it relocates as before.
 
 A site is asked about once per RetrySeconds. Allowed: Global::Team::AllyClearPorc
-and AllyClearEco (owner's lists, 2026-10-17).
+and AllyClearEco (owner's lists, 2026-10-17), AllyClearTurrets (T1 construction
+turrets) and AllyClearIntel (T2 radars and jammers) (owner, 2026-10-20).
 
 ******************************************************************************/
 namespace Team {
@@ -60,6 +63,8 @@ namespace AllyClear {
         if (!allowedReady) {
             for (uint i = 0; i < Global::Team::AllyClearPorc.length(); ++i) allowed.set(Global::Team::AllyClearPorc[i], true);
             for (uint i = 0; i < Global::Team::AllyClearEco.length(); ++i) allowed.set(Global::Team::AllyClearEco[i], true);
+            for (uint i = 0; i < Global::Team::AllyClearTurrets.length(); ++i) allowed.set(Global::Team::AllyClearTurrets[i], true);
+            for (uint i = 0; i < Global::Team::AllyClearIntel.length(); ++i) allowed.set(Global::Team::AllyClearIntel[i], true);
             allowedReady = true;
         }
         return allowed.exists(name);

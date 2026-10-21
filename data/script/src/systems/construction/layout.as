@@ -9,6 +9,7 @@
 #include "../../helpers/spatial/layout_helpers.as"
 #include "../presentation/widget_link.as"
 #include "compact_eco.as"
+#include "../team/ally_clear.as"
 
 /******************************************************************************
 
@@ -713,6 +714,9 @@ namespace Layout {
         // Its existing holes are not new obstructions. A structure taking the
         // reserved cells triggers relocation; any claimed economy/nano locks it.
         if (aiTerrainMgr.IsZoneClear(fwdZone)) return;
+        // owner 2026-10-20: an allied SMRTBARb's T1 porc/eco/turrets or T2 radar/jammer
+        // there is handed over and reclaimed before the cluster moves on
+        if (AllyClearZone("tech.eco.fwd", fwdCentre, boxAcross, fwdDepth)) return;
         GenericHelpers::LogUtil("[Layout] forward cluster at (" + int(fwdCentre.x) + ", " + int(fwdCentre.z) + ") physically blocked before activation: recalculating", 1);
         if (fwdGroup > 0) aiTerrainMgr.ReleaseGroup(fwdGroup);
         aiTerrainMgr.ReleaseZone(fwdZone);
@@ -724,6 +728,33 @@ namespace Layout {
         PlanForwardBox();
     }
     bool ForwardPlanned() { return fwdZone != 0; }
+
+    // Owner 2026-10-20 (live White Fire Remake: an allied SMRTBARb's units stood in
+    // TECH's economy and were never asked about; only blocked factory sites asked):
+    // the economy ground - the turret box, the box last grown behind it and the
+    // forward cluster - is asked about too. Team::AllyClear::Hold sends one request
+    // per area per AllyClearRetrySeconds; the allies give their T1 porc, T1 eco,
+    // T1 construction turrets and T2 radars/jammers standing there, our builders
+    // reclaim them (AllyClear::BuilderTask)
+    bool AllyClearZone(const string &in key, const AIFloat3 &in centre, int acrossCells, int depthCells)
+    {
+        if (centre.x < 0.0f || acrossCells <= 0 || depthCells <= 0) return false;
+        const float across = float(acrossCells) * SQUARE_SIZE;   // half the extent, elmos (a cell is 2 squares)
+        const float along = float(depthCells) * SQUARE_SIZE;
+        const bool turned = (facing & 1) == 1;
+        return Team::AllyClear::Hold(key, centre, turned ? along : across, turned ? across : along);
+    }
+    int allyClearEcoFrame = -100000;
+    void AllyClearEco()
+    {
+        if (!Global::Team::AllyClearEnabled || !Global::Team::AllyClearEcoAsk || !HasBox()) return;
+        if (ai.frame - allyClearEcoFrame < 10 * SECOND) return;   // Hold keeps its own retry; this spares the scan
+        allyClearEcoFrame = ai.frame;
+        AllyClearZone("tech.eco.box", boxCentre, boxAcross, boxDepth);
+        if (extraZones.length() > 0 && MapHelpers::SqDist(lastBoxCentre, boxCentre) > 1.0f)
+            AllyClearZone("tech.eco.box.last", lastBoxCentre, boxAcross, lastBoxDepth);
+        if (fwdZone != 0) AllyClearZone("tech.eco.fwd", fwdCentre, boxAcross, fwdDepth);
+    }
     // The forward cluster's turrets compete with the main block's once anything
     // of ours is reserved and claimed, building or standing in its zone (CheckForward
     // latches tech.box.fwd_started), not only after the main block's last slot
@@ -1369,6 +1400,7 @@ namespace Layout {
                 float(Global::RoleSettings::Tech::LayoutFallbackShakeCells) * SQUARE_SIZE * 2, true, timeout));
         }
         CheckForward(true);
+        AllyClearEco();   // owner 2026-10-20
         int id = -1;
         // D-101 (owner's rule): advanced fusions and advanced converters go in sets,
         // the first flush against a turret, the rest lined up away from it; the
