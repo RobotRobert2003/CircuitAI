@@ -158,7 +158,7 @@
 		// part; "min_tech" adds every armed mobile def at that BAR techlevel.
 		"commander_snipe": {
 			"enabled": true,
-			"units": ["armfboy", "corsumo", "leginc"],  // Fatboy, Mammoth, Incinerator
+			"units": ["armfboy", "corsumo", "leginc", "corgol"],  // Fatboy, Mammoth, Incinerator, Tzar
 			"min_tech": 3,          // every T3 (0: listed units only)
 			"air": false,           // T3 aircraft keep their own targeting
 			"interval": 15,         // frames between scans
