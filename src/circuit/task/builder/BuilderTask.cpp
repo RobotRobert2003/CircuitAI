@@ -500,6 +500,12 @@ void IBuilderTask::OnUnitIdle(CCircuitUnit* unit)
 		if ((dist > EngageRange(unit)) && Approach(unit)) {
 			return;
 		}
+		if (approachThrottled) {  // not a failure: the build command goes out now
+			if (Execute(unit)) {
+				engaged.insert(unit);
+			}
+			return;
+		}
 	}
 	if (++buildFails <= 2) {  // Workaround due to engine's ability randomly disregard orders
 		if (Execute(unit) && IsExperimental()) {
@@ -715,15 +721,27 @@ bool IBuilderTask::Approach(CCircuitUnit* unit)
 	if (!geom::is_valid(ap)) {
 		return false;
 	}
+	// Owner 2026-10-21 (SD-129): same-point re-sends keep the walk they
+	// have, and a per-AI budget caps approach MOVEs (CBuilderManager).
+	approachThrottled = false;
+	bool keepWalk = false;
+	CBuilderManager* budgetMgr = dynamic_cast<CBuilderManager*>(manager);
+	if ((budgetMgr != nullptr) && !budgetMgr->TakeApproachMove(unit, ap, keepWalk) && !keepWalk) {
+		approachThrottled = true;  // over budget: the caller gives the build command, the engine walks
+		return false;
+	}
 	ITravelAction* travelAct = unit->GetTravelAct();
 	if ((travelAct != nullptr) && !travelAct->IsFinished()) {
 		travelAct->StateFinish();
 	}
+	engaged.erase(unit);
+	approaching.insert(unit);
+	if (keepWalk) {
+		return true;
+	}
 	TRY_UNIT(circuit, unit,
 		unit->CmdMoveTo(ap, 0, INT_MAX);
 	)
-	engaged.erase(unit);
-	approaching.insert(unit);
 	const AIFloat3& upos = unit->GetPos(circuit->GetLastFrame());
 	circuit->LOG("EXP: approach: %s(%i) at (%.0f, %.0f) walks to (%.0f, %.0f), %.0f from the %s site (%.0f, %.0f)",
 			unit->GetCircuitDef()->GetDef()->GetName(), unit->GetId(), upos.x, upos.z, ap.x, ap.z,

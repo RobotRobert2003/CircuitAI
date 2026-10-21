@@ -159,6 +159,7 @@ protected:
 	// Move to a free point on the range circle; the construction command
 	// follows on arrival (the idle event). True when a move was given.
 	bool Approach(CCircuitUnit* unit);
+	bool approachThrottled = false;  // the last Approach was refused by the per-AI MOVE budget
 	void UpdatePath(CCircuitUnit* unit);
 	void ApplyPath(const CQueryPathSingle* query);
 	void HideAssignee(CCircuitUnit* unit);

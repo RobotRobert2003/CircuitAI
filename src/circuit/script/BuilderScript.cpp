@@ -113,6 +113,9 @@ CBuilderScript::CBuilderScript(CScriptManager* scr, CBuilderManager* mgr)
 	r = engine->RegisterObjectMethod("CBuilderManager", "int TurretsOnReclaim(int, float, bool, bool preserveReclaimPriority = false)", asMETHOD(CBuilderManager, TurretsOnReclaim), asCALL_THISCALL); ASSERT(r >= 0);  // D-078
 	r = engine->RegisterObjectProperty("CBuilderManager", "float experimentalDirectRange", asOFFSET(CBuilderManager, experimentalDirectRange)); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("CBuilderManager", "float experimentalSearchRadius", asOFFSET(CBuilderManager, experimentalSearchRadius)); ASSERT(r >= 0);
+	r = engine->RegisterObjectProperty("CBuilderManager", "int approachRepeatSeconds", asOFFSET(CBuilderManager, approachRepeatSeconds)); ASSERT(r >= 0);
+	r = engine->RegisterObjectProperty("CBuilderManager", "float approachRepeatRadius", asOFFSET(CBuilderManager, approachRepeatRadius)); ASSERT(r >= 0);
+	r = engine->RegisterObjectProperty("CBuilderManager", "int approachBudgetPer10s", asOFFSET(CBuilderManager, approachBudgetPer10s)); ASSERT(r >= 0);
     r=engine->RegisterObjectMethod("CBuilderManager","bool SetCommanderCombatOption(const string &in, float)",asMETHOD(CBuilderManager,SetCommanderCombatOption),asCALL_THISCALL); ASSERT(r>=0);
     r=engine->RegisterObjectMethod("CBuilderManager","float GetCommanderEnergyReserve() const",asMETHOD(CBuilderManager,GetCommanderEnergyReserve),asCALL_THISCALL); ASSERT(r>=0);
     r=engine->RegisterObjectMethod("CBuilderManager","float GetCommanderEnergyDeficit() const",asMETHOD(CBuilderManager,GetCommanderEnergyDeficit),asCALL_THISCALL); ASSERT(r>=0);

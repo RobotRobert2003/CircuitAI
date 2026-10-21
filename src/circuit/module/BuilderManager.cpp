@@ -665,6 +665,7 @@ int CBuilderManager::UnitDestroyed(CCircuitUnit* unit, CEnemyInfo* attacker)
 	// (FindUnfinishedFor, FindUnfinishedNear, CountUnfinishedNear,
 	// GetUnfinishedCount) dereference it, and the unit is freed after this event
 	EraseUnfinishedUnit(unit);
+	approachMemo.erase(unit->GetId());
 	auto itre = repairUnits.find(unit->GetId());
 	if (itre != repairUnits.end()) {
 		AbortTask(itre->second);
@@ -1454,6 +1455,38 @@ void CBuilderManager::FallbackTask(CCircuitUnit* unit)
 	task->AssignTo(unit);
 	task->Start(unit);
 	static_cast<CBuilderScript*>(script)->TaskAssigned(unit);
+}
+
+bool CBuilderManager::TakeApproachMove(CCircuitUnit* unit, const AIFloat3& point, bool& keepWalk)
+{
+	keepWalk = false;
+	const int frame = circuit->GetLastFrame();
+	auto memo = approachMemo.find(unit->GetId());
+	if ((approachRepeatSeconds > 0) && (memo != approachMemo.end())
+		&& (frame - memo->second.frame < approachRepeatSeconds * FRAMES_PER_SEC)
+		&& (memo->second.point.SqDistance2D(point) < SQUARE(approachRepeatRadius))
+		&& circuit->GetCallback()->Unit_HasCommands(unit->GetId()))
+	{
+		keepWalk = true;  // already walking there: no new MOVE
+		++approachKept;
+		return false;
+	}
+	while (!approachFrames.empty() && (frame - approachFrames.front() >= FRAMES_PER_SEC * 10)) {
+		approachFrames.pop_front();
+	}
+	if ((approachBudgetPer10s > 0) && (int(approachFrames.size()) >= approachBudgetPer10s)) {
+		++approachOverBudget;
+		if (frame - approachThrottleLogFrame >= FRAMES_PER_SEC * 10) {
+			circuit->LOG("EXP: approach throttle: %i MOVEs in the last 10 s (budget %i); kept %i walks, %i over budget since the last line",
+					int(approachFrames.size()), approachBudgetPer10s, approachKept, approachOverBudget);
+			approachThrottleLogFrame = frame;
+			approachKept = approachOverBudget = 0;
+		}
+		return false;
+	}
+	approachFrames.push_back(frame);
+	approachMemo[unit->GetId()] = SApproachMemo{frame, point};
+	return true;
 }
 
 bool CBuilderManager::IsBuilderInArea(CCircuitDef* buildDef, const AIFloat3& position) const

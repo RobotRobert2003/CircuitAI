@@ -33,5 +33,9 @@ namespace ScoutRaid {
         int MaxRoutesPerSecond = 2;
         int StuckSeconds = 8;
         float WaypointSpacing = 192.0f;     // minimum spacing of compacted MOVE waypoints
+        // Owner 2026-10-21: route points handed to the unit at once (the rest
+        // follow in windows near the end); <= 0 = the whole route.
+        int MaxIssuedWaypoints = 6;
+        int WindowSeconds = 2;              // at most one new window per raider this often
     }
 }

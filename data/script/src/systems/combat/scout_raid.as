@@ -31,6 +31,8 @@ namespace ScoutRaid {
         int excluded = -1;          // target given up after repeated hazard replans
         array<AIFloat3> route;      // the compacted route last issued
         uint cursor = 0;            // first route point not yet reached
+        uint issuedEnd = 0;         // route points [.., issuedEnd) handed to the task so far
+        int lastWindow = -100000;   // frame of the last window handed out
         AIFloat3 lastPos;
         int lastMove = 0;
         int nextReplan = 0;
@@ -390,7 +392,7 @@ namespace ScoutRaid {
         if (path is null) return;
         r.route = direct ? path : Compact(path);
         r.cursor = 0;
-        r.task.SetRoute(r.route);
+        IssueWindow(r);
         // A contact the engine will not accept as a priority target still
         // gets the route; the held priority is then cleared (INV-211).
         if (!r.task.SetLandTarget(r.escaping ? -1 : target)) r.task.SetLandTarget(-1);
@@ -398,6 +400,32 @@ namespace ScoutRaid {
         r.target = target; r.targetPos = targetPos;
         GenericHelpers::LogUtil("[ScoutRaid] route unit=" + r.id + " target=" + target + " points=" + r.route.length()
             + " goal=(" + int(goal.x) + "," + int(goal.z) + ") direct=" + direct + " escape=" + r.escaping, 1);
+    }
+
+    // Owner 2026-10-21 (SD-129 command flood): one Flea sent 482 MOVEs in a
+    // minute, every replan shift-queueing the whole compacted route (~56
+    // points). The task now gets at most MaxIssuedWaypoints points from the
+    // cursor; the next window follows as the raider nears its end, at most
+    // once per WindowSeconds. <= 0 hands out the whole route as before.
+    void IssueWindow(Raider@ r)
+    {
+        const int cap = Global::ScoutRaid::MaxIssuedWaypoints;
+        const uint total = r.route.length();
+        if (cap <= 0 || total <= uint(cap) + r.cursor) {
+            if (r.cursor == 0) r.task.SetRoute(r.route);
+            else {
+                array<AIFloat3> rest;
+                for (uint i = r.cursor; i < total; ++i) rest.insertLast(r.route[i]);
+                r.task.SetRoute(rest);
+            }
+            r.issuedEnd = total;
+        } else {
+            array<AIFloat3> window;
+            for (uint i = r.cursor; i < r.cursor + uint(cap); ++i) window.insertLast(r.route[i]);
+            r.task.SetRoute(window);
+            r.issuedEnd = r.cursor + uint(cap);
+        }
+        r.lastWindow = ai.frame;
     }
 
     // Current observed ground contact of this id? O(G); only on replans.
@@ -541,7 +569,11 @@ namespace ScoutRaid {
             // Progress along the issued route; stuck detection.
             while (r.cursor < r.route.length() && MapHelpers::SqDist(pos, r.route[r.cursor]) < 128.0f * 128.0f) ++r.cursor;
             if (MapHelpers::SqDist(pos, r.lastPos) > 64.0f * 64.0f) { r.lastPos = pos; r.lastMove = ai.frame; }
-            const bool atEnd = r.task.IsAtEnd(u);
+            // The next window when the raider is within two points of the
+            // handed-out end (or standing on it).
+            const bool windowEnd = r.issuedEnd < r.route.length() && (r.cursor + 2 >= r.issuedEnd || r.task.IsAtEnd(u));
+            if (windowEnd && ai.frame - r.lastWindow >= Global::ScoutRaid::WindowSeconds * SECOND) IssueWindow(r);
+            const bool atEnd = r.task.IsAtEnd(u) && r.issuedEnd >= r.route.length();
             const bool stuck = !atEnd && ai.frame - r.lastMove > Global::ScoutRaid::StuckSeconds * SECOND;
             // Wrap-around trigger: a contact now covers a waypoint within the
             // lookahead (at least the next 3). Sensor->enemy-cache->hazard->tick
@@ -566,7 +598,7 @@ namespace ScoutRaid {
                     // budgeted replan. One extra MOVE per hazard episode.
                     array<AIFloat3> hold = {pos};
                     r.task.SetRoute(hold);
-                    r.route.resize(0); r.cursor = 0;
+                    r.route.resize(0); r.cursor = 0; r.issuedEnd = 0;
                     // Queue now: clearing the route also clears next tick's
                     // hazardAhead signal. A live economy target otherwise
                     // leaves this one-point hold permanent (single Tick case).

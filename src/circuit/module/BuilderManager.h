@@ -16,6 +16,7 @@
 
 #include <map>
 #include <set>
+#include <deque>
 #include <string>
 #include <vector>
 #include <unordered_set>
@@ -337,6 +338,12 @@ public:
 	bool IsExperimentalAirDirect() const { return experimentalAirDirect; }
 	float GetExperimentalDirectRange() const { return experimentalDirectRange; }
 	float GetExperimentalSearchRadius() const { return experimentalSearchRadius; }
+	// Approach MOVE throttle (owner 2026-10-21, SD-129 command flood): a builder
+	// re-sent to about the same approach point within approachRepeatSeconds
+	// keeps the walk it already has; at most approachBudgetPer10s approach
+	// MOVEs per AI in any 10 s (over budget the build command goes straight
+	// out and the engine walks into range itself). <= 0 disables either.
+	bool TakeApproachMove(CCircuitUnit* unit, const springai::AIFloat3& point, bool& keepWalk);
 	// D-066: the nearest live, untaken order of `type` in native's queue that
 	// this builder may take (defence, sensors, the watchdog's repairs). The
 	// script pulls them when its sequence says so; nothing else assigns them
@@ -506,6 +513,16 @@ private:
 	bool experimentalAirDirect = false;     // opt-in: engine controls flying constructors' last approach
 	float experimentalDirectRange = 1600.f;  // elmos
 	float experimentalSearchRadius = 512.f;  // elmos: how far from the asked anchor a site may be packed (D-066)
+public:
+	int approachRepeatSeconds = 10;          // script property: same-point approach re-sends kept this long
+	float approachRepeatRadius = 96.f;       // elmos: "about the same" approach point
+	int approachBudgetPer10s = 20;           // script property: approach MOVEs per AI per 10 s
+private:
+	struct SApproachMemo { int frame; springai::AIFloat3 point; };
+	std::unordered_map<int, SApproachMemo> approachMemo;  // unit id -> last approach MOVE
+	std::deque<int> approachFrames;                        // frames of the approach MOVEs in the last 10 s
+	int approachThrottleLogFrame = -100000;
+	int approachKept = 0, approachOverBudget = 0;
 
 	CCircuitDef* terraDef = nullptr;
 	std::unordered_map<IBuilderTask::BT, std::unordered_map<CCircuitDef*, SBuildChain*>> buildChains;  // owner
