@@ -3,6 +3,7 @@
 #include "air_screen.as"
 #include "air_raids.as"
 #include "air_recon.as"
+#include "air_scout_sweep.as"
 #include "air_base_response.as"
 #include "air_naval_support.as"
 #include "../../helpers/math/air_math.as"
@@ -134,6 +135,12 @@ namespace AirProduction {
         const float homeValue = AvailableFighterValue();
         const bool airEmergency = AirMath::Emergency(intrusion, homeValue, Global::RoleSettings::Air::InterceptCostRatio);
         const bool emergency = AirBaseResponse::Emergency() || airEmergency;
+        // A requested, sustained-income scout package precedes discretionary
+        // workforce growth. Actual base/air emergencies keep their reserve.
+        if (!emergency) {
+            @t = AirScoutSweep::Produce(u);
+            if (t !is null) return t;
+        }
         CCircuitDef@ builder = ai.GetCircuitDef(cons);
         const int constructors = AirEconomy::ConstructorTarget(builder, advanced);
         const bool saving = AirEconomy::SavingForFirstLab();
@@ -198,7 +205,7 @@ namespace AirProduction {
             if (t !is null) { aiTerrainMgr.SetLayoutInt("air.scout.next", ai.frame + Global::RoleSettings::Air::ScoutReplaceSeconds * SECOND); return t; }
         }
         // One completed advanced plant supplies the whole team's fighter/recon arm.
-        if (advanced && u.id == AirRecon::FighterPlant()) {
+        if (!AirScoutSweep::Enabled() && advanced && u.id == AirRecon::FighterPlant()) {
             CCircuitDef@ radar = ai.GetCircuitDef(AirRecon::Name(side));
             if (radar !is null) {
                 AirRecon::Unlock(radar);
@@ -295,6 +302,7 @@ namespace AirProduction {
         AirNavalSupport::Reset();
         AirBaseResponse::Reset();
         AirRecon::Reset();
+        AirScoutSweep::Reset();
         AirOperations::Reset();
         AirRaids::Reset();
         if (openingScout !is null && !openingScout.IsDead()) openingScout.Abort();
@@ -367,6 +375,7 @@ namespace AirProduction {
     {
         AirBaseResponse::Tick();
         AirRecon::Tick();
+        AirScoutSweep::Tick();
         AirNavalSupport::Tick();
         AirOperations::Tick();
         AirRaids::Update();

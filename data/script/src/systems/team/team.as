@@ -10,6 +10,7 @@
 #include "commander_energy.as"
 #include "pinpointer_pool.as"
 #include "ally_clear.as"
+#include "nuke_recon.as"
 
 namespace Team {
     // Return true if the def represents a T2 constructor (land or air)
@@ -50,6 +51,7 @@ namespace Team {
             return;
         }
         if (SeaTech::Handle(msg, fromTeamId)) return;
+        if (NukeRecon::Handle(msg, fromTeamId)) return;
         if (Roster::HandleMessage(msg, fromTeamId)) return;
         if (CommanderEnergy::HandleMessage(msg, fromTeamId)) return;
         if (PinpointerPool::HandleMessage(msg, fromTeamId)) return;

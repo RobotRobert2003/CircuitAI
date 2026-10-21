@@ -729,7 +729,9 @@ namespace RoleAir {
     IUnitTask@ Air_MilitaryAiMakeTask(CCircuitUnit@ u)
     {
         IUnitTask@ defenceTask = AirBaseResponse::TaskFor(u);
-        if (defenceTask !is null) return defenceTask;
+        if (defenceTask !is null) { AirScoutSweep::Exclude(u); return defenceTask; }
+        IUnitTask@ sweepTask = AirScoutSweep::TaskFor(u);
+        if (sweepTask !is null) return sweepTask;
         // D-291: survivors of a wiped bombing run scout the enemy rear, then return home.
         IUnitTask@ scoutTask = AirEscortScout::TaskFor(u);
         if (scoutTask !is null) return scoutTask;
@@ -1258,6 +1260,10 @@ namespace RoleAir {
             || aiEconomyMgr.metal.income > 10.0f || aiEnemyMgr.mobileThreat > 0.0f)) Military::Porc::MakeDefence(cluster, pos);
     }
 
+    void Air_FactoryAiUnitAdded(CCircuitUnit@ unit, Unit::UseAs usage) {
+        AirScoutSweep::PlantFinished(unit);
+    }
+
     void Register() {
         if (RoleConfigs::Get(AiRole::AIR) !is null) return;
         RoleConfig@ cfg = RoleConfig(AiRole::AIR, cast<MainUpdateDelegate@>(@Air_MainUpdate));
@@ -1270,6 +1276,7 @@ namespace RoleAir {
 
         @cfg.BuilderAiMakeTaskHandler = cast<AiMakeTaskDelegate@>(@Air_BuilderAiMakeTask);
         @cfg.FactoryAiMakeTaskHandler = cast<AiMakeTaskDelegate@>(@Air_FactoryAiMakeTask);
+        @cfg.FactoryAiUnitAdded = cast<AiUnitAddedDelegate@>(@Air_FactoryAiUnitAdded);
         
         @cfg.BuilderAiUnitAdded = cast<AiUnitAddedDelegate@>(@Air_BuilderAiUnitAdded);
         @cfg.BuilderAiUnitRemoved = cast<AiUnitRemovedDelegate@>(@Air_BuilderAiUnitRemoved);

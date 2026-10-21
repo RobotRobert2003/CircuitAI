@@ -237,6 +237,7 @@ namespace AirRecon {
     }
     IUnitTask@ MakeTask(CCircuitUnit@ u)
     {
+        if (AirScoutSweep::Enabled()) return null;
         if (!AirEconomy::Active() || !Controlled(u) || u.circuitDef.GetName() != Name(UnitHelpers::GetSideForUnitName(u.circuitDef.GetName()))) return null;
         const string key = "" + u.id;
         CRouteTask@ active;
@@ -278,6 +279,7 @@ namespace AirRecon {
     }
     void Tick()
     {
+        if (AirScoutSweep::Enabled()) return;
         array<string>@ away = sweeping.getKeys();
         for (uint i = 0; i < away.length(); ++i) {
             CCircuitUnit@ u = ai.GetTeamUnit(parseInt(away[i])); CRouteTask@ task; sweeping.get(away[i], @task);

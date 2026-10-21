@@ -112,6 +112,15 @@ namespace Air {
             float StrikeImmediatePriority = 4.0f; // visible local AFUS interrupts a committed raid; 0 disables
             float StrikeImmediateRadius = 1800.0f;
             int RadarWaveSize = 20;
+            // Mixed sweeps supersede the old continuous twenty-radar controller.
+            bool ScoutSweepEnabled = true;
+            int ScoutSweepT1Count = 10;
+            int ScoutSweepRadarCount = 4;
+            int ScoutSweepFirstSeconds = 120;
+            int ScoutSweepIntervalSeconds = 300;
+            int ScoutSweepTimeoutSeconds = 240;
+            float ScoutSweepMetal = 60.0f;
+            float ScoutSweepEnergy = 2000.0f;
             int RadarWaveIntervalSeconds = 600;
             int RadarMaxWaitSeconds = 90; // launch available planes even below the full cohort
             int RadarPatrolCheckSeconds = 2;

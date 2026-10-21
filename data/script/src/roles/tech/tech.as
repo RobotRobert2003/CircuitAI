@@ -533,6 +533,7 @@ namespace RoleTech
 	{
 		GenericHelpers::LogUtil("[TECH] Enter Tech_MainUpdate", 4);
 		Tech_UpdateNukeFirstStrike();
+        NukeRecon::Tick();
 	}
 
 	// Release the first-strike override once the silo has had time to fire, so its
@@ -552,6 +553,7 @@ namespace RoleTech
 	// to the closest allies (Team::Donation::OnCombatBotBuilt, D-041).
 	void Tech_MilitaryAiUnitAdded(CCircuitUnit @unit, Unit::UseAs usage)
 	{
+        NukeRecon::Finished(unit);
 		Invariants::OnUnitAdded(unit);   // D-076: INV-001
         if (TechHeavyRush::OnFinished(unit)) return;
         // D-158: keep the amphibious wave together; constructor donations are separate.

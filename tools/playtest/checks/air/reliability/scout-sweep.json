@@ -1,0 +1,19 @@
+{
+  "stop_minute": 11,
+  "expect": [
+    {"key":"fixture","pattern":"\\[ScoutSweepWatch\\] supplied plants", "scope":"any", "by_minute":1},
+    {"key":"gate","pattern":"\\[ScoutSweepProbe\\] gate opened", "scope":"any", "by_minute":2},
+    {"key":"nuke","pattern":"\\[TECH\\]\\[NukeRecon\\] nominal half stockpile", "scope":"any", "by_minute":3},
+    {"key":"message","pattern":"\\[AIR\\]\\[ScoutSweep\\] nuke request TECH=1", "scope":"any", "by_minute":3},
+    {"key":"production","pattern":"\\[AIR\\]\\[Produce\\] scout.sweep", "scope":"any", "by_minute":4},
+    {"key":"first","pattern":"\\[ScoutSweepProbe\\] wave=1 scouts=10 radar=4", "scope":"any", "by_minute":6},
+    {"key":"second","pattern":"\\[ScoutSweepProbe\\] wave=2 scouts=10 radar=4", "scope":"any", "by_minute":8},
+    {"key":"third","pattern":"\\[ScoutSweepProbe\\] wave=3 scouts=10 radar=4", "scope":"any", "by_minute":11},
+    {"key":"arrival","pattern":"\\[AIR\\]\\[ScoutSweep\\] arrived unit=", "scope":"any", "by_minute":11}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope":"any"},
+    {"key":"invariant","pattern":"\\[INVARIANT\\]", "scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:", "scope":"any"}
+  ]
+}

@@ -536,6 +536,9 @@ namespace AirBuild {
     }
     bool StarterReadyToRetire(CCircuitUnit@ plant)
     {
+        // Periodic mixed reconnaissance needs the T1 scout build options even
+        // after the advanced aircraft plant is complete.
+        if (AirScoutSweep::Enabled()) return false;
         if (plant is null || !UnitHelpers::IsT1AircraftPlant(plant.circuitDef.GetName())
             || Team::Ferry::requestPending || aiTerrainMgr.GetLayoutInt("air.starter.retired", 0) != 0
             || AirEconomy::CompletedConstructors() < Global::RoleSettings::Air::OpeningAirConstructors
@@ -599,7 +602,7 @@ namespace AirBuild {
         if (!Can(u, d) || Busy(d, Task::BuildType::FACTORY)) return null;
         const int count = AirEconomy::Planned(d, Task::BuildType::FACTORY);
         if (!advanced && count > 0) return null;
-        if (!advanced && aiTerrainMgr.GetLayoutInt("air.starter.retired",0) != 0 && !Team::Ferry::requestPending
+        if (!advanced && !AirScoutSweep::Enabled() && aiTerrainMgr.GetLayoutInt("air.starter.retired",0) != 0 && !Team::Ferry::requestPending
             && (AirEconomy::t2 == 0 || !AirEconomy::HasAdvancedBuilder() || AirEconomy::bankM < d.costM)) return null;
         if (!advanced && UnitHelpers::IsCommander(u.circuitDef) && AirEconomy::t1+AirEconomy::t2 == 0
             && !AirEconomy::HasMobileConstructor()) {

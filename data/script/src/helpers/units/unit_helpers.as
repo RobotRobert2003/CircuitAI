@@ -1869,11 +1869,11 @@ namespace UnitHelpers {
     // T1 Air scout unit names per side (BAR ids; verified against behaviour.json)
     string GetT1AirScoutForSide(const string &in side)
     {
-        // Armada uses ARM Peewee scout plane
+        // Armada Blink (armpeep), as named in BAR's English unit list.
         if (side == "armada") return "armpeep";
-        // Cortex uses COR Fink scout plane
+        // Cortex Finch (corfink).
         if (side == "cortex") return "corfink";
-        // Legion: use fighter as early scout per profile config
+        // Legion Noctua (legfig) doubles as fighter and T1 scout.
         if (side == "legion") return "legfig";
         // Default to armada variant if unknown
         return "armpeep";
