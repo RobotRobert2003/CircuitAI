@@ -287,7 +287,7 @@ namespace TechWeapons {
             case AIR: return Global::RoleSettings::Tech::WeaponMaxAir;
             case ARTY: return Global::RoleSettings::Tech::WeaponMaxArty;
             case LRPC: return Global::RoleSettings::Tech::WeaponMaxLrpc;
-            case SUPER: return Global::RoleSettings::Tech::WeaponMaxSuper;
+            case SUPER: return LolCannon::Enabled() ? 0 : Global::RoleSettings::Tech::WeaponMaxSuper;   // the lolcannon program owns it
             case COAST: return Global::RoleSettings::Tech::WeaponMaxCoast;
         }
         return 0;

@@ -18,6 +18,7 @@
 #include "../systems/construction/layout.as"
 #include "../systems/team/sea_assist.as"
 #include "../systems/construction/idle_reclaim.as"
+#include "../systems/construction/lolcannon.as"
 
 namespace Builder {
 	// CCircuitUnit is registered as asOBJ_NOCOUNT (see InitScript.cpp).
@@ -1232,6 +1233,7 @@ namespace Builder {
 
 	IUnitTask@ EnqueueLRPCHeavy(const string &in unitSide, const AIFloat3 &in anchor, float shake, int timeoutFrames, Task::Priority prio = Task::Priority::NOW)
 	{
+		if (LolCannon::Enabled()) return null;   // owner, 2026-10-21: only the lolcannon program builds one
 		string name = UnitHelpers::GetLRPCHeavyNameForSide(unitSide);
 		GenericHelpers::LogUtil("[BUILDER] Enqueue Heavy LRPC '" + name + "'", 2);
 		return _EnqueueGenericByName(Task::BuildType::BIG_GUN, name, anchor, shake, timeoutFrames, prio);
@@ -2006,6 +2008,8 @@ namespace Builder {
 				return null;
 			}
 		}
+		// owner, 2026-10-21: the lolcannon crew builds only the lolcannon program
+		{ IUnitTask@ lc = LolCannon::BuilderTask(u); if (lc !is null) return lc; }
 		// New gating via BuilderTaskTrack: grace window, then gate if added, else allow; hard timeout clears
 		BuilderTaskTrack@ tr = GetTrackForBuilder(u);
 		if (tr !is null) {
@@ -2058,6 +2062,7 @@ namespace Builder {
 
 	void AiTaskAdded(IUnitTask@ task)
 	{
+		LolCannon::TaskAdded(task);   // owner, 2026-10-21: a lolcannon outside its program is aborted
 		T3Unstick::TaskAdded(task);   // the engine's self-reclaim of a stuck T3 is aborted (owner, 2026-10-20)
 		if (Global::AISettings::Role == AiRole::TECH && Global::RoleSettings::Tech::ExperimentalBuild)
 			Invariants::ConstructionAdmitted(task);
@@ -2392,6 +2397,7 @@ namespace Builder {
 		if (unit is null) return;
 
 		if (Team::Recovery::OnUnitAdded(unit)) return;
+		LolCannon::UnitAdded(unit);   // owner, 2026-10-21: the lolcannon crew is claimed as it comes out
 
 		// Role-independent, like the mex bookkeeping in AiTaskAdded: SEA counts
 		// its construction ships here, TACTICAL unlocks its shipyard caps the
@@ -2778,6 +2784,7 @@ namespace Builder {
 
 		Team::SeaAssist::OnUnitRemoved(unit);
 		IdleReclaim::UnitRemoved(unit); // a lost unit marks a wreck site
+		LolCannon::UnitRemoved(unit);
 
 		// Ensure any per-builder task mapping is cleared for this unit
 		ClearBuilderTaskByUnit(unit);

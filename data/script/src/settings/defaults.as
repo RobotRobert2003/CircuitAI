@@ -10,6 +10,7 @@
 #include "shared/scout_raid.as"
 #include "shared/construction.as"
 #include "shared/idle_reclaim.as"
+#include "shared/lolcannon.as"
 #include "roles/tech.as"
 #include "roles/air.as"
 #include "roles/front.as"
