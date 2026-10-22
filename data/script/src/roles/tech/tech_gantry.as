@@ -469,8 +469,9 @@ namespace TechHeavyChoice {
     }
 }
 
-// D-288 (owner): a gantry by 500 metal per second, then one more per further
-// 500. The single owner of TECH's gantry target, cap and due flag; rule
+// D-288 (owner): the first gantry at GantryScaleFirstMetal (t3rush:
+// GantryScaleFirstMetalT3Rush), then one more per further GantryScaleMetalStep.
+// The single owner of TECH's gantry target, cap and due flag; rule
 // gantry.scale and the legacy T2 rung only read Due(). Every other gantry path
 // (D-281 early gantry, chain steps, cluster recovery) counts toward Have().
 namespace TechGantryScale {
@@ -500,6 +501,16 @@ namespace TechGantryScale {
         if (landDef !is null && Global::Map::MergedUnitLimits.get(landDef.GetName(), cap)) mapCeiling = cap;
     }
     bool Due() { return Enabled() && due; }
+
+    // The first gantry's income: GantryScaleFirstMetal, or on the t3rush plan
+    // GantryScaleFirstMetalT3Rush (owner, 2026-10-22) (0 = the step), never
+    // above the step.
+    float FirstMetal(float step) {
+        const float first = TechPlan::plan == "t3rush" ? Global::RoleSettings::Tech::GantryScaleFirstMetalT3Rush
+            : Global::RoleSettings::Tech::GantryScaleFirstMetal;
+        if (first <= 0.0f) return step;
+        return AiMin(first, step);
+    }
 
     // Standing gantries and frames (def.count counts frames), plus land orders
     // not framed yet. O(clusters); the cluster list is a few tiers x a few
@@ -543,7 +554,9 @@ namespace TechGantryScale {
         if (landDef is null || !Economy::IncomeWindowReady()) { due = false; return; }
         const float mi = Economy::GetMinMetalIncomeLast10s();   // 10 s minimum: a spike never raises the target
         const float step = AiMax(1.0f, Global::RoleSettings::Tech::GantryScaleMetalStep);
-        const int raw = AiMin(AiMax(0, Global::RoleSettings::Tech::GantryScaleMax), int(mi / step));
+        // Owner (2026-10-19, t3rush 2026-10-22): the first gantry at FirstMetal()
+        const float first = FirstMetal(step);
+        const int raw = AiMin(AiMax(0, Global::RoleSettings::Tech::GantryScaleMax), AiMax(int(mi / step), mi >= first ? 1 : 0));
         if (raw > highWater) {
             highWater = raw;
             aiTerrainMgr.SetLayoutInt(TargetKey, highWater);
