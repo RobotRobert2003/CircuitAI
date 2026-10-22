@@ -54,6 +54,7 @@ namespace TechFortifications {
         if (!TechWeapons::OnMap(p) || aiBattle.IsFriendlyLane(p)) return;
         CCircuitDef@ d = TechWeapons::Def(role);
         if (d is null || !WallHelpers::Allowed(d, p)) return;
+        if (T3Unstick::Cleared(p, T3Unstick::HalfSize(d))) return;   // cleared to free a penned T3 (owner, 2026-10-22)
         Piece v; v.role = role; v.pos = p;
         const string key = s.key + "." + role + "." + int(p.x) + "." + int(p.z);
         v.slot = aiTerrainMgr.GetLayoutInt(key, -1);

@@ -936,6 +936,13 @@ namespace TechWeapons {
                 if (d is null) { s.dead = true; continue; }
                 const bool stands = aiBuilderMgr.FindOwnNear(s.pos, 64.0f, d) !is null;
                 if (stands && s.standFrame < 0) s.standFrame = ai.frame;
+                if (!stands && T3Unstick::Cleared(s.pos)) {
+                    // cleared to free a penned T3 (owner, 2026-10-22): never rebuilt there
+                    s.dead = true;
+                    s.standFrame = -1;
+                    GenericHelpers::LogUtil("[TECH][Weapons] slot " + s.role + " at (" + int(s.pos.x) + "," + int(s.pos.z) + ") was cleared for a T3; dropped", 1);
+                    continue;
+                }
                 if (!stands && s.standFrame >= 0) s.standFrame = -1;   // lost: to be rebuilt
             }
         }

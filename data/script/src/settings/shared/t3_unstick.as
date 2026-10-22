@@ -16,6 +16,10 @@ namespace Global { namespace T3Unstick {
     float TurretMargin = 32.0f;           // construction turrets within build range + this join each reclaim
     int BuildersPerBlocker = 2;
     float NudgeDistance = 600.0f;         // after a round, one move this far toward the nearest enemy start
+    // A cleared blocker's site leaves TECH's plans (owner, 2026-10-22): the
+    // native layout slot is forgotten on reclaim (D-101); the script plans
+    // (weapon slots, fortifications, forward defence, eco flak) skip these.
+    int MaxCleared = 64;                  // oldest dropped first
     // Engine (CircuitAI.cpp UnitMoveFailed): after 40 failed moves it stops the
     // unit and orders it reclaimed. For a T3 that reclaim is aborted here and
     // treated as the stuck signal.

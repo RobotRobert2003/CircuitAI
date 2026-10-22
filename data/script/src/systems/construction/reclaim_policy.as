@@ -140,7 +140,7 @@ namespace TechReclaim {
     // A script reclaim ordered after Allowed: watched by Tick for the pause.
     void Track(CCircuitUnit@ target, IUnitTask@ task, const string &in source)
     {
-        if (target is null || task is null) return;
+        if (target is null || task is null || task.IsDead()) return;
         for (uint i = 0; i < trackedIds.length(); ++i) {
             if (trackedIds[i] != target.id) continue;
             @trackedTasks[i] = task;
@@ -174,7 +174,8 @@ namespace TechReclaim {
         for (uint i = 0; i < trackedIds.length(); ) {
             CCircuitUnit@ t = ai.GetTeamUnit(trackedIds[i]);
             IUnitTask@ task = trackedTasks[i];
-            if (t is null || task is null || task.IsDead()) { Untrack(i); continue; }
+            // gone, dying or given to an ally (AllyClear): no longer ours to pause
+            if (!ai.IsOwnedUnit(t) || task is null || task.IsDead()) { Untrack(i); continue; }
             // INV-201: no reclaim of an energy storage is ever in flight
             if (IsEnergyStorage(t))
                 Invariants::Violation("INV-201", "" + t.id, "reclaim of energy storage " + t.circuitDef.GetName() + " " + t.id + " in flight (" + trackedSources[i] + ")");

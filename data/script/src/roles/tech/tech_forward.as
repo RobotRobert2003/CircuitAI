@@ -185,6 +185,8 @@ namespace TechForward {
 
     IUnitTask@ OrderDefence(CCircuitUnit@ u, CCircuitDef@ d, const AIFloat3& in at, float shake, const string &in why)
     {
+        if (u is null || d is null) return null;
+        if (T3Unstick::Cleared(at, T3Unstick::HalfSize(d))) return null;   // cleared to free a penned T3 (owner, 2026-10-22)
         IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::DEFENCE, Task::Priority::NORMAL, d, at, shake, true,
             Global::RoleSettings::Tech::ForwardOrderHoldSeconds * SECOND));
         if (t is null) return null;

@@ -96,6 +96,7 @@ namespace EcoFlak {
             const AIFloat3 p(c.centre.x+x/scale,0.f,c.centre.z+z/scale);
             if (p.x<64.f || p.z<64.f || p.x>=AiTerrainWidth()-64.f || p.z>=AiTerrainHeight()-64.f
                 || !OutsideEconomy(p) || !Space(p,c,index) || aiBattle.IsFriendlyLane(p)
+                || T3Unstick::Cleared(p,T3Unstick::HalfSize(def))   // cleared for a penned T3 (owner, 2026-10-22)
                 || !aiTerrainMgr.CanReserveBuilding(def,p,0)) continue;
             c.sites[index]=p;
             return true;
@@ -181,6 +182,7 @@ namespace EcoFlak {
                 c.slots[i]=-1; c.sites[i]=AIFloat3(-1.f,0.f,-1.f);
             }
             if (c.slots[i]<0 && c.sites[i].x>=0.f && (!OutsideEconomy(c.sites[i])
+                || T3Unstick::Cleared(c.sites[i],T3Unstick::HalfSize(def))
                 || !aiTerrainMgr.CanReserveBuilding(def,c.sites[i],0))) c.sites[i]=AIFloat3(-1.f,0.f,-1.f);
             if (c.sites[i].x<0.f && !Plan(c,i,def)) continue;
             const AIFloat3 p=c.sites[i];

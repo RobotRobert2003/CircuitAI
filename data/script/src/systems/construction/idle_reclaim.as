@@ -179,7 +179,7 @@ namespace IdleReclaim {
         for (int i = int(jobs.length()) - 1; i >= 0; --i) {
             Job@ j = jobs[i];
             CCircuitUnit@ u = ai.GetTeamUnit(j.unit);
-            if (u is null) { EndJob(uint(i), true, ai.frame); continue; }
+            if (!ai.IsOwnedUnit(u)) { EndJob(uint(i), true, ai.frame); continue; }   // gone, dying or given away
             if (j.task is null || j.task.IsDead()) {
                 // empty circle unless it ran its full time or stopped on a full bank
                 const bool keep = aiEconomyMgr.isMetalFull || ai.frame - j.started >= timeout - 2 * SECOND;
@@ -220,7 +220,7 @@ namespace IdleReclaim {
     // con gets a wreck run instead; anything else keeps `t`.
     IUnitTask@ Offer(CCircuitUnit@ u, IUnitTask@ t)
     {
-        if (!Global::IdleReclaim::Enabled || u is null || !Listed(u.circuitDef) || u.GetBuildProgress() < 1.0f) return t;
+        if (!Global::IdleReclaim::Enabled || !ai.IsOwnedUnit(u) || !Listed(u.circuitDef) || u.GetBuildProgress() < 1.0f) return t;
         Job@ mine = JobOf(u.id);
         if (mine !is null) {
             // its run is still live: keep it unless real work was found
@@ -253,7 +253,7 @@ namespace IdleReclaim {
             }
             IUnitTask@ run = aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::LOW, best.pos, best.metal,
                 Global::IdleReclaim::JobTimeoutSeconds * SECOND, Global::IdleReclaim::AreaRadius));
-            if (run is null) return t;
+            if (run is null || run.IsDead()) return t;
             Job job;
             job.unit = u.id;
             job.site = best.key;

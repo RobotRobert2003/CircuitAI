@@ -166,9 +166,11 @@ namespace AllyClear {
         }
         if (best is null) return null;
         IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::HIGH, best, 60 * SECOND));
-        if (!ai.IsOwnedUnit(u) || !ai.IsOwnedUnit(best) || t is null || t.IsDead()) return null;
+        if (t is null || t.IsDead()) return null;
+        if (!ai.IsOwnedUnit(best)) { aiBuilderMgr.AbortTask(t); return null; }   // given back or gone meanwhile
         reclaimTask.set("" + best.id, @t);
-        return t;
+        // recorded either way: if this builder went, others join the task
+        return ai.IsOwnedUnit(u) ? t : null;
     }
 
     // ---------------------------------------------------------------- owner
@@ -183,6 +185,7 @@ namespace AllyClear {
             Team::Roster::Entry@ who = Team::Roster::Get(sender);
             const bool t3 = IsT3Key(f[2]);   // T3Unstick: any SMRTBARb role, and its wider list (turrets, T2 flak/arty)
             if (who is null || (!t3 && who.role != AiRole::TECH && who.role != AiRole::AIR)) return true;
+            if (f[2].length() == 0 || f[2].findFirst(",") >= 0) return true;   // a malformed key could not be granted back
             const float x = float(parseInt(f[3])), z = float(parseInt(f[4]));
             const float hx = float(parseInt(f[5])), hz = float(parseInt(f[6]));
             const bool keepEnergy = aiEconomyMgr.isEnergyStalling;
@@ -194,6 +197,7 @@ namespace AllyClear {
                 if (!ai.IsOwnedUnit(u) || u.circuitDef.IsMobile()) continue;
                 const string name = u.circuitDef.GetName();
                 if (!(Allowed(name) || (t3 && T3Unstick::Clearable(name))) || (keepEnergy && IsEco(name))) continue;
+                if (aiBuilderMgr.IsReclaimProtected(u.circuitDef)) continue;   // never hand over what we may not reclaim ourselves
                 const AIFloat3 p = u.GetPos(ai.frame);
                 const float rx = float(u.circuitDef.GetFootprintX()) * SQUARE_SIZE;   // half the footprint, elmos
                 const float rz = float(u.circuitDef.GetFootprintZ()) * SQUARE_SIZE;
@@ -214,7 +218,9 @@ namespace AllyClear {
             Req@ r = null;
             if (!reqs.get(f[2], @r) || r is null) return true;
             array<string>@ ids = f[3].split(",");
+            if (ids is null) return true;
             for (uint i = 0; i < ids.length(); ++i) {
+                if (ids[i].length() == 0) continue;
                 const int id = parseInt(ids[i]);
                 if (id > 0 && r.units.find(id) < 0) r.units.insertLast(id);
             }

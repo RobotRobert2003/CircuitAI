@@ -38,6 +38,12 @@ TECH asks its reclaim gate (TechReclaim::Allowed, D-290) for each one.
 
 When the blockers are gone or ReclaimSeconds pass the unit gets one move of
 NudgeDistance toward the nearest enemy start, and its task takes over again.
+Every blocker that is gone by then leaves the blueprint (owner, 2026-10-22):
+its native layout slot was marked recycled when the reclaim was enqueued
+(BuilderManager, D-101) and is forgotten, not restored, when it goes; its
+site joins `cleared`, which TECH's script plans read through Cleared() before
+putting a building back (TechWeapons slots, TechFortifications pieces,
+TechForward defence orders, EcoFlak sites).
 A unit that is still stuck gets another round after RetrySeconds with a wider
 ring, MaxRounds in all; moving 4 x StuckRadius resets the count.
 
@@ -60,7 +66,45 @@ namespace T3Unstick {
         bool signalled = false;  // the engine tried to reclaim it
         string allyKey = "";
         array<int> blockers;
+        array<AIFloat3> blockerAt;  // parallel to blockers: site and half footprint, read once gone
+        array<float> blockerHalf;
         dictionary blockerUnits; // original identities belonging to this round
+    }
+
+    // Sites cleared for a T3 (parallel arrays, oldest first). Cleared() is
+    // O(C), C <= MaxCleared, called once per planned slot per plan pass.
+    array<AIFloat3> clearedAt;
+    array<float> clearedHalf;
+
+    void AddCleared(const AIFloat3 &in p, float half, const string &in why)
+    {
+        if (Cleared(p, half)) return;
+        const int cap = AiMax(1, Global::T3Unstick::MaxCleared);
+        while (int(clearedAt.length()) >= cap) { clearedAt.removeAt(0); clearedHalf.removeAt(0); }
+        clearedAt.insertLast(p);
+        clearedHalf.insertLast(half);
+        GenericHelpers::LogUtil("[T3Unstick] " + why + " at (" + int(p.x) + "," + int(p.z) + ") cleared; its site leaves the plans", 1);
+    }
+
+    // True when a footprint of half size `half` at p overlaps a cleared site
+    bool Cleared(const AIFloat3 &in p, float half = 0.0f)
+    {
+        for (uint i = 0; i < clearedAt.length(); ++i) {
+            const float reach = clearedHalf[i] + half;
+            if (abs(clearedAt[i].x - p.x) < reach && abs(clearedAt[i].z - p.z) < reach) return true;
+        }
+        return false;
+    }
+
+    // The round's blockers that are gone (reclaimed, or lost) leave the plans
+    void NoteCleared(Hull@ h)
+    {
+        if (h is null) return;
+        for (uint i = 0; i < h.blockers.length() && i < h.blockerAt.length(); ++i) {
+            CCircuitUnit@ original = null;
+            if (!h.blockerUnits.get("" + h.blockers[i], @original) || ai.IsOwnedUnit(original)) continue;
+            AddCleared(h.blockerAt[i], h.blockerHalf[i], "blocker " + h.blockers[i]);
+        }
     }
 
     array<Hull@> hulls;
@@ -93,6 +137,8 @@ namespace T3Unstick {
             blockerUsers.delete(key);
         }
         h.blockers.resize(0);
+        h.blockerAt.resize(0);
+        h.blockerHalf.resize(0);
         h.blockerUnits.deleteAll();
     }
 
@@ -186,7 +232,11 @@ namespace T3Unstick {
                 continue;
             }
             IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::HIGH, b, int(Global::T3Unstick::ReclaimSeconds) * SECOND));
-            if (!ai.IsOwnedUnit(u) || h.unit !is u) return;
+            if (!ai.IsOwnedUnit(u) || h.unit !is u) {
+                // the T3 went during the enqueue: no untracked reclaim is left behind
+                if (t !is null && !t.IsDead()) aiBuilderMgr.AbortTask(t);
+                return;
+            }
             if (t is null || t.IsDead() || !ai.IsOwnedUnit(b)) { kept += " " + name; continue; }
             if (tech) TechReclaim::Track(b, t, "t3unstick");
             reclaimTask.set("" + b.id, @t);
@@ -198,6 +248,8 @@ namespace T3Unstick {
             blockerUsers.set(key, users + 1);
             h.blockerUnits.set(key, @b);
             h.blockers.insertLast(b.id);
+            h.blockerAt.insertLast(p);
+            h.blockerHalf.insertLast(HalfSize(b.circuitDef));
             if (activeBlockers.find(b.id) < 0) activeBlockers.insertLast(b.id);
             cleared += " " + name;
         }
@@ -235,6 +287,7 @@ namespace T3Unstick {
     void EndRound(Hull@ h, CCircuitUnit@ u, const AIFloat3 &in pos)
     {
         if (h is null) return;
+        NoteCleared(h);
         ReleaseBlockers(h);
         h.roundStart = -1;
         h.nextRound = ai.frame + int(Global::T3Unstick::RetrySeconds) * SECOND;
@@ -280,6 +333,7 @@ namespace T3Unstick {
             if (h is null) { hulls.removeAt(uint(i)); continue; }
             CCircuitUnit@ u = h.unit;
             if (!ai.IsOwnedUnit(u)) {
+                NoteCleared(h);
                 ReleaseBlockers(h);
                 hulls.removeAt(uint(i));
                 continue;
@@ -335,12 +389,12 @@ namespace T3Unstick {
         if (reclaimTask.get("" + best.id, @live) && Team::AllyClear::LiveReclaim(live, best)) return live;
         if (Global::AISettings::Role == AiRole::TECH && !TechReclaim::Allowed(best, "t3unstick")) return null;
         IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::HIGH, best, int(Global::T3Unstick::ReclaimSeconds) * SECOND));
-        if (!ai.IsOwnedUnit(u) || !ai.IsOwnedUnit(best) || t is null || t.IsDead()) return null;
-        if (t !is null) {
-            if (Global::AISettings::Role == AiRole::TECH) TechReclaim::Track(best, t, "t3unstick");
-            reclaimTask.set("" + best.id, @t);
-            blockerUnit.set("" + best.id, @best);
-        }
-        return t;
+        if (t is null || t.IsDead()) return null;
+        if (!ai.IsOwnedUnit(best)) { aiBuilderMgr.AbortTask(t); return null; }   // the blocker went (or was given away) meanwhile
+        if (Global::AISettings::Role == AiRole::TECH) TechReclaim::Track(best, t, "t3unstick");
+        reclaimTask.set("" + best.id, @t);
+        blockerUnit.set("" + best.id, @best);
+        // the task is recorded either way: if this builder went, others join it
+        return ai.IsOwnedUnit(u) ? t : null;
     }
 }  // namespace T3Unstick
