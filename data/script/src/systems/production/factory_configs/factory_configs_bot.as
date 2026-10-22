@@ -199,11 +199,10 @@ namespace BotConfigs {
             cfg.AddRole("heavy",     array<string> = {"legaabot"});
 
             // Roughly derived from factory_leg.json land/air weights; kept broad and role-based
-            // Owner 2026-10-22: raider (Satyr) weight matches assault (Karkinos) at every tier.
-            cfg.SetTierProbabilities(0, array<float> = {0.10f, 0.20f, 0.08f, 0.10f, 0.10f, 0.08f, 0.02f, 0.00f, 0.08f, 0.02f});
-            cfg.SetTierProbabilities(1, array<float> = {0.10f, 0.18f, 0.10f, 0.10f, 0.12f, 0.10f, 0.02f, 0.00f, 0.08f, 0.02f});
-            cfg.SetTierProbabilities(2, array<float> = {0.08f, 0.16f, 0.12f, 0.10f, 0.14f, 0.12f, 0.02f, 0.00f, 0.08f, 0.04f});
-            cfg.SetTierProbabilities(3, array<float> = {0.06f, 0.14f, 0.14f, 0.10f, 0.16f, 0.14f, 0.04f, 0.00f, 0.08f, 0.06f});
+            cfg.SetTierProbabilities(0, array<float> = {0.10f, 0.20f, 0.30f, 0.10f, 0.10f, 0.08f, 0.02f, 0.00f, 0.08f, 0.02f});
+            cfg.SetTierProbabilities(1, array<float> = {0.10f, 0.18f, 0.28f, 0.10f, 0.12f, 0.10f, 0.02f, 0.00f, 0.08f, 0.02f});
+            cfg.SetTierProbabilities(2, array<float> = {0.08f, 0.16f, 0.26f, 0.10f, 0.14f, 0.12f, 0.02f, 0.00f, 0.08f, 0.04f});
+            cfg.SetTierProbabilities(3, array<float> = {0.06f, 0.14f, 0.22f, 0.10f, 0.16f, 0.14f, 0.04f, 0.00f, 0.08f, 0.06f});
 
             FactoryProduction::factoryConfigs.set("leglab", @cfg);
             GenericHelpers::LogUtil("[FactoryProduction] RegisterBotFactories: leglab registered", 3);
