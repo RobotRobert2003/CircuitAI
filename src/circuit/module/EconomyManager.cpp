@@ -218,7 +218,8 @@ void CEconomyManager::InitHandlers()
 					// Force commander level 0 to morph
 					CCircuitUnit* unit = this->circuit->GetTeamUnit(unitId);
 					if ((unit != nullptr)
-						&& (unit->GetTask()->GetType() != IUnitTask::Type::PLAYER))
+						&& (unit->GetLiveTask() != nullptr)
+						&& (unit->GetLiveTask()->GetType() != IUnitTask::Type::PLAYER))
 					{
 						const std::map<std::string, std::string>& customParams = unit->GetCircuitDef()->GetDef()->GetCustomParams();
 						auto it = customParams.find("level");
@@ -2205,8 +2206,9 @@ void CEconomyManager::StartFactoryJob()
 	if ((factoryMgr->GetFactoryCount() == 0) && circuit->GetBuilderManager()->GetTasks(IBuilderTask::BuildType::FACTORY).empty()) {
 		CCircuitUnit* comm = circuit->GetSetupManager()->GetCommander();
 		const AIFloat3 pos = (comm != nullptr) ? comm->GetPos(circuit->GetLastFrame()) : AIFloat3(-RgtVector);
-		if (!factoryMgr->IsSwitchTime() && (comm != nullptr) && (comm->GetTask()->GetType() == IUnitTask::Type::BUILDER)) {
-			IBuilderTask* taskB = static_cast<IBuilderTask*>(comm->GetTask());
+		if (!factoryMgr->IsSwitchTime() && (comm != nullptr) && (comm->GetLiveTask() != nullptr)
+			&& (comm->GetLiveTask()->GetType() == IUnitTask::Type::BUILDER)) {
+			IBuilderTask* taskB = static_cast<IBuilderTask*>(comm->GetLiveTask());
 			const float maxDist = comm->GetCircuitDef()->GetBuildDistance() + comm->GetCircuitDef()->GetSpeed() * startMexTravel;
 			if (taskB->GetPosition().SqDistance2D(pos) > SQUARE(maxDist)) {
 				factoryMgr->RaiseSwitchTime();
@@ -2276,7 +2278,7 @@ CBFactoryTask* CEconomyManager::PickNextFactory(const AIFloat3& position, bool i
 
 void CEconomyManager::AddMorphee(CCircuitUnit* unit)
 {
-	if (!unit->IsUpgradable() || (unit->GetTask()->GetType() == IUnitTask::Type::NIL)) {
+	if (!unit->IsUpgradable() || (unit->GetLiveTask() == nullptr) || (unit->GetLiveTask()->GetType() == IUnitTask::Type::NIL)) {
 		return;
 	}
 	morphees.insert(unit);
@@ -2305,7 +2307,7 @@ void CEconomyManager::UpdateMorph()
 	auto it = morphees.begin();
 	while (it != morphees.end()) {
 		CCircuitUnit* unit = *it;
-		if ((unit->GetTask()->GetType() == IUnitTask::Type::PLAYER) ||
+		if ((unit->GetLiveTask() == nullptr) || (unit->GetLiveTask()->GetType() == IUnitTask::Type::PLAYER) ||
 			(unit->GetUnit()->GetHealth() < unit->GetUnit()->GetMaxHealth() * 0.8f))
 		{
 			++it;

@@ -45,7 +45,11 @@ void CSupportAction::Update(CCircuitAI* circuit)
 	if (unit->GetCurrentCommand()->GetId() == CMD_GUARD) {
 		return;
 	}
-	CCircuitUnit* leader = static_cast<ISquadTask*>(unit->GetTask())->GetLeader();
+	IUnitTask* task = unit->GetLiveTask();  // 2026-10-22: no handler or expired task -> skip
+	CCircuitUnit* leader = (task != nullptr) ? static_cast<ISquadTask*>(task)->GetLeader() : nullptr;
+	if (leader == nullptr) {
+		return;
+	}
 	TRY_UNIT(circuit, unit,
 		unit->GetUnit()->Guard(leader->GetUnit());
 	)

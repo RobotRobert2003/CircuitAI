@@ -63,8 +63,8 @@ static bool CMilitaryManager_SetPorcChain(CMilitaryManager* militaryMgr,
 static bool CMilitaryManager_TransferUnit(CMilitaryManager* mgr, CCircuitUnit* unit, IUnitTask* task)
 {
     if (unit == nullptr || task == nullptr || mgr->GetCircuit()->GetTeamUnit(unit->GetId()) != unit
-        || task->IsDead() || task->GetManager() != mgr || unit->GetTask() == nullptr
-        || unit->GetTask()->GetManager() != mgr
+        || task->IsDead() || task->GetManager() != mgr || unit->GetLiveTask() == nullptr
+        || unit->GetLiveTask()->GetManager() != mgr
         || (dynamic_cast<IFighterTask*>(task) == nullptr && !task->IsExternalControlled())) return false;
     if (unit->GetTask() != task) mgr->AssignTask(unit, task);
     return true;

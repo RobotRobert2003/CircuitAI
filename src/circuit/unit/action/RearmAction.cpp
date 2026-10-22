@@ -45,7 +45,8 @@ void CRearmAction::OnStart()
 {
 	IAction::OnStart();
 	CCircuitUnit* unit = static_cast<CCircuitUnit*>(ownerList);
-	unit->GetTask()->OnRearmStart(unit);
+	IUnitTask* task = unit->GetLiveTask();  // 2026-10-22: no handler or expired task -> skip
+	if (task != nullptr) task->OnRearmStart(unit);
 }
 
 } // namespace circuit

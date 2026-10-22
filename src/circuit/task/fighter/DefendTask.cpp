@@ -53,9 +53,10 @@ CDefendTask::~CDefendTask()
 bool CDefendTask::CanAssignTo(CCircuitUnit* unit) const
 {
 	// Neither direction may merge a script-owned cohort into ordinary defence.
-	if (IsGather() || static_cast<CDefendTask*>(unit->GetTask())->IsGather()) return false;
+	CDefendTask* current = static_cast<CDefendTask*>(unit->GetLiveTask());  // 2026-10-22: null-safe
+	if (current == nullptr || IsGather() || current->IsGather()) return false;
 	return (leader == nullptr || leader->GetCircuitDef()->GetTargetMinCost() == unit->GetCircuitDef()->GetTargetMinCost())
-        && (attackPower < maxPower) && (static_cast<CDefendTask*>(unit->GetTask())->GetPromote() == promote);
+        && (attackPower < maxPower) && (current->GetPromote() == promote);
 }
 
 void CDefendTask::AssignTo(CCircuitUnit* unit)

@@ -138,18 +138,23 @@ void CMilitaryManager::InitHandlers()
 	auto attackerIdleHandler = [this](CCircuitUnit* unit) {
 		// NOTE: Avoid instant task reassignment, though it may be not relevant for attackers
 		if (this->circuit->GetLastFrame() > unit->GetTaskFrame()/* + FRAMES_PER_SEC*/) {
-			unit->GetTask()->OnUnitIdle(unit);
+			IUnitTask* task = unit->GetLiveTask();  // 2026-10-22: no handler or expired task -> skip
+			if (task != nullptr) task->OnUnitIdle(unit);
 		}
 	};
 	auto attackerDamagedHandler = [](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		unit->GetTask()->OnUnitDamaged(unit, attacker);
+		IUnitTask* task = unit->GetLiveTask();
+		if (task != nullptr) task->OnUnitDamaged(unit, attacker);
 	};
 	auto attackerDestroyedHandler = [this](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetTask();
-		task->OnUnitDestroyed(unit, attacker);  // can change task
-		unit->GetTask()->RemoveAssignee(unit);  // Remove unit from IdleTask
+		IUnitTask* task = unit->GetLiveTask();
+		if (task != nullptr) {  // 2026-10-22: a missing/expired task still gets the bookkeeping below
+			task->OnUnitDestroyed(unit, attacker);  // can change task
+			IUnitTask* live = unit->GetLiveTask();
+			if (live != nullptr) live->RemoveAssignee(unit);  // Remove unit from IdleTask
+		}
 
-		if (task->GetType() == IUnitTask::Type::NIL) {
+		if ((task != nullptr) && (task->GetType() == IUnitTask::Type::NIL)) {
 			return;
 		}
 
@@ -221,9 +226,12 @@ void CMilitaryManager::InitHandlers()
 		UnitAdded(unit, UseAs::SUPER);
 	};
 	auto superDestroyedHandler = [this](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetTask();
-		task->OnUnitDestroyed(unit, attacker);  // can change task
-		unit->GetTask()->RemoveAssignee(unit);  // Remove unit from IdleTask
+		IUnitTask* task = unit->GetLiveTask();
+		if (task != nullptr) {
+			task->OnUnitDestroyed(unit, attacker);  // can change task
+			IUnitTask* live = unit->GetLiveTask();
+			if (live != nullptr) live->RemoveAssignee(unit);  // Remove unit from IdleTask
+		}
 
 		if (unit->GetCircuitDef()->IsAttrStock()) {
 			stockpilers.erase(unit);
@@ -2471,7 +2479,8 @@ void CMilitaryManager::Watchdog()
 	ZoneScopedN(__PRETTY_FUNCTION__);
 
 	for (CCircuitUnit* unit : army) {
-		if (unit->GetTask()->GetType() == IUnitTask::Type::PLAYER) {
+		IUnitTask* task = unit->GetLiveTask();
+		if ((task != nullptr) && (task->GetType() == IUnitTask::Type::PLAYER)) {
 			continue;
 		}
 		if (!circuit->GetCallback()->Unit_HasCommands(unit->GetId())) {
