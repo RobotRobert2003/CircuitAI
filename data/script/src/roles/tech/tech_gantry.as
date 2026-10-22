@@ -397,9 +397,24 @@ namespace TechHeavyChoice {
         }
         return @cached;
     }
+    // HeavyAlternate (owner, 2026-10-22): every other batch starts with the other unit of the pair
+    // (Thor, Titan, Thor ...), land and amphibious alike. The pair's second unit is still the
+    // fallback when the first cannot be built. Candidates() itself stays unchanged: the transport
+    // check reads it.
+    array<string> alternated;    // reused ordering for LateBatch
+    string lastBatchUnit;        // the unit the last successful late batch built
+    array<string>@ BatchOrder(const string& in side) {
+        array<string>@ c = Candidates(side);
+        if (!Global::RoleSettings::Tech::HeavyAlternate || c.length() < 2 || lastBatchUnit != c[0]) return @c;
+        alternated.resize(0);
+        for (uint i = 1; i < c.length(); ++i) alternated.insertLast(c[i]);
+        alternated.insertLast(c[0]);
+        return @alternated;
+    }
     // One level-1 line per batch (one batch per gantry ask, five units each).
     IUnitTask@ LateBatch(CCircuitUnit@ gantry, const string& in side, int count) {
-        IUnitTask@ task = Factory::EnqueueGantryBatchFrom(gantry, Candidates(side), count, Task::Priority::HIGH);
+        IUnitTask@ task = Factory::EnqueueGantryBatchFrom(gantry, BatchOrder(side), count, Task::Priority::HIGH);
+        if (task !is null) lastBatchUnit = Factory::lastGantryBatchUnit;
         if (task !is null)
             GenericHelpers::LogUtil("[TECH][Heavy] batch side=" + side + " terrain=" + Terrain()
                 + " unit=" + Factory::lastGantryBatchUnit + " gantry=" + gantry.circuitDef.GetName() + " x" + count, 1);

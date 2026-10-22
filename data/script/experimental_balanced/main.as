@@ -160,6 +160,7 @@ namespace Main {
 	void ApplyProfileSettings()
 	{
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
+        Global::RoleSettings::Tech::HeavyAlternate = true; // owner 2026-10-22: late heavy batches alternate Thor / Titan (land and amphibious)
         Global::RoleSettings::Front::VehicleTankOpenerChance = 0.0f;
 		// FRONT (owner, 2026-10-17): two FRONTs each build a spam lab for an edge lane, left and right
 		// (src/settings/shared/spam.as EdgeLanesEnabled, off there; systems/combat/edge_lanes.as)

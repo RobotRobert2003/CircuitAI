@@ -246,6 +246,7 @@ namespace Tech {
             float HeavyLateMetalIncome = 400.0f;
             int HeavyAmphibiousMinBeaches = 1;          // assault beach fronts (StrategicSites) that make a map "amphibious"
             int LateMarauderMassBatch = 0;              // 0 = no late Marauders; N = one late batch of N Marauders on an amphibious map (owner's "very large numbers" exception, off)
+            bool HeavyAlternate = false;                // true: every other late heavy batch starts with the other unit of the pair (on in experimental_balanced)
             string HeavyLandArmada = "armthor";
             string HeavyAmphArmada = "armbanth";
             string HeavyLandCortex = "corkorg";         // owner default; "corjugg" (Behemoth: land only, very slow) is the alternative
