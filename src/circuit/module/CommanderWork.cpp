@@ -334,7 +334,7 @@ IUnitTask* CCommanderControl::AssistWork(CCircuitUnit* unit,const State& s,const
         } else {
             // A plant producing a unit (recruit task), not a nano turret.
             if(def->IsMobile() || !def->IsBuilder() || def->IsAssist() || def->GetBuildOptions().empty()
-                || !worker->GetLiveTask() || worker->GetLiveTask()->GetType()!=IUnitTask::Type::FACTORY) continue;
+                || !worker->GetTask() || worker->GetTask()->GetType()!=IUnitTask::Type::FACTORY) continue;
             at=worker->GetPos(frame);
         }
         if(!InsideLine(s,at,frame,reach)) continue;

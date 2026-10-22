@@ -1239,7 +1239,7 @@ int CCircuitAI::UnitFinished(CCircuitUnit* unit)
 		module->UnitFinished(unit);
 	}
 
-	IUnitTask* finishedTask = unit->IsDead() ? nullptr : unit->GetLiveTask();
+	IUnitTask* finishedTask = unit->IsDead() ? nullptr : unit->GetTask();
 	if ((finishedTask != nullptr)  // AiUnitAdded script can give away unit by now
 		&& (finishedTask->GetType() != IUnitTask::Type::NIL)
 		&& (unit->GetUnit()->GetRulesParamFloat("resurrected", 0.f) != 0.f))
@@ -1295,7 +1295,7 @@ int CCircuitAI::UnitMoveFailed(CCircuitUnit* unit)
 //		Garbage(unit, "stuck");
 		GetBuilderManager()->Enqueue(TaskB::Reclaim(IBuilderTask::Priority::NORMAL, unit));
 	} else {
-		IUnitTask* task = unit->GetLiveTask();
+		IUnitTask* task = unit->GetTask();
 		if ((task != nullptr) && (task->GetType() != IUnitTask::Type::NIL)) {
 			task->OnUnitMoveFailed(unit);
 		}
@@ -1422,7 +1422,7 @@ int CCircuitAI::EnemyEnterLOS(CEnemyInfo* enemy)
 		CCircuitUnit* unit = GetTeamUnit(fId);
 		// 2026-10-22 crash (frame 91940, after a [TurretReclaim] interrupt): a team unit with no task
 		// handler (task == nullptr) or an expired task sat next to a sudden threat. Live task only.
-		IUnitTask* task = (unit != nullptr) ? unit->GetLiveTask() : nullptr;
+		IUnitTask* task = (unit != nullptr) ? unit->GetTask() : nullptr;
 		if ((task != nullptr) && (task->GetType() != IUnitTask::Type::NIL)) {
 			unit->ForceUpdate(lastFrame + THREAT_UPDATE_RATE);
 		}
@@ -1475,7 +1475,7 @@ int CCircuitAI::EnemyDestroyed(CEnemyInfo* enemy)
 int CCircuitAI::PlayerCommand(const std::vector<CCircuitUnit*>& units)
 {
 	for (CCircuitUnit* unit : units) {
-		IUnitTask* task = (unit != nullptr) ? unit->GetLiveTask() : nullptr;
+		IUnitTask* task = (unit != nullptr) ? unit->GetTask() : nullptr;
 		if ((task != nullptr)
 			&& (task->GetType() != IUnitTask::Type::NIL)  // ignore orders to nanoframes
 			&& (task->GetType() != IUnitTask::Type::PLAYER))
@@ -1848,7 +1848,7 @@ bool CCircuitAI::UnitControl(CCircuitUnit* unit, bool isEnable)
 	if ((unit == nullptr)/* || (unit->GetTask()->GetType() == IUnitTask::Type::NIL)*/) {
 		return false;
 	}
-	IUnitTask* task = unit->GetLiveTask();
+	IUnitTask* task = unit->GetTask();
 	if (task == nullptr) {
 		return false;  // no handler (or an expired task): nothing to hand over
 	}
@@ -1880,7 +1880,7 @@ void CCircuitAI::UpdateActions()
 			actionUnits.pop_back();
 			DeleteTeamUnit(unit);
 		} else {
-			IUnitTask* task = unit->GetLiveTask();
+			IUnitTask* task = unit->GetTask();
 			if ((task != nullptr) && (task->GetType() != IUnitTask::Type::PLAYER)) {
 				unit->Update(this);
 				--n;

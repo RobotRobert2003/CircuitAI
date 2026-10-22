@@ -784,7 +784,7 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         // Only deployment yields; local combat observation never pauses.
         if(frame<s.frontYield) return false;
         if(!options.frontReady || unit->GetHealthPercent()<options.recover
-            || !unit->GetLiveTask() || unit->GetLiveTask()->GetType()==IUnitTask::Type::RETREAT) return false;
+            || !unit->GetTask() || unit->GetTask()->GetType()==IUnitTask::Type::RETREAT) return false;
         // D-299: hold the last fallback line until its turret quota stands
         // (bounded by line_hold_seconds); the ladder offers that work.
         if(frame<s.lineUntil && !s.lineDone) return false;
@@ -886,7 +886,7 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
     if(!options.advance || unit->GetHealthPercent()<options.recover
         || ai->GetFactoryManager()->GetFactoryCount()==0
         || ai->GetBuilderManager()->GetWorkerCount()<=options.frontWorkers
-        || !unit->GetLiveTask() || unit->GetLiveTask()->GetType()==IUnitTask::Type::RETREAT) return false;
+        || !unit->GetTask() || unit->GetTask()->GetType()==IUnitTask::Type::RETREAT) return false;
     // Strategic planning uses the existing published enemy-group snapshot once
     // a second. Local threat observation remains at three frames while deployed.
     if(frame<s.lastLog+30) return s.deployed && task;

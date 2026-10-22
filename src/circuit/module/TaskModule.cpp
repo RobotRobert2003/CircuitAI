@@ -84,7 +84,7 @@ void ITaskModule::AssignTask(CCircuitUnit* unit, IUnitTask* task)
 		CBuilderManager* bm = dynamic_cast<CBuilderManager*>(this);
 		if ((bm != nullptr) && bm->IsExperimentalBuild() && (unit->GetCircuitDef() != nullptr)) {
 			GetCircuit()->LOG("EXP: swap: %s(%i) from task type %i to task type %i", unit->GetCircuitDef()->GetDef()->GetName(), unit->GetId(),
-					int(unit->GetLiveTask() != nullptr ? unit->GetLiveTask()->GetType() : IUnitTask::Type::NIL), int(task->GetType()));
+					int(unit->GetTask() != nullptr ? unit->GetTask()->GetType() : IUnitTask::Type::NIL), int(task->GetType()));
 		}
 	}
 	const auto id = unit->GetId();

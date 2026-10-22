@@ -152,19 +152,19 @@ void CBuilderManager::InitHandlers()
 		//        Can cause idle builder, but Watchdog should catch it eventually.
 		//        Unfortunately can't use EVENT_COMMAND_FINISHED because there is no unique commandId like unitId
 		if (this->circuit->GetLastFrame() > unit->GetTaskFrame()/* + FRAMES_PER_SEC*/) {
-			IUnitTask* task = unit->GetLiveTask();  // 2026-10-22: no handler or expired task -> skip
+			IUnitTask* task = unit->GetTask();  // 2026-10-22: no handler or expired task -> skip
 			if (task != nullptr) task->OnUnitIdle(unit);
 		}
 	};
 	auto workerDamagedHandler = [](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetLiveTask();
+		IUnitTask* task = unit->GetTask();
 		if (task != nullptr) task->OnUnitDamaged(unit, attacker);
 	};
 	auto workerDestroyedHandler = [this](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetLiveTask();
+		IUnitTask* task = unit->GetTask();
 		if (task != nullptr) {  // 2026-10-22: a missing/expired task still gets the bookkeeping below
 			task->OnUnitDestroyed(unit, attacker);  // can change task
-			IUnitTask* live = unit->GetLiveTask();
+			IUnitTask* live = unit->GetTask();
 			if (live != nullptr) live->RemoveAssignee(unit);  // Remove unit from IdleTask
 		}
 
@@ -208,10 +208,10 @@ void CBuilderManager::InitHandlers()
 		UnitAdded(unit, UseAs::REZZER);
 	};
 	auto rezzDestroyedHandler = [this](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetLiveTask();
+		IUnitTask* task = unit->GetTask();
 		if (task != nullptr) {
 			task->OnUnitDestroyed(unit, attacker);  // can change task
-			IUnitTask* live = unit->GetLiveTask();
+			IUnitTask* live = unit->GetTask();
 			if (live != nullptr) live->RemoveAssignee(unit);  // Remove unit from IdleTask
 		}
 
@@ -1860,7 +1860,7 @@ IBuilderTask* CBuilderManager::MakeEnergizerTask(CCircuitUnit* unit, const CQuer
 	}
 
 	if ((task == nullptr) &&
-		((unit->GetLiveTask() == nullptr) || (unit->GetLiveTask()->GetType() != IUnitTask::Type::BUILDER) || (static_cast<IBuilderTask*>(unit->GetLiveTask())->GetBuildType() != IBuilderTask::BuildType::GUARD)))
+		((unit->GetTask() == nullptr) || (unit->GetTask()->GetType() != IUnitTask::Type::BUILDER) || (static_cast<IBuilderTask*>(unit->GetTask())->GetBuildType() != IBuilderTask::BuildType::GUARD)))
 	{
 		CCircuitUnit* vip = circuit->GetFactoryManager()->GetClosestFactory(pos);
 		if (vip != nullptr) {
@@ -2244,7 +2244,7 @@ IBuilderTask* CBuilderManager::MakeCommTask(CCircuitUnit* unit, const CQueryCost
 	}
 
 	if ((task == nullptr) &&
-		((unit->GetLiveTask() == nullptr) || (unit->GetLiveTask()->GetType() != IUnitTask::Type::BUILDER) || (static_cast<IBuilderTask*>(unit->GetLiveTask())->GetBuildType() != IBuilderTask::BuildType::GUARD)))
+		((unit->GetTask() == nullptr) || (unit->GetTask()->GetType() != IUnitTask::Type::BUILDER) || (static_cast<IBuilderTask*>(unit->GetTask())->GetBuildType() != IBuilderTask::BuildType::GUARD)))
 	{
 		CCircuitUnit* vip = circuit->GetFactoryManager()->GetClosestFactory(pos);
 		if (vip != nullptr) {
@@ -2522,7 +2522,7 @@ void CBuilderManager::Watchdog()
                 task->GetLastTouched(), task->GetTimeout(), int(task->IsLayoutOwned()), task->GetReservationId(),
                 task->GetBuildPowerM(), p.x, p.z);
             for (auto* owner : task->GetAssignees()) circuit->LOG("BUILD_QUEUE: owner=%d current=%d matches=%d commands=%d",
-                owner->GetId(), int(owner->GetLiveTask() != nullptr ? owner->GetLiveTask()->GetType() : IUnitTask::Type::NIL), int(owner->GetLiveTask()==task), int(circuit->GetCallback()->Unit_HasCommands(owner->GetId())));
+                owner->GetId(), int(owner->GetTask() != nullptr ? owner->GetTask()->GetType() : IUnitTask::Type::NIL), int(owner->GetTask()==task), int(circuit->GetCallback()->Unit_HasCommands(owner->GetId())));
             for (auto* worker : workers) if (worker->GetCircuitDef()->CanBuild(task->GetBuildDef())) {
                 circuit->LOG("BUILD_QUEUE: candidate=%d can=%d reachable=%d", worker->GetId(), int(task->CanAssignTo(worker)),
                     int(!geom::is_valid(p) || circuit->GetTerrainManager()->CanReachAtSafe(worker,p,worker->GetCircuitDef()->GetBuildDistance())));
@@ -2559,7 +2559,7 @@ void CBuilderManager::Watchdog()
 		if (CCircuitUnit::ETaskState::EXECUTE != worker->GetTaskState()) {  // FIXME: Doesn't deal with Reclaim and Resurrect of Features
 			continue;
 		}
-		IUnitTask* task = worker->GetLiveTask();
+		IUnitTask* task = worker->GetTask();
 		if (task == nullptr) {  // 2026-10-22: no handler or expired task: skip
 			continue;
 		}

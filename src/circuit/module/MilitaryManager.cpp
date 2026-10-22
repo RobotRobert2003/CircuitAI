@@ -138,19 +138,19 @@ void CMilitaryManager::InitHandlers()
 	auto attackerIdleHandler = [this](CCircuitUnit* unit) {
 		// NOTE: Avoid instant task reassignment, though it may be not relevant for attackers
 		if (this->circuit->GetLastFrame() > unit->GetTaskFrame()/* + FRAMES_PER_SEC*/) {
-			IUnitTask* task = unit->GetLiveTask();  // 2026-10-22: no handler or expired task -> skip
+			IUnitTask* task = unit->GetTask();  // 2026-10-22: no handler or expired task -> skip
 			if (task != nullptr) task->OnUnitIdle(unit);
 		}
 	};
 	auto attackerDamagedHandler = [](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetLiveTask();
+		IUnitTask* task = unit->GetTask();
 		if (task != nullptr) task->OnUnitDamaged(unit, attacker);
 	};
 	auto attackerDestroyedHandler = [this](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetLiveTask();
+		IUnitTask* task = unit->GetTask();
 		if (task != nullptr) {  // 2026-10-22: a missing/expired task still gets the bookkeeping below
 			task->OnUnitDestroyed(unit, attacker);  // can change task
-			IUnitTask* live = unit->GetLiveTask();
+			IUnitTask* live = unit->GetTask();
 			if (live != nullptr) live->RemoveAssignee(unit);  // Remove unit from IdleTask
 		}
 
@@ -226,10 +226,10 @@ void CMilitaryManager::InitHandlers()
 		UnitAdded(unit, UseAs::SUPER);
 	};
 	auto superDestroyedHandler = [this](CCircuitUnit* unit, CEnemyInfo* attacker) {
-		IUnitTask* task = unit->GetLiveTask();
+		IUnitTask* task = unit->GetTask();
 		if (task != nullptr) {
 			task->OnUnitDestroyed(unit, attacker);  // can change task
-			IUnitTask* live = unit->GetLiveTask();
+			IUnitTask* live = unit->GetTask();
 			if (live != nullptr) live->RemoveAssignee(unit);  // Remove unit from IdleTask
 		}
 
@@ -2479,7 +2479,7 @@ void CMilitaryManager::Watchdog()
 	ZoneScopedN(__PRETTY_FUNCTION__);
 
 	for (CCircuitUnit* unit : army) {
-		IUnitTask* task = unit->GetLiveTask();
+		IUnitTask* task = unit->GetTask();
 		if ((task != nullptr) && (task->GetType() == IUnitTask::Type::PLAYER)) {
 			continue;
 		}

@@ -249,7 +249,7 @@ void CRetreatTask::Finish()
 void CRetreatTask::Cancel()
 {
 	if (repairer != nullptr) {
-		IUnitTask* repairerTask = repairer->GetLiveTask();  // 2026-10-22: null-safe
+		IUnitTask* repairerTask = repairer->GetTask();  // 2026-10-22: null-safe
 		if (repairerTask != nullptr) repairerTask->GetManager()->AbortTask(repairerTask);
 	}
 }
@@ -481,7 +481,7 @@ CCircuitUnit* CRetreatTask::ValidateNewRepairer(const IPathQuery* query, int new
 	if (newRep == nullptr) {
 		return nullptr;
 	}
-	if ((newRep->GetLiveTask() == nullptr) || (newRep->GetLiveTask()->GetType() != IUnitTask::Type::BUILDER)) {
+	if ((newRep->GetTask() == nullptr) || (newRep->GetTask()->GetType() != IUnitTask::Type::BUILDER)) {
 		return nullptr;
 	}
 	IBuilderTask* taskB = static_cast<IBuilderTask*>(newRep->GetTask());
