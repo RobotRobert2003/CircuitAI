@@ -1,0 +1,24 @@
+{
+  "_doc": "Legacy native-profile startup load after shared script organization; no experimental role expectations.",
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "screenshot",
+      "pattern": "\\[Playtest\\] screenshot",
+      "scope": "any",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    }
+  ]
+}

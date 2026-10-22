@@ -1,0 +1,101 @@
+{
+  "name": "commander-static-sensor",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "Previously seen static radar remains a cloak hazard after its spotter dies and mobile memory expires.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4300,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4300,
+    4100,
+    1600
+  ],
+  "photos": [
+    25,
+    40,
+    65,
+    90
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "hold_friendly": true,
+  "groups": [
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4600,
+        4600
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corjugg",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4300,
+        4850
+      ],
+      "after_seconds": 23
+    },
+    {
+      "unit": "corrad",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4300,
+        6100
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4500,
+        6100
+      ],
+      "after_seconds": 12
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_kills": 0,
+    "max_shots": 0,
+    "max_losses": 0,
+    "min_damage": 0
+  },
+  "checks": "commander-static-sensor",
+  "enemy_destination": [
+    4300,
+    4850
+  ],
+  "commander_initial": true,
+  "commander_trace": true,
+  "remove_units_after_seconds": 40,
+  "remove_unit_name": "armeyes",
+  "remove_unit_position": [
+    4500,
+    6100
+  ],
+  "completion_after_seconds": 90,
+  "commander_overrides": {
+    "t3_screen": 0
+  },
+  "enemy_commander_home": true
+}

@@ -1,0 +1,4 @@
+{
+  "role": "SEA", "counts": {}, "support": false,
+  "description": "Supreme SEA/AIR/TECH on both teams: hostile reservation attempts inside unused allied factory/economy slots. Run run_sea_allied_base.py without --supplied."
+}

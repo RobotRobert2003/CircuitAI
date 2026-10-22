@@ -1,0 +1,12 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {"key":"loaded","pattern":"\\[SeaArena\\].* loaded","scope":"any","by_minute":1},
+    {"key":"underwater-screen","pattern":"\\[SEA\\]\\[Screen\\] hold","scope":"any","by_minute":2}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena","scope":"any"}
+  ]
+}

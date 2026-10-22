@@ -1,0 +1,14 @@
+{
+  "name":"commander-friendly-block", "unit":"armcom", "side":"armada", "role":"TECH", "enemy_role":"FRONT",
+  "description":"A friendly structure intersects every D-gun line to supplied unarmed constructors. Frozen enemy builders leave the blocker alive for the full observation; TECH must avoid a manual shot.",
+  "map":"Comet Catcher Remake 1.8", "map_key":"comet", "starts":[[4000,4000],[4000,7000]],
+  "camera":[4300,4130,1000], "photos":[25,35], "min_spawn_spacing":38,
+  "command_breakdown":true, "commander_observation":true,
+  "groups":[
+    {"unit":"armcom","team":0,"count":1,"position":[4300,4000],"after_seconds":12},
+    {"unit":"armestor","team":0,"count":1,"position":[4300,4064],"after_seconds":12},
+    {"unit":"corck","team":1,"count":4,"columns":1,"spacing":40,"position":[4300,4130],"after_seconds":23}
+  ],
+  "assertions":{"min_shooters":0,"min_kills":0,"max_losses":0,"min_damage":0},
+  "checks":"commander-friendly-block"
+}

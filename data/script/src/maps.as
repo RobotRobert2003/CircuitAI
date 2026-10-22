@@ -1,5 +1,5 @@
 
-#include "helpers/generic_helpers.as"
+#include "helpers/common/generic_helpers.as"
 
 //Maps
 #include "maps/default_map_config.as"
@@ -21,6 +21,7 @@
 #include "maps/sinkhole_network.as"
 #include "maps/ancient_bastion_remake.as"
 #include "maps/mediterraneum.as"
+#include "maps/pinewood_derby.as"
 
 // Additional configs generated from the BAR map-list export: the popular16p pool
 // and every other map with a player count of 12 or more.
@@ -78,6 +79,7 @@
 #include "maps/thermal_shock.as"
 #include "maps/twin_lakes_park_redux.as"
 #include "maps/white_fire_remake.as"
+#include "maps/tropical_assault.as"
 
 namespace Maps {
     MapConfigManager@ mapManager = MapConfigManager(DEFAULT_MAP_CONFIG);
@@ -89,6 +91,7 @@ namespace Maps {
 		SupremeIsthmus::registerObjectives();
 
 		mapManager.RegisterMapConfig(SupremeIsthmus::config);
+		mapManager.RegisterMapConfig(PinewoodDerby::config);
 		mapManager.RegisterMapConfig(AllThatGlitters::config);
         mapManager.RegisterMapConfig(EightHorses::config);
         mapManager.RegisterMapConfig(FlatsAndForests::config);
@@ -162,6 +165,7 @@ namespace Maps {
         mapManager.RegisterMapConfig(ThermalShock::config);
         mapManager.RegisterMapConfig(TwinLakesParkRedux::config);
         mapManager.RegisterMapConfig(WhiteFireRemake::config);
+        mapManager.RegisterMapConfig(TropicalAssault::config);
 
         GenericHelpers::LogUtil("Finished registering map configurations: " +
             mapManager.mapConfigs.length() + " map configs available.", 1);

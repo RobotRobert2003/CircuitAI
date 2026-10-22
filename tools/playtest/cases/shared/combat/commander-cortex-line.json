@@ -1,0 +1,14 @@
+{
+  "name":"commander-cortex-line", "unit":"corcom", "side":"cortex", "role":"SEA",
+  "description":"Cortex sea-role commander defends on land with a penetrating D-gun, then resumes role work.",
+  "map":"Comet Catcher Remake 1.8", "map_key":"comet", "starts":[[4000,4000],[4000,7000]],
+  "camera":[4250,4150,1000], "photos":[25,35], "min_spawn_spacing":38,
+  "command_breakdown":true, "commander_observation":true,
+  "groups":[
+    {"unit":"corcom","team":0,"count":1,"position":[4300,4000],"after_seconds":12},
+    {"unit":"armeyes","team":0,"count":1,"position":[4500,4250],"after_seconds":12},
+    {"unit":"corak","team":1,"count":5,"columns":1,"spacing":40,"position":[4300,4080],"after_seconds":23}
+  ],
+  "assertions":{"min_shooters":1,"min_kills":3,"max_losses":0,"min_damage":800,"max_first_shot_seconds":40},
+  "checks":"commander-combat"
+}

@@ -314,9 +314,55 @@ void TestRingOrderAndClearOf()
 
 }  // namespace
 
+// D-343: SEA turret and economy reservations may not cut the flagship off.
+void TestHullPathClear()
+{
+	const int w = 40, h = 20;
+	std::vector<char> water(w * h, 1);
+	Check(HullPathClear(water, w, h, 2, 10, 37, 10, 3, 1), "open water lets a wide hull through");
+	// A wall across the window with a 5-cell gap at rows 8..12.
+	std::vector<char> wall = water;
+	for (int z = 0; z < h; ++z) {
+		if (z < 8 || z > 12) wall[z * w + 20] = 0;
+	}
+	Check(HullPathClear(wall, w, h, 2, 10, 37, 10, 2, 1), "a 5-cell gap passes a hull of half-width 2");
+	Check(!HullPathClear(wall, w, h, 2, 10, 37, 10, 3, 1), "a 5-cell gap stops a hull of half-width 3");
+	// Sealing the gap blocks every hull, even one cell wide.
+	std::vector<char> sealed = wall;
+	for (int z = 8; z <= 12; ++z) sealed[z * w + 20] = 0;
+	Check(!HullPathClear(sealed, w, h, 2, 10, 37, 10, 0, 1), "a sealed wall blocks the narrowest hull");
+	// A start hugging a footprint snaps to clear water within `snap` cells.
+	std::vector<char> yard = water;
+	for (int z = 5; z < 15; ++z) for (int x = 0; x < 4; ++x) yard[z * w + x] = 0;
+	Check(!HullPathClear(yard, w, h, 4, 10, 37, 10, 3, 0), "the mouth cell itself is too close to the yard");
+	Check(HullPathClear(yard, w, h, 4, 10, 37, 10, 3, 4), "the mouth snaps to clear water beside the yard");
+	Check(!HullPathClear(water, w, h, -1, 10, 37, 10, 1, 1), "an endpoint outside the window is refused");
+}
+
 int main()
 {
+    for (int requested=0;requested<4;++requested) for (int actual=0;actual<4;++actual) {
+        Check(MatchesFacingPass(actual,requested)==(actual==requested),
+            "opening facing pass tests and serves the same exit orientation");
+        Check(MatchesFacingPass(actual,-1), "other roles retain any reserved facing");
+    }
+	// Real completed power, not a dense reservation of future turrets, owns
+	// rush placement. Cover overlap, unequal build speed and exact reach edges.
+	const std::vector<BuiltPower> built{{{0, 0}, 100.f, 240.f}, {{10, 0}, 100.f, 300.f}};
+	Check(PowerAt({5, 0}, built) == 540.f, "sum overlapping completed assistants");
+	Check(PowerAt({20, 0}, built) == 300.f, "include exact reach boundary");
+	Check(PowerAt({20.01f, 0}, built) == 0.f, "exclude just beyond reach");
+	Check(PowerAt({0, 0}, {}) == 0.f, "planned but unbuilt area has no power");
+	Check(BuiltPowerBefore(540, 10000, 300, 1), "working power outranks proximity");
+	Check(BuiltPowerBefore(540, 4, 540, 9), "equal power prefers anchor proximity");
+	Check(!BuiltPowerBefore(540, 4, 540, 4), "exact ties retain candidate order");
 	TestCentroidAndNearest();
+	const std::vector<SupportReach> supports{{{0, 0}, 100.f}, {{250, 0}, 20.f}};
+	Check(WithinSupport({100, 0}, supports), "packed set includes exact support boundary");
+	Check(!WithinSupport({100.1f, 0}, supports), "packed extension stops outside first support");
+	Check(WithinSupport({250, 0}, supports), "another support can serve a later member");
+	Check(!WithinSupport({0, 0}, {}), "no imaginary support for empty group");
+	Check(!WithinSupport({0, 0}, {{{0, 0}, -100.f}}), "invalid reach cannot be squared positive");
 	TestFirstTurretNearestSeed();
 	TestBlockFillsAcrossRows();
 	TestNextConnectedNoneFree();
@@ -331,6 +377,7 @@ int main()
 	TestRingSkipsTheZone();
 	TestFlushAndSetStep();
 	TestLeavesPocket();
+	TestHullPathClear();
 	TestRingOrderAndClearOf();
 	if (failures > 0) {
 		std::cerr << failures << " of " << checks << " checks failed\n";

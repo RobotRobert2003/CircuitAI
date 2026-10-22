@@ -1,0 +1,107 @@
+{
+  "name": "supreme-shore-combat-handoff",
+  "handoff_audit": {"wave_seconds": 240, "maximum_response_seconds": 3, "submarines": ["armsub", "armserp"], "enemy": "corroy"},
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      7492,
+      1220
+    ],
+    [
+      4814,
+      11077
+    ]
+  ],
+  "checks": "sea/combat/supreme-shore-combat-handoff",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "shots": "1@5200@6100:2200,3@5200@6100:2200,6@5200@6100:2200",
+  "groups": [
+    {
+      "unit": "armpt",
+      "team": 0,
+      "count": 8,
+      "position": [
+        5800,
+        2100
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "armsub",
+      "team": 0,
+      "count": 24,
+      "position": [
+        6000,
+        1800
+      ],
+      "columns": 6,
+      "spacing": 100
+    },
+    {
+      "unit": "armserp",
+      "team": 0,
+      "count": 12,
+      "position": [
+        5200,
+        1800
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "corroy",
+      "team": 1,
+      "count": 3,
+      "position": [
+        4300,
+        3300
+      ],
+      "columns": 3,
+      "spacing": 160,
+      "after_seconds": 240
+    },
+    {
+      "unit": "armason",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4300,
+        3600
+      ],
+      "after_seconds": 230
+    },
+    {
+      "unit": "armroy",
+      "team": 0,
+      "count": 2,
+      "position": [
+        4000,
+        3300
+      ],
+      "after_seconds": 235
+    }
+  ],
+  "follow_shots": [
+    60,
+    180,
+    350
+  ],
+  "scout_diagnostics": true,
+  "start_boxes": [
+    [
+      0,
+      0,
+      1,
+      0.5
+    ],
+    [
+      0,
+      0.5,
+      1,
+      1
+    ]
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "name": "ranged-medusa-turn",
+  "unit": "legmed",
+  "description": "A visible target appears behind a ranged hull after its first target dies. The AI must reorient safely and fire rather than repeatedly walk away to the outer firing band.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "side": "legion",
+  "camera": [
+    4000,
+    4000,
+    2150
+  ],
+  "photos": [
+    45,
+    90,
+    150
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3750,
+        4500
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        3250
+      ]
+    },
+    {
+      "unit": "armestor",
+      "count": 1,
+      "team": 1,
+      "position": [
+        4000,
+        4800
+      ]
+    },
+    {
+      "unit": "legmed",
+      "count": 1,
+      "team": 0,
+      "position": [
+        4000,
+        4000
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armestor",
+      "count": 1,
+      "team": 1,
+      "position": [
+        4000,
+        3100
+      ],
+      "after_seconds": 60
+    }
+  ],
+  "assertions": {
+    "min_kills": 2,
+    "min_shooters": 1,
+    "max_losses": 0,
+    "max_friendly_damage": 0,
+    "max_target_response_seconds": 30
+  }
+}

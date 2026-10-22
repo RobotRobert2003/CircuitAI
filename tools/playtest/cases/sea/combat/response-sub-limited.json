@@ -1,0 +1,109 @@
+{
+  "name": "response-sub-limited",
+  "production": true,
+  "groups": [
+    {
+      "unit": "armsy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2450,
+        4400
+      ]
+    },
+    {
+      "unit": "armcs",
+      "team": 0,
+      "count": 2,
+      "position": [
+        2300,
+        4800
+      ]
+    },
+    {
+      "unit": "armroy",
+      "team": 0,
+      "count": 2,
+      "position": [
+        2750,
+        4200
+      ]
+    },
+    {
+      "unit": "armuwfus",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        4200
+      ]
+    },
+    {
+      "unit": "armuwmmm",
+      "team": 0,
+      "count": 8,
+      "position": [
+        1850,
+        4850
+      ]
+    },
+    {
+      "unit": "armuwms",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        3900
+      ]
+    },
+    {
+      "unit": "corsub",
+      "team": 1,
+      "count": 4,
+      "position": [
+        3900,
+        4250
+      ],
+      "after_seconds": 60
+    },
+    {
+      "unit": "armfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2300,
+        4200
+      ]
+    },
+    {
+      "unit": "armason",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2800,
+        4650
+      ]
+    },
+    {
+      "unit": "corason",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        4650
+      ]
+    },
+    {
+      "unit": "armnanotcplat",
+      "team": 0,
+      "count": 6,
+      "position": [
+        2180,
+        4520
+      ],
+      "columns": 3,
+      "spacing": 64
+    }
+  ],
+  "support_turrets": true
+}

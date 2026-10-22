@@ -42,6 +42,16 @@ inline bool SBlockingMap::IsReserved(int x, int z) const
 	return grid[z * columns + x].structMask == StructMask::RESERVED;
 }
 
+inline bool SBlockingMap::IsResourceSite(int x, int z, SM mask) const
+{
+	// MarkBlocker seeds permanent sites at 2*BLOCK_VAL. Building/reclaiming a
+	// structure and overlaying a zone must never make that ground disposable.
+	// Two indexed reads: no resource-list scan or additional map-sized cache.
+	const SBlockCell& cell = grid[z * columns + x];
+	return ((mask & static_cast<SM>(StructMask::MEX)) && cell.blockerCounts[static_cast<ST>(StructType::MEX)] >= BLOCK_VAL * 2)
+		|| ((mask & static_cast<SM>(StructMask::GEO)) && cell.blockerCounts[static_cast<ST>(StructType::GEO)] >= BLOCK_VAL * 2);
+}
+
 inline void SBlockingMap::MarkBlocker(int x, int z, StructType structType, SM notIgnoreMask)
 {
 	SBlockCell& cell = grid[z * columns + x];

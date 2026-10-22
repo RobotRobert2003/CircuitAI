@@ -1,0 +1,5 @@
+{
+  "stop_minute": 8,
+  "expect": [{"key":"converters","pattern":"DenseFixture\\] PASS touching armmmkr count=8 edges=10","by_minute":8,"scope":"any"}],
+  "forbid": [{"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|DenseFixture\\] FAIL|Error in.*dense_economy","scope":"any"}]
+}

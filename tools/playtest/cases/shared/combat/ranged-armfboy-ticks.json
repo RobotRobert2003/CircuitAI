@@ -1,0 +1,91 @@
+{
+  "name": "ranged-armfboy-ticks",
+  "unit": "armfboy",
+  "checks": "ranged-armfboy-ticks",
+  "description": "D-294: four AI-owned Fatboys against a 24-Tick swarm plus two legitimate LLT targets. Ticks (GROUNDSCOUT) must never be shot; the LLTs must be. A baseline DLL must show shots scouts>0, proving the case detects the bug.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    3500,
+    4700,
+    1900
+  ],
+  "photos": [
+    50,
+    100,
+    180
+  ],
+  "shot_census": true,
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3200,
+        4300
+      ]
+    },
+    {
+      "unit": "armseer",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3100,
+        4200
+      ]
+    },
+    {
+      "unit": "armfboy",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3400,
+        4400
+      ],
+      "spacing": 200,
+      "columns": 4
+    },
+    {
+      "unit": "corllt",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3800,
+        5300
+      ],
+      "spacing": 320
+    },
+    {
+      "unit": "armflea",
+      "count": 24,
+      "team": 1,
+      "position": [
+        3500,
+        6200
+      ],
+      "spacing": 96,
+      "columns": 6,
+      "after_seconds": 45
+    }
+  ],
+  "enemy_destination": [
+    3400,
+    4400
+  ],
+  "assertions": {
+    "min_shooters": 2,
+    "min_damage": 1000
+  }
+}

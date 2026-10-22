@@ -1,0 +1,98 @@
+{
+  "name": "mace-rush-counterpush",
+  "unit": "armham",
+  "side": "armada",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4250,
+    1600
+  ],
+  "photos": [
+    32,
+    40,
+    65
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 2,
+      "position": [
+        3550,
+        4350
+      ],
+      "spacing": 450
+    },
+    {
+      "unit": "armham",
+      "team": 0,
+      "count": 24,
+      "position": [
+        3800,
+        3900
+      ],
+      "columns": 6,
+      "spacing": 64,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armrock",
+      "team": 0,
+      "count": 12,
+      "position": [
+        3800,
+        3700
+      ],
+      "columns": 6,
+      "spacing": 64,
+      "after_seconds": 16
+    },
+    {
+      "unit": "armwar",
+      "team": 1,
+      "count": 8,
+      "position": [
+        3800,
+        4500
+      ],
+      "columns": 4,
+      "spacing": 85,
+      "after_seconds": 30
+    }
+  ],
+  "assertions": {
+    "min_shooters": 16,
+    "min_kills": 8,
+    "max_losses": 18,
+    "max_friendly_damage": 1500,
+    "min_types_assigned": 2,
+    "min_damage": 5000,
+    "max_first_shot_seconds": 60
+  },
+  "camera_angle": 1.35,
+  "min_spawn_spacing": 64,
+  "units": [
+    "armham",
+    "armrock"
+  ],
+  "formation_observation": true,
+  "command_breakdown": true,
+  "rush_lifecycle": true,
+  "enemy_destination": [
+    4000,
+    3500
+  ],
+  "storage_scenario": "mace-rush-counterpush"
+}

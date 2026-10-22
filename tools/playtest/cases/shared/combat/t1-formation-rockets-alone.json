@@ -1,0 +1,100 @@
+{
+  "name": "t1-formation-rockets-alone",
+  "unit": "corstorm",
+  "side": "cortex",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4200,
+    1650
+  ],
+  "photos": [
+    26,
+    34,
+    50,
+    80
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4200
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4700
+      ]
+    },
+    {
+      "unit": "corstorm",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3800,
+        3800
+      ],
+      "columns": 6,
+      "spacing": 70,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armwar",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3850,
+        4500
+      ],
+      "columns": 4,
+      "spacing": 90,
+      "after_seconds": 20
+    }
+  ],
+  "assertions": {
+    "min_shooters": 2,
+    "max_friendly_damage": 0,
+    "min_kills": 1,
+    "max_losses": 6,
+    "min_types_assigned": 1,
+    "min_damage": 500,
+    "max_first_shot_seconds": 60,
+    "max_allied_losses": 6
+  },
+  "enemy_destination": [
+    4000,
+    2900
+  ],
+  "camera_angle": 0.25,
+  "min_spawn_spacing": 64,
+  "description": "Rear elements must remain independently useful when no screening cohort is available.",
+  "storage_scenario": "formation-rockets-alone",
+  "command_breakdown": true,
+  "trace_orders": false,
+  "support_units": [
+    "corstorm"
+  ],
+  "support_deadline_seconds": 75,
+  "units": [
+    "corstorm"
+  ],
+  "formation_observation": true
+}

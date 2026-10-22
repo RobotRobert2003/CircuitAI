@@ -1,0 +1,13 @@
+{
+  "stop_minute":6,
+  "expect":[
+    {"key":"escort","pattern":"\\[SEA\\]\\[Escort\\] armsjam follows","scope":"test","by_minute":2},
+    {"key":"fleet-search","pattern":"\\[SEA\\]\\[Fleet\\] armpship","scope":"test","by_minute":2},
+    {"key":"combat","pattern":"\\[SeaArena\\].* damage","scope":"any","by_minute":6}
+  ],
+  "forbid":[
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena","scope":"any"}
+  ]
+}

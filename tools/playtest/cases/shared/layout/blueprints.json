@@ -1,0 +1,9 @@
+{
+  "description": "Host blueprint observation for AIR/TECH/SEA on Supreme Isthmus and resource-node exclusion including metal-map control.",
+  "maps": ["Supreme Isthmus v1.7", "Full Metal Plate 1.7"],
+  "setup": "run_blueprint_check.py --map supreme --dll PINNED_DLL; repeat with --map metal-plate",
+  "roles": ["AIR", "TECH", "SEA"],
+  "resources": "ordinary; no bonuses or spawned economy",
+  "checks": "shared/layout/blueprints",
+  "notes": "Runner provides TECH/AIR starts and blueprints-metal checks on Metal Plate. Preserve every failed fixture and final run separately. Resource envelopes are temporary probe-only objects removed on the next slow tick."
+}

@@ -19,9 +19,11 @@ import sys
 import uuid
 from pathlib import Path
 
+from benchmark_store import EVIDENCE_ROOT, require_checkout
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-DOC = REPO / "doc" / "benchmarks" / "tech-rush.md"
+DOC = EVIDENCE_ROOT / "tech-rush.md"
 
 # milestone -> (def names, target minutes, floor minutes)
 MILESTONES = [
@@ -158,6 +160,8 @@ def write(rows):
 
 
 def append_row(identifier, new_row):
+    if DOC == EVIDENCE_ROOT / "tech-rush.md":
+        require_checkout()
     DOC.parent.mkdir(parents=True, exist_ok=True)
     lock = DOC.with_name(DOC.name + '.lock')
     try:

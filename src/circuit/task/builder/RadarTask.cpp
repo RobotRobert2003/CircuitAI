@@ -6,6 +6,9 @@
  */
 
 #include "task/builder/RadarTask.h"
+#include "module/CommanderControl.h"
+#include "module/TaskModule.h"
+#include "CircuitAI.h"
 #include "unit/CircuitDef.h"
 #include "util/Utils.h"
 
@@ -28,6 +31,16 @@ CBRadarTask::CBRadarTask(ITaskModule* mgr)
 
 CBRadarTask::~CBRadarTask()
 {
+}
+
+bool CBRadarTask::CanAssignTo(CCircuitUnit* unit) const
+{
+	if (!ISensorTask::CanAssignTo(unit)) return false;
+	// Admission only: never abandon a nanoframe or a worker's live claim
+	// because coverage changed while it was travelling/building. The shared
+	// commander snapshot amortizes queue candidates; no new polling or orders.
+	return target != nullptr || units.count(unit) != 0
+			|| manager->GetCircuit()->GetCommanderControl()->CanStartRadar(unit);
 }
 
 } // namespace circuit

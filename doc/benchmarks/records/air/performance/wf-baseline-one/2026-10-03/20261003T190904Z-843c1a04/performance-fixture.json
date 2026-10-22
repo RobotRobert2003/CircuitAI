@@ -1,7 +1,0 @@
-{
-  "multiple_air": false,
-  "resources_supplied": false,
-  "revision": "baseline",
-  "seed": 1814001,
-  "timing_scope": "all engine AI callbacks per simulation frame; not per-AI/census"
-}

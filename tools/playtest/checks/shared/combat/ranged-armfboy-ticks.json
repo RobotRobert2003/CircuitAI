@@ -1,0 +1,85 @@
+{
+  "stop_minute": 4,
+  "_doc": "D-294 Fatboy GROUNDSCOUT exclusion. Pass: legitimate shots by minute 4, no shot_census line on a GROUNDSCOUT target, summary scouts=0, no INVARIANT (INV-207).",
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "spawn",
+      "pattern": "\\[RangedArena\\].* spawn",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "damage",
+      "pattern": "\\[RangedArena\\].* damage.*attackerTeam=0",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "orders",
+      "pattern": "\\[RangedArena\\].* orders team=0",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "census",
+      "pattern": "\\[RangedArena\\].* shots scouts=\\d+ other=",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "ticks arrived",
+      "pattern": "\\[RangedArena\\].* spawn id=\\d+ team=1 unit=armflea",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "legitimate shots",
+      "pattern": "\\[RangedArena\\].* shots scouts=0 other=[1-9]",
+      "scope": "any",
+      "by_minute": 4
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena|Removed widget: Ranged combat arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "policy",
+      "pattern": "has invalid ranged policy",
+      "scope": "any"
+    },
+    {
+      "key": "tick shot",
+      "pattern": "\\[RangedArena\\].* shot_census .*category=GROUNDSCOUT",
+      "scope": "any"
+    },
+    {
+      "key": "tick tally",
+      "pattern": "\\[RangedArena\\].* shots scouts=[1-9]",
+      "scope": "any"
+    }
+  ]
+}

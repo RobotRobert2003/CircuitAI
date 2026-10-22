@@ -1,0 +1,103 @@
+{
+  "name": "air-perimeter-safety",
+  "checks": "air/combat/air-perimeter",
+  "description": "Known flak appears near the forward contour; shared patrol corners must withdraw safely while preserving bomber escort and ground defense.",
+  "bomber_only": false,
+  "aircraft": [
+    {
+      "unit": "$fighter2",
+      "count": 4,
+      "team": 0,
+      "once": true
+    },
+    {
+      "unit": "$fighter2",
+      "count": 44,
+      "team": 0,
+      "once": true,
+      "after_seconds": 120
+    },
+    {
+      "unit": "armbrawl",
+      "count": 10,
+      "team": 0,
+      "once": true,
+      "after_seconds": 210
+    },
+    {
+      "unit": "$t2",
+      "count": 20,
+      "team": 0,
+      "once": true,
+      "after_seconds": 300
+    }
+  ],
+  "targets": [
+    {
+      "unit": "armfus",
+      "count": 1,
+      "position": [
+        11000,
+        2600
+      ]
+    },
+    {
+      "unit": "armmmkr",
+      "count": 4,
+      "position": [
+        10000,
+        2400
+      ]
+    },
+    {
+      "unit": "corck",
+      "count": 3,
+      "position": [
+        2600,
+        11200
+      ],
+      "after_seconds": 210
+    }
+  ],
+  "defenses": [
+    {
+      "unit": "armflak",
+      "count": 1,
+      "position": [
+        6000,
+        7500
+      ],
+      "after_seconds": 160,
+      "once": true
+    }
+  ],
+  "sensors": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        5500,
+        5300
+      ],
+      "once": true
+    }
+  ],
+  "refill_seconds": 15,
+  "perimeter_probe": true,
+  "command_detail": true,
+  "screenshots": [
+    {
+      "second": 175,
+      "x": 6144,
+      "z": 8500,
+      "height": 15500
+    },
+    {
+      "second": 265,
+      "x": 3000,
+      "z": 11000,
+      "height": 6500
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "stop_minute": 20,
+  "expect": [
+    {"key":"adoption", "pattern":"SeaProbe\\] PASS named-state adoption", "by_minute":3, "scope":"any"},
+    {"key":"replan", "pattern":"SeaProbe\\] PASS physical blocker replanned unused berth", "by_minute":5, "scope":"any"},
+    {"key":"egress", "pattern":"SEA\\]\\[Harbor\\] exit verified", "by_minute":15, "scope":"self"},
+    {"key":"retired", "pattern":"SeaProbe\\] PASS original yard entered retirement", "by_minute":20, "scope":"any"},
+    {"key":"removed", "pattern":"SeaProbe\\] PASS original yard physically removed", "by_minute":20, "scope":"any"},
+    {"key":"physical-handover", "pattern":"SeaFixture\\] PASS replacement exit precedes old reclaim", "by_minute":20, "scope":"any"},
+    {"key":"reclaimed", "pattern":"SeaFixture\\] PASS observed old yard removal after reclaim", "by_minute":20, "scope":"any"}
+  ],
+  "forbid": [
+    {"key":"runtime", "pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaProbe\\] FAIL|SeaFixture\\] FAIL|Error in.*sea_harbor", "scope":"any"}
+  ]
+}

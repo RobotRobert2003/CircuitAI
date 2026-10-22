@@ -1,0 +1,15 @@
+{
+  "stop_minute":6,
+  "expect":[
+    {"key":"loaded","pattern":"\\[AirArena\\] event=loaded","scope":"any","by_minute":1},
+    {"key":"ground-contact","pattern":"\\[AIR\\]\\[BaseResponse\\] contact=true","scope":"tech","by_minute":2},
+    {"key":"offensive-wave","pattern":"WAVE: committed attack .*offensive=1","scope":"any","by_minute":4},
+    {"key":"economy-hit","pattern":"\\[AirArena\\] event=damage .*adef=armpnix .*amount=[1-9][0-9.]* .*emp=0 team=1 vdef=(armafus|armmmkr)","scope":"any","by_minute":6}
+  ],
+  "forbid":[
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT|\\[AirOrders\\] ERROR","scope":"any"},
+    {"key":"fixture","pattern":"\\[AirArena\\] event=error|Removed widget: AIR combat arena|Error in.*air_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

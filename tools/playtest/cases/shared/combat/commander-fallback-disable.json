@@ -1,0 +1,106 @@
+{
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4900,
+    1500
+  ],
+  "photos": [
+    20,
+    30,
+    40,
+    55
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "enemy_destination": [
+    4000,
+    4800
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 4
+  },
+  "name": "commander-fallback-disable",
+  "storage_scenario": "commander-fallback-off",
+  "description": "Disable fallback while the commander is still travelling to its held line; damage/journey memory must not renew a disabled policy.",
+  "groups": [
+    {
+      "unit": "armcom",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        5000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3920,
+        4650
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4080,
+        4650
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        4250
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 1,
+      "count": 4,
+      "columns": 4,
+      "spacing": 60,
+      "position": [
+        4000,
+        5900
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "checks": "commander-fallback-disable",
+  "commander_override_events": [
+    {
+      "seconds": 36,
+      "key": "fallback",
+      "value": 0
+    }
+  ]
+}

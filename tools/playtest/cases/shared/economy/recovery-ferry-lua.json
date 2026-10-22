@@ -1,0 +1,7 @@
+{
+  "name": "recovery-ferry-lua",
+  "description": "8v8 Glacial: all six role losses, delayed TECH lab, Lua relay, existing transport, coastal safe drops, independent SUPPORT recovery and healthy-team negative control.",
+  "runner": "tools/playtest/run_builder_recovery.py",
+  "arguments": ["--ferry", "--relay", "--profile", "experimental_terrible"],
+  "checks": "shared/economy/builder-recovery.json"
+}

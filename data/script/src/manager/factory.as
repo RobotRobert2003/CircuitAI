@@ -1,13 +1,12 @@
 #include "../define.as"
 #include "../unit.as"
 #include "../task.as"
-#include "../types/opener.as"
 #include "../types/map_config.as"
 #include "../global.as"
 #include "../types/role_config.as"
-#include "../helpers/unit_helpers.as"
+#include "../helpers/units/unit_helpers.as"
 #include "builder.as"
-#include "ferry.as"
+#include "../systems/team/ferry.as"
 
 namespace Factory {
 
@@ -62,6 +61,10 @@ namespace Factory {
 
 	// Track all factories by id -> handle, and each factory's nano count (id -> int)
 	dictionary allFactories;      // key: string unitId -> CCircuitUnit@
+	// D-289: the same factories as a list, kept with allFactories in AiUnitAdded /
+	// AiUnitRemoved (destroyed, given, captured), so a per-ask iteration
+	// (the turret ladder) allocates nothing (getKeys() allocates every call).
+	array<CCircuitUnit@> factoryList;
 	dictionary factoryNanoCounts; // key: string unitId -> int count
 
 	// Queued build counters for key factories/energy
@@ -106,16 +109,43 @@ namespace Factory {
 
     ******************************************************************************/
 
+	// Called only at recruit completion; no per-frame scan or speculative queue.
+	// Recheck role/retirement because task hooks may change either at handover.
+	bool AiCanRefillImmediately(CCircuitUnit@ u)
+	{
+        if (u is null || u.circuitDef is null || Lifecycle::IsRetiring(u)) return false;
+        if (Global::AISettings::Role == AiRole::TECH)
+            return Global::RoleSettings::Tech::ContinuousGantryProduction && UnitHelpers::IsGantryLab(u.circuitDef.GetName());
+		return Global::AISettings::Role == AiRole::AIR
+			&& Global::RoleSettings::Air::ContinuousFactoryProduction
+			&& u !is null && u.circuitDef !is null && !Lifecycle::IsRetiring(u)
+			&& (UnitHelpers::IsT1AircraftPlant(u.circuitDef.GetName())
+				|| UnitHelpers::IsT2AircraftPlant(u.circuitDef.GetName()));
+	}
+
 	IUnitTask@ AiMakeTask(CCircuitUnit@ u)
 	{
+		// Retirement owns the factory before every production provider, including
+		// constructor donations/recovery and spam. Checking only in the TECH
+		// delegate allowed these earlier providers to restart a retired lab.
+		if (Lifecycle::IsRetiring(u)) return null;
+		IUnitTask@ recovery = Team::Recovery::FactoryMakeTask(u);
+		if (recovery !is null) return recovery;
+		if (SeaFactories::Hold(u)) return aiFactoryMgr.Enqueue(TaskS::Wait(true, SECOND));
 		// Only AIR changes ordering: transport obligations precede optional spam and combat.
-		if (Global::AISettings::Role == AiRole::AIR) {
+		if (Global::AISettings::Role == AiRole::AIR || Global::AISettings::Role == AiRole::TECH) {
 			IUnitTask@ ferry = Team::Ferry::FactoryMakeTask(u);
 			if (ferry !is null) return ferry;
 		}
-		IUnitTask@ t = TechFlank::Produce(u);
+        IUnitTask@ t = Team::HeavyTransport::FactoryTask(u);
+        if (t !is null) return t;
+        @t = TechFlank::Produce(u);
 		if (t !is null) return t;
-		@t = Spam::FactoryMakeTask(u);   // active spam overrides every T1 factory decision
+		// Emergency AIR production must reach its role before optional spam.
+		if (AirBaseResponse::Emergency() && (UnitHelpers::IsT1AircraftPlant(u.circuitDef.GetName())
+			|| UnitHelpers::IsT2AircraftPlant(u.circuitDef.GetName()))) return AirProduction::MakeTask(u);
+		@t = SeaCoast::Produce(u);
+		if (t is null) @t = Spam::FactoryMakeTask(u);   // coastal recovery owns its land labs
 		if (t !is null) return t;
 
 		@t = Team::Ferry::FactoryMakeTask(u);      // AIR owes TECH a transport: build it first
@@ -134,8 +164,6 @@ namespace Factory {
 
 		return t;
 	}
-
-
 
 	void AiTaskAdded(IUnitTask@ task)
 	{
@@ -158,9 +186,6 @@ namespace Factory {
 		// 	cfg.AiTaskRemovedHandler(task, done);
 	}
 
-	// CCircuitUnit@ energizer1 = null;
-	// CCircuitUnit@ energizer2 = null;
-	
 	void AiUnitAdded(CCircuitUnit@ unit, Unit::UseAs usage)
 	{
 		if (unit is null) {
@@ -193,7 +218,6 @@ namespace Factory {
                 2
             );
         }
-
 
 		// Track primary lab references centrally
 		// Minimal guard: only assign when this unit is registered as a FACTORY
@@ -265,6 +289,7 @@ namespace Factory {
 			string key = "" + unit.id;
 			// Register the factory handle
 			allFactories.set(key, @unit);
+			if (factoryList.findByRef(unit) < 0) factoryList.insertLast(unit);
 			// Ensure a nano count entry exists (0 if new)
 			int tmp = 0;
 			if (!factoryNanoCounts.get(key, tmp)) {
@@ -357,8 +382,7 @@ namespace Factory {
 		if (cfg !is null && cfg.FactoryAiUnitAdded !is null) {
 			cfg.FactoryAiUnitAdded(unit, usage);
 		}
-		
-		
+
 	}
 
 	void AiUnitRemoved(CCircuitUnit@ unit, Unit::UseAs usage)
@@ -386,6 +410,10 @@ namespace Factory {
 		if (usage == Unit::UseAs::FACTORY) {
 			string key = "" + unit.id;
 			allFactories.delete(key);
+			{
+				const int at = factoryList.findByRef(unit);
+				if (at >= 0) factoryList.removeAt(uint(at));
+			}
 			factoryNanoCounts.delete(key);
 			GenericHelpers::LogUtil("[FACTORY] Untracked factory id=" + unit.id, 3);
 		}
@@ -488,26 +516,9 @@ namespace Factory {
 		return (Factory::primaryT2BotLab is null) ? _CommanderPosOrSentinel() : Factory::primaryT2BotLab.GetPos(ai.frame);
 	}
 
-
-
-	AIFloat3 GetT1VehPlantPos()
-	{
-		return (Factory::primaryT1VehPlant is null) ? _CommanderPosOrSentinel() : Factory::primaryT1VehPlant.GetPos(ai.frame);
-	}
-
-	AIFloat3 GetT2VehPlantPos()
-	{
-		return (Factory::primaryT2VehPlant is null) ? _CommanderPosOrSentinel() : Factory::primaryT2VehPlant.GetPos(ai.frame);
-	}
-
 	AIFloat3 GetT1AirPlantPos()
 	{
 		return (Factory::primaryT1AirPlant is null) ? _CommanderPosOrSentinel() : Factory::primaryT1AirPlant.GetPos(ai.frame);
-	}
-
-	AIFloat3 GetT2AirPlantPos()
-	{
-		return (Factory::primaryT2AirPlant is null) ? _CommanderPosOrSentinel() : Factory::primaryT2AirPlant.GetPos(ai.frame);
 	}
 
 	AIFloat3 GetT1ShipyardPos()
@@ -518,31 +529,6 @@ namespace Factory {
 	AIFloat3 GetT2ShipyardPos()
 	{
 		return (Factory::primaryT2Shipyard is null) ? _CommanderPosOrSentinel() : Factory::primaryT2Shipyard.GetPos(ai.frame);
-	}
-
-	AIFloat3 GetT1HoverPlantPos()
-	{
-		return (Factory::primaryT1HoverPlant is null) ? _CommanderPosOrSentinel() : Factory::primaryT1HoverPlant.GetPos(ai.frame);
-	}
-
-	AIFloat3 GetFloatingHoverPlantPos()
-	{
-		return (Factory::primaryFloatingHoverPlant is null) ? _CommanderPosOrSentinel() : Factory::primaryFloatingHoverPlant.GetPos(ai.frame);
-	}
-
-	AIFloat3 GetSeaplanePlatformPos()
-	{
-		return (Factory::primarySeaplanePlatform is null) ? _CommanderPosOrSentinel() : Factory::primarySeaplanePlatform.GetPos(ai.frame);
-	}
-
-	AIFloat3 GetLandGantryPos()
-	{
-		return (Factory::primaryLandGantry is null) ? _CommanderPosOrSentinel() : Factory::primaryLandGantry.GetPos(ai.frame);
-	}
-
-	AIFloat3 GetWaterGantryPos()
-	{
-		return (Factory::primaryWaterGantry is null) ? _CommanderPosOrSentinel() : Factory::primaryWaterGantry.GetPos(ai.frame);
 	}
 
 	// Master: return the first available factory position in priority order.
@@ -705,78 +691,62 @@ namespace Factory {
 	}
 
 	// Enqueue a batch of signature experimental units from a gantry based on side
-	// Returns the last enqueued task or null if unavailable
+	// Returns the last enqueued task or null if unavailable. Early-window
+	// behaviour, unchanged: the side's signature heavy only.
 	IUnitTask@ EnqueueGantrySignatureBatch(CCircuitUnit@ gantry, const string &in side, int count = 5, Task::Priority prio = Task::Priority::HIGH)
 	{
-		if (gantry is null) return null;
-		const CCircuitDef@ facDef = gantry.circuitDef; if (facDef is null) return null;
-		string heavyName = UnitHelpers::GetGantrySignatureUnitForSide(side);
+		const string heavyName = UnitHelpers::GetGantrySignatureUnitForSide(side);
 		if (heavyName.length() == 0) {
 			GenericHelpers::LogUtil("[FACTORY] Gantry signature unit unresolved for side='" + side + "'", 2);
 			return null;
 		}
+		array<string> candidates = {heavyName};
+		return EnqueueGantryBatchFrom(gantry, candidates, count, prio);
+	}
 
-		// Build a small fallback list per side to improve robustness when the primary is capped or unavailable
-		array<string> candidates;
-		candidates.insertLast(heavyName);
-		// Prefer amphibious options if this is a water gantry
-		// bool waterFac = UnitHelpers::FactoryIsWater(facDef.GetName());
-		// if (side == "armada") {
-		// 	// Primary: Bantha; Fallbacks: Razorback (armraz), Lunkhead (armlun) which is amphibious/hover
-		// 	// candidates.insertLast("armraz");
-		// 	// candidates.insertLast("armlun");
-		// 	if (waterFac) {
-		// 		// Ensure amphibious candidate is early in list for water gantry
-		// 		int idx = candidates.find("armlun");
-		// 		if (idx >= 0) candidates.removeAt(uint(idx));
-		// 		candidates.insertAt(1, "armlun");
-		// 	}
-		// } else if (side == "cortex") {
-		// 	// Primary: Juggernaut (corkorg); Fallbacks: Shiva (corshiva, amphibious), Karganeth (corkarg)
-		// 	// candidates.insertLast("corshiva");
-		// 	// candidates.insertLast("corkarg");
-		// 	if (waterFac) {
-		// 		int idx2 = candidates.find("corshiva");
-		// 		if (idx2 >= 0) candidates.removeAt(uint(idx2));
-		// 		candidates.insertAt(1, "corshiva");
-		// 	}
-		// } else if (side == "legion") {
-		// 	// Primary: Sol Invictus; Fallback: Leg Pede (legpede)
-		// 	candidates.insertLast("legpede");
-		// }
-
+	// D-287: the first candidate this gantry can build and whose cap allows one
+	// more. A map cap (armthor = 0 on three water maps) makes IsAvailable false,
+	// so the next candidate is taken; no cap is raised here. O(candidates) per
+	// gantry ask (one ask per finished batch); no allocation beyond the recruits.
+	IUnitTask@ EnqueueGantryBatchFrom(CCircuitUnit@ gantry, const array<string>& in candidates, int count = 5, Task::Priority prio = Task::Priority::HIGH)
+	{
+		if (gantry is null) return null;
+		const CCircuitDef@ facDef = gantry.circuitDef; if (facDef is null) return null;
 		CCircuitDef@ heavyDef = null;
-		string chosen = "";
 		for (uint i = 0; i < candidates.length(); ++i) {
-			string name = candidates[i];
-			@heavyDef = ai.GetCircuitDef(name);
-			if (heavyDef is null) {
-				GenericHelpers::LogUtil("[FACTORY] Gantry candidate missing def: '" + name + "'", 3);
+			CCircuitDef@ candidate = ai.GetCircuitDef(candidates[i]);
+			if (candidate is null) {
+				GenericHelpers::LogUtil("[FACTORY] Gantry candidate missing def: '" + candidates[i] + "'", 3);
 				continue;
 			}
-			if (!heavyDef.IsAvailable(ai.frame)) {
-				GenericHelpers::LogUtil("[FACTORY] Gantry candidate not available now: '" + name + "'", 3);
+			// The factory's own build options decide (armshltxuw cannot build armthor)
+			if (!facDef.CanBuild(candidate)) {
+				GenericHelpers::LogUtil("[FACTORY] Gantry candidate not buildable by " + facDef.GetName() + ": '" + candidates[i] + "'", 3);
 				continue;
 			}
-			chosen = name;
+			if (!candidate.IsAvailable(ai.frame)) {
+				GenericHelpers::LogUtil("[FACTORY] Gantry candidate not available now: '" + candidates[i] + "'", 3);
+				continue;
+			}
+			@heavyDef = candidate;
 			break;
 		}
-		if (chosen.length() == 0 || heavyDef is null) {
-			GenericHelpers::LogUtil("[FACTORY] Gantry signature selection failed for side='" + side + "' (all candidates unavailable)", 2);
+		if (heavyDef is null) {
+			GenericHelpers::LogUtil("[FACTORY] Gantry batch selection failed at " + facDef.GetName() + " (all " + candidates.length() + " candidates unavailable)", 2);
 			return null;
 		}
 		const AIFloat3 pos = gantry.GetPos(ai.frame);
 		IUnitTask@ last = null;
-		int n = (count < 1 ? 1 : count);
+		const int n = (count < 1 ? 1 : count);
 		for (int i = 0; i < n; ++i) {
 			@last = aiFactoryMgr.Enqueue(
 				TaskS::Recruit(Task::RecruitType::FIREPOWER, prio, heavyDef, pos, 64.f)
 			);
 		}
-		GenericHelpers::LogUtil("[FACTORY] Gantry enqueued x" + n + " '" + chosen + "' from " + facDef.GetName(), 2);
+		lastGantryBatchUnit = heavyDef.GetName();   // read by the caller's level-1 trace
+		GenericHelpers::LogUtil("[FACTORY] Gantry enqueued x" + n + " '" + lastGantryBatchUnit + "' from " + facDef.GetName(), 2);
 		return last;
 	}
-
-
+	string lastGantryBatchUnit;   // the unit of the last successful EnqueueGantryBatchFrom
 
 }  // namespace Factory

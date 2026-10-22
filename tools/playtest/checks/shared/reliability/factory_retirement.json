@@ -1,0 +1,11 @@
+{
+  "stop_minute": 3,
+  "expect": [
+    {"key": "retirement", "pattern": "\\[RetirementTest\\] PASS all_factions_queue_cleared_and_no_new_frames", "scope": "any", "by_minute": 2.2}
+  ],
+  "forbid": [
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "fixture", "pattern": "\\[RetirementTest\\] FAIL", "scope": "any"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "any"}
+  ]
+}

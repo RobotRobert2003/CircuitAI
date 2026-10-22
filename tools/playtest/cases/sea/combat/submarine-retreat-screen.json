@@ -1,0 +1,13 @@
+{
+  "name":"submarine-retreat-screen", "starts":[[2300,4400],[8000,4400]],
+  "checks":"sea/combat/submarine-retreat-screen", "retreat_observer":true,
+  "screen_anchor_fixture":true,
+  "patrol_observer":true, "objective_observer":true,
+  "shots":"0.5@3500@3300:4400,1@3500@3300:4400,3@3500@3300:4400",
+  "groups":[
+    {"unit":"corpship","team":0,"count":6,"position":[3300,4300],"columns":3,"spacing":130},
+    {"unit":"corsub","team":0,"count":6,"position":[2750,4300],"columns":3,"spacing":130},
+    {"unit":"corfrad","team":0,"count":1,"position":[2800,4300]},
+    {"unit":"armcrus","team":1,"count":4,"position":[4200,4300],"columns":2,"spacing":180}
+  ]
+}

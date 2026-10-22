@@ -1,0 +1,16 @@
+{
+  "_doc": "D-307: supplied Coastlines Dry placement, real turret assistance, native group adoption and useful lost-slot recovery. Use run_tech_compact.py.",
+  "stop_minute": 10,
+  "complete_on": {"key": "complete", "pattern": "\\[TechCompactTest\\] PASS compact_growth_economy_recovery", "scope": "any"},
+  "completion_grace_seconds": 10,
+  "expect": [
+    {"key": "four small clusters", "pattern": "\\[Layout\\]\\[Compact\\] cluster=4 .*turrets=(1|4)", "scope": "tech", "by_minute": 10},
+    {"key": "physical turrets", "pattern": "\\[TechCompactTest\\] PASS sixteen_turrets", "scope": "any", "by_minute": 10},
+    {"key": "supported economy", "pattern": "\\[TechCompactTest\\] PASS supported_economy", "scope": "any", "by_minute": 10},
+    {"key": "native group adoption", "pattern": "\\[TechCompactTest\\] PASS native_group_adoption", "scope": "any", "by_minute": 10},
+    {"key": "physical recovery", "pattern": "\\[TechCompactTest\\] PASS compact_growth_economy_recovery", "scope": "any", "by_minute": 10}
+  ],
+  "forbid": [
+    {"key": "failure", "pattern": "\\[TechCompactTest\\] FAIL|\\[INVARIANT\\]|: ERR\\s+:|: WARN\\s+:|SCRIPT CRASH|Lib exception|Access violation|has crashed", "scope": "any"}
+  ]
+}

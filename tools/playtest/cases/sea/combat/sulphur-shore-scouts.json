@@ -1,0 +1,14 @@
+{
+  "name":"sulphur-shore-scouts", "map":"Sulphur Springs v1.1", "map_key":"sulphur",
+  "starts":[[1000,300],[12000,11000]],
+  "checks":"sea/combat/supreme-shore-scouts.json",
+  "patrol_observer":true, "objective_observer":true,
+  "progression_audit":{"kind":"shores","unit":"corsy","count":3,"by_seconds":360},
+  "shots":"1@6000@6000:900,3@6000@11300:4000,6@6000@11300:9000",
+  "groups":[
+    {"unit":"armpt","team":0,"count":3,"position":[1600,500],"columns":3,"spacing":160},
+    {"unit":"corsy","team":1,"count":1,"position":[5600,700]},
+    {"unit":"corsy","team":1,"count":1,"position":[10752,4608]},
+    {"unit":"corsy","team":1,"count":1,"position":[11500,9200]}
+  ]
+}

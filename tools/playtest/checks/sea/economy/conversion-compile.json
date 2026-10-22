@@ -1,0 +1,10 @@
+{
+  "description": "Load SEA conversion policy and execute its own-team capacity diagnostics",
+  "stop_minute": 2,
+  "expect": [
+    {"key": "capacity-log", "pattern": "\\[SEA\\]\\[Economy\\].*convertCapacity=", "by_minute": 1, "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "errors", "pattern": "INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|Execution of script failed", "scope": "any"}
+  ]
+}

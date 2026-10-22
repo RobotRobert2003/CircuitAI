@@ -1,0 +1,75 @@
+{
+  "name": "fortress-corcrwh-defense",
+  "unit": "corcrwh",
+  "side": "cortex",
+  "role": "AIR",
+  "description": "Supplied heavy aircraft: real task targeting, valuable target behind cheap bots, or cheap-only/AA control.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "camera": [
+    4000,
+    3200,
+    1900
+  ],
+  "photos": [
+    25,
+    45,
+    90
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3250,
+        3000
+      ]
+    },
+    {
+      "unit": "armflea",
+      "count": 12,
+      "team": 1,
+      "position": [
+        3670,
+        3220
+      ],
+      "spacing": 110
+    },
+    {
+      "unit": "corgol",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3770,
+        3600
+      ],
+      "spacing": 250
+    },
+    {
+      "unit": "corcrwh",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3750,
+        2800
+      ],
+      "spacing": 250
+    }
+  ],
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 2
+  }
+}

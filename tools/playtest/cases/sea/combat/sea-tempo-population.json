@@ -1,0 +1,10 @@
+{
+  "name": "sea-tempo-perf",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [[7492,1220],[4814,11077]],
+  "checks": "sea-tempo-population",
+  "patrol_observer": true,
+  "shots": "1@5500@6300:1500,4@6500@6300:3200",
+  "groups": [{"unit":"armroy","team":0,"count":48,"position":[5100,1200],"columns":8,"spacing":100}]
+}

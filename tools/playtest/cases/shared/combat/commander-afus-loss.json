@@ -1,0 +1,84 @@
+{
+  "name": "commander-afus-loss",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "SUPPORT",
+  "description": "Destroy the allied AFUS during a cloaked T2 approach; protection ownership must expire immediately.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4300,
+      4000
+    ],
+    [
+      2500,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "ally_spots": "1,2",
+  "enemy_team": 2,
+  "camera": [
+    4300,
+    4200,
+    1600
+  ],
+  "photos": [
+    25,
+    45,
+    65
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "commander_initial": true,
+  "enemy_commander_home": true,
+  "groups": [
+    {
+      "unit": "corafus",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4300,
+        3000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4300,
+        4800
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armzeus",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4300,
+        4750
+      ],
+      "after_seconds": 23
+    }
+  ],
+  "assertions": {
+    "max_losses": 0,
+    "min_shooters": 0,
+    "min_kills": 0,
+    "max_shots": 0
+  },
+  "checks": "commander-afus-loss",
+  "remove_units_after_seconds": 26,
+  "remove_unit_team": 1,
+  "remove_unit_name": "corafus",
+  "completion_after_seconds": 40,
+  "observation_frames": 3
+}

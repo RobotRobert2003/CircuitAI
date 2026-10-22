@@ -1,4 +1,4 @@
-#include "../src/manager/artillery_policy.as"
+#include "../src/systems/diagnostics/artillery_policy.as"
 namespace Main 
 {
     void AiSuperWeaponFired(CCircuitUnit@ unit, const AIFloat3& in aim) { ArtilleryPolicy::Fired(unit, aim); }

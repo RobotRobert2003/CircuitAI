@@ -25,6 +25,7 @@ namespace circuit {
 class IMainJob;
 class CBDefenceTask;
 class CFGuardTask;
+class CRangedWorld;
 
 namespace TaskF {
 	struct SFightTask {
@@ -112,6 +113,10 @@ public:
 	}
 
 	IFighterTask* Enqueue(const TaskF::SFightTask& ti);
+	IFighterTask* EnqueueGather(const TaskF::SFightTask& ti, const springai::AIFloat3& pos, int deadline);
+	bool SetGatherPower(IUnitTask* task, float power);
+	IUnitTask* EnqueueExternalControl(const std::string& ownerRule);
+	IUnitTask* EnqueueCargoHold(int transportId);
 	virtual CRetreatTask* EnqueueRetreat() override;
 
 	/*
@@ -310,6 +315,7 @@ public:
 	bool HasDefence(int cluster);
 	void ProcessHubDefence(CBDefenceTask* task);
 	springai::AIFloat3 GetScoutPosition(CCircuitUnit* unit);
+	springai::AIFloat3 GroundObjective(CCircuitUnit* unit, const springai::AIFloat3& previous);
 	void ClearScoutPosition(IUnitTask* task);
 	void FillFrontPos(CCircuitUnit* unit, F3Vec& outPositions);
 	void FillAttackSafePos(CCircuitUnit* unit, F3Vec& outPositions);
@@ -326,6 +332,11 @@ public:
 	void AddResponse(CCircuitUnit* unit);
 	void DelResponse(CCircuitUnit* unit);
 	float GetArmyCost() const { return armyCost; }
+    void SetAggressionDelta(float value);
+    float GetAggressionDelta() const { return aggressionDelta; }
+    void SetAutomaticAggression(float value);
+    float GetAutomaticAggression() const { return automaticAggression; }
+    float GetAggression() const { return automaticAggression + aggressionDelta; }
 	float RoleProbability(const CCircuitDef* cdef) const;
 	bool IsNeedBigGun(const CCircuitDef* cdef) const;
 	springai::AIFloat3 GetBigGunPos(CCircuitDef* bigDef) const;
@@ -375,8 +386,19 @@ public:
 								  float powerMod, bool isTest);
 
 	float GetRangeUnitCountCompensatorScale();
+	IUnitTask* TryMakeRangedTask(CCircuitUnit* unit);
+	std::shared_ptr<CRangedWorld> GetRangedWorld();
+	bool HasRangedUnits() const;
 
 private:
+	std::shared_ptr<CRangedWorld> rangedWorld;
+    float aggressionDelta=0.f, automaticAggression=0.f;
+    IUnitTask* MakeTask(CCircuitUnit* unit) override;
+    void UpdateExternalControl();
+    std::string externalOwnerRule;
+    std::unordered_set<int> externalOwnerDefinitions;
+    std::set<int> externalOwnerCandidates;
+    std::vector<int> externalOwnerSnapshot;
 	virtual IUnitTask* DefaultMakeTask(CCircuitUnit* unit) override;
 
 	void Watchdog();

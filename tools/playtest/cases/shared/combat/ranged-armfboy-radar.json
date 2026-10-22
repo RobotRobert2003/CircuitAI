@@ -1,0 +1,83 @@
+{
+  "name": "ranged-armfboy-radar",
+  "unit": "armfboy",
+  "checks": "ranged-armfboy-radar",
+  "description": "D-294 owner correction: artillery fires blind at slow or stationary radar dots. Four AI-owned Fatboys (sight 510, range 700) with an Advanced Radar; three LLTs 600 elmos away (radar dot, outside LOS, inside range, cannot reach the Fatboys) must be shot as dots; eight Ticks running past 550+ elmos away under radar only (fast dots) must never be shot. Fatboy row z=4400, LLT row z=5000, Tick lane z=4950 towards a far destination.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    3700,
+    4700,
+    1900
+  ],
+  "photos": [
+    40,
+    80,
+    150
+  ],
+  "shot_census": true,
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3200,
+        4300
+      ]
+    },
+    {
+      "unit": "armfboy",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3400,
+        4400
+      ],
+      "spacing": 200,
+      "columns": 4
+    },
+    {
+      "unit": "corllt",
+      "count": 3,
+      "team": 1,
+      "position": [
+        3400,
+        5000
+      ],
+      "spacing": 300,
+      "columns": 3
+    },
+    {
+      "unit": "armflea",
+      "count": 8,
+      "team": 1,
+      "position": [
+        2300,
+        4950
+      ],
+      "spacing": 96,
+      "columns": 8,
+      "after_seconds": 25
+    }
+  ],
+  "enemy_destination": [
+    5600,
+    6800
+  ],
+  "assertions": {
+    "min_shooters": 2,
+    "min_damage": 500
+  }
+}

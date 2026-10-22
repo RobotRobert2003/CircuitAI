@@ -10,7 +10,7 @@ style. Only the characters of TEXTS are kept, so the table stays small.
 
     python tools/draw/make_glyphs.py [--font <ttf>] [--preview out.png]
 
-Output: data/script/src/manager/glyphs.as (namespace Glyphs). Units are font
+Output: data/script/src/systems/presentation/glyphs.as (namespace Glyphs). Units are font
 units scaled so the cap height is 1000; y grows downward (map z), baseline 0.
 """
 import argparse
@@ -25,7 +25,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 DEFAULT_FONT = r"C:\bardev\bar-Beyond-All-Reason\fonts\exo2\Exo2-Bold.ttf"
 OUT = os.path.join(REPO, "data", "script", "src", "manager", "glyphs.as")
 
-# every text the AI writes (manager/commands.as): the table holds these characters
+# every text the AI writes (systems/presentation/commands.as): the table holds these characters
 TEXTS = [
     "SMRTBARb",
     "Do not spec cheat!",
@@ -37,7 +37,7 @@ TEXTS = [
     "RobotRobert03",
     "ManBearPig",
     "iOS_Client",
-    # D-127: the lane labels (manager/lanes.as): class names and numbers
+    # D-127: the lane labels (systems/world/lanes.as): class names and numbers
     "LAND BOT AMPHIBIOUS HOVER ALL-TERRAIN NAVAL AIR LANES",
     "0123456789",
 ]

@@ -5,6 +5,9 @@
  */
 
 #include "terrain/BattleAnalysis.h"
+#include "terrain/AirSafety.h"
+#include "terrain/WaterSurvey.h"
+#include "map/MapManager.h"
 #include "terrain/TerrainManager.h"
 #include "terrain/TerrainData.h"
 #include "map/ThreatMap.h"
@@ -14,6 +17,7 @@
 #include "unit/enemy/EnemyUnit.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
+#include "util/Performance.h"
 #include "spring/SpringMap.h"
 #include "spring/SpringCallback.h"
 #include "unit/ally/AllyUnit.h"
@@ -28,6 +32,7 @@
 #include <limits>
 #include <queue>
 #include <string>
+#include <cstdlib>
 
 namespace circuit {
 
@@ -535,9 +540,11 @@ void CBattleAnalysis::OnEnemyLost(const AIFloat3& pos, float c)
 
 void CBattleAnalysis::Update(int frame)
 {
+	++groundPublication;
 	EnsureGrid();
 	airContacts.clear();
     groundContacts.clear();
+    radarDots.clear();
     navalContacts.clear();
     observedWaterWeapons.assign(height.size(), 0.f);
 	const float dt = float(frame - lastDecay) / FRAMES_PER_SEC;
@@ -554,6 +561,13 @@ void CBattleAnalysis::Update(int frame)
 		const CEnemyUnit* e = kv.second;
 		const CCircuitDef* d = e->GetCircuitDef();
 		if (d == nullptr) {
+            // D-296: an unidentified dot is still an enemy to avoid. Same
+            // visibility rules as identified contacts; land only.
+            if (e->IsInRadarOrLOS() && !e->IsIgnore()
+                && !(e->GetData().losStatus & (SEnemyData::LosMask::HIDDEN | SEnemyData::LosMask::NEUTRAL
+                    | SEnemyData::LosMask::DYING | SEnemyData::LosMask::DEAD))
+                && std::isfinite(e->GetPos().x) && std::isfinite(e->GetPos().z) && Height(e->GetPos()) >= 0.f)
+                radarDots.push_back(e->GetPos());
 			continue;
 		}
 		const float m = d->GetCostM();
@@ -568,7 +582,21 @@ void CBattleAnalysis::Update(int frame)
         if (!d->IsAbleToFly() && observed && Height(e->GetPos()) >= 0.f) {
             const bool economy = !d->IsMobile() && (d->IsMex() || d->IsBuilder() || d->IsWind()
                 || d->GetMaxRange() <= 0.f);
-            groundContacts.push_back({e->GetPos(), m, economy});
+            // D-296: O(1) per contact, cached definition flags only.
+            int kind = 0;
+            if (!d->IsMobile()) {
+                if (d->IsMex()) kind |= K_MEX;
+                if (d->IsWind()) kind |= K_WIND;
+                if (d->IsAssist()) kind |= K_NANO;
+                if (kind == 0 && economy) kind |= K_OTHER_ECO;
+            }
+            // BAR lets construction turrets reclaim enemy units (modrules
+            // reclaim.allowEnemies = true): a static reclaimer's build distance
+            // is lethal to a scout (round 12: two Ticks reclaimed by cornanotc).
+            const float hazardRange = e->IsBeingBuilt() ? 0.f : std::max(
+                d->HasSurfToLand() ? d->GetMaxRange(CCircuitDef::RangeType::LAND) : 0.f,
+                (!d->IsMobile() && d->IsAbleToReclaim()) ? d->GetBuildDistance() : 0.f);
+            groundContacts.push_back({e->GetPos(), m, economy, e->GetId(), d->GetId(), kind, hazardRange});
         }
         if (observed && !d->IsAbleToFly() && d->IsMobile()
             && (d->IsFloater() || d->IsSubmarine()) && Height(e->GetPos()) < 0.f) {
@@ -643,6 +671,33 @@ void CBattleAnalysis::Update(int frame)
 	}
 }
 
+void CBattleAnalysis::SampleNavalThreat(const AIFloat3& origin, float radius)
+{
+	std::fill(std::begin(navalThreatCost), std::end(navalThreatCost), 0.f);
+	if (!std::isfinite(origin.x) || !std::isfinite(origin.z) || !std::isfinite(radius) || radius <= 0.f) return;
+	PrepareWater();
+	const int basin = WaterBody(origin, false);
+	for (const auto& entry : circuit->GetEnemyManager()->GetEnemyUnits()) {
+		const CEnemyUnit* enemy = entry.second;
+		CCircuitDef* def = enemy->GetCircuitDef();
+		// IsHidden() includes the profile IGNORE bit. Using it here made the
+		// deliberate profile-ignore exception below unreachable. This sampler is
+		// requested by SEA only; true fog and game-level ignoredByAI still apply.
+		if (def == nullptr || !enemy->IsInRadarOrLOS()
+			|| (enemy->GetData().losStatus & (SEnemyData::LosMask::HIDDEN | SEnemyData::LosMask::NEUTRAL | SEnemyData::LosMask::DYING | SEnemyData::LosMask::DEAD))) continue;
+		if (enemy->IsIgnore() && (!def->IsIgnore() || enemy->GetUnit()->GetRulesParamFloat("ignoredByAI", 0.f) > 0.f)) continue;
+		const AIFloat3& pos = enemy->GetPos();
+		if (origin.SqDistance2D(pos) > radius * radius) continue;
+		if (def->IsAbleToFly()) {
+			if (def->HasSurfToLand() || def->HasSurfToWater()) navalThreatCost[2] += def->GetCostM();
+			continue;
+		}
+		if (Height(pos) >= 0.f || (basin >= 0 && WaterBody(pos, false) != basin)) continue;
+		const int kind = !def->IsMobile() ? 3 : def->IsInWater(Height(pos), pos.y) ? 1 : 0;
+		navalThreatCost[kind] += def->GetCostM();
+	}
+}
+
 float CBattleAnalysis::AmphThreat(const AIFloat3& pos) const {
     const float coverage = observedWaterWeapons.empty() ? 0.f : observedWaterWeapons[Cell(pos)];
     return std::max(coverage, circuit->GetThreatMap()->GetAmphThreatAtPos(pos));
@@ -650,11 +705,58 @@ float CBattleAnalysis::AmphThreat(const AIFloat3& pos) const {
 AIFloat3 CBattleAnalysis::GetGroundContactPos(int i) const {
     return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].pos : AIFloat3(-1.f, 0.f, -1.f);
 }
+int CBattleAnalysis::GetGroundContactId(int i) const {
+    return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].id : -1;
+}
+int CBattleAnalysis::GetGroundContactDefId(int i) const {
+    return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].defId : -1;
+}
 float CBattleAnalysis::GetGroundContactCost(int i) const {
     return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].cost : 0.f;
 }
 bool CBattleAnalysis::IsGroundContactEconomy(int i) const {
     return i >= 0 && i < int(groundContacts.size()) && groundContacts[i].economy;
+}
+int CBattleAnalysis::GetGroundContactKind(int i) const {
+    return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].kind : 0;
+}
+void CBattleAnalysis::EnsureGroundHazard(float margin)
+{
+    if (!std::isfinite(margin)) margin = 0.f;
+    margin = std::clamp(margin, 0.f, 2048.f);
+    if (groundHazardPublication == groundPublication && groundHazardMargin == margin
+        && observedGroundHazard.size() == height.size()) return;
+    // Lazy: only a caller (D-296 scout raids) pays, at most once per Update
+    // publication (1 s) per margin. O(G) clear + O(A * (r+margin)^2 / cell^2)
+    // paint over A armed observed ground contacts; no allocation after the
+    // first build (assign reuses capacity).
+    performance::Scope measured(circuit, performance::BATTLE_GROUND_HAZARD);
+    EnsureGrid();
+    groundHazardPublication = groundPublication; groundHazardMargin = margin;
+    observedGroundHazard.assign(height.size(), 0.f);
+    for (const auto& c : groundContacts) {
+        if (c.hazardRange <= 0.f) continue;
+        // Include cell discretisation, like the water-weapon layer.
+        ranged::PaintDisc(observedGroundHazard, gw, gh, float(cellSize), c.pos.x, c.pos.z,
+            c.hazardRange + margin + float(cellSize), 1.f);
+    }
+    // Unidentified dots (played: raiders ran into an LLT line that was only a
+    // dot until inside its range). Conservative radius; identification later
+    // replaces it with the real range. O(D * (r+margin)^2 / cell^2).
+    for (const auto& p : radarDots)
+        ranged::PaintDisc(observedGroundHazard, gw, gh, float(cellSize), p.x, p.z,
+            unknownHazardRange + margin + float(cellSize), 1.f);
+}
+void CBattleAnalysis::SetUnknownHazardRange(float range)
+{
+    const float value = std::isfinite(range) ? std::clamp(range, 0.f, 2048.f) : 700.f;
+    if (value != unknownHazardRange) { unknownHazardRange = value; groundHazardPublication = ~0u; }
+}
+float CBattleAnalysis::GroundHazard(const AIFloat3& pos, float margin)
+{
+    if (!std::isfinite(pos.x) || !std::isfinite(pos.z)) return 0.f;
+    EnsureGroundHazard(margin);
+    return observedGroundHazard.empty() ? 0.f : observedGroundHazard[Cell(pos)];
 }
 AIFloat3 CBattleAnalysis::GetNavalContactPos(int i) const {
     return i >= 0 && i < int(navalContacts.size()) ? navalContacts[i] : AIFloat3(-1.f, 0.f, -1.f);
@@ -724,6 +826,207 @@ int CBattleAnalysis::EnemyCount(int kind) const { return ((kind >= 0) && (kind <
 
 float CBattleAnalysis::SurfThreat(const AIFloat3& pos) const { return circuit->GetThreatMap()->GetSurfThreatAtPos(pos); }
 float CBattleAnalysis::AirThreat(const AIFloat3& pos) const { return circuit->GetThreatMap()->GetAirThreatAtPos(pos); }
+bool CBattleAnalysis::InLos(const AIFloat3& pos) const {
+    return std::isfinite(pos.x) && std::isfinite(pos.z) && pos.x >= 0.f && pos.z >= 0.f
+        && pos.x < CTerrainManager::GetTerrainWidth() && pos.z < CTerrainManager::GetTerrainHeight()
+        && circuit->GetMapManager()->IsInLOS(AIFloat3(pos.x, 0.f, pos.z));
+}
+float CBattleAnalysis::AirThreatAlong(const AIFloat3& from, const AIFloat3& to, float padding) const {
+    const auto* threat = circuit->GetThreatMap();
+    float result = air::CorridorThreat(from.x, from.z, to.x, to.z, padding,
+        CTerrainManager::GetTerrainWidth(), CTerrainManager::GetTerrainHeight(), threat->GetSquareSize(),
+        [threat](float x, float z) { return threat->GetAirThreatAtPos(AIFloat3(x,0.f,z)); });
+    if (!std::isfinite(result) || result >= 1.f) return result;
+    RefreshAirWeapons();
+    for (const auto& weapon : airWeapons) {
+        if (air::IntersectsCircle(from.x,from.z,to.x,to.z,weapon.pos.x,weapon.pos.z,
+            weapon.range+padding+2.f*threat->GetSquareSize())) return std::max(1.f,result);
+    }
+    return result;
+}
+void CBattleAnalysis::RefreshAirWeapons() const {
+    const int frame=circuit->GetLastFrame();
+    if (frame<airWeaponFrame+FRAMES_PER_SEC) return;
+    airWeaponFrame=frame;airWeapons.clear();
+    for (const auto& kv:circuit->GetEnemyManager()->GetEnemyUnits()) {
+        const auto* e=kv.second;const auto* d=e->GetCircuitDef();
+        if (d==nullptr || !d->HasSurfToAir() || !e->IsInRadarOrLOS() || e->IsBeingBuilt()
+            || (e->GetData().losStatus & (SEnemyData::LosMask::HIDDEN | SEnemyData::LosMask::NEUTRAL
+                | SEnemyData::LosMask::DYING | SEnemyData::LosMask::DEAD))) continue;
+        if (e->IsIgnore() && (!d->IsIgnore() || e->GetUnit()->GetRulesParamFloat("ignoredByAI",0.f)>0.f)) continue;
+        const float range=d->GetMaxRange(CCircuitDef::RangeType::AIR);
+        if (range>0.f) airWeapons.push_back({e->GetPos(),range});
+    }
+}
+
+int CBattleAnalysis::GetNavalForceCount() {
+    const int frame = circuit->GetLastFrame();
+    if (frame < navalForceFrame + 5 * FRAMES_PER_SEC) return int(navalForces.size());
+    navalForceFrame = frame;
+    navalForces.clear(); PrepareWater();
+    auto add = [this](int id, CCircuitDef* d, const AIFloat3& p, bool allied) {
+        if (d == nullptr || d->IsAbleToFly() || d->IsSurfer() || Height(p) >= -8.f) return;
+        const bool factory = !d->IsMobile() && d->IsBuilder();
+        const bool submerged = d->IsInWater(Height(p), p.y);
+        const bool antiSub = submerged ? d->HasSubToWater() : d->HasSurfToWater();
+        const bool armed = antiSub || d->HasSurfToLand() || d->HasSurfToAir();
+        // Builders/hovercraft are not a combat fleet. Include naval factories
+        // as friendly support anchors only; their metal is never fleet strength.
+        if (!factory && (!d->IsMobile() || d->IsBuilder() || !armed
+            || !(d->IsFloater() || d->IsSubmarine() || (d->IsAmphibious() && submerged)))) return;
+        const int body = WaterBody(p,false);
+        if (body < 0) return;
+        navalForces.push_back({p, d->GetCostM(), id, d->GetId(),
+            (allied ? 1 : 0) | (submerged ? 2 : 0) | (antiSub ? 4 : 0) | (factory ? 8 : 0), body});
+    };
+    circuit->UpdateFriendlyUnits();
+    for (const auto& kv : circuit->GetFriendlyUnits()) {
+        if (kv.second->GetUnit()->IsBeingBuilt()) continue;
+        auto* d = circuit->GetCircuitDefSafe(circuit->GetCallback()->Unit_GetDefId(kv.first));
+        add(kv.first, d, kv.second->GetPos(frame), true);
+    }
+    for (const auto& kv : circuit->GetEnemyManager()->GetEnemyUnits()) {
+        const auto* e = kv.second;
+        auto* d = e->GetCircuitDef();
+        if (d == nullptr || !e->IsInRadarOrLOS() || e->IsBeingBuilt()
+            || (e->GetData().losStatus & (SEnemyData::LosMask::HIDDEN | SEnemyData::LosMask::NEUTRAL
+                | SEnemyData::LosMask::DYING | SEnemyData::LosMask::DEAD))) continue;
+        if (e->IsIgnore() && (!d->IsIgnore() || e->GetUnit()->GetRulesParamFloat("ignoredByAI",0.f)>0.f)) continue;
+        add(e->GetId(),d,e->GetPos(),false);
+    }
+    // Reproducible ties independent of native unordered containers.
+    std::sort(navalForces.begin(),navalForces.end(),[](const NavalForce& a,const NavalForce& b) { return a.id<b.id; });
+    return int(navalForces.size());
+}
+int CBattleAnalysis::GetNavalForceId(int i) const { return i>=0 && i<int(navalForces.size()) ? navalForces[i].id : -1; }
+bool CBattleAnalysis::OutsideStaticWaterWeapons(const AIFloat3& position, float padding, float formationRadius)
+{
+    GetSeaForceCount();
+    // Derived from the exact snapshots used by the old script loops, not a
+    // timed observation cache. Ground can republish within the same frame.
+    if (waterWeaponFrame != seaForceFrame || waterWeaponPublication != groundPublication) {
+        waterWeaponFrame = seaForceFrame; waterWeaponPublication = groundPublication;
+        staticWaterWeapons.clear(); staticWaterWeaponIndex.Clear(); maximumWaterWeaponRange = 0.f;
+        staticWaterWeaponIndexValid = true;
+        const auto add = [&](const AIFloat3& point, const CCircuitDef* definition) {
+            const float range = definition->GetMaxRange(CCircuitDef::RangeType::WATER);
+            if (staticWaterWeaponIndex.CanQuery({point.x,point.z},0.f) && std::isfinite(range) && range>=0.f)
+                staticWaterWeaponIndex.Add({point.x, point.z}, int(staticWaterWeapons.size()));
+            else staticWaterWeaponIndexValid = false;
+            staticWaterWeapons.push_back({point, range});
+            maximumWaterWeaponRange = std::max(maximumWaterWeaponRange, range);
+        };
+        for (int i = 0; i < GetGroundContactCount(); ++i) {
+            const int id = GetGroundContactDefId(i);
+            const auto* definition = id >= 0 ? circuit->GetCircuitDef(id) : nullptr;
+            if (definition && !definition->IsMobile() && (definition->HasSurfToWater() || definition->HasSubToWater()))
+                add(GetGroundContactPos(i), definition);
+        }
+        for (const auto& force : seaForces) {
+            if ((force.flags & 1) || !(force.flags & 8) || !(force.flags & 4)) continue;
+            const auto* definition = force.defId >= 0 ? circuit->GetCircuitDef(force.defId) : nullptr;
+            if (definition) add(force.pos, definition);
+        }
+    }
+    const auto inside = [&](int index) {
+        const auto& weapon = staticWaterWeapons[index];
+        const float radius = (weapon.range + padding) + formationRadius;
+        return position.SqDistance2D(weapon.position) < radius * radius;
+    };
+    // Broad phase is conservative even for an unusual negative policy margin.
+    // Exact squared-radius test and the strict boundary remain unchanged.
+    const float queryRadius=(maximumWaterWeaponRange + std::fabs(padding)) + std::fabs(formationRadius);
+    bool safe = true;
+    if (staticWaterWeaponIndexValid && staticWaterWeaponIndex.CanQuery({position.x,position.z},queryRadius))
+        safe = !staticWaterWeaponIndex.Any({position.x, position.z},queryRadius,inside);
+    else {
+        // Preserve the original scan for exceptional policy/contact values;
+        // never feed NaN, infinity or overflowing coordinates to grid indexing.
+        for (size_t index=0; index<staticWaterWeapons.size(); ++index)
+            if (inside(int(index))) { safe=false; break; }
+    }
+    static const bool verify = std::getenv("CIRCUIT_VERIFY_SEA_STATIC_INDEX") != nullptr;
+    if (verify) {
+        // Independent legacy traversal also verifies snapshot membership, not
+        // merely the broad-phase arithmetic. Validation only, never timings.
+        bool legacy = true;
+        const auto threatens = [&](const AIFloat3& point, const CCircuitDef* definition) {
+            const float radius = (definition->GetMaxRange(CCircuitDef::RangeType::WATER) + padding) + formationRadius;
+            return position.SqDistance2D(point) < radius * radius;
+        };
+        for (int index = 0; index < GetGroundContactCount(); ++index) {
+            const int definitionId = GetGroundContactDefId(index);
+            const auto* definition = definitionId >= 0 ? circuit->GetCircuitDef(definitionId) : nullptr;
+            if (definition && !definition->IsMobile() && (definition->HasSurfToWater() || definition->HasSubToWater())
+                && threatens(GetGroundContactPos(index), definition)) legacy = false;
+        }
+        for (const auto& force : seaForces) {
+            if ((force.flags & 1) || !(force.flags & 8) || !(force.flags & 4)) continue;
+            const auto* definition = force.defId >= 0 ? circuit->GetCircuitDef(force.defId) : nullptr;
+            if (definition && threatens(force.pos, definition)) legacy = false;
+        }
+        if (safe != legacy) circuit->LOG("[INVARIANT] SEA static weapon index diverged");
+    }
+    return safe;
+}
+
+int CBattleAnalysis::GetSeaForceCount() {
+    const int frame=circuit->GetLastFrame();
+    if (frame==seaForceFrame) return int(seaForces.size());
+    seaForceFrame=frame;
+    GetNavalForceCount();
+    // SEA engagement observations are fresh on each requesting frame. Keep
+    // AIR's five-second membership snapshot untouched. One O(F+E) pass with
+    // retained vector capacity; no per-ship scans or hidden-position callbacks.
+    seaForces.clear();
+    for (const auto& force : navalForces) {
+        if (!(force.flags & 1)) continue;
+        auto it = circuit->GetFriendlyUnits().find(force.id);
+        if (it == circuit->GetFriendlyUnits().end()) continue;
+        NavalForce fresh = force;
+        fresh.pos = it->second->GetPos(frame);
+        fresh.body = WaterBody(fresh.pos,false);
+        seaForces.push_back(fresh);
+    }
+    for (const auto& kv : circuit->GetEnemyManager()->GetEnemyUnits()) {
+        const auto* e=kv.second;
+        auto* d=e->GetCircuitDef();
+        if (e->GetData().losStatus & (SEnemyData::LosMask::HIDDEN|SEnemyData::LosMask::NEUTRAL
+            | SEnemyData::LosMask::DYING|SEnemyData::LosMask::DEAD)) continue;
+        const bool observed=e->IsInRadarOrLOS();
+        // Static memory is a search objective (flag 128), never fire authority.
+        if (!observed && (d==nullptr || d->IsMobile())) continue;
+        if (e->IsIgnore() && (d==nullptr || !d->IsIgnore() || (observed
+            && e->GetUnit()->GetRulesParamFloat("ignoredByAI",0.f)>0.f))) continue;
+        const auto& p=e->GetPos(); // only the last legal observation
+        // D-301: hovers on water are SEA contacts too (flag 512). Only surface
+        // guns can hit them; script filters torpedo-only cohorts (KI-611).
+        if (Height(p)>=-8.f || (d!=nullptr && d->IsAbleToFly())) continue;
+        const int body=WaterBody(p,false);
+        if (body<0) continue;
+        if (d==nullptr) {
+            if (p.y < -1.f) seaForces.push_back({p,0.f,e->GetId(),-1,2|16,body});
+            continue;
+        }
+        const bool submerged=d->IsInWater(Height(p),p.y);
+        const bool antiSub=submerged ? d->HasSubToWater() : d->HasSurfToWater();
+        if (d->IsMobile() && !(d->IsFloater() || d->IsSubmarine() || d->IsSurfer() || (d->IsAmphibious() && submerged))) continue;
+        // Unfinished yards and mobile constructors are denial targets too.
+        const int flags=(submerged?2:0)|(antiSub?4:0)|(!d->IsMobile()?8:0)
+            |(!d->IsMobile() && !d->GetBuildOptions().empty()?32:0)
+            |(d->IsMex()?64:0)|(!observed?128:0)
+            |(d->IsMobile() && d->IsAmphibious() && submerged?256:0)
+            |(d->IsMobile() && d->IsSurfer()?512:0);
+        seaForces.push_back({p,d->GetCostM(),e->GetId(),d->GetId(),flags,body});
+    }
+    std::sort(seaForces.begin(),seaForces.end(),[](const NavalForce& a,const NavalForce& b){return a.id<b.id;});
+    return int(seaForces.size());
+}
+int CBattleAnalysis::GetNavalForceDefId(int i) const { return i>=0 && i<int(navalForces.size()) ? navalForces[i].defId : -1; }
+int CBattleAnalysis::GetNavalForceFlags(int i) const { return i>=0 && i<int(navalForces.size()) ? navalForces[i].flags : 0; }
+int CBattleAnalysis::GetNavalForceBody(int i) const { return i>=0 && i<int(navalForces.size()) ? navalForces[i].body : -1; }
+float CBattleAnalysis::GetNavalForceCost(int i) const { return i>=0 && i<int(navalForces.size()) ? navalForces[i].cost : 0.f; }
+AIFloat3 CBattleAnalysis::GetNavalForcePos(int i) const { return i>=0 && i<int(navalForces.size()) ? navalForces[i].pos : AIFloat3(-1.f,0.f,-1.f); }
 
 // ---------------------------------------------------------------- water
 
@@ -773,6 +1076,83 @@ void CBattleAnalysis::BuildWater()
 	hostile8.assign(n8, 0);
 	hostile15.assign(n15, 0);
 	waterBuilt = true;
+}
+
+void CBattleAnalysis::UpdateWaterSurvey(int body)
+{
+    BuildWater();
+    // Pay history allocation/indexing only for a caller requesting a survey;
+    // ordinary AIR/TECH water analysis retains its previous memory/work cost.
+    if (surveySeen.empty()) {
+        surveyCells.resize(hostile8.size());
+        surveySeen.assign(body8.size(), -1);
+        surveyFrame.assign(hostile8.size(), -100000);
+        for (size_t i=0; i<body8.size(); ++i)
+            if (body8[i]>=0) surveyCells[body8[i]].push_back(static_cast<int>(i));
+    }
+    const int frame = circuit->GetLastFrame();
+    if (body < 0 || body >= static_cast<int>(surveyCells.size()) || frame-surveyFrame[body] < 5*FRAMES_PER_SEC) return;
+    surveyFrame[body] = frame;
+    const auto* sensors = circuit->GetMapManager();
+    // O(W_body), independent of unit/scout count. Read the already updated
+    // ally sensor maps, not engine wrappers, once per five seconds per basin.
+    // A 64-elmo grid proves sampled coverage, not omniscience between samples.
+    for (int c : surveyCells[body]) {
+        const AIFloat3 surface((c%gw+.5f)*cellSize, 0.f, (c/gw+.5f)*cellSize);
+        const AIFloat3 submerged(surface.x, -64.f, surface.z);
+        surveySeen[c] = survey::Observe(surveySeen[c], frame,
+            sensors->IsInLOS(surface), sensors->IsInRadar(submerged));
+    }
+}
+
+float CBattleAnalysis::GetWaterSurveyCoverage(int body, int maxAgeFrames)
+{
+    UpdateWaterSurvey(body);
+    if (body < 0 || body >= static_cast<int>(surveyCells.size()) || surveyCells[body].empty()) return 0.f;
+    int fresh = 0;
+    for (int c : surveyCells[body]) fresh += survey::Fresh(surveySeen[c], circuit->GetLastFrame(), maxAgeFrames);
+    return static_cast<float>(fresh)/static_cast<float>(surveyCells[body].size());
+}
+
+AIFloat3 CBattleAnalysis::GetWaterScoutGoal(int body, int maxAgeFrames, const AIFloat3& from, int seed)
+{
+    UpdateWaterSurvey(body);
+    AIFloat3 best(-1.f, 0.f, -1.f);
+    if (body < 0 || body >= static_cast<int>(surveyCells.size())) return best;
+    float score = std::numeric_limits<float>::max();
+    for (int c : surveyCells[body]) {
+        if (survey::Fresh(surveySeen[c], circuit->GetLastFrame(), maxAgeFrames)) continue;
+        const AIFloat3 p((c%gw+.5f)*cellSize, 0.f, (c/gw+.5f)*cellSize);
+        const float dx=p.x-from.x, dz=p.z-from.z;
+        // Stable scout-specific tie/sector bias without consuming random draws.
+        const unsigned hash=static_cast<unsigned>(c/16)*2654435761u ^ static_cast<unsigned>(seed)*2246822519u;
+        const float rank=dx*dx+dz*dz+static_cast<float>(hash%16u)*65536.f;
+        if (rank < score) { score=rank; best=p; }
+    }
+    return best;
+}
+
+int CBattleAnalysis::GetWaterEnemyCount(int body)
+{
+    BuildWater();
+    if (body < 0 || body >= static_cast<int>(hostile8.size())) return -1;
+    int count=0;
+    // O(E), called by SEA's five-second decision only. Include unfinished
+    // factories/builders and unresolved static sightings omitted by combat
+    // snapshots. Never query hidden engine positions or definitions.
+    for (const auto& item : circuit->GetEnemyManager()->GetEnemyUnits()) {
+        const auto* enemy=item.second;
+        if (enemy->GetData().losStatus & (SEnemyData::LosMask::NEUTRAL|SEnemyData::LosMask::DYING|SEnemyData::LosMask::DEAD)) continue;
+        const auto* def=enemy->GetCircuitDef();
+        if (def != nullptr && def->GetDef()->IsAbleToFly()) continue;
+        const auto& p=enemy->GetPos();
+        if (WaterBody(p,false)!=body) continue;
+        // A profile's IGNORE preference is not proof that a remembered enemy
+        // structure vanished. HIDDEN marks invalidated positional memory.
+        if (enemy->IsInRadarOrLOS() || (def != nullptr && !def->IsMobile()
+            && !(enemy->GetData().losStatus & SEnemyData::LosMask::HIDDEN))) ++count;
+    }
+    return count;
 }
 
 int CBattleAnalysis::WaterBody(const AIFloat3& pos, bool subDepth) const

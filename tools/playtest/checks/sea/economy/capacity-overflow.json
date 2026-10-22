@@ -1,0 +1,8 @@
+{
+ "stop_minute": 12,
+ "expect": [
+   {"key":"overflow","pattern":"\\[SEA\\]\\[Capacity\\] overflow factory=","by_minute":12,"scope":"any"},
+   {"key":"completed","pattern":"SeaCapacity\\] PASS constructed overflow factory","by_minute":12,"scope":"any"}
+ ],
+ "forbid":[{"key":"errors","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaCapacity\\] FAIL","scope":"any"}]
+}

@@ -4,7 +4,7 @@
   "checks":"air_edge",
   "description":"Central AA blocks the direct diagonal; observe the actual bomber flank and distant AFUS handoff",
   "visibility":"global", "bomber_only":false,
-  "route_probe":{"axis":"z","crossing":6200,"safe_below":4200,"safe_above":8800,"height":7000},
+  "route_probe":{"axis":"z","crossing":6200,"safe_below":4200,"safe_above":8800,"height":7000,"target_units":{"armafus":true,"armmmkr":true}},
   "priority_targets":{"armafus":true}, "priority_radius":1800,
   "aircraft":[{"unit":"$fighter2","count":40,"team":0,"once":true},{"unit":"$t2","count":48,"team":0,"once":true}],
   "targets":[

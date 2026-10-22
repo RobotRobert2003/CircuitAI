@@ -1,0 +1,10 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {"key":"occupied-tidal","pattern":"DenseFixture\\] PASS occupied tidal rejected","by_minute":8,"scope":"any"},
+    {"key":"tidal-strip","pattern":"DenseFixture\\] PASS touching armtide count=12 edges=16","by_minute":8,"scope":"any"},
+    {"key":"t1-converters","pattern":"DenseFixture\\] PASS touching armfmkr count=6 edges=7","by_minute":8,"scope":"any"},
+    {"key":"advanced-converters","pattern":"DenseFixture\\] PASS touching armuwmmm count=6 edges=7","by_minute":8,"scope":"any"}
+  ],
+  "forbid": [{"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|DenseFixture\\] FAIL|Error in.*dense_economy","scope":"any"}]
+}

@@ -1,0 +1,81 @@
+{
+  "name": "thug-supreme-line",
+  "unit": "corthud",
+  "side": "cortex",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      4800,
+      8200
+    ],
+    [
+      7500,
+      4000
+    ]
+  ],
+  "camera": [
+    6350,
+    6200,
+    1500
+  ],
+  "photos": [
+    35,
+    60,
+    110
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        5900,
+        6200
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        6000,
+        5900
+      ]
+    },
+    {
+      "unit": "corthud",
+      "count": 6,
+      "team": 0,
+      "position": [
+        6100,
+        6700
+      ],
+      "columns": 6,
+      "spacing": 64,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armwar",
+      "count": 3,
+      "team": 1,
+      "position": [
+        6200,
+        6100
+      ],
+      "spacing": 90,
+      "after_seconds": 20
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "max_friendly_damage": 0,
+    "min_kills": 2,
+    "max_losses": 2,
+    "min_types_assigned": 1
+  },
+  "enemy_destination": [
+    6300,
+    7300
+  ]
+}

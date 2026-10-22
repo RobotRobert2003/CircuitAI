@@ -1,0 +1,58 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {
+      "key": "seen",
+      "pattern": "\\[CommanderTrace\\] sensor id=(?P<sensor>\\d+) def=corrad .*los=1",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "remembered",
+      "pattern": "\\[CommanderTrace\\] sensor id=(?P<sensor>\\d+) def=corrad .*los=0 blip=0",
+      "scope": "any",
+      "after_minute": 1,
+      "by_minute": 2,
+      "same_as": "seen",
+      "after_key": "seen"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "unsafe_shot",
+      "pattern": "\\[Commander\\].*shot_pending|\\[CommanderT3\\].*concealed_shot",
+      "scope": "any"
+    },
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "commander_lost",
+      "pattern": "\\[RangedArena\\].* death id=\\d+ team=0 unit=armcom",
+      "scope": "any"
+    }
+  ],
+  "complete_on": {
+    "key": "complete",
+    "pattern": "\\[RangedArena\\].* scenario_complete",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 10
+}

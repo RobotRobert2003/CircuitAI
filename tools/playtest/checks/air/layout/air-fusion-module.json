@@ -1,0 +1,17 @@
+{
+  "stop_minute": 22,
+  "expect": [
+    {"key":"opening", "pattern":"\\[AirEconomyProbe\\] PASS opening reserves", "by_minute":5},
+    {"key":"fusion-module", "pattern":"\\[AIR\\]\\[EcoLayout\\] reserved air\\.(field)?[eE]co\\.\\d+ .*kind=fusion", "by_minute":14},
+    {"key":"fusion-place", "pattern":"\\[AIR\\]\\[EcoLayout\\] place (armfus|corfus|legfus) in air\\.(field)?[eE]co\\.\\d+ slot=\\d+ kind=fusion", "by_minute":20, "after_key":"fusion-module"},
+    {"key":"fusion-on-slot", "pattern":"\\[AirEconomyProbe\\] PASS fusion on module slot", "by_minute":22, "after_key":"fusion-place"}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope":"any"},
+    {"key":"invariant", "pattern":"INVARIANT", "scope":"any"},
+    {"key":"fusion-invariant", "pattern":"INV-203|INV-107", "scope":"any"},
+    {"key":"probe", "pattern":"\\[AirEconomyProbe\\] FAIL", "scope":"any"},
+    {"key":"fallback", "pattern":"fusion fallback field site", "scope":"any"},
+    {"key":"crash", "pattern":"Access violation|has crashed|Fatal:", "scope":"any"}
+  ]
+}

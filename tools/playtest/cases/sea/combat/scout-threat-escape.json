@@ -1,0 +1,47 @@
+{
+  "name": "scout-threat-escape",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      7492,
+      1220
+    ],
+    [
+      4814,
+      11077
+    ]
+  ],
+  "checks": "sea/combat/scout-threat-escape.json",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "shots": "0.5@2200@6000:2300,1.5@2600@6000:2600,3@5000@5500:3200",
+  "groups": [
+    {
+      "unit": "armpt",
+      "team": 0,
+      "count": 3,
+      "position": [
+        6000,
+        2300
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "cortl",
+      "team": 1,
+      "count": 1,
+      "position": [
+        6000,
+        2600
+      ]
+    }
+  ],
+  "progression_audit": {
+    "kind": "scout_travel",
+    "unit": "armpt",
+    "count": 3,
+    "minimum_travel": 600
+  }
+}

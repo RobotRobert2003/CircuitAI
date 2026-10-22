@@ -6,6 +6,7 @@ would erase the instrumentation). Never edits production data or a live install.
 import argparse
 import json
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import re
 import shutil
 
@@ -20,8 +21,8 @@ def main():
     parser.add_argument("--mode", choices=["profiles", "fire"], required=True)
     args = parser.parse_args()
     base = args.dir.resolve()
-    if not base.is_relative_to((ROOT / "build-theatres").resolve()):
-        parser.error("use an isolated directory under this repository's build-theatres")
+    if not base.is_relative_to((RAW_ROOT).resolve()):
+        parser.error("use an isolated directory under the benchmark repository's build-theatres")
     staged = base / "AI/Skirmish/BARbTest/test/script"
     if not staged.is_dir():
         parser.error("stage BARbTest first")

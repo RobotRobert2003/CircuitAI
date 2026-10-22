@@ -138,13 +138,27 @@ function widget:DrawScreen()
 	if pending then pending.draws = pending.draws + 1 end
 end
 
+function widget:Shutdown()
+	if pending then
+		Spring.SendCommands({"setmaxspeed "..pending.speed,"setminspeed "..pending.speed})
+		pending=nil
+	end
+end
+
 function widget:Update()
 	if not pending then return end
 	-- Other spectator camera widgets can restore their own state after a jump.
 	-- Hold this explicit test camera only during the screenshot settling window.
 	Spring.SetCameraState({mode=1,px=pending.x,py=math.max(0,Spring.GetGroundHeight(pending.x,pending.z)),
 		pz=pending.z,height=pending.height,angle=0.8},0)
-	if pending.draws>=3 and Spring.DiffTimers(Spring.GetTimer(),pending.started)>=1 then
+	local elapsed = Spring.DiffTimers(Spring.GetTimer(),pending.started)
+	if elapsed >= 5 and pending.draws < 3 then
+		echo("screenshot timeout: restoring speed")
+		Spring.SendCommands({"setmaxspeed "..pending.speed,"setminspeed "..pending.speed})
+		pending=nil
+		return
+	end
+	if pending.draws>=3 and elapsed>=1 then
 		local state=Spring.GetCameraState()
 		echo(string.format("camera captured name=%s position=(%.0f,%.0f) height=%.0f",
 			tostring(state.name),state.px or -1,state.pz or -1,state.height or -1))
@@ -152,6 +166,33 @@ function widget:Update()
 		echo(string.format("screenshot at %.1f min of team %d at (%d, %d)",pending.minute,target.team or -1,pending.x,pending.z))
 		Spring.SendCommands({"setmaxspeed "..pending.speed,"setminspeed "..pending.speed})
 		pending=nil
+	end
+end
+
+-- "[Playtest] decided: ..." once, when a single AI alliance still has living
+-- units; playtest.py stops the run there unless --play-decided is given, so a
+-- won game does not run on to stop_minute. Humans/spectator teams are ignored:
+-- the host sits in its own ally team with a commander on every playtest.
+local decidedEchoed = false
+local function checkDecided(n)
+	if decidedEchoed then return end
+	local aiAllies, aliveAllies, aliveTeams = {}, {}, {}
+	for _, t in ipairs(Spring.GetTeamList()) do
+		local _, _, isDead, isAI, _, ally = Spring.GetTeamInfo(t, false)
+		if isAI then
+			aiAllies[ally] = true
+			if not isDead and (Spring.GetTeamUnitCount(t) or 0) > 0 then
+				aliveAllies[ally] = true
+				aliveTeams[#aliveTeams + 1] = t
+			end
+		end
+	end
+	local total, alive, last = 0, 0, nil
+	for a in pairs(aiAllies) do total = total + 1 end
+	for a in pairs(aliveAllies) do alive = alive + 1; last = a end
+	if total > 1 and alive <= 1 then
+		decidedEchoed = true
+		echo(string.format("decided: ally %s alone with teams %s at %.1f min", tostring(last), table.concat(aliveTeams, ","), n / (60 * FPS)))
 	end
 end
 
@@ -163,7 +204,7 @@ function widget:GameFrame(n)
 		WG.barblink.SetOpen(false)
 		echo("BARb AI window closed for the screenshots")
 	end
-	if n % 1800 == 0 then dumpEco(n) end
+	if n % 1800 == 0 then dumpEco(n); checkDecided(n) end
 	if n == 1 then
 		Spring.SendCommands("luaui disablewidget Autoquit")
 		-- The spectator TV can replace the requested camera during its render

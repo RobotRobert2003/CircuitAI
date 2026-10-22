@@ -21,7 +21,12 @@
 *.app
 
 CMakeFiles/
+# Optional local compatibility junction to the external raw benchmark store.
 build-theatres/
+# Validation artifacts belong to CircuitAI.benchmarks, never source commits.
+/build-validation/
+# Packaged runbooks are generated artifacts; maintain their source under skills/.
+/skills/*.zip
 Makefile
 cmake_install.cmake
 

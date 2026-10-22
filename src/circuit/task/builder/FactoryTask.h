@@ -22,6 +22,7 @@ public:
 
 	CCircuitDef* GetReprDef() const { return reprDef; }
 	bool IsPlop() const { return isPlop; }
+	void PreferFacing(int value) { preferredFacing = value >= 0 && value < 4 ? value : -1; }
 	void SetPosition(const springai::AIFloat3& pos) { position = pos; }
 
 	virtual void Start(CCircuitUnit* unit) override;
@@ -40,6 +41,7 @@ private:
 
 	CCircuitDef* reprDef;
 	bool isPlop;
+	int preferredFacing = -1; // transient script preference, opening yard only
 };
 
 } // namespace circuit

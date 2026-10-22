@@ -9,6 +9,7 @@
 #include "module/TaskModule.h"
 #include "map/ThreatMap.h"
 #include "resource/MetalManager.h"
+#include "terrain/TerrainManager.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 
@@ -52,14 +53,9 @@ bool CBNanoTask::Execute(CCircuitUnit* unit)
 		)
 		return true;
 	}
-	if (geom::is_valid(buildPos)
-		&& circuit->GetMap()->IsPossibleToBuildAt(buildDef->GetDef(), buildPos, facing))
-	{
-		TRY_UNIT(circuit, unit,
-			unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(frame));
-		)
-		return true;
-	}
+	if (TryBuildCachedSite(unit)) return true;
+
+	if (AdoptStandingFrame(unit)) return true;
 
 	// Alter/randomize position
 	AIFloat3 pos = (shake > .0f) ? geom::get_near_pos(position, shake) : position;
@@ -72,6 +68,9 @@ bool CBNanoTask::Execute(CCircuitUnit* unit)
 		TRY_UNIT(circuit, unit,
 			unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(frame));
 		)
+	} else if (pinFailed) {
+		manager->AbortTask(this);
+		return false;
 	} else {
 		// Fallback to Guard/Assist/Patrol
 		manager->FallbackTask(unit);

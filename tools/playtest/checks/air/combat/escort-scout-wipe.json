@@ -1,0 +1,21 @@
+{
+  "stop_minute": 9,
+  "expect": [
+    {"key":"loaded","pattern":"\\[AirArena\\] event=loaded","scope":"any","by_minute":1},
+    {"key":"launch","pattern":"\\[AIR\\]\\[Waves\\] Wave \\d+ launched .*bombers=([1-9]\\d*) fighters=([1-9]\\d*)","scope":"any","by_minute":3},
+    {"key":"exhausted","pattern":"WAVE: operation exhausted","scope":"any","by_minute":8,"after_key":"launch"},
+    {"key":"wipe","pattern":"\\[AIR\\]\\[EscortScout\\] wipe op=\\d+ bombersLaunched=[1-9]\\d* escorts=[1-9]","scope":"any","by_minute":8,"after_key":"launch"},
+    {"key":"t1-scout","pattern":"\\[AIR\\]\\[EscortScout\\] fighter=\\d+ def=(armfig|corveng|legfig) .*point=","scope":"any","by_minute":8,"after_key":"wipe"},
+    {"key":"t2-scout","pattern":"\\[AIR\\]\\[EscortScout\\] fighter=\\d+ def=(armhawk|corvamp|legvenator|legafigdef) .*point=","scope":"any","by_minute":8,"after_key":"wipe"},
+    {"key":"dispatch","pattern":"\\[AIR\\]\\[EscortScout\\] dispatch fighter=\\d+","scope":"any","by_minute":8,"after_key":"wipe"},
+    {"key":"arrived","pattern":"\\[AIR\\]\\[EscortScout\\] released fighter=\\d+ reason=arrived","scope":"any","by_minute":9,"after_key":"dispatch"}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT|\\[AirOrders\\] ERROR","scope":"any"},
+    {"key":"scout-invariant","pattern":"INV-202","scope":"any"},
+    {"key":"aa-known-at-plan","pattern":"\\[AIR\\]\\[Waves\\] held: no feasible known target","scope":"any"},
+    {"key":"fixture","pattern":"\\[AirArena\\] event=error|Removed widget: AIR combat arena|Error in.*air_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

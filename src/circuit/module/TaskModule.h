@@ -42,7 +42,7 @@ public:
 	// a task created solely for that caller does not sit in the queue for someone
 	// else. No-op unless the module tracks that (CBuilderManager does).
 	virtual void DiscardUnusedTask(IUnitTask* task) {}
-	void AbortTask(IUnitTask* task) { DequeueTask(task, false); }
+	void AbortTask(IUnitTask* task);
 	void DoneTask(IUnitTask* task) { DequeueTask(task, true); }
 
 public:

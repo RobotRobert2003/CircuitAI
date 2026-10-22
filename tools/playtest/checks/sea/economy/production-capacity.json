@@ -1,0 +1,10 @@
+{
+  "stop_minute": 12,
+  "expect": [
+    {"key":"assist","pattern":"SeaCapacity\\] PASS commander assists shipyard","by_minute":12,"scope":"any"},
+    {"key":"support","pattern":"SeaCapacity\\] PASS constructed support turret","by_minute":12,"scope":"any"},
+    {"key":"four","pattern":"SeaCapacity\\] PASS T2 with four completed in-range turrets","by_minute":12,"scope":"any"},
+    {"key":"handoff","pattern":"SeaCapacity\\] PASS commander assists economic construction after four-turret handoff","by_minute":12,"scope":"any"}
+  ],
+  "forbid": [{"key":"errors","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaCapacity\\] FAIL|Error in.*sea_capacity","scope":"any"}]
+}

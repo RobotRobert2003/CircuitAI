@@ -2,9 +2,10 @@
 // Multiple strategies can be enabled simultaneously per role via a bitmask.
 // Keep this enum small and stable; append new values to avoid renumbering.
 enum Strategy {
-    T2_RUSH = 0,      // Prioritize reaching T2 quickly (labs, eco thresholds)
+    SPAM_RUSH = 0,    // Existing early T1 spam / fast T2 assault gates
     T3_RUSH = 1,      // Prioritize reaching T3/experimental (e.g., Gantry)
     NUKE_RUSH = 2,    // Prioritize early nuclear capabilities (within safe eco bounds)
+    T2_RUSH = 3,      // Finite heavy T2 delivery; original flag positions preserved
 }
 
 // Utilities for logging and display of strategy sets
@@ -20,6 +21,7 @@ namespace StrategyUtil {
 
     string ToString(const Strategy s) {
         switch (s) {
+            case Strategy::SPAM_RUSH: return "SPAM_RUSH";
             case Strategy::T2_RUSH: return "T2_RUSH";
             case Strategy::T3_RUSH: return "T3_RUSH";
             case Strategy::NUKE_RUSH: return "NUKE_RUSH";

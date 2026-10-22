@@ -1,0 +1,45 @@
+{
+  "stop_minute": 12,
+  "expect": [
+    {
+      "key": "widget",
+      "pattern": "\\[Playtest\\] widget loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "thugs",
+      "pattern": "RANGED: assigned corthud",
+      "scope": "any",
+      "by_minute": 10
+    },
+    {
+      "key": "screenshot",
+      "pattern": "\\[Playtest\\] screenshot",
+      "scope": "any",
+      "by_minute": 4
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "policy",
+      "pattern": "has invalid ranged policy",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

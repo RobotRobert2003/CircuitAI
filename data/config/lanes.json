@@ -69,12 +69,7 @@
 	"recalc_seconds": 180,            // LaneRecalcSeconds: recalculated at least this often
 	"recalc_shift": 1000,             // LaneRecalcShift: or when the front moves this far
 	"recalc_min_seconds": 60,         // LaneRecalcMinSeconds: but at most this often
-	"draw": true,                     // LaneDraw: drawn on the map after the intro
 	"draw_seconds": 30,               // LaneDrawSeconds: owner: shown 30 s, then erased
-	"draw_fallback_seconds": 300,      // LaneDrawFallbackSeconds: an AI that does not draw the intro starts here
-	"symbol_spacing": 1400,           // LaneSymbolSpacing: a class symbol this often along a lane
-	"symbol_size": 260,               // LaneSymbolSize
-	"label_size": 240,                // LaneLabelSize: the class name's cap height
 	"pond_max_map_share": 0.025,      // advisory: a small connected ship-water component
 	"water_min_cells": 16,            // ignore tiny depth-grid fragments (64-elmo cells)
 	"water_territory_ratio": 0.8,      // shore nearer one side by this ratio; middle stays neutral

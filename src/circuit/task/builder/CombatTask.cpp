@@ -75,7 +75,7 @@ void CCombatTask::Execute(CCircuitUnit* unit)
 	const AIFloat3& position = GetTarget()->GetPos();
 	CCircuitDef* cdef = unit->GetCircuitDef();
 	const float range = std::max(unit->GetUnit()->GetMaxRange(), /*unit->IsUnderWater(frame) ? cdef->GetSonarRadius() : */cdef->GetLosRadius());
-	if (position.SqDistance2D(pos) < range) {
+	if (position.SqDistance2D(pos) < SQUARE(range)) {
 		unit->Attack(GetTarget(), GetTarget()->GetUnit()->IsCloaked(), frame + FRAMES_PER_SEC * 60);
 	} else {
 		const AIFloat3 velLead = GetTarget()->GetVel() * FRAMES_PER_SEC * 3;

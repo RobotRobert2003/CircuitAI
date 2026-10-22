@@ -1,0 +1,40 @@
+{
+  "name": "gunship-deadline",
+  "description": "Supplied gunship reinforcements assemble against nearby AA; low supply must release on its deadline.",
+  "checks": "gunship-deadline",
+  "bomber_only": false,
+  "aircraft": [
+    {
+      "unit": "armbrawl",
+      "count": 2,
+      "team": 0,
+      "position": [
+        2155,
+        11744
+      ],
+      "once": true
+    }
+  ],
+  "targets": [
+    {
+      "unit": "corck",
+      "count": 1,
+      "team": 1,
+      "position": [
+        3100,
+        10900
+      ]
+    }
+  ],
+  "defenses": [
+    {
+      "unit": "armrl",
+      "count": 6,
+      "position": [
+        3300,
+        10900
+      ]
+    }
+  ],
+  "refill_seconds": 30
+}

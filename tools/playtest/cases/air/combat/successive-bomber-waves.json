@@ -1,0 +1,18 @@
+{
+  "name": "successive-bomber-waves",
+  "description": "Fresh bombers and escorts launch after cadence while an earlier offensive cohort remains alive and committed.",
+  "checks": "successive-bomber-waves",
+  "bomber_only": false,
+  "aircraft": [
+    {"unit":"$t2","count":24,"team":0,"once":true},
+    {"unit":"$fighter2","count":24,"team":0,"once":true},
+    {"unit":"$t2","count":24,"team":0,"after_seconds":180,"once":true},
+    {"unit":"$fighter2","count":24,"team":0,"after_seconds":180,"once":true}
+  ],
+  "targets": [
+    {"unit":"armafus","count":1,"position":[10100,1300]},
+    {"unit":"armmmkr","count":4,"position":[10300,1700]}
+  ],
+  "defenses": [],
+  "refill_seconds": 30
+}

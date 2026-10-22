@@ -1,19 +1,13 @@
 #include "../define.as"
-#include "../helpers/generic_helpers.as"
+#include "../helpers/common/generic_helpers.as"
 #include "../global.as"
 #include "../types/role_config.as"
-#include "../helpers/map_helpers.as"
-#include "team_economy.as"
-
-// void OpenStrategy(const CCircuitDef@ facDef, const AIFloat3& in pos)
-// {
-// 	GenericHelpers::LogUtil("EC2OpenStrategy called for factory: " + facDef.GetName() + " at position: " + pos.x + ", " + pos.z, 1);
-// }
+#include "../helpers/spatial/map_helpers.as"
+#include "../systems/team/team_economy.as"
 
 namespace Economy {
 
 	// To not reset army requirement on factory switch, @see Factory::AiIsSwitchAllowed
-	bool isSwitchAssist = false;
 
 	void AiLoad(IStream& istream)
 	{
@@ -68,28 +62,7 @@ namespace Economy {
 		// D-175: one overflow policy and cooldown for every experimental role.
 		TeamEconomy::ShareOverflow();
 		Invariants::CheckTeamShare();
-	}
-
-	// Resource getters (expose current resource info handles)
-	const SResourceInfo@ GetMetalResource()
-	{
-		return aiEconomyMgr.metal;
-	}
-
-	const SResourceInfo@ GetEnergyResource()
-	{
-		return aiEconomyMgr.energy;
-	}
-
-	// Convenience getters for frequently used values
-	float GetMetalIncome()
-	{
-		return aiEconomyMgr.metal.income;
-	}
-
-	float GetEnergyIncome()
-	{
-		return aiEconomyMgr.energy.income;
+		Invariants::CheckNonBuildPowerBuilders();   // D-293: INV-204, every role
 	}
 
 	/**************************************
@@ -184,19 +157,6 @@ namespace Economy {
 		return _energyMin10s.getMin(ai.frame, _WINDOW_10S_FRAMES, aiEconomyMgr.energy.income);
 	}
 
-	// Centralized placement anchors for economy-related structures
-	AIFloat3 GetEnergyCenter()
-	{
-		GenericHelpers::LogUtil("[ECONOMY] Enter GetEnergyCenter", 4);
-		return Global::Map::StartPos;
-	}
-
-	AIFloat3 GetEnergyConverterCenter()
-	{
-		GenericHelpers::LogUtil("[ECONOMY] Enter GetEnergyConverterCenter", 4);
-		return Global::Map::StartPos;
-	}
-
 	// Mex tracking helper to ensure we only upgrade our own MEXes
 	namespace MexTracker
 	{
@@ -270,19 +230,6 @@ namespace Economy {
 			return false;
 		}
 
-		bool IsUpgraded(const AIFloat3& in pos)
-		{
-			const float tolerance = 35.0f;
-			for (uint i = 0; i < myMexes.length(); ++i)
-			{
-				if (MapHelpers::IsInRange(pos, myMexes[i].pos, tolerance))
-				{
-					return myMexes[i].isUpgraded;
-				}
-			}
-			return false;
-		}
-
 		AIFloat3 GetNearestNonUpgradedMex(const AIFloat3& in unitPos)
 		{
 			AIFloat3 bestPos;
@@ -309,7 +256,8 @@ namespace Economy {
 			return AIFloat3(-1, -1, -1);
 		}
 
-		AIFloat3 GetNearestNonUpgradedMexInRange(const AIFloat3& in unitPos, const AIFloat3& in center, float radius)
+		AIFloat3 GetNearestNonUpgradedMexInRange(const AIFloat3& in unitPos, const AIFloat3& in center, float radius,
+            CCircuitUnit@ worker = null, CCircuitDef@ upgrade = null)
 		{
 			AIFloat3 bestPos;
 			float bestDistSq = 3.402823466e+38F;
@@ -325,6 +273,15 @@ namespace Economy {
 					float d = MapHelpers::SqDist(unitPos, myMexes[i].pos);
 					if (d < bestDistSq)
 					{
+                        // Optional admission for actual upgrade orders. Keep
+                        // tracker-only prerequisite queries unchanged. A cliff,
+                        // water-depth mismatch or unsafe approach must not make
+                        // every spare worker allocate the same doomed upgrade.
+                        // Read live safety; never blacklist a spot by timeout.
+                        if (worker !is null && upgrade !is null
+                            && (!aiTerrainMgr.CanUpgradeTerrain(upgrade, myMexes[i].pos)
+                                || !aiTerrainMgr.CanReachAtSafe(worker, myMexes[i].pos,
+                                    worker.circuitDef.GetBuildDistance()))) continue;
 						bestDistSq = d;
 						bestPos = myMexes[i].pos;
 						found = true;
@@ -350,31 +307,6 @@ namespace Economy {
 			return count;
 		}
 
-		AIFloat3 GetNearestOwnedMexInRange(const AIFloat3& in unitPos, const AIFloat3& in center, float radius)
-		{
-			AIFloat3 bestPos;
-			float bestDistSq = 3.402823466e+38F;
-			bool found = false;
-
-			for (uint i = 0; i < myMexes.length(); ++i)
-			{
-				if (MapHelpers::IsInRange(myMexes[i].pos, center, radius))
-				{
-					float d = MapHelpers::SqDist(unitPos, myMexes[i].pos);
-					if (d < bestDistSq)
-					{
-						bestDistSq = d;
-						bestPos = myMexes[i].pos;
-						found = true;
-					}
-				}
-			}
-
-			if (found)
-				return bestPos;
-			return AIFloat3(-1, -1, -1);
-		}
-
 		bool AnyUpgradeInProgressNear(const AIFloat3& in pos, float radius)
 		{
 			const float r2 = radius * radius;
@@ -393,5 +325,3 @@ namespace Economy {
 	}
 
 }  // namespace Economy
-
-

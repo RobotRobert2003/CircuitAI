@@ -1,0 +1,15 @@
+{
+  "stop_minute": 3,
+  "expect": [
+    {"key":"loaded","pattern":"\\[RangedArena\\].* loaded","scope":"any","by_minute":1},
+    {"key":"spawn","pattern":"\\[RangedArena\\].* spawn.*unit=armpw","scope":"any","by_minute":1},
+    {"key":"orders","pattern":"\\[RangedArena\\].* unit_command key=armpw:10","scope":"any","by_minute":2}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[RangedArena\\].*ERROR|Error in.*ranged_arena|Removed widget: Ranged combat arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"},
+    {"key":"damage","pattern":"\\[RangedArena\\].* damage","scope":"any"}
+  ]
+}

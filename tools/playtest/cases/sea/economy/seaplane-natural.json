@@ -1,0 +1,11 @@
+{
+  "name": "seaplane-natural",
+  "map": "Supreme Isthmus v1.7",
+  "runner": "tools/playtest/run_sea_transition.py --natural --minutes 30",
+  "description": "Ordinary-resource SEA versus SEA opening and post-T2 seaplane transition. No units or resources supplied; active opponent. Compare compact and experimental economy paths, keeping failed milestones in the evidence.",
+  "variants": ["armada compact", "armada experimental"],
+  "checks": "sea/economy/seaplane-natural.json",
+  "minutes": 30,
+  "seed": 2091,
+  "supplied": false
+}

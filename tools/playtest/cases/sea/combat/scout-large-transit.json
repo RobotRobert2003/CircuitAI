@@ -1,0 +1,38 @@
+{
+  "name": "scout-large-transit",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      7492,
+      1220
+    ],
+    [
+      4814,
+      11077
+    ]
+  ],
+  "checks": "sea/combat/scout-large-transit.json",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "progression_audit": {
+    "kind": "scout_travel",
+    "unit": "armpt",
+    "count": 12,
+    "minimum_travel": 1000
+  },
+  "shots": "1@5200@6100:2200,3@5200@6100:2200,6@5200@6100:2200",
+  "groups": [
+    {
+      "unit": "armpt",
+      "team": 0,
+      "count": 12,
+      "position": [
+        6000,
+        1800
+      ],
+      "columns": 6,
+      "spacing": 120
+    }
+  ]
+}

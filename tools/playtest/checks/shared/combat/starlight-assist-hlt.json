@@ -1,0 +1,75 @@
+{
+  "stop_minute": 4,
+  "_doc": "D-295 Starlight assist past static coverage. As ranged-starlight-assist; the fixture's no_static_damage logs '[RangedArena] ERROR artillery_hit_by_static', which the base fixture forbid rejects.",
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "spawn",
+      "pattern": "\\[RangedArena\\].* spawn",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "damage",
+      "pattern": "\\[RangedArena\\].* damage.*attackerTeam=0",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "orders",
+      "pattern": "\\[RangedArena\\].* orders team=0",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "assist",
+      "pattern": "RANGED: assist unit=\\d+ target=\\d+ ally=\\d+",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "progress",
+      "pattern": "\\[RangedArena\\].* centroid_distance mean=",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "starlight damage",
+      "pattern": "\\[RangedArena\\].* damage .*attackerTeam=0 .*attackerDef=armmanni",
+      "scope": "any",
+      "by_minute": 3
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena|Removed widget: Ranged combat arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "policy",
+      "pattern": "has invalid ranged policy",
+      "scope": "any"
+    }
+  ]
+}

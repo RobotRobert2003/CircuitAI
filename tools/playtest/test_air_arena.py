@@ -27,6 +27,21 @@ class ArenaTests(unittest.TestCase):
         self.assertEqual((result['completed_waves'], result['censored_waves']), (0, 1))
         self.assertIsNone(result['waves'][0]['survivors'])
 
+    def test_overlap_requires_recent_actual_survivors(self):
+        result = self.audit(
+            'event=launch frame=30 wave=1 target=9 risk=1 ids=1 count=1',
+            'event=flight frame=300 alive=1 wave=1',
+            'event=launch frame=330 wave=2 target=10 risk=1 ids=2 count=1')
+        self.assertEqual(result['observed_overlaps'], [dict(wave=2, launch_frame=330,
+            earlier_wave=1, earlier_alive=1, observed_frame=300)])
+
+    def test_dead_or_stale_cohort_is_not_overlap_evidence(self):
+        for census in ('event=flight frame=300 alive=0 wave=1',
+                       'event=flight frame=100 alive=1 wave=1'):
+            result = self.audit('event=launch frame=30 wave=1 target=9 risk=1 ids=1 count=1',
+                census, 'event=launch frame=330 wave=2 target=10 risk=1 ids=2 count=1')
+            self.assertEqual(result['observed_overlaps'], [])
+
     def test_shutdown_overrun_cannot_turn_an_unfinished_sortie_into_success(self):
         result = analyze(io.StringIO('[AirArena] event=launch frame=30 wave=1 target=9 risk=1 ids=1 count=1\n'
                                     '[AirArena] event=target_dead frame=1810 wave=1 cost=3350\n'

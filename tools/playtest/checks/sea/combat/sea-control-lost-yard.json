@@ -1,0 +1,17 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {"key": "loaded", "pattern": "\\[SeaArena\\].* loaded case=control-yard-lost", "scope": "any", "by_minute": 1},
+    {"key": "yard-visible", "pattern": "\\[SeaArena\\].*detected.*unit=corsy", "scope": "any", "by_minute": 1},
+    {"key": "radar-removed", "pattern": "\\[SeaArena\\].*fixture_removed team=0 unit=armfrad count=1", "scope": "any", "by_minute": 1},
+    {"key": "yard-lost-from-vision", "pattern": "\\[SeaArena\\].*objective.*unit=corsy los=false radar=false", "scope": "any", "by_minute": 1},
+    {"key": "yard-damaged", "pattern": "\\[SeaArena\\].*damage.*team=0.*victimUnit=corsy", "scope": "any", "by_minute": 3},
+    {"key": "yard-destroyed", "pattern": "\\[SeaArena\\].*death.*team=1.*attackerTeam=0", "scope": "any", "by_minute": 4}
+  ],
+  "forbid": [
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "invariant", "pattern": "INVARIANT", "scope": "any"},
+    {"key": "fixture", "pattern": "\\[SeaArena\\].*ERROR|Error in.*sea_arena|Removed widget: SEA combat arena", "scope": "any"},
+    {"key": "crash", "pattern": "Access violation|has crashed|Fatal:", "scope": "any"}
+  ]
+}

@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import subprocess
 import sys
 import playtest
@@ -82,7 +83,8 @@ def run(args, entry):
         "dll_sha256": hashlib.sha256(args.dll.read_bytes()).hexdigest(),
         "staged_script_sha256": {str(p.relative_to(source.parents[1])): hashlib.sha256(p.read_bytes()).hexdigest()
                                  for p in source.parents[1].rglob('*.as')}}, indent=2))
-    subprocess.run([sys.executable, str(playtest.REPO/"tools/knowledge/check_script_api.py"), "--dll", str(args.dll)], check=True)
+    subprocess.run([sys.executable, str(playtest.REPO/"tools/knowledge/check_script_api.py"),
+        "--dll", str(args.dll), "--scripts", str(source.parents[1])], check=True)
     launch = call+["launch", "--dir", str(base), "--engine", "recoil_2026.07.04"]
     if args.headless:
         launch.append("--headless")
@@ -105,7 +107,7 @@ def main():
     parser.add_argument("--wall-minutes", type=float, default=25)
     parser.add_argument("--headless", action="store_true")
     args = parser.parse_args()
-    if not args.dir.resolve().is_relative_to(playtest.REPO/"build-theatres"):
+    if not args.dir.resolve().is_relative_to(RAW_ROOT):
         parser.error("Use an isolated build-theatres output directory")
     chosen = args.maps.split(",")
     if set(chosen)-{m[0] for m in MAPS}:

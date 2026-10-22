@@ -12,6 +12,7 @@
 #include "util/math/QuadField.h"
 #include "util/math/Region.h"
 #include "terrain/AlliedReservations.h"
+#include "terrain/CommanderCombat.h"
 #include "resource/MetalField.h"
 #include "task/static/StrategicTargeting.h"
 
@@ -132,7 +133,11 @@ public:
 	allied_layout::Reservations& GetLayoutReservations() { return layoutReservations; }
 	metal_field::Claims& GetMetalClaims() { return metalClaims; }
 	strategic::Ledger& GetPulseClaims() { return pulseClaims; }
+    commander::ShotClaims& GetCommanderShots() { return commanderShots; }
 	strategic::Ledger& GetNuclearHistory() { return nuclearHistory; }
+private:
+    commander::ShotClaims commanderShots;
+public:
 private:
 	strategic::Ledger pulseClaims, nuclearHistory;
 	allied_layout::Reservations layoutReservations;

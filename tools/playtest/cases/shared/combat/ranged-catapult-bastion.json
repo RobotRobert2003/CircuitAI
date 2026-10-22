@@ -1,0 +1,22 @@
+{
+  "name": "ranged-catapult-bastion",
+  "unit": "corcat",
+  "description": "Observed Bastion with rear economy bait. Catapults must bombard without entering its fire; all friendly combat orders are native.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [[4000, 2400], [4000, 9800]],
+  "side": "cortex",
+  "camera": [4000, 4850, 2600],
+  "photos": [25, 45, 100],
+  "command_breakdown": true,
+  "no_static_damage": true,
+  "checks": "catapult-bastion",
+  "groups": [
+    {"unit":"armarad","count":1,"team":0,"position":[3500,4100]},
+    {"unit":"armeyes","count":1,"team":0,"position":[3800,5500]},
+    {"unit":"legbastion","count":1,"team":1,"position":[4000,5500]},
+    {"unit":"armafus","count":1,"team":1,"position":[4000,5860]},
+    {"unit":"corcat","count":4,"team":0,"position":[3500,3800],"spacing":260,"columns":4}
+  ],
+  "assertions": {"min_shooters":4,"min_kills":1,"max_losses":0}
+}

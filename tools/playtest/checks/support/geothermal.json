@@ -1,0 +1,11 @@
+{
+  "stop_minute": 20,
+  "expect": [
+    {"key":"basic-geo","pattern":"SupportEvidence\\] finished=(armgeo|corgeo|leggeo) ","by_minute":10,"scope":"any"},
+    {"key":"advanced-geo","pattern":"SupportEvidence\\] finished=(armageo|corageo|legageo) ","by_minute":18,"scope":"any"},
+    {"key":"constructor-gift","pattern":"SUPPORT\\]\\[Gift\\]","by_minute":15},
+    {"key":"home-upgrades","pattern":"home upgrades complete; combat released","by_minute":18},
+    {"key":"combat","pattern":"SupportEvidence\\] finished=(armfast|corpyro|legstr) ","by_minute":20,"scope":"any"}
+  ],
+  "forbid": [{"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception","scope":"any"}]
+}

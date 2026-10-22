@@ -51,8 +51,8 @@
       "scope": "any"
     },
     {
-      "key": "all players",
-      "pattern": "\\[TheatresCheck\\] PASS all players",
+      "key": "selected team",
+      "pattern": "\\[TheatresCheck\\] PASS selected team",
       "by_minute": 4,
       "scope": "any"
     },

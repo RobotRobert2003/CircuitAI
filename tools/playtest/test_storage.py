@@ -107,6 +107,36 @@ class StorageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'changed after recording'):
                 storage.publish(archive,store=Path(tmp)/'records')
 
+    def test_publish_retries_transient_rename_without_changing_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, archive = archived_game(tmp)
+            original_rename = Path.rename
+            attempts = []
+            def rename(path, target):
+                attempts.append(path)
+                if len(attempts) == 1:
+                    raise PermissionError('temporary reader lock')
+                return original_rename(path, target)
+            with patch.object(Path, 'rename', rename), patch.object(storage.time, 'sleep') as sleep:
+                dest = storage.publish(archive, ['screen.png'], store=Path(tmp)/'records')
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(attempts[0], attempts[1])
+            sleep.assert_called_once_with(.05)
+            self.assertEqual((dest/'screen.png').read_bytes(), (archive/'screen.png').read_bytes())
+            self.assertEqual(storage.read_json(dest/'result.json')['verdict'], 'FAIL')
+
+    def test_publish_permanent_rename_failure_retains_pending_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, archive = archived_game(tmp)
+            store = Path(tmp)/'records'
+            with patch.object(Path, 'rename', side_effect=PermissionError('denied')) as rename, \
+                    patch.object(storage.time, 'sleep'), self.assertRaises(PermissionError):
+                storage.publish(archive, store=store)
+            self.assertEqual(rename.call_count, 8)
+            pending = list(store.rglob('.pending-*'))
+            self.assertEqual(len(pending), 1)
+            self.assertEqual((pending[0]/'report.md').read_bytes(), (archive/'report.md').read_bytes())
+
     def test_publish_changed_selection_cannot_overwrite_existing_record(self):
         with tempfile.TemporaryDirectory() as tmp:
             _,archive=archived_game(tmp);store=Path(tmp)/'records'

@@ -1,0 +1,56 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "dead_corjugg",
+      "pattern": "\\[RangedArena\\].* death id=\\d+ team=1 unit=corjugg",
+      "scope": "any",
+      "by_minute": 4
+    },
+    {
+      "key": "reset",
+      "pattern": "\\[CommanderT3\\].*def=corjugg plan approach=rear .*juke=70",
+      "scope": "any",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "commander_lost",
+      "pattern": "\\[RangedArena\\].* death id=\\d+ team=0 unit=armcom",
+      "scope": "any"
+    }
+  ],
+  "complete_on": {
+    "key": "complete",
+    "pattern": "\\[RangedArena\\].* scenario_complete",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 10
+}

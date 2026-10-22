@@ -1,0 +1,30 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {
+      "key": "scouts",
+      "pattern": "SeaArena.*spawn.*unit=armpt",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "survey",
+      "pattern": "\\[SEA\\]\\[Control\\].*surveyed=[1-9]",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "perimeter",
+      "pattern": "\\[SEA\\]\\[SubPerimeter\\]",
+      "scope": "any",
+      "by_minute": 5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "runtime",
+      "pattern": "INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaArena.*ERROR",
+      "scope": "any"
+    }
+  ]
+}

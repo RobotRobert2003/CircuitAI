@@ -6,6 +6,7 @@
  */
 
 #include "task/fighter/AttackTask.h"
+#include "task/fighter/TargetPreference.h"
 #include "map/InfluenceMap.h"
 #include "map/ThreatMap.h"
 #include "module/MilitaryManager.h"
@@ -48,6 +49,9 @@ CAttackTask::~CAttackTask()
 bool CAttackTask::CanAssignTo(CCircuitUnit* unit) const
 {
 	assert(leader != nullptr);
+    // A cheap aircraft must not become the leader and erase the fortress's
+    // opt-in target policy when compatible air squads merge.
+    if (leader->GetCircuitDef()->GetTargetMinCost() != unit->GetCircuitDef()->GetTargetMinCost()) return false;
 
 	float speedLeader = leader->GetCircuitDef()->GetSpeed();
 	float speedUnit = unit->GetCircuitDef()->GetSpeed();
@@ -253,6 +257,9 @@ void CAttackTask::FindTarget()
 	const int noChaseCat = cdef->GetNoChaseCategory();
 
 	CEnemyInfo* bestTarget = nullptr;
+    CEnemyInfo* preferred = nullptr;
+    float preferredMetric = std::numeric_limits<float>::max();
+    const float minimumCost = cdef->GetTargetMinCost();
 	const float sqOBDist = pos.SqDistance2D(basePos);  // Own to Base distance
 	float minSqDist = std::numeric_limits<float>::max();
 	bool hasGoodTarget = false;
@@ -262,7 +269,7 @@ void CAttackTask::FindTarget()
 	for (unsigned i = 0; i < groups.size(); ++i) {
 		const CEnemyManager::SEnemyGroup& group = groups[i];
 		const bool isOverpowered = maxPower * 0.125f > group.influence;
-		if (hasGoodTarget && isOverpowered) {
+		if (minimumCost <= 0.f && hasGoodTarget && isOverpowered) {
 			continue;
 		}
 		const float distBE = group.pos.distance2D(basePos);  // Base to Enemy distance
@@ -317,6 +324,13 @@ void CAttackTask::FindTarget()
 			}
 
 			const float sqOEDist = group.vagueMetric * pos.SqDistance2D(ePos) * scale;  // Own to Enemy distance
+            // Fold preference into this existing eligibility scan: no extra
+            // enemy traversal, callbacks or allocation for fortress targeting.
+            if (edef != nullptr && targeting::Preferred(minimumCost, edef->GetCostM(),
+                    edef->IsEnemyRoleAny(CCircuitDef::RoleMask::COMM), edef->IsEnemyRoleAny(CCircuitDef::RoleMask::AA))
+                    && sqOEDist < preferredMetric) {
+                preferredMetric = sqOEDist; preferred = enemy;
+            }
 			if (minSqDist > sqOEDist) {
 				minSqDist = sqOEDist;
 				bestTarget = enemy;
@@ -325,6 +339,10 @@ void CAttackTask::FindTarget()
 		}
 	}
 
+    if (preferred != nullptr && (bestTarget == nullptr || targeting::WithinDetour(
+            pos.SqDistance2D(preferred->GetPos()), pos.SqDistance2D(bestTarget->GetPos()), SQUARE(cdef->GetMaxRange())))) {
+        bestTarget = preferred;
+    }
 	if (bestTarget != nullptr) {
 		SetTarget(bestTarget);
 		position = GetTarget()->GetPos();

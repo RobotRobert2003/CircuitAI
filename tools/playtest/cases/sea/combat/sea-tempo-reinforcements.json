@@ -1,0 +1,73 @@
+{
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      7492,
+      1220
+    ],
+    [
+      4814,
+      11077
+    ]
+  ],
+  "checks": "sea-arena",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "shots": "0.8@4400@6000:2000,2@4400@6000:2000,4@4400@6000:2000",
+  "name": "sea-tempo-recruits",
+  "groups": [
+    {
+      "unit": "armroy",
+      "team": 0,
+      "count": 7,
+      "position": [
+        6000,
+        1200
+      ],
+      "columns": 4,
+      "spacing": 140
+    },
+    {
+      "unit": "armroy",
+      "team": 0,
+      "count": 4,
+      "position": [
+        6400,
+        1500
+      ],
+      "columns": 2,
+      "spacing": 160,
+      "after_seconds": 90
+    },
+    {
+      "unit": "armfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        5200,
+        1800
+      ]
+    },
+    {
+      "unit": "corsy",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4800,
+        1800
+      ]
+    },
+    {
+      "unit": "corpship",
+      "team": 1,
+      "count": 4,
+      "position": [
+        5000,
+        2200
+      ],
+      "columns": 2,
+      "spacing": 150
+    }
+  ]
+}

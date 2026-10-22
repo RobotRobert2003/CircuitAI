@@ -1013,6 +1013,8 @@
 		},
 		"armfboy": {
 			"role": ["heavy"],
+			"attribute": ["ranged"],
+			"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 144, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false, "stage_when_blocked": true},
 			"threat":{"air": 0.0, "water": 0.0, "surf": 1.5,
 				"vs":{"artillery": 2.0, "anti_air": 2.0, "vy": 0.7}
 			}
@@ -1027,7 +1029,8 @@
 		},
 		"armfido": {
 			"role": ["assault"],
-			"attribute": ["siege"],
+			"attribute": ["siege", "ranged"],
+			"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 			"slow_target": true,
 			"retreat": 0.5,
 			"threat":{"air": 0.0, "water": 0.0, "surf": 1.0},
@@ -1068,7 +1071,8 @@
 		},
 		"armsnipe": {
 			"role": ["anti_heavy_ass"],
-			"attribute": ["siege"],
+			"attribute": ["siege", "ranged", "ret_hold"],
+			"ranged": {"target_mode": "precision", "advance_unknown_radar": true, "range_fraction": 0.94, "spacing": 112, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true, "cloak_on_reload": true},
 			"threat": {"air": 0.0, "water": 0.0,"vs": {"scout":0.5, "raider":0.5}},
             "retreat": 0.6
 		},
@@ -1202,7 +1206,9 @@
 		},
 		"armmanni": {
 			"role": ["anti_heavy_ass"],
-			"attribute": ["siege"],
+			"retreat": 0.65,
+			"attribute": ["siege", "ranged"],
+			"ranged": {"target_mode": "precision", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 256, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true},
 			"threat":{"air":0.0, "water":0.0,
 				"vs":{"anti_air": 2.0, "raider": 0.5, "heavy":2.0}	
 			}
@@ -1466,7 +1472,8 @@
 		},
 		"cormort": {
 			"role": ["assault"],
-			"attribute":["support"],  //was siege too - but evtl not working correct
+			"attribute":["support", "ranged"],
+			"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},  //was siege too - but evtl not working correct
 			"retreat": 0.85
 		},
 		"corhrk": {
@@ -1628,12 +1635,14 @@
 		},
 		"corban": {
 			"role":	["assault"], 
-			"attribute": ["siege"],  
+			"attribute": ["siege", "ranged"],
+			"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 			"retreat": 0.5
 		},
 		"cortrem": {
 			"role": ["artillery"],
-			"attribute": ["siege"],
+			"attribute": ["siege", "ranged"],
+			"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 192, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 			"retreat": 0.5
 		},
 		"corvrad": {

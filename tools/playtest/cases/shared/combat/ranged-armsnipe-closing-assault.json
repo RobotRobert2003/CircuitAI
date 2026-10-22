@@ -1,0 +1,102 @@
+{
+  "name": "ranged-sniper-closing",
+  "unit": "armsnipe",
+  "description": "Delayed fast ground assault verifies tactical withdrawal, real fire and health retreat.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    45,
+    120,
+    210
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3600,
+        4750
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armseer",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3300,
+        4400
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armaser",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        4500
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armestor",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3900,
+        5350
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armsnipe",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3400,
+        4400
+      ],
+      "spacing": 220,
+      "columns": 3
+    },
+    {
+      "unit": "corak",
+      "count": 12,
+      "team": 1,
+      "position": [
+        3550,
+        6200
+      ],
+      "spacing": 150,
+      "after_seconds": 60,
+      "columns": 6
+    }
+  ],
+  "enemy_destination": [
+    3800,
+    4000
+  ],
+  "assertions": {
+    "min_kills": 3,
+    "min_shooters": 2,
+    "max_losses": 3
+  }
+}

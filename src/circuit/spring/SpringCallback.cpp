@@ -6,6 +6,8 @@
  */
 
 #include "spring/SpringCallback.h"
+#include "spring/ResurrectionClaim.h"
+#include "Sim/Units/CommandAI/Command.h"
 
 #include "util/Defines.h"
 
@@ -15,6 +17,21 @@
 namespace circuit {
 
 using namespace springai;
+
+int COOAICallback::Unit_Maximum() const { return sAICallback->Unit_getMax(skirmishAIId); }
+int COOAICallback::Unit_Team(int unitId) const { return sAICallback->Unit_getTeam(skirmishAIId, unitId); }
+
+bool COOAICallback::Unit_ResurrectionClaim(int unitId, int frame, ResurrectionClaim& claim) const
+{
+    // Read only the active command, with no generated command wrappers or
+    // persistent cache. A human ally can replace a command within this frame.
+    if (sAICallback->Unit_getCurrentCommands(skirmishAIId, unitId) <= 0
+        || sAICallback->Unit_CurrentCommand_getId(skirmishAIId, unitId, 0) != CMD_RESURRECT
+        || sAICallback->Unit_CurrentCommand_getTimeOut(skirmishAIId, unitId, 0) < frame) return false;
+    float parameters[5];
+    const int count = sAICallback->Unit_CurrentCommand_getParams(skirmishAIId, unitId, 0, parameters, 5);
+    return claim.Decode(parameters, count, sAICallback->Unit_getMax(skirmishAIId));
+}
 
 COOAICallback::COOAICallback(OOAICallback* clb)
 		: sAICallback(nullptr)
@@ -79,9 +96,12 @@ const std::vector<int>& COOAICallback::GetFriendlyUnitIdsIn(const springai::AIFl
 {
 	float pos_posF3[3];
 	pos.LoadInto(pos_posF3);
-	unitIds.resize(MAX_UNITS);
-	int size = sAICallback->getFriendlyUnitsIn(skirmishAIId, pos_posF3, radius, spherical, unitIds.data(), MAX_UNITS);
-	unitIds.resize(size);
+    const auto result=queriedUnitIds.Read(MAX_UNITS,[&](int* output,int capacity) {
+        return sAICallback->getFriendlyUnitsIn(skirmishAIId,pos_posF3,radius,spherical,output,capacity);
+    });
+    // Preserve this API's shared-vector lifetime and exact engine order.
+    // Copy only K local results, rather than zeroing MAX_UNITS every query.
+    unitIds.assign(result.begin(),result.end());
 	return unitIds;
 }
 
@@ -125,9 +145,15 @@ const std::vector<int>& COOAICallback::GetEnemyUnitIdsIn(const AIFloat3& pos, fl
 {
 	float pos_posF3[3];
 	pos.LoadInto(pos_posF3);
-	unitIds.resize(MAX_UNITS);
-	int size = sAICallback->getEnemyUnitsIn(skirmishAIId, pos_posF3, radius, spherical, unitIds.data(), MAX_UNITS);
-	unitIds.resize(size);
+    // Commander observation asks this every three frames. As for friendly
+    // local queries, retain the bounded callback buffer and copy only the K
+    // results instead of zero-filling MAX_UNITS on every ask. Preserve engine
+    // order and this shared-vector lifetime; callback_buffer_test covers the
+    // reusable storage contract across empty/full queries and size changes.
+    const auto result=queriedUnitIds.Read(MAX_UNITS,[&](int* output,int capacity) {
+        return sAICallback->getEnemyUnitsIn(skirmishAIId,pos_posF3,radius,spherical,output,capacity);
+    });
+    unitIds.assign(result.begin(),result.end());
 	return unitIds;
 }
 
@@ -189,6 +215,11 @@ int COOAICallback::Unit_GetDefId(int unitId) const
 bool COOAICallback::Unit_HasCommands(int unitId) const
 {
 	return sAICallback->Unit_getCurrentCommands(skirmishAIId, unitId) > 0;
+}
+
+int COOAICallback::Feature_ResurrectDef(int featureId) const
+{
+	return sAICallback->Feature_getResurrectDef(skirmishAIId, featureId);
 }
 
 bool COOAICallback::Feature_IsResurrectable(int featureId) const

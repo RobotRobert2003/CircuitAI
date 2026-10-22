@@ -1,0 +1,99 @@
+{
+  "name": "response-sub-cortex",
+  "production": true,
+  "groups": [
+    {
+      "unit": "corsy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2450,
+        4400
+      ]
+    },
+    {
+      "unit": "corcs",
+      "team": 0,
+      "count": 2,
+      "position": [
+        2300,
+        4800
+      ]
+    },
+    {
+      "unit": "corroy",
+      "team": 0,
+      "count": 2,
+      "position": [
+        2750,
+        4200
+      ]
+    },
+    {
+      "unit": "coruwfus",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        4200
+      ]
+    },
+    {
+      "unit": "coruwmmm",
+      "team": 0,
+      "count": 8,
+      "position": [
+        1850,
+        4850
+      ]
+    },
+    {
+      "unit": "coruwms",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        3900
+      ]
+    },
+    {
+      "unit": "corsub",
+      "team": 1,
+      "count": 12,
+      "position": [
+        3900,
+        4250
+      ],
+      "after_seconds": 60
+    },
+    {
+      "unit": "corfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2300,
+        4200
+      ]
+    },
+    {
+      "unit": "corason",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2800,
+        4650
+      ]
+    },
+    {
+      "unit": "corason",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        4650
+      ]
+    }
+  ],
+  "checks": "sea-sub-production",
+  "support_turrets": true
+}

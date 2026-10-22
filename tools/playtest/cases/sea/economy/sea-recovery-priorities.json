@@ -1,0 +1,8 @@
+{
+  "name": "sea-recovery-priorities",
+  "runner": "tools/playtest/run_sea_recovery.py",
+  "minutes": 8,
+  "checks": "sea-recovery-priorities",
+  "fixture": true,
+  "map": "Supreme Isthmus v1.7"
+}

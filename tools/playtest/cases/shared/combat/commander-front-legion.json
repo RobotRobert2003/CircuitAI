@@ -1,0 +1,84 @@
+{
+  "name": "commander-front-legion",
+  "unit": "legcom",
+  "side": "legion",
+  "role": "FRONT",
+  "description": "FRONT must wait for the first completed nano, then deploy and construct front radar/laser under real role policy.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4900,
+    2300
+  ],
+  "photos": [
+    35,
+    60,
+    100
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "hold_friendly": true,
+  "groups": [
+    {
+      "unit": "leglab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3700,
+        4000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "legnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3700,
+        3750
+      ],
+      "after_seconds": 45
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        6000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corfus",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        6400
+      ],
+      "after_seconds": 12
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "checks": "commander-front-duty",
+  "commander_front_work": true,
+  "commander_initial": true
+}

@@ -1,4 +1,4 @@
--- Playtest watcher for the AI's start-of-game intro (manager/commands.as): the
+-- Playtest watcher for the AI's start-of-game intro (systems/presentation/commands.as): the
 -- whole-map overview camera, a screenshot while the commander and "Do not spec
 -- cheat!" stand, one while the credits stand, one after both are erased. The
 -- playtest joins as a spectator, so the shots are what a spectator sees.

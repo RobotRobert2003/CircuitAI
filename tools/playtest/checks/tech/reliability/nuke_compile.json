@@ -1,0 +1,12 @@
+{
+  "_doc": "D-229: load the real shared AngelScript graph and select the nuke opening in each experimental profile. This is a compile/startup check, not a launch benchmark.",
+  "stop_minute": 1,
+  "expect": [
+    {"key": "nuke opening", "pattern": "\\[TECH\\]\\[Chain\\] objective nuke", "by_minute": 1, "scope": "tech"},
+    {"key": "widget", "pattern": "\\[Playtest\\] widget loaded", "by_minute": 1, "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"}
+  ]
+}

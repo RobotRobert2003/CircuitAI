@@ -1,0 +1,75 @@
+{
+  "name": "herring-aa-unarmed",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      4814,
+      11077
+    ],
+    [
+      7492,
+      1220
+    ]
+  ],
+  "patrol_observer": true,
+  "shots": "",
+  "checks": "sea-aa-unarmed",
+  "groups": [
+    {
+      "team": 0,
+      "unit": "corpt",
+      "count": 12,
+      "position": [
+        6500,
+        11000
+      ],
+      "spacing": 140,
+      "columns": 4
+    },
+    {
+      "team": 0,
+      "unit": "corfrad",
+      "count": 1,
+      "position": [
+        6800,
+        10900
+      ]
+    },
+    {
+      "team": 1,
+      "unit": "corvalk",
+      "count": 8,
+      "position": [
+        7900,
+        9300
+      ],
+      "spacing": 140,
+      "columns": 3,
+      "after_seconds": 100
+    }
+  ],
+  "enemy_air_route": [
+    [
+      7800,
+      10000
+    ],
+    [
+      6400,
+      11800
+    ],
+    [
+      4300,
+      11600
+    ]
+  ],
+  "remove_air_at": 210,
+  "follow_shots": [
+    60,
+    90,
+    108,
+    118,
+    150,
+    270
+  ]
+}

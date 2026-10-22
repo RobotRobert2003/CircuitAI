@@ -1,0 +1,48 @@
+{
+  "name": "gunship-heavy-aa",
+  "description": "Nearby flak raises the assembled gunship requirement above its minimum; damage remains measured separately.",
+  "checks": "gunship-heavy-aa",
+  "bomber_only": false,
+  "aircraft": [
+    {
+      "unit": "armbrawl",
+      "count": 30,
+      "team": 0,
+      "position": [
+        2155,
+        11744
+      ],
+      "once": true
+    }
+  ],
+  "targets": [
+    {
+      "unit": "corck",
+      "count": 1,
+      "team": 1,
+      "position": [
+        3100,
+        10900
+      ]
+    }
+  ],
+  "defenses": [
+    {
+      "unit": "armrl",
+      "count": 6,
+      "position": [
+        3300,
+        10900
+      ]
+    },
+    {
+      "unit": "armflak",
+      "count": 3,
+      "position": [
+        3300,
+        10900
+      ]
+    }
+  ],
+  "refill_seconds": 30
+}

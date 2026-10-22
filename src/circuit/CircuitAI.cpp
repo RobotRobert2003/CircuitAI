@@ -15,6 +15,7 @@
 #include "map/MapManager.h"
 #include "map/ThreatMap.h"
 #include "module/BuilderManager.h"
+#include "module/CommanderControl.h"
 #include "module/FactoryManager.h"
 #include "module/EconomyManager.h"
 #include "module/MilitaryManager.h"
@@ -27,7 +28,10 @@
 #include "unit/enemy/EnemyUnit.h"
 #include "util/GameAttribute.h"
 #include "util/Utils.h"
+#include "util/Performance.h"
+#include "angelscript/include/angelscript.h"
 #include "util/Profiler.h"
+#include "util/WidgetState.h"
 #ifdef DEBUG_VIS
 #include "map/InfluenceMap.h"
 #include "map/ThreatMap.h"
@@ -147,6 +151,7 @@ CCircuitAI::~CCircuitAI()
 	if (isInitialized) {
 		Release(0);
 	}
+	performance::Release(this);
 }
 
 int CCircuitAI::HandleEvent(int topic, const void* data)
@@ -406,6 +411,7 @@ int CCircuitAI::HandleGameEvent(int topic, const void* data)
 			const struct SWeaponFiredEvent* evt = (const struct SWeaponFiredEvent*)data;
 			CCircuitUnit* unit = GetTeamUnit(evt->unitId);
 			if (unit != nullptr) {
+                if (commanderControl) commanderControl->WeaponFired(evt->unitId,evt->weaponDefId);
 				CAirWaveTask* wave = dynamic_cast<CAirWaveTask*>(unit->GetTask());
                 if (wave != nullptr) wave->OnWeaponFired(unit, evt->weaponDefId);
 				CSuperTask* firingTask = dynamic_cast<CSuperTask*>(unit->GetTask());
@@ -679,6 +685,10 @@ int CCircuitAI::Init(int skirmishAIId, const struct SSkirmishAICallback* sAICall
 	builderManager->InitHandlers();
 	militaryManager = std::make_shared<CMilitaryManager>(this);
 	militaryManager->InitHandlers();
+    commanderControl=std::make_unique<CCommanderControl>(this);
+    // D-300: before script init, so AiMain can already publish widget state.
+    widgetState=std::make_unique<CWidgetState>(this);
+    widgetState->Start();
 
 	// TODO: Remove EconomyManager from module (move abilities to BuilderManager).
 	modules.push_back(militaryManager);
@@ -687,6 +697,9 @@ int CCircuitAI::Init(int skirmishAIId, const struct SSkirmishAICallback* sAICall
 	modules.push_back(economyManager);  // NOTE: Uses unit's manager != nullptr, thus must be last.
 
 	terrainManager->Init();
+	// D-323: the battlefield map analysis, run once per process by the first AI
+	// whose profile enables it and shared by every AI through CGameAttribute.
+	gameAttribute->GetFieldService().Start(this, gameAttribute.get());
 	battle = std::make_shared<CBattleAnalysis>(this);  // D-126
 	economyManager->InitEconomyScores();
 
@@ -777,8 +790,12 @@ int CCircuitAI::Release(int reason)
 		return 0;
 	}
 
+	if (widgetState != nullptr) {
+		widgetState->Stop();
+	}
 	scheduler->ProcessRelease();
 	scheduler = nullptr;
+	widgetState.reset();  // its repeat job died with the scheduler
 
 	delete script;  // NOTE: Threaded scripts, hence destroy contexts after scheduler
 	script = nullptr;
@@ -805,6 +822,7 @@ int CCircuitAI::Release(int reason)
 	economyManager = nullptr;
 	factoryManager = nullptr;
 	builderManager = nullptr;
+    commanderControl.reset();
 	battle = nullptr;
 	terrainManager = nullptr;
 	metalManager = nullptr;
@@ -889,8 +907,15 @@ int CCircuitAI::Update(int frame)
 		// scheduler->RunJobEvery(CScheduler::GameJob(&CInitScript::Update, script), TEAM_SLOWUPDATE_RATE, skirmishAIId);
 		script->Update();
 	}
+    if (commanderControl) commanderControl->Update();
 	UpdateActions();
 	FlushDrawQueue();  // D-118
+	if (performance::enabled && frame % (60 * FRAMES_PER_SEC) == 0) {
+		performance::Flush(this);
+		unsigned current = 0, destroyedObjects = 0, detected = 0;
+		scriptManager->GetEngine()->GetGCStatistics(&current, &destroyedObjects, &detected);
+		performance::Garbage(this, current, destroyedObjects, detected);
+	}
 
 #ifdef DEBUG_VIS
 	if (frame % FRAMES_PER_SEC == 0) {
@@ -1157,7 +1182,7 @@ int CCircuitAI::Message(int playerId, const char* message)
 
 int CCircuitAI::UnitCreated(CCircuitUnit* unit, CCircuitUnit* builder)
 {
-	unit->SetProducerId(builder != nullptr ? builder->GetId() : -1);
+	unit->SetProducerId(builder != nullptr ? builder->GetId() : -1, GetLastFrame());
 	for (auto& module : modules) {
 		module->UnitCreated(unit, builder);
 	}
@@ -1285,6 +1310,7 @@ int CCircuitAI::UnitDamaged(CCircuitUnit* unit, ICoreUnit::Id attackerId, int we
 
 int CCircuitAI::UnitDestroyed(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+	unit->MarkDestroying();
 	destroyed.insert(unit->GetId());
 	const int lostId = unit->GetId();
 	allyTeam->GetNuclearHistory().Prune(lastFrame, [lostId](int owner) { return owner != lostId; });
@@ -1534,6 +1560,8 @@ int CCircuitAI::Save(std::ostream& os)
 
 int CCircuitAI::LuaMessage(const char* inData)
 {
+    if (commanderControl && commanderControl->ReceiveProjectiles(inData)) return 0;
+    if (builderManager != nullptr && builderManager->ReceiveResurrectionClaim(inData)) return 0;
 	script->LuaMessage(inData);
 	return 0;  // signaling: OK
 }
@@ -1595,6 +1623,8 @@ CCircuitUnit* CCircuitAI::RegisterTeamUnit(ICoreUnit::Id unitId, Unit* u)
 	unit->SetArea(area);
 
 	teamUnits[unitId] = unit;
+    if (commanderControl) commanderControl->Join(unit);
+    ++ownedUnitRevision;
 	cdef->Inc();
 
 	// FIXME: Sometimes area where factory is placed is not suitable for its units.
@@ -1607,7 +1637,10 @@ CCircuitUnit* CCircuitAI::RegisterTeamUnit(ICoreUnit::Id unitId, Unit* u)
 
 void CCircuitAI::UnregisterTeamUnit(CCircuitUnit* unit)
 {
+    if (commanderControl) commanderControl->Leave(unit->GetId());
+    builderManager->ForgetUnfinishedCount(unit);
 	teamUnits.erase(unit->GetId());
+    ++ownedUnitRevision;
 	unit->GetCircuitDef()->Dec();
 
 	/*(unit->GetTask() == nullptr) ? DeleteTeamUnit(unit) : */unit->SetIsDead();

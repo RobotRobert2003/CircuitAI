@@ -1,0 +1,64 @@
+{
+  "stop_minute": 1,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 0.4
+    },
+    {
+      "key": "fallback",
+      "pattern": "\\[CommanderFallback\\] unit=(?P<unit>\\d+) on metal=",
+      "scope": "any",
+      "by_minute": 0.6
+    },
+    {
+      "key": "disabled",
+      "pattern": "\\[Commander\\] override fallback=0",
+      "scope": "any",
+      "by_minute": 0.62
+    },
+    {
+      "key": "released",
+      "pattern": "\\[CommanderFallback\\] unit=(?P<unit>\\d+) off frame=",
+      "scope": "any",
+      "by_minute": 0.64,
+      "after_key": "disabled",
+      "same_as": "fallback"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "commander_lost",
+      "pattern": "\\[RangedArena\\].* death id=\\d+ team=0 unit=armcom",
+      "scope": "any"
+    }
+  ],
+  "complete_on": {
+    "key": "released",
+    "pattern": "\\[CommanderFallback\\].* off frame=",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 10
+}

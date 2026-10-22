@@ -1,0 +1,199 @@
+{
+  "name": "commander-t3-behemoth",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "Iteration fixture: the Behemoth wave of commander-t3-waves alone (same line, vision, energy and repair).",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    5150,
+    1900
+  ],
+  "photos": [
+    60,
+    90,
+    110,
+    130
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "enemy_destination": [
+    4000,
+    4300
+  ],
+  "groups": [
+    {
+      "unit": "armcom",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        4760
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3760,
+        4900
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3880,
+        4900
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4120,
+        4900
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4240,
+        4900
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armhlt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3820,
+        4840
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armhlt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4180,
+        4840
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        5500
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        5950
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3880,
+        4560
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4120,
+        4560
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armafus",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3500,
+        3300
+      ],
+      "after_seconds": 10
+    },
+    {
+      "unit": "armafus",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4500,
+        3300
+      ],
+      "after_seconds": 10
+    },
+    {
+      "unit": "armestor",
+      "team": 0,
+      "count": 4,
+      "columns": 4,
+      "spacing": 110,
+      "position": [
+        3830,
+        3550
+      ],
+      "after_seconds": 10
+    },
+    {
+      "unit": "corjugg",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        6300
+      ],
+      "after_seconds": 25
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "min_kills": 1,
+    "max_losses": 12,
+    "min_damage": 0
+  },
+  "checks": "commander-t3-behemoth",
+  "friendly_repair": true
+}

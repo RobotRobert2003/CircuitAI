@@ -1,0 +1,12 @@
+{
+  "_doc": "No-bonus TECH benchmark: actual missile projectile by 15 minutes, then observe economy recovery. No pass_on at silo completion.",
+  "stop_minute": 19,
+  "expect": [
+    {"key":"nuke chain", "pattern":"\\[TECH\\]\\[Chain\\] objective nuke", "by_minute":0.5, "scope":"tech"},
+    {"key":"launched", "pattern":"\\[NukeRush\\] launch team=0 ", "by_minute":15, "scope":"any"}
+  ],
+  "forbid": [
+    {"key":"script error", "pattern":": ERR\\s+:", "scope":"any"},
+    {"key":"invariant", "pattern":"\\[INVARIANT\\]", "scope":"tech"}
+  ]
+}

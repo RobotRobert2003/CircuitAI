@@ -431,7 +431,9 @@
 		"role": ["assault"]
 	},
 	"armfboy": {
-		"role": ["assault", "heavy"]
+		"role": ["assault", "heavy"],
+		"attribute": ["ranged"],
+		"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 144, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false, "stage_when_blocked": true},
 	},
 	"armmav": {
 		"role": ["riot"],
@@ -439,6 +441,8 @@
 	},
 	"armfido": {
 		"role": ["skirmish"],
+		"attribute": ["ranged"],
+		"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 		"slow_target": true
 	},
 	"armvader": {
@@ -462,7 +466,9 @@
 		"attribute": ["siege"]
 	},
 	"armsnipe": {
-		"role": ["anti_heavy"]
+		"role": ["anti_heavy"],
+		"attribute": ["ranged", "ret_hold"],
+		"ranged": {"target_mode": "precision", "advance_unknown_radar": true, "range_fraction": 0.94, "spacing": 112, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true, "cloak_on_reload": true},
 	},
 	"armamph": {
 		"role": ["raider", "anti_air"]
@@ -549,7 +555,9 @@
 	},
 	"armmanni": {
 		"role": ["anti_heavy"],
-		"attribute": ["artillery"]
+		"retreat": 0.65,
+		"attribute": ["artillery", "ranged"],
+		"ranged": {"target_mode": "precision", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 256, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true},
 	},
 	"armmart": {
 		"role": ["artillery"]
@@ -765,7 +773,8 @@
 	},
 	"cormort": {
 		"role": ["artillery"],
-		"attribute": ["skirmish"]
+		"attribute": ["skirmish", "ranged"],
+		"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 	},
 	"corhrk": {
 		"role": ["artillery"]
@@ -879,10 +888,14 @@
 		"role": ["artillery"]
 	},
 	"corban": {
-		"role": ["skirmish"]
+		"role": ["skirmish"],
+		"attribute": ["ranged"],
+		"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 	},
 	"cortrem": {
-		"role": ["artillery", "heavy"]
+		"role": ["artillery", "heavy"],
+		"attribute": ["ranged"],
+		"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 192, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 	},
 	"corvrad": {
 		"role": ["assault"],

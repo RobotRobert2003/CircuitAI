@@ -1,0 +1,12 @@
+{
+  "stop_minute": 20,
+  "expect": [
+    {"key":"layout-sequence","pattern":"SUPPORT\\]\\[Build\\] shared layout","by_minute":1},
+    {"key":"advanced-factory","pattern":"SUPPORT\\]\\[Phase\\] T2 combat production online","by_minute":12},
+    {"key":"combat-produced","pattern":"SupportEvidence\\] finished=(armfast|corpyro|legstr) ","by_minute":14,"scope":"any"},
+    {"key":"combat-engaged","pattern":"SupportEvidence\\] damage=(armfast|corpyro|legstr) ","by_minute":20,"scope":"any"}
+  ],
+  "forbid": [
+    {"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception","scope":"any"}
+  ]
+}

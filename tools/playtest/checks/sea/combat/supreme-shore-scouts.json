@@ -1,0 +1,14 @@
+{
+  "stop_minute":8,
+  "expect":[
+    {"key":"loaded","pattern":"\\[SeaArena\\].* loaded", "scope":"any","by_minute":1},
+    {"key":"shore","pattern":"\\[SEA\\]\\[Patrol\\].*shore=true", "scope":"any","by_minute":2},
+    {"key":"yard-found","pattern":"\\[SeaArena\\].*detected.*unit=corsy", "scope":"any","by_minute":5}
+  ],
+  "forbid":[
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

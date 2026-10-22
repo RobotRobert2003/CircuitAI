@@ -1456,14 +1456,31 @@
 			},
 			"armrock": {
 				"role": ["skirmish"],
+				"attribute": ["ranged"],
+				"ranged": {"coordinated": true,
+                "sustained_rush": true,
+                "sustained_rush_ratio": 2.0,
+                "sustained_rush_radius": 900.0,
+                "sustained_rush_min_front": 8,
+                "sustained_rush_remaining": 0.25,
+                "sustained_rush_cooldown": 20.0,
+                "sustained_rush_range": 0.8, "range_fraction": 0.95, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "catch_seconds": 6, "engagement_seconds": 12, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.25, "static_loss_fraction": 0.08, "intent_gain": 0.20, "formation": {"family": "t1_bot_line", "position": "rear", "separation_minimum": 64, "separation_maximum": 96, "withdrawal_lead_seconds": 1.0}},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
 			"armham": {
 				"role": ["assault"],
+				"attribute": ["ranged"],
+				"ranged": {"coordinated": true,
+                "sustained_rush": true,
+                "sustained_rush_ratio": 2.0,
+                "sustained_rush_radius": 900.0,
+                "sustained_rush_min_front": 8,
+                "sustained_rush_remaining": 0.25,
+                "sustained_rush_cooldown": 20.0,
+                "sustained_rush_range": 0.8, "formation": {"family": "t1_bot_line", "position": "front"}, "range_fraction": 0.97, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "rush_ratio": 1.5, "catch_seconds": 6, "engagement_seconds": 12, "support_allies": true, "support_loss_fraction": 0.70, "intent_gain": 0.20, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.4, "static_loss_fraction": 0.12},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
-				"power": 1.0,
-				"retreat": 0
+				"power": 1.0
 			},
 			"armjeth": {
 				"role": ["anti_air"],
@@ -1505,6 +1522,8 @@
 			},
 			"armfboy": {
 				"role": ["assault", "heavy"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 144, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false, "stage_when_blocked": true},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1516,6 +1535,8 @@
 			},
 			"armfido": {
 				"role": ["skirmish"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1554,7 +1575,8 @@
 			},
 			"armsnipe": {
 				"role": ["anti_heavy"],
-				"attribute": ["siege"],
+				"attribute": ["siege", "ranged", "ret_hold"],
+				"ranged": {"target_mode": "precision", "advance_unknown_radar": true, "range_fraction": 0.94, "spacing": 112, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true, "cloak_on_reload": true},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1682,12 +1704,13 @@
 			},
 			"armmanni": {
 				"role": ["anti_heavy", "assault"],
-				"attribute": ["artillery", "siege"],
+				"attribute": ["artillery", "siege", "ranged"],
+				"ranged": {"hold_fireline": true, "target_mode": "precision", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 256, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0,
 					"vs": { "spam": 0}
 				},
 				"power": 1.0,
-				"retreat": 0
+				"retreat": 0.65
 			},
 			"armmart": {
 				"role": ["artillery"],
@@ -2000,11 +2023,29 @@
 			},
 			"corstorm": {
 				"role": ["skirmish"],
+				"attribute": ["ranged"],
+				"ranged": {"coordinated": true,
+                "sustained_rush": true,
+                "sustained_rush_ratio": 2.0,
+                "sustained_rush_radius": 900.0,
+                "sustained_rush_min_front": 8,
+                "sustained_rush_remaining": 0.25,
+                "sustained_rush_cooldown": 20.0,
+                "sustained_rush_range": 0.8, "range_fraction": 0.95, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "catch_seconds": 6, "engagement_seconds": 12, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.25, "static_loss_fraction": 0.08, "intent_gain": 0.20, "formation": {"family": "t1_bot_line", "position": "rear", "separation_minimum": 64, "separation_maximum": 96, "withdrawal_lead_seconds": 1.0}},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
 			"corthud": {
 				"role": ["assault"],
+				"attribute": ["ranged"],
+				"ranged": {"coordinated": true,
+                "sustained_rush": true,
+                "sustained_rush_ratio": 2.0,
+                "sustained_rush_radius": 900.0,
+                "sustained_rush_min_front": 8,
+                "sustained_rush_remaining": 0.25,
+                "sustained_rush_cooldown": 20.0,
+                "sustained_rush_range": 0.8, "formation": {"family": "t1_bot_line", "position": "front"}, "range_fraction": 0.97, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "rush_ratio": 1.5, "catch_seconds": 6, "engagement_seconds": 12, "support_allies": true, "support_loss_fraction": 0.70, "intent_gain": 0.20, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.4, "static_loss_fraction": 0.12},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -2038,7 +2079,8 @@
 			},
 			"cormort": {
 				"role": ["artillery"],
-				"attribute":["skirmish", "siege"],
+				"attribute":["skirmish", "siege", "ranged"],
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -2128,7 +2170,10 @@
 			},
 			"corcat": {
 				"role": ["artillery", "heavy"],
-				"attribute": ["siege"],
+				// Shared controller uses loaded rocket range/burst and bounded firing slots.
+			// Bombardment retains splash/static value; no precision-only heavy preference.
+			"attribute": ["siege", "ranged"],
+				"ranged": {"target_mode": "bombardment", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 192, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -2237,7 +2282,8 @@
 			},
 			"corban": {
 				"role":	["skirmish"],
-				"attribute": ["siege"],
+				"attribute": ["siege", "ranged"],
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0,
 					"vs": { "spam": 0}
 				},
@@ -2245,7 +2291,8 @@
 			},
 			"cortrem": {
 				"role": ["artillery", "heavy"],
-				"attribute": ["siege"],
+				"attribute": ["siege", "ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 192, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -2407,6 +2454,7 @@
 				"power": 1.0
 			},
 			"corcrwh": {
+				"target_min_cost": 300,
 				"role": ["heavy", "air"],
 				"attribute": ["anti_heavy"],
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},

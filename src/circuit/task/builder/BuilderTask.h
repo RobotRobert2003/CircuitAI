@@ -9,6 +9,7 @@
 #define SRC_CIRCUIT_TASK_BUILDER_BUILDERTASK_H_
 
 #include "task/UnitTask.h"
+#include "task/builder/ConstructionRecovery.h"
 #include "util/Defines.h"
 #include "util/math/Geometry.h"
 
@@ -88,6 +89,7 @@ public:
 		executors.erase(unit);
 		engaged.erase(unit);
 		approaching.erase(unit);
+		constructionHealth.erase(unit);
 		return IUnitTask::ForgetUnit(unit);
 	}
 
@@ -115,6 +117,9 @@ public:
 
 	virtual bool IsGeneric() const { return false; }
 	BuildType GetBuildType() const { return buildType; }
+	// D-211: opt-in, transient recovery selection. Script re-adopts after load.
+	// Prevent legacy feature-area reevaluation from silently changing the job.
+	bool recoveryControlled = false;
 	float GetBuildPowerM() const { return buildPower.metal; }
 	float GetBuildPowerE() const { return buildPower.energy; }
 	float GetCostM() const { return cost.metal; }
@@ -189,7 +194,12 @@ public:
 	void RequireReservation() { pinRequired = true; pinnedReservation = -1; layoutOwned = true; }
 	bool IsLayoutOwned() const { return layoutOwned; }
 	int GetReservationId() const { return reservationId; }
+	// Called by the existing watchdog, only for script-opted-in roles.
+	void RecoverConstruction(CCircuitUnit* unit, int retryFrames, int releaseFrames);
 protected:
+	bool AdoptStandingFrame(CCircuitUnit* unit);
+	bool TryBuildCachedSite(CCircuitUnit* unit);
+	std::map<CCircuitUnit*, construction::Observation> constructionHealth;
 	IBuilderTask* nextTask;  // old list style
 	CCircuitUnit* initiator;
 

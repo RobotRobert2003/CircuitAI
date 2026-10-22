@@ -1,5 +1,0 @@
-# Repository Instructions
-
-Read and follow the canonical instructions in [`AGENTS.md`](AGENTS.md). They apply to every task in this repository, including the strict read-only policy for the external BAR and Recoil repositories.
-
-That file's "Repository Map" section describes every file and folder in this repository and every external path this project relies on, including which are writable and which are strictly read-only. Consult it before searching for where a change belongs.

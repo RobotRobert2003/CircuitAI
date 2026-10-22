@@ -1,0 +1,14 @@
+{
+  "_doc": "Finite heavy T2 integration. Completion and physical ferry events are also recorded by run_heavy_rush.py; this check does not impose nuke-only opening selection.",
+  "stop_minute": 40,
+  "expect": [
+    {"key": "widget", "pattern": "\\[Playtest\\] widget loaded", "by_minute": 1, "scope": "any"},
+    {"key": "strategy masks", "pattern": "\\[HeavyStrategyTest\\] PASS", "by_minute": 1, "scope": "any"},
+    {"key": "heavy batch", "pattern": "\\[TECH\\]\\[HeavyRush\\] completed ([1-9][0-9]*)/\\1\\b", "by_minute": 40, "scope": "tech"}
+  ],
+  "forbid": [
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "strategy failure", "pattern": "\\[HeavyStrategyTest\\] FAIL", "scope": "any"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "stop_minute": 22,
+  "expect": [
+    {"key":"advanced-factory","pattern":"SUPPORT\\]\\[Phase\\] T2 combat production online","by_minute":12},
+    {"key":"t1-constructor","pattern":"SupportEvidence\\] finished=legck ","by_minute":4,"scope":"any"},
+    {"key":"t2-constructor","pattern":"SupportEvidence\\] finished=legack ","by_minute":12,"scope":"any"},
+    {"key":"combat-engineer-ordered","pattern":"SUPPORT\\]\\[BuildPower\\] ordered legaceb owned=","by_minute":18},
+    {"key":"combat-engineer","pattern":"SupportEvidence\\] finished=legaceb ","by_minute":18,"scope":"any"},
+    {"key":"construction-turret","pattern":"SupportEvidence\\] finished=(legnanotc|legnanotct2) ","by_minute":16,"scope":"any"},
+    {"key":"combat","pattern":"SupportEvidence\\] finished=legstr ","by_minute":18,"scope":"any"}
+  ],
+  "forbid": [
+    {"key":"no-infestor","pattern":"SupportEvidence\\] finished=leginfestor ","scope":"any"},
+    {"key":"inv-204","pattern":"INV-204","scope":"any"},
+    {"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception","scope":"any"}
+  ]
+}

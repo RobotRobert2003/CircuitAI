@@ -14,16 +14,25 @@
 //   AheadOf            - a site on the side of the block its exit points to (D-096)
 //   CellRect, Overlaps - a footprint against the factories' exit lanes (D-096)
 //   LeavesPocket       - a footprint may not wall off free cells (D-072, D-090)
+//   HullPathClear      - a hull of a given width can still sail between two points (D-343)
 //   RingOrder          - the points a drop-spot search tries, nearest first (D-091)
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <limits>
 #include <utility>
 #include <vector>
 
 namespace circuit::layout_rank {
+
+// Opt-in facing passes must not consume a differently oriented reservation:
+// the footprint and exit predicate were evaluated for this pass's facing.
+// A negative filter retains the legacy reservation preference for other roles.
+inline bool MatchesFacingPass(int actual, int filter) {
+    return filter < 0 || actual == filter;
+}
 
 struct Pt {
 	float x = 0.f;
@@ -39,6 +48,45 @@ inline float Sq(const Pt& a, const Pt& b)
 inline float Dist(const Pt& a, const Pt& b)
 {
 	return std::sqrt(Sq(a, b));
+}
+
+struct SupportReach {
+	Pt position;
+	float radius;
+};
+
+// Every member of a packed set needs support, not just the seed. The caller
+// prepares this small group once per packing operation; no engine callbacks
+// or allocations occur per candidate. O(group size), with an existence exit.
+inline bool WithinSupport(const Pt& site, const std::vector<SupportReach>& sources)
+{
+	for (const auto& source : sources) {
+		if (source.radius > 0.f && Sq(site, source.position) <= source.radius * source.radius) return true;
+	}
+	return false;
+}
+
+// D-229: only completed, owned static assistants enter this snapshot. Future
+// reserved turrets deliberately contribute nothing. Speeds may be expressed
+// per frame or per second, provided every source uses the same unit.
+struct BuiltPower {
+	Pt pos;
+	float reachSq;
+	float speed;
+};
+
+inline float PowerAt(const Pt& site, const std::vector<BuiltPower>& sources)
+{
+	float sum = 0.f;
+	for (const auto& source : sources) {
+		if (Sq(site, source.pos) <= source.reachSq) sum += source.speed;
+	}
+	return sum;
+}
+
+inline bool BuiltPowerBefore(float powerA, float distanceA, float powerB, float distanceB)
+{
+	return powerA != powerB ? powerA > powerB : distanceA < distanceB;
 }
 
 // The mean of pts; `fallback` when there is none.
@@ -323,6 +371,81 @@ inline bool LeavesPocket(const std::vector<char>& open, int w, int h)
 	for (int i = 0; i < w * h; ++i) {
 		if (open[i] && !seen[i]) {
 			return true;
+		}
+	}
+	return false;
+}
+
+// D-343: can a hull of half-width `clearance` cells travel between two cells
+// of a local window? `open` is 1 for navigable, unoccupied water. A cell is
+// usable when every cell within Chebyshev distance `clearance` is open (cells
+// outside the window count as open: the caller pads the window). The start
+// and goal snap to the nearest usable cell within `snap` cells, because a
+// shipyard mouth or a repair spot sits next to the footprints it serves.
+// Time and memory O(w*h): one two-pass distance transform, one 4-way flood.
+inline bool HullPathClear(const std::vector<char>& open, int w, int h,
+	int fromX, int fromZ, int toX, int toZ, int clearance, int snap)
+{
+	if ((w <= 0) || (h <= 0) || (int(open.size()) < w * h) || (clearance < 0) || (snap < 0)) {
+		return false;
+	}
+	const auto inside = [&](int x, int z) { return (x >= 0) && (z >= 0) && (x < w) && (z < h); };
+	if (!inside(fromX, fromZ) || !inside(toX, toZ)) {
+		return false;
+	}
+	// Chebyshev distance to the nearest blocked cell (outside the window is open).
+	const int unreached = w + h;  // not "far": a Windows macro
+	std::vector<int> dist(std::size_t(w) * h, unreached);
+	for (int i = 0; i < w * h; ++i) {
+		if (!open[i]) dist[i] = 0;
+	}
+	for (int z = 0; z < h; ++z) {
+		for (int x = 0; x < w; ++x) {
+			int& d = dist[z * w + x];
+			if (d == 0) continue;
+			if (x > 0) d = std::min(d, dist[z * w + x - 1] + 1);
+			if (z > 0) {
+				d = std::min(d, dist[(z - 1) * w + x] + 1);
+				if (x > 0) d = std::min(d, dist[(z - 1) * w + x - 1] + 1);
+				if (x + 1 < w) d = std::min(d, dist[(z - 1) * w + x + 1] + 1);
+			}
+		}
+	}
+	for (int z = h - 1; z >= 0; --z) {
+		for (int x = w - 1; x >= 0; --x) {
+			int& d = dist[z * w + x];
+			if (d == 0) continue;
+			if (x + 1 < w) d = std::min(d, dist[z * w + x + 1] + 1);
+			if (z + 1 < h) {
+				d = std::min(d, dist[(z + 1) * w + x] + 1);
+				if (x + 1 < w) d = std::min(d, dist[(z + 1) * w + x + 1] + 1);
+				if (x > 0) d = std::min(d, dist[(z + 1) * w + x - 1] + 1);
+			}
+		}
+	}
+	// dist counts the blocked cell itself as 0, so a cell is usable when its
+	// nearest blocked cell is more than `clearance` cells away.
+	const auto usable = [&](int x, int z) { return dist[z * w + x] > clearance; };
+	std::vector<char> seen(std::size_t(w) * h, 0);
+	std::vector<int> queue;
+	for (int z = std::max(0, fromZ - snap); z <= std::min(h - 1, fromZ + snap); ++z) {
+		for (int x = std::max(0, fromX - snap); x <= std::min(w - 1, fromX + snap); ++x) {
+			if (usable(x, z)) { seen[z * w + x] = 1; queue.push_back(z * w + x); }
+		}
+	}
+	const auto goal = [&](int x, int z) {
+		return std::abs(x - toX) <= snap && std::abs(z - toZ) <= snap;
+	};
+	for (std::size_t head = 0; head < queue.size(); ++head) {
+		const int i = queue[head], x = i % w, z = i / w;
+		if (goal(x, z)) return true;
+		const int nx[4] = {x - 1, x + 1, x, x}, nz[4] = {z, z, z - 1, z + 1};
+		for (int k = 0; k < 4; ++k) {
+			if (!inside(nx[k], nz[k])) continue;
+			const int j = nz[k] * w + nx[k];
+			if (seen[j] || !usable(nx[k], nz[k])) continue;
+			seen[j] = 1;
+			queue.push_back(j);
 		}
 	}
 	return false;

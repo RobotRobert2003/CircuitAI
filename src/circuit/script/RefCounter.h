@@ -15,6 +15,17 @@
 
 namespace circuit {
 
+// O(1), allocation-free replacement of an owned intrusive reference. Retain
+// first so self-assignment is safe even after the external owner releases it.
+template<class T>
+void AssignOwnedReference(T*& destination, T* source)
+{
+	if (source != nullptr) source->AddRef();
+	T* previous = destination;
+	destination = source;
+	if (previous != nullptr) previous->Release();
+}
+
 template<class T>
 class IRefCounter {
 public:

@@ -814,7 +814,8 @@
 			},
 			"legamcluster": {
 				"role": ["artillery"],
-				"attribute": ["siege"],
+				"attribute": ["siege", "ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"retreat": 0.6
 			},
 			"legavroc": {
@@ -823,10 +824,14 @@
 			},
 			"legmed": {
 				"role":	["assault"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"retreat": 0.5
 			},
 			"legvcarry": {
 				"role":	["riot"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "carrier", "range_fraction": 0.94, "spacing": 160, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"limit": 3
 			},
 			"leginf": {
@@ -899,6 +904,7 @@
 				"retreat": 0.5
 			},
 			"legfort": {
+				"target_min_cost": 300,
 				"role": ["heavy", "air"],
 				"retreat": 0.4
 			},

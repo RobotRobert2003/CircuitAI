@@ -1,0 +1,12 @@
+{
+ "name":"submarine-torpedo-screen",
+ "checks":"sea/combat/submarine-torpedo-screen",
+ "shots":"1@3400@3400:4400,3@3400@3400:4400,5@3400@3400:4400",
+ "groups":[
+  {"unit":"armsub","team":0,"count":7,"position":[2400,4200],"columns":4,"spacing":90},
+  {"unit":"armserp","team":0,"count":7,"position":[2200,4600],"columns":4,"spacing":90},
+  {"unit":"armason","team":0,"count":1,"position":[3200,4500]},
+  {"unit":"armawac","team":0,"count":1,"position":[3850,4250]},
+  {"unit":"cortl","team":1,"count":1,"position":[3850,4250]}
+ ]
+}

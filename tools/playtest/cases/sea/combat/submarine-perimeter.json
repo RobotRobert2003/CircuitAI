@@ -1,0 +1,94 @@
+{
+  "name": "submarine-perimeter",
+  "checks": "sea/combat/submarine-perimeter",
+  "shots": "1@4200@3300:4450,3@4200@3300:4450,5@4200@3300:4450",
+  "groups": [
+    {
+      "unit": "armsub",
+      "team": 0,
+      "count": 7,
+      "position": [
+        2400,
+        4200
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "armserp",
+      "team": 0,
+      "count": 7,
+      "position": [
+        2900,
+        4200
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "corsub",
+      "team": 0,
+      "count": 7,
+      "position": [
+        3400,
+        4200
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "corssub",
+      "team": 0,
+      "count": 7,
+      "position": [
+        3900,
+        4200
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "legnavysub",
+      "team": 0,
+      "count": 7,
+      "position": [
+        4400,
+        4200
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "leganavyheavysub",
+      "team": 0,
+      "count": 7,
+      "position": [
+        4900,
+        4200
+      ],
+      "columns": 4,
+      "spacing": 100
+    }
+  ],
+  "starts": [
+    [
+      2300,
+      4400
+    ],
+    [
+      13184,
+      4080
+    ]
+  ],
+  "patrol_observer": true,
+  "acceptance": {
+    "minimum_survivors": {
+      "armsub": 7,
+      "armserp": 7,
+      "corsub": 7,
+      "corssub": 7,
+      "legnavysub": 7,
+      "leganavyheavysub": 7
+    }
+  }
+}

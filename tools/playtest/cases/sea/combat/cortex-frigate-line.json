@@ -1,0 +1,12 @@
+{
+  "name":"cortex-frigate-line", "map":"Glacial Gap v1.1", "map_key":"glacial",
+  "starts":[[2300,4400],[4600,4400]], "checks":"sea-arena",
+  "patrol_observer":true, "objective_observer":true,
+  "acceptance":{"minimum_survivors":{"corpship":3},"destroyed_units":{"armpt":6}},
+  "shots":"0.5@2500@3400:4400,1@2500@3400:4400,3@2500@3400:4400",
+  "groups":[
+    {"unit":"corpship","team":0,"count":6,"position":[2700,4400],"columns":3,"spacing":140},
+    {"unit":"corfrad","team":0,"count":1,"position":[2500,4400]},
+    {"unit":"armpt","team":1,"count":6,"position":[3600,4400],"columns":3,"spacing":100}
+  ]
+}

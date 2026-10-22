@@ -1,0 +1,13 @@
+{
+  "_doc": "D-288 natural-economy quick test: run with --set GantryScaleMetalStep=150 so the one-gantry-per-step rule shows inside 30 minutes. Target 2 needs a natural 10 s minimum of 300 M/s by minute 30; a run that never gets there is a scenario miss, not a code failure (read the GantryScale lines).",
+  "stop_minute": 30,
+  "expect": [
+    {"key": "target 1", "pattern": "\\[TECH\\]\\[GantryScale\\] target=1 ", "by_minute": 20, "scope": "tech"},
+    {"key": "gantry", "pattern": "\\[Playtest\\] finished (armshltx|corgant|leggant) team 0", "by_minute": 26, "scope": "any"},
+    {"key": "target 2", "pattern": "\\[TECH\\]\\[GantryScale\\] target=2 ", "by_minute": 30, "scope": "tech"}
+  ],
+  "forbid": [
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"},
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"}
+  ]
+}

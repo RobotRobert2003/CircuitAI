@@ -1,0 +1,44 @@
+{
+  "stop_minute": 1,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "ranged",
+      "pattern": "RANGED: assigned",
+      "scope": "any",
+      "by_minute": 1
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena|Removed widget: Ranged combat arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "policy",
+      "pattern": "RANGED.*invalid|invalid ranged",
+      "scope": "any"
+    }
+  ]
+}

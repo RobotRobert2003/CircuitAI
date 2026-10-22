@@ -1,9 +1,0 @@
-{
-  "donation_stop_seconds": 600,
-  "enemy_frozen": true,
-  "profile": "experimental_terrible",
-  "scenario": "energy-starved",
-  "seed": 1810001,
-  "side": "legion",
-  "supplied_assets": true
-}

@@ -1,0 +1,11 @@
+{
+  "scenario": "guard-orders",
+  "domain": "shared",
+  "area": "performance",
+  "runner": "tools/playtest/run_guard_regression.py",
+  "maps": ["Glacial Gap v1.1", "Supreme Isthmus v1.7"],
+  "variants": ["baseline natural", "candidate natural", "baseline supplied recovery", "candidate supplied recovery"],
+  "purpose": "Measure native guard order counts and verify queue preservation plus immediate recovery after STOP, target change, movement and target destruction.",
+  "checks": ["shared/performance/guard-natural.json", "shared/performance/guard-fixture.json"],
+  "limitations": ["Supplied fixture re-admits real guard tasks and exempts its owned guards from SEA idle-assist cleanup; it is not normal role frequency evidence.", "STOP and MOVE use the existing AI command API; spectator LuaUI orders would be rejected. STOP is timed from its synchronized event, and moving-target acceptance requires actual displacement.", "Natural runs preserve role policy and fog, but diverging game populations cannot prove an FPS percentage.", "CIRCUIT_VERIFY_GUARD enables extra diagnostic reads/logging, unsuitable for CPU timing.", "Local synchronized order counts are not internet packet measurements."]
+}

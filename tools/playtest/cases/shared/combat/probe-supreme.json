@@ -1,0 +1,78 @@
+{
+  "name": "probe-supreme",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "Terrain probe for fixture design (height along lines).",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      4800,
+      8200
+    ],
+    [
+      7500,
+      4000
+    ]
+  ],
+  "camera": [
+    6350,
+    6200,
+    1500
+  ],
+  "photos": [],
+  "min_spawn_spacing": 38,
+  "groups": [],
+  "height_probe": [
+    [
+      0,
+      6200,
+      12288,
+      6200,
+      24
+    ],
+    [
+      0,
+      4000,
+      12288,
+      4000,
+      24
+    ],
+    [
+      0,
+      8200,
+      12288,
+      8200,
+      24
+    ],
+    [
+      6300,
+      0,
+      6300,
+      12288,
+      24
+    ],
+    [
+      3000,
+      0,
+      3000,
+      12288,
+      24
+    ],
+    [
+      9500,
+      0,
+      9500,
+      12288,
+      24
+    ]
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_kills": 0,
+    "max_losses": 99,
+    "min_damage": 0
+  },
+  "checks": "commander-t3-duel"
+}

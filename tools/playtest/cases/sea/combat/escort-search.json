@@ -1,0 +1,8 @@
+{
+  "name":"escort-search", "checks":"sea-fleet-escort",
+  "groups":[
+    {"unit":"armpship","team":0,"count":8,"position":[2300,4300]},
+    {"unit":"armsjam","team":0,"count":2,"position":[2100,4400]},
+    {"unit":"corpship","team":1,"count":8,"position":[4500,4300]}
+  ]
+}

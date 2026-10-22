@@ -1,0 +1,33 @@
+{
+  "name": "air-factory-throughput",
+  "storage_scenario": "air-factory-throughput",
+  "unit": "armaap",
+  "role": "AIR",
+  "checks": "factory-throughput",
+  "description": "Six funded T2 plants with 14 support turrets each. Observe every engine frame after 90 seconds, separating empty production queues from physical factory launch time. AIR production priorities remain active.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [[4000,2400],[4000,9800]],
+  "side": "armada",
+  "camera": [4000,3000,3300],
+  "photos": [90,150],
+  "command_breakdown": true,
+  "factory_throughput": true,
+  "production": true,
+  "start_metal": 1000000,
+  "start_energy": 1000000,
+  "min_spawn_spacing": 64,
+  "groups": [
+    {"unit":"armaap","count":6,"team":0,"position":[3000,2800],"spacing":700,"columns":3},
+    {"unit":"armaca","count":3,"team":0,"position":[3400,2000]},
+    {"unit":"armca","count":3,"team":0,"position":[3800,2000]},
+    {"unit":"armafus","count":4,"team":0,"position":[2800,1600],"spacing":400},
+    {"unit":"armnanotc","count":14,"team":0,"position":[2832,2580],"spacing":64,"columns":7},
+    {"unit":"armnanotc","count":14,"team":0,"position":[3532,2580],"spacing":64,"columns":7},
+    {"unit":"armnanotc","count":14,"team":0,"position":[4232,2580],"spacing":64,"columns":7},
+    {"unit":"armnanotc","count":14,"team":0,"position":[2832,3280],"spacing":64,"columns":7},
+    {"unit":"armnanotc","count":14,"team":0,"position":[3532,3280],"spacing":64,"columns":7},
+    {"unit":"armnanotc","count":14,"team":0,"position":[4232,3280],"spacing":64,"columns":7},
+    {"unit":"armestor","count":1,"team":1,"position":[4000,9500]}
+  ]
+}

@@ -1,5 +1,5 @@
 #include "../src/setup.as"
-#include "../src/helpers/generic_helpers.as"
+#include "../src/helpers/common/generic_helpers.as"
 #include "../src/global.as"
 #include "../src/maps.as"
 #include "../src/types/strategy.as" // for StrategyUtil names when logging
@@ -10,9 +10,10 @@ namespace Main {
 	// Values are likelihoods in [0.0, 1.0] for enabling a given strategy.
 	// Adjust these to tune how often a strategy is chosen at game start.
 	namespace StrategyWeights {
-		float Tech_T2_RUSH = 0.85f;   // 85% chance
+		float Tech_Spam_Rush = 0.85f;   // 85% chance
 		float Tech_T3_RUSH = 0.35f;   // 35% chance
 		float Tech_NUKE_RUSH = 0.25f; // 25% chance
+		float Tech_T2_RUSH = 0.25f; // Independent finite heavy-delivery rush
 	}
 
 	// Decide a boolean from a probability using AiDice with two weights: off vs on.
@@ -31,14 +32,19 @@ namespace Main {
 		// Start fresh (no strategies), then enable per dice outcome
 		Global::RoleSettings::Tech::StrategyMask = 0;
 
-		if (DecideEnabled(StrategyWeights::Tech_T2_RUSH)) {
-			Global::RoleSettings::Tech::EnableStrategy(Strategy::T2_RUSH);
+		if (DecideEnabled(StrategyWeights::Tech_Spam_Rush)) {
+			Global::RoleSettings::Tech::EnableStrategy(Strategy::SPAM_RUSH);
 		}
 		if (DecideEnabled(StrategyWeights::Tech_T3_RUSH)) {
 			Global::RoleSettings::Tech::EnableStrategy(Strategy::T3_RUSH);
 		}
 		if (DecideEnabled(StrategyWeights::Tech_NUKE_RUSH)) {
 			Global::RoleSettings::Tech::EnableStrategy(Strategy::NUKE_RUSH);
+		}
+
+		// Append the new draw: preserve the order of the three established rolls.
+		if (DecideEnabled(StrategyWeights::Tech_T2_RUSH)) {
+			Global::RoleSettings::Tech::EnableStrategy(Strategy::T2_RUSH);
 		}
 
 		GenericHelpers::LogUtil(
@@ -49,7 +55,24 @@ namespace Main {
 
 	void AiMain()
 	{
+		Global::RoleSettings::MexOwnershipEnabled = true;
+		// Also initialize before setupMap (and when reconstructing a saved game).
+		aiEconomyMgr.SetMexOwnership(true, Global::RoleSettings::MexOwnershipSeconds);
+		// D-352: mex ownership by theatre (home, sea, lanes, the race); the claim
+		// numbers go out with the roster once the role and start are known.
+		Global::RoleSettings::MexClaim::TheatresEnabled = true;
+		Team::MexClaim::Setup();
+		Global::RoleSettings::Air::FundFirstLab = true;
+        Global::Commander::AfusDefenceRadius = Global::Commander::BaseRadius;
+        Global::Commander::FrontRecovery = true;
+        Global::Commander::FrontMexSeconds = 1.f;
+        Global::RoleSettings::Tech::EcoFlakEnabled = true;
 		GenericHelpers::LogUtil("Running AiMain()", 1);
+
+        // The opening Tick must search for gaps and raid just like later scouts.
+        Global::ScoutRaid::KeepNativeScouts = 0;
+        Global::RoleSettings::Tech::HeavyDeliveryFrontEnabled = true;
+        Global::RoleSettings::Tech::HeavyDeliveryBlockedSeconds = 5.0f;
 
 		// Air-factory gate. Native CEnemyManager::IsAirValid() tests
 		//     GetEnemyThreat(AA) <= maxAAThreat
@@ -101,11 +124,14 @@ namespace Main {
 		ArtilleryPolicy::Check();
         Lanes::Poll(); // complete async surveys for every role before consumers run
         AmphibiousOps::Tick();
+        ScoutRaid::Tick(); // D-296: no-op unless the profile JSON enables scout raids
 		Commands::DrawTick();   // the widget's map drawing, paced under the server's flood guard
 		// Update cached enemy threat information roughly every 10 seconds (300 frames).
 		//if ((ai.frame % (10 * SECOND)) == 0) {
 		Military::UpdateEnemyThreatCache();
 		Military::UpdateEnemyCostCache();
+        Aggression::Update();
+        CommanderCombat::Update();
 
 		if (Global::profileController !is null) {
 			Global::profileController.MainUpdate();
@@ -115,7 +141,7 @@ namespace Main {
 		Team::Ferry::Update();   // transport ferry: hand-over on arrival, run polling
 		Team::SeaAssist::Update();  // SEA seeds a TACTICAL ally with a construction ship
 		Team::Donation::Update();   // a teammate without T2 asks TECH for a constructor
-		Team::CheckOrphaned();   // ask allies for a T1 constructor if we lost commander and all builders
+		Team::CheckOrphaned();   // recover lost mobile constructors through TECH
 	}
 
 	void AiMessage(const string& in msg, int fromTeamId)  // AiSendMessage from an allied BARb instance
@@ -125,7 +151,7 @@ namespace Main {
 
 	void AiLuaMessage(const string& in data)  // Spring.SendSkirmishAIMessage(teamID, msg) from the local LuaUI
 	{
-		if (!Commands::Handle(data)) {
+		if (!Team::Recovery::HandleLua(data) && !Commands::Handle(data)) {
 			GenericHelpers::LogUtil("[AI][LuaMessage] ignored: " + data, 3);
 		}
 	}
@@ -133,6 +159,11 @@ namespace Main {
 	//Use this to modify global.as and apply difficulty/profile settings
 	void ApplyProfileSettings()
 	{
+        Global::RoleSettings::Tech::EarlyGantryEnabled = true;
+        Global::RoleSettings::Front::VehicleTankOpenerChance = 0.5f;
+		// FRONT (owner, 2026-10-17): two FRONTs each build a spam lab for an edge lane, left and right
+		// (src/settings/shared/spam.as EdgeLanesEnabled, off there; systems/combat/edge_lanes.as)
+		Global::Spam::EdgeLanesEnabled = true;
 	}
 
 }  // namespace Main

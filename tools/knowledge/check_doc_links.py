@@ -19,19 +19,23 @@ import io
 import os
 import re
 import sys
+from pathlib import Path
+from documentation_store import require_docs, SOURCE_ROOT
 
-DIRS = ['doc', 'data/script', 'skills']
-ROOT_FILES = ['AGENTS.md', 'README.md', 'CONVENTIONS.md']
+DIRS = ['data/script', 'skills', 'tools/playtest', 'doc']
+ROOT_FILES = ['AGENTS.md', 'README.md', 'BARB5_CHANGELOG.md']
 LINK = re.compile(r'\[[^\]]*\]\(([^)\s]+)\)')
 SKIP_PREFIX = ('http://', 'https://', '#', 'mailto:')
 
 
 def markdown_files():
+    for path in require_docs().rglob('*.md'):
+        yield str(path)
     for path in ROOT_FILES:
-        if os.path.isfile(path):
-            yield path
+        if (SOURCE_ROOT/path).is_file():
+            yield str(SOURCE_ROOT/path)
     for d in DIRS:
-        for dirpath, _dirnames, filenames in os.walk(d):
+        for dirpath, _dirnames, filenames in os.walk(SOURCE_ROOT/d):
             for fn in sorted(filenames):
                 if fn.endswith('.md'):
                     yield os.path.join(dirpath, fn)

@@ -1,0 +1,14 @@
+{
+  "stop_minute": 15,
+  "expect": [
+    {"key":"observer", "pattern":"\\[SeaExpansionWatch\\] loaded", "by_minute":1, "scope":"any"},
+    {"key":"frontier", "pattern":"\\[SeaExpansionWatch\\] sample.*team=0 .*beyond2400=[1-9]", "by_minute":10, "scope":"any"},
+    {"key":"cluster-fort-order", "pattern":"\\[SEA\\]\\[Expansion\\] fort=", "by_minute":12, "scope":"any"},
+    {"key":"fortify", "pattern":"\\[SeaExpansionWatch\\] finished.*def=(armtl|cortl|legtl) ", "by_minute":12, "scope":"any"}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception|Error in.*sea_expansion_watch", "scope":"any"},
+    {"key":"invariant", "pattern":"INVARIANT", "scope":"any"},
+    {"key":"crash", "pattern":"Access violation|has crashed|Fatal:", "scope":"any"}
+  ]
+}

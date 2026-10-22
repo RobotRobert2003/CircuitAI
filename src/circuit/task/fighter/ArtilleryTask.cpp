@@ -6,6 +6,8 @@
  */
 
 #include "task/fighter/ArtilleryTask.h"
+#include "task/fighter/RangedEngagement.h"
+#include "task/RetreatTask.h"
 #include "map/ThreatMap.h"
 #include "module/MilitaryManager.h"
 #include "setup/SetupManager.h"
@@ -39,12 +41,16 @@ CArtilleryTask::~CArtilleryTask()
 
 bool CArtilleryTask::CanAssignTo(CCircuitUnit* unit) const
 {
-	return units.empty() && unit->GetCircuitDef()->IsRoleArty();
+	return units.empty() && (unit->GetCircuitDef()->IsRoleArty() || unit->GetCircuitDef()->IsAttrRanged());
 }
 
 void CArtilleryTask::AssignTo(CCircuitUnit* unit)
 {
 	IFighterTask::AssignTo(unit);
+	if (unit->GetCircuitDef()->IsAttrRanged()) {
+		ranged = std::make_unique<CRangedEngagement>(manager->GetCircuit(), this, unit);
+		return;
+	}
 
 	unit->CmdSetMoveState(CCircuitDef::MoveType::HOLD_POS);
 	/*
@@ -75,7 +81,10 @@ void CArtilleryTask::AssignTo(CCircuitUnit* unit)
 
 void CArtilleryTask::RemoveAssignee(CCircuitUnit* unit)
 {
-	if (unit->GetCircuitDef()->IsAttrSiege()) {
+	if (ranged) {
+		ranged->Release(unit);
+		ranged.reset();
+	} else if (unit->GetCircuitDef()->IsAttrSiege()) {
 		unit->CmdSetFireState(CCircuitDef::FireType::OPEN);
 	}
 	IFighterTask::RemoveAssignee(unit);
@@ -91,8 +100,30 @@ void CArtilleryTask::Start(CCircuitUnit* unit)
 	Execute(unit);
 }
 
+bool CArtilleryTask::ForgetUnit(CCircuitUnit* unit)
+{
+	// ForgetUnitEverywhere broadcasts every removed ally to every task. Only
+	// this task's assignee owns this controller; clearing it for a dead radar
+	// leaves a ranged gun on the legacy path without its required travel action.
+	if (ranged && units.count(unit)) { ranged->Release(unit, false); ranged.reset(); }
+	return IFighterTask::ForgetUnit(unit);
+}
+
+void CArtilleryTask::Stop(bool done)
+{
+	if (ranged) {
+		ranged->Release(units.empty() ? nullptr : *units.begin());
+		ranged.reset();
+	}
+	IFighterTask::Stop(done);
+}
+
 void CArtilleryTask::Update()
 {
+	if (ranged) {
+		for (CCircuitUnit* unit : units) Execute(unit);
+		return;
+	}
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
 
@@ -111,6 +142,13 @@ void CArtilleryTask::Update()
 
 void CArtilleryTask::Execute(CCircuitUnit* unit)
 {
+	if (ranged) {
+		ranged->Update(unit);
+		auto* selected=manager->GetCircuit()->GetEnemyInfo(ranged->Target());
+		if (selected!=GetTarget()) SetTarget(selected);
+		position = unit->GetPos(manager->GetCircuit()->GetLastFrame());
+		return;
+	}
 	if (unit->Blocker() != nullptr) {
 		return;  // Do not interrupt current action
 	}
@@ -161,9 +199,34 @@ void CArtilleryTask::Execute(CCircuitUnit* unit)
 void CArtilleryTask::OnUnitIdle(CCircuitUnit* unit)
 {
 	IFighterTask::OnUnitIdle(unit);
+	if (ranged) { ranged->Idle(); return; }
 	if (units.find(unit) != units.end()) {
 		RemoveAssignee(unit);
 	}
+}
+
+void CArtilleryTask::OnUnitMoveFailed(CCircuitUnit* unit)
+{
+	if (ranged) { ranged->MoveFailed(); return; }
+	IFighterTask::OnUnitMoveFailed(unit);
+}
+
+void CArtilleryTask::OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker)
+{
+	if (ranged) {
+		ranged->Idle();
+        // Script/JSON chooses this doctrine. Forward-only firing-line hulls
+        // retain their weapon owner even at low HP; other artillery keeps its
+        // existing native repair retreat. No polling or extra query is added.
+        if (unit->GetCircuitDef()->GetRangedPolicy().holdFireline || ranged->IsSustainedRush()) return;
+		// Holding a firing position need never raise another idle event, so
+		// health retreat must hand over now rather than wait in cowards.
+		if (unit->GetHealthPercent() <= unit->GetCircuitDef()->GetRetreat()) {
+			manager->AssignTask(unit, manager->EnqueueRetreat());
+			return;
+		}
+	}
+	IFighterTask::OnUnitDamaged(unit, attacker);
 }
 
 CEnemyInfo* CArtilleryTask::FindTarget(CCircuitUnit* unit, const AIFloat3& pos)

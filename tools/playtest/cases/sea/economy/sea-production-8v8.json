@@ -1,0 +1,8 @@
+{
+  "name": "sea-production-8v8",
+  "runner": "tools/playtest/run_sea_recovery.py",
+  "minutes": 30,
+  "checks": "sea-production-8v8",
+  "fixture": false,
+  "map": "Shore_to_Shore_V3"
+}

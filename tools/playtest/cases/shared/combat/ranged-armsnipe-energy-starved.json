@@ -1,0 +1,105 @@
+{
+  "name": "ranged-sniper-low-energy",
+  "unit": "armsnipe",
+  "description": "Energy starvation: no cloak command churn or invented free shots.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    45,
+    120,
+    210
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3900,
+        4750
+      ]
+    },
+    {
+      "unit": "armseer",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3300,
+        4400
+      ]
+    },
+    {
+      "unit": "armaser",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        4900
+      ]
+    },
+    {
+      "unit": "armestor",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        5200
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armllt",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3800,
+        5400
+      ],
+      "spacing": 320
+    },
+    {
+      "unit": "armsnipe",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3700,
+        4100
+      ],
+      "spacing": 200,
+      "columns": 4
+    },
+    {
+      "unit": "armck",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        3700
+      ]
+    }
+  ],
+  "start_energy": 0,
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 0,
+    "max_shots": 0
+  },
+  "checks": "ranged-no-energy"
+}

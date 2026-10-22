@@ -32,6 +32,7 @@
 #include "map/ThreatMap.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
+#include "util/Performance.h"
 #include "spring/SpringMap.h"
 
 #include "Log.h"
@@ -326,14 +327,37 @@ std::vector<AIFloat3> CBattleAnalysis::GetTerrainRoute(const AIFloat3& from, con
 {
     EnsureGrid();
     if (!laneTerrain) CaptureLaneRequest(1, 0.f, 0.f, 1.f, 0.f, 1.f, 0);
-    Grid threat(height.size());
-    for (size_t c = 0; c < threat.size(); ++c) {
-        const auto p = CellPos(c);
-        threat[c] = cls == L_AIR ? AirThreat(p) : (cls == L_AMPH ? AmphThreat(p) : SurfThreat(p));
+    if (routeSnapshotTerrain != laneTerrain) {
+        routeSnapshotTerrain = laneTerrain;
+        for (auto& snapshot : routeSnapshots) { snapshot.version = 0; snapshot.workspace.version = 0; }
+        amphRouteWorkspace.version = 0;
     }
+    auto& snapshot = routeSnapshots[cls == L_AIR ? 1 : 0];
+    auto& threat = cls == L_AMPH ? amphRouteThreat : snapshot.threat;
+    const auto version = circuit->GetThreatMap()->GetPublicationVersion();
+    if (cls == L_AMPH || snapshot.version != version || threat.size() != height.size()) {
+        threat.resize(height.size());
+        for (size_t c = 0; c < threat.size(); ++c) {
+            const auto p = CellPos(c);
+            threat[c] = cls == L_AIR ? AirThreat(p) : (cls == L_AMPH ? AmphThreat(p) : SurfThreat(p));
+        }
+        if (cls != L_AMPH) snapshot.version = version;
+    }
+    auto& workspace = cls == L_AMPH ? amphRouteWorkspace : snapshot.workspace;
     const auto cells = lane::Solver(*laneTerrain, laneSettings).PointRoute(
         {from.x, from.y, from.z}, {to.x, to.y, to.z}, cls, threat,
-        landCost, waterCost, threatWeight, maxWaterThreat);
+        landCost, waterCost, threatWeight, maxWaterThreat, nullptr, &workspace, cls == L_AMPH ? 0 : version);
+    static const bool verify = std::getenv("CIRCUIT_VERIFY_POINT_ROUTES") != nullptr;
+    if (verify) {
+        Grid fresh(height.size());
+        for (size_t c=0; c<fresh.size(); ++c) {
+            const auto p=CellPos(c);
+            fresh[c]=cls==L_AIR ? AirThreat(p) : cls==L_AMPH ? AmphThreat(p) : SurfThreat(p);
+        }
+        const auto expected=lane::Solver(*laneTerrain,laneSettings).PointRoute(
+            {from.x,from.y,from.z},{to.x,to.y,to.z},cls,fresh,landCost,waterCost,threatWeight,maxWaterThreat);
+        if (cells!=expected) circuit->LOG("[INVARIANT] INV-176 published route cache differs from fresh query");
+    }
     std::vector<AIFloat3> result;
     result.reserve(cells.size());
     for (int c : cells) { auto p = CellPos(c); p.y = Height(p); result.push_back(p); }
@@ -344,6 +368,140 @@ std::vector<AIFloat3> CBattleAnalysis::GetUnitTerrainRoute(const CCircuitDef* de
         const AIFloat3& from, const AIFloat3& to, bool dry, float landCost,
         float waterCost, float threatWeight, float maxWaterThreat)
 {
+    return UnitTerrainRoute(def, from, to, dry, landCost, waterCost, threatWeight, maxWaterThreat, nullptr, 0.f);
+}
+
+std::vector<AIFloat3> CBattleAnalysis::SafeAirRoute(const AIFloat3& from, const AIFloat3& to,
+        float maxThreat, float padding)
+{
+    if (!std::isfinite(maxThreat) || maxThreat < 0.f || !std::isfinite(padding) || padding < 0.f) return {};
+    // D-312: the common clear leg needs no grid solve. The same corridor check
+    // validates every shortcut and each live flight leg, including endpoint joins.
+    if (AirThreatAlong(from, to, padding) <= maxThreat) return {to};
+    EnsureGrid();
+    auto inside = [this](const AIFloat3& p) {
+        return std::isfinite(p.x) && std::isfinite(p.z) && p.x >= 0 && p.z >= 0
+            && p.x < gw * cellSize && p.z < gh * cellSize;
+    };
+    if (!inside(from) || !inside(to)) return {};
+    if (!laneTerrain) CaptureLaneRequest(1, 0.f, 0.f, 1.f, 0.f, 1.f, 0);
+    if (!laneTerrain) return {};
+    // On-demand only: O(G*r^2 + sum weapon-disc cells) mask, O(G log G)
+    // search. Scratch belongs to this AI and is overwritten on each solve;
+    // no stale visibility cache or engine callbacks on a worker. r is padding
+    // in grid cells. Refuse a covered origin rather than waive the AA rule.
+    ferryAirThreat.assign(height.size(), 0.f);
+    ferryAirBlocked.assign(height.size(), 0);
+    const int radius = int(std::ceil(std::min(padding, 512.f) / cellSize)) + 1;
+    for (int z = 0; z < gh; ++z) for (int x = 0; x < gw; ++x) {
+        if (AirThreat(CellPos(z * gw + x)) <= maxThreat) continue;
+        for (int dz = -radius; dz <= radius; ++dz) for (int dx = -radius; dx <= radius; ++dx)
+            if (x+dx >= 0 && x+dx < gw && z+dz >= 0 && z+dz < gh)
+                ferryAirBlocked[(z+dz)*gw+x+dx] = 1;
+    }
+    RefreshAirWeapons();
+    for (const auto& weapon : airWeapons) {
+        const float r = weapon.range + padding + 2.f*circuit->GetThreatMap()->GetSquareSize() + cellSize;
+        const int x0 = std::max(0, int((weapon.pos.x-r)/cellSize));
+        const int x1 = std::min(gw-1, int((weapon.pos.x+r)/cellSize));
+        const int z0 = std::max(0, int((weapon.pos.z-r)/cellSize));
+        const int z1 = std::min(gh-1, int((weapon.pos.z+r)/cellSize));
+        for (int z=z0; z<=z1; ++z) for (int x=x0; x<=x1; ++x)
+            if (CellPos(z*gw+x).SqDistance2D(weapon.pos) <= r*r) ferryAirBlocked[z*gw+x] = 1;
+    }
+    const auto cells = lane::Solver(*laneTerrain,laneSettings).PointRoute(
+        {from.x,from.y,from.z},{to.x,to.y,to.z},L_AIR,ferryAirThreat,
+        1.f,1.f,0.f,1e9f,&ferryAirBlocked,&ferryAirWorkspace,0);
+    if (cells.empty()) return {};
+    // Linear shortcut pass; never cut a corner through known weapon coverage.
+    std::vector<AIFloat3> result;
+    AIFloat3 anchor=from, previous=from;
+    for (size_t i=0; i<=cells.size(); ++i) {
+        const AIFloat3 next=i<cells.size()?CellPos(cells[i]):to;
+        if (AirThreatAlong(anchor,next,padding)>maxThreat) {
+            if (anchor.SqDistance2D(previous)<1.f || AirThreatAlong(previous,next,padding)>maxThreat) return {};
+            result.push_back(previous); anchor=previous;
+        }
+        previous=next;
+    }
+    result.push_back(to);
+    return result;
+}
+
+std::vector<AIFloat3> CBattleAnalysis::GetUnitRaidRoute(const CCircuitDef* def,
+        const AIFloat3& from, const AIFloat3& to, float hazardMargin, float hazardWeight, bool avoidHazards)
+{
+    // D-296: a dry land route whose cells inside observed armed-ground
+    // coverage (+margin) have a hazardWeight cost floor over the legacy
+    // surface threat, or are blocked on request. Same UNIT_ROUTE accounting as
+    // GetUnitTerrainRoute; the overlay adds O(1) per cell to its threat fill.
+    if (def == nullptr || !std::isfinite(hazardWeight) || hazardWeight < 0.f) return {};
+    performance::Scope routeScope(circuit, performance::UNIT_ROUTE);
+    EnsureGrid();
+    auto inside = [this](const AIFloat3& p) {
+        return std::isfinite(p.x) && std::isfinite(p.z) && p.x>=0 && p.z>=0
+            && p.x<gw*cellSize && p.z<gh*cellSize;
+    };
+    if (!inside(from) || !inside(to)) return {};
+    std::unique_ptr<MoveData> move(def->GetDef()->GetMoveData());
+    if (!move) return {};
+    int cls;
+    switch (move->GetSpeedModClass()) {
+        case 0: cls = L_LAND; break;  // MoveDef::Tank
+        case 1: cls = L_BOT; break;   // MoveDef::KBot
+        case 2: cls = L_HOVER; break; // MoveDef::Hover
+        default: return {};           // ships are not land raiders
+    }
+    if (!laneTerrain) CaptureLaneRequest(1, 0.f, 0.f, 1.f, 0.f, 1.f, 0);
+    if (!laneTerrain) return {};
+    EnsureGroundHazard(hazardMargin);
+    const float weight = std::min(hazardWeight, 1e6f);
+    {
+    performance::Scope threatScope(circuit, performance::UNIT_ROUTE_THREAT);
+    // Base surface threat once per ThreatMap publication (O(G) lookups), then
+    // an O(G) overlay of the current hazard per solve: a dot painted this
+    // second is in the next solve. No per-definition terrain is built.
+    const auto version = circuit->GetThreatMap()->GetPublicationVersion();
+    if (raidBaseVersion != version || raidBaseThreat.size() != height.size()) {
+        raidBaseThreat.resize(height.size());
+        for (size_t c = 0; c < raidBaseThreat.size(); ++c) raidBaseThreat[c] = SurfThreat(CellPos(c));
+        raidBaseVersion = version;
+    }
+    raidRouteThreat.resize(height.size());
+    // Script chooses hard avoidance for a clear start, soft costs for escape.
+    // D-311: O(G) bytes retained per AI, filled in the existing O(G) overlay;
+    // no new world scan/cache epoch. Tests: single-tick-backline arena and
+    // terrain_route_test's live obstacle/blocked-origin differential cases.
+    if (avoidHazards) raidRouteBlocked.resize(height.size());
+    for (size_t c = 0; c < raidRouteThreat.size(); ++c) {
+        raidRouteThreat[c] = observedGroundHazard[c] > 0.f ? std::max(raidBaseThreat[c], weight) : raidBaseThreat[c];
+        if (avoidHazards) raidRouteBlocked[c] = observedGroundHazard[c] > 0.f;
+    }
+    }
+    std::vector<int> cells;
+    {
+    performance::Scope searchScope(circuit, performance::UNIT_ROUTE_SEARCH);
+    // threatVersion 0: penalties are rebuilt per solve (the overlay changes);
+    // the route cache is bypassed for the same reason. Water cells cost like
+    // land; requested hazard obstacles additionally block covered land.
+    cells = lane::Solver(*laneTerrain, laneSettings).PointRoute({from.x, from.y, from.z}, {to.x, to.y, to.z},
+        cls, raidRouteThreat, 1.f, 1.f, 1.f, 1e9f,
+        avoidHazards ? &raidRouteBlocked : nullptr, &raidRouteWorkspace, 0);
+    }
+    if (cells.empty()) return {};
+    std::vector<AIFloat3> result;
+    result.reserve(cells.size() + 2);
+    result.emplace_back(from.x, Height(from), from.z);
+    for (int c : cells) { auto p = CellPos(c); p.y = Height(p); result.push_back(p); }
+    result.emplace_back(to.x, Height(to), to.z);
+    return result;
+}
+
+std::vector<AIFloat3> CBattleAnalysis::UnitTerrainRoute(const CCircuitDef* def,
+        const AIFloat3& from, const AIFloat3& to, bool dry, float landCost,
+        float waterCost, float threatWeight, float maxWaterThreat, const Grid* hazard, float hazardValue)
+{
+    performance::Scope routeScope(circuit, performance::UNIT_ROUTE);
     EnsureGrid();
     auto inside = [this](const AIFloat3& p) {
         return std::isfinite(p.x) && std::isfinite(p.z) && p.x>=0 && p.z>=0
@@ -370,34 +528,71 @@ std::vector<AIFloat3> CBattleAnalysis::GetUnitTerrainRoute(const CCircuitDef* de
     };
     auto& t=cache.grid;
     const int frame=circuit->GetLastFrame();
-    if (t.height.empty() || frame-cache.frame>=60*FRAMES_PER_SEC) {
+    static const bool verify = std::getenv("CIRCUIT_VERIFY_UNIT_ROUTES") != nullptr;
+    bool rebuild = t.height.empty();
+    const bool refresh = rebuild || frame < cache.frame || frame-cache.frame>=60*FRAMES_PER_SEC;
+    if (refresh) {
+        performance::Scope refreshScope(circuit, performance::UNIT_TERRAIN_REFRESH);
         cache.frame=frame;
-        circuit->GetMap()->GetSlopeMap(cache.slope);
-        t.gw=gw; t.gh=gh; t.cellSize=cellSize;
-        t.height.resize(height.size()); t.surfaceSlope=surfaceSlope; t.body8.assign(height.size(),0);
-        t.edges.assign(height.size(),0);
-        for (auto& p:t.pass) p.assign(height.size(),0);
+        circuit->GetMap()->GetSlopeMap(unitRouteSlope);
+        // Preserve the old sixty-second freshness boundary. Only reuse exact
+        // immutable inputs: fine height publication, fine slopes and coarse
+        // shelf slopes. O(S+G) comparison replaces O(G*8*K) corridor sampling
+        // on unchanged terrain; no per-definition fine-height copies. Fresh
+        // endpoints below still read the current height publication.
+        rebuild = rebuild || area->heightRevision == 0
+            || cache.heightRevision != area->heightRevision
+            || cache.slope != unitRouteSlope || t.surfaceSlope != surfaceSlope
+            || t.gw != gw || t.gh != gh || t.cellSize != cellSize;
+        cache.slope.swap(unitRouteSlope);
+        cache.heightRevision = area->heightRevision;
+    }
+    const auto buildTerrain = [&](lane::Terrain& built) {
+        built.gw=gw; built.gh=gh; built.cellSize=cellSize;
+        built.height.resize(height.size()); built.surfaceSlope=surfaceSlope; built.body8.assign(height.size(),0);
+        built.edges.assign(height.size(),0);
+        for (auto& p:built.pass) p.assign(height.size(),0);
         for (int c=0;c<gw*gh;++c) {
             const auto p=CellPos(c);
-            t.height[c]=elevation(p.x,p.z);
-            t.pass[L_AMPH][c]=corridor(p,p);
+            built.height[c]=elevation(p.x,p.z);
+            built.pass[L_AMPH][c]=corridor(p,p);
         }
-        for (int c=0;c<gw*gh;++c) if (t.pass[L_AMPH][c]) {
+        for (int c=0;c<gw*gh;++c) if (built.pass[L_AMPH][c]) {
             for (int d=0;d<8;++d) {
                 const int x=c%gw+NB[d][0],z=c/gw+NB[d][1];
                 if (x<0 || z<0 || x>=gw || z>=gh) continue;
                 const int n=z*gw+x;
-                if (t.pass[L_AMPH][n] && corridor(CellPos(c),CellPos(n))) t.edges[c]|=1u<<d;
+                if (built.pass[L_AMPH][n] && corridor(CellPos(c),CellPos(n))) built.edges[c]|=1u<<d;
             }
         }
+    };
+    if (rebuild) {
+        performance::Scope buildScope(circuit, performance::UNIT_TERRAIN_BUILD);
+        buildTerrain(t);
         circuit->LOG("UNIT_TERRAIN def=%s dry=%i cells=%i",def->GetDef()->GetName(),int(dry),gw*gh);
+    } else if (refresh && verify) {
+        lane::Terrain fresh;
+        buildTerrain(fresh);
+        if (fresh.height != t.height || fresh.surfaceSlope != t.surfaceSlope
+            || fresh.pass != t.pass || fresh.edges != t.edges)
+            circuit->LOG("[INVARIANT] INV-176 retained unit terrain differs from refresh");
     }
     // Endpoints must connect to their grid centres; never snap over a cliff.
     if (!corridor(from,CellPos(Cell(from))) || !corridor(CellPos(Cell(to)),to)) return {};
-    Grid threat(height.size());
+    auto& threat = unitRouteThreat;
+    {
+    performance::Scope threatScope(circuit, performance::UNIT_ROUTE_THREAT);
+    threat.resize(height.size());
     for (size_t c=0;c<threat.size();++c) threat[c]=dry ? SurfThreat(CellPos(c)) : AmphThreat(CellPos(c));
+    if (hazard != nullptr && hazard->size() == threat.size()) {
+        for (size_t c=0;c<threat.size();++c) if ((*hazard)[c] > 0.f) threat[c]=std::max(threat[c],hazardValue);
+    }
+    }
     // Exclude allied structures; the engine still resolves mobile traffic.
-    std::vector<char> obstacles(height.size(),0);
+    auto& obstacles = unitRouteObstacles;
+    {
+    performance::Scope obstacleScope(circuit, performance::UNIT_ROUTE_OBSTACLES);
+    obstacles.assign(height.size(),0);
     circuit->UpdateFriendlyUnits();
     for (const auto& kv:circuit->GetFriendlyUnits()) {
         const auto* building=circuit->GetCircuitDefSafe(circuit->GetCallback()->Unit_GetDefId(kv.first));
@@ -408,8 +603,19 @@ std::vector<AIFloat3> CBattleAnalysis::GetUnitTerrainRoute(const CCircuitDef* de
             for (int x=std::max(0,int((p.x-r)/cellSize));x<=std::min(gw-1,int((p.x+r)/cellSize));++x)
                 obstacles[z*gw+x]=1;
     }
-    const auto cells=lane::Solver(t,laneSettings).PointRoute({from.x,from.y,from.z},{to.x,to.y,to.z},
-        L_AMPH,threat,landCost,waterCost,threatWeight,maxWaterThreat,&obstacles);
+    }
+    std::vector<int> cells;
+    {
+        performance::Scope searchScope(circuit, performance::UNIT_ROUTE_SEARCH);
+        cells=lane::Solver(t,laneSettings).PointRoute({from.x,from.y,from.z},{to.x,to.y,to.z},
+            L_AMPH,threat,landCost,waterCost,threatWeight,maxWaterThreat,&obstacles,&unitRouteWorkspace,0);
+    }
+    // Same inputs and ordered route oracle; deliberately excluded from timing.
+    if (verify) {
+        const auto expected=lane::Solver(t,laneSettings).PointRoute({from.x,from.y,from.z},{to.x,to.y,to.z},
+            L_AMPH,threat,landCost,waterCost,threatWeight,maxWaterThreat,&obstacles);
+        if (cells!=expected) circuit->LOG("[INVARIANT] INV-176 unit route scratch differs from fresh search");
+    }
     if (cells.empty()) return {};
     std::vector<AIFloat3> result;
     result.reserve(cells.size()+2);
@@ -429,10 +635,26 @@ std::vector<AIFloat3> CBattleAnalysis::GetLaneRoute(int lane, const AIFloat3& fr
 	// Never snap an inaccessible start across water or a cliff to another component.
 	const int origin = Cell(from), entry = lanes[lane].cells.front();
 	if (!pass[cls][origin] || !pass[cls][entry]) return result;
-	Grid distance;
-	std::vector<int> previous;
-	lane::Solver(*laneTerrain, laneSettings).DijkstraMulti({entry}, Grid(height.size(), 1.f), cls, nullptr, distance, previous);
-	if (distance[origin] == std::numeric_limits<float>::max()) return result;
+	// This consumer needs only the origin-to-entry chain, never the remaining
+    // distance field. Same strict tie rules, with lazy scratch initialization.
+    auto& ws=laneJoinWorkspace;
+    ws.penalty.resize(height.size(),1.f);
+    auto& distance=ws.distance; auto& previous=ws.previous;
+    lane::Solver solver(*laneTerrain,laneSettings);
+    solver.DijkstraMulti({entry},ws.penalty,cls,nullptr,distance,previous,
+        true,0.f,nullptr,0.f,true,nullptr,origin,&ws.search);
+    if (!ws.search.Seen(origin) || distance[origin] == std::numeric_limits<float>::max()) return result;
+    if (std::getenv("CIRCUIT_VERIFY_POINT_ROUTES") != nullptr) {
+        Grid fullDistance; std::vector<int> fullPrevious;
+        solver.DijkstraMulti({entry},Grid(height.size(),1.f),cls,nullptr,fullDistance,fullPrevious);
+        int cell=origin;
+        for (size_t i=0;i<height.size() && cell!=entry && cell>=0;++i) {
+            if (distance[cell]!=fullDistance[cell] || previous[cell]!=fullPrevious[cell]) {
+                circuit->LOG("[INVARIANT] INV-176 lane-join route differs from full search"); break;
+            }
+            cell=previous[cell];
+        }
+    }
 	int at = origin;
 	for (size_t step = 0; step < height.size() && at != entry; ++step) {
 		result.push_back(CellPos(at));

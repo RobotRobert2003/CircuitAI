@@ -9,12 +9,15 @@
 #define SRC_CIRCUIT_SPRING_SPRINGCALLBACK_H_
 
 #include "OOAICallback.h"  // C++ wrapper
+#include "spring/CallbackBuffer.h"
 
 #include <vector>
 
 struct SSkirmishAICallback;
 
 namespace circuit {
+
+struct ResurrectionClaim;
 
 class COOAICallback final {
 public:
@@ -67,8 +70,12 @@ public:
 
 	int Unit_GetDefId(int unitId) const;
 	bool Unit_HasCommands(int unitId) const;
+    bool Unit_ResurrectionClaim(int unitId, int frame, ResurrectionClaim& claim) const;
+    int Unit_Maximum() const;
+    int Unit_Team(int unitId) const;
 
 	bool Feature_IsResurrectable(int featureId) const;
+	int Feature_ResurrectDef(int featureId) const;
 
 	bool UnitDef_HasYardMap(int unitDefId) const;
 
@@ -78,6 +85,7 @@ private:
 	int skirmishAIId;
 
 	std::vector<int> unitIds;
+    CallbackBuffer queriedUnitIds;
 	std::vector<springai::Unit*> units;
 };
 

@@ -1,0 +1,155 @@
+{
+  "name": "thug-reinforcement-stream",
+  "unit": "corthud",
+  "side": "cortex",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    3900,
+    1250
+  ],
+  "photos": [
+    30,
+    50,
+    85
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4200
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4700
+      ]
+    },
+    {
+      "unit": "corthud",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3800,
+        3900
+      ],
+      "columns": 6,
+      "spacing": 64,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armestor",
+      "count": 8,
+      "team": 1,
+      "position": [
+        3800,
+        4520
+      ],
+      "after_seconds": 20,
+      "columns": 6,
+      "spacing": 160
+    },
+    {
+      "unit": "corthud",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3860,
+        3400
+      ],
+      "after_seconds": 40,
+      "columns": 6,
+      "spacing": 80
+    },
+    {
+      "unit": "corthud",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3860,
+        3400
+      ],
+      "after_seconds": 60,
+      "columns": 6,
+      "spacing": 80
+    },
+    {
+      "unit": "corthud",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3860,
+        3400
+      ],
+      "after_seconds": 80,
+      "columns": 6,
+      "spacing": 80
+    },
+    {
+      "unit": "corthud",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3860,
+        3400
+      ],
+      "after_seconds": 100,
+      "columns": 6,
+      "spacing": 80
+    },
+    {
+      "unit": "corthud",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3860,
+        3400
+      ],
+      "after_seconds": 120,
+      "columns": 6,
+      "spacing": 80
+    },
+    {
+      "unit": "corthud",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3860,
+        3400
+      ],
+      "after_seconds": 140,
+      "columns": 6,
+      "spacing": 80
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "max_friendly_damage": 0,
+    "min_kills": 3,
+    "max_losses": 0,
+    "min_types_assigned": 1,
+    "min_damage": 6000,
+    "max_first_shot_seconds": 65
+  },
+  "camera_angle": 1.35,
+  "min_spawn_spacing": 64,
+  "storage_scenario": "thug-reinforcements-v2"
+}

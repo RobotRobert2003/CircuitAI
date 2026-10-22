@@ -1,7 +1,7 @@
 #include "../define.as"
 #include "../types/start_spot.as"
 #include "../types/map_config.as"
-#include "../helpers/unit_helpers.as"
+#include "../helpers/units/unit_helpers.as"
 
 namespace AcidicQuarry {
 	// NOTE: This map file intentionally holds only static data (start spots & MapConfig).

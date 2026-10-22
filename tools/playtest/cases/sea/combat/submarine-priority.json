@@ -1,0 +1,13 @@
+{
+ "name":"submarine-priority",
+ "checks":"sea/combat/submarine-priority",
+ "shots":"1@3400@3500:4400,3@3400@3500:4400,5@3400@3500:4400",
+ "groups":[
+  {"unit":"armserp","team":0,"count":12,"position":[2600,4250],"columns":4,"spacing":100},
+  {"unit":"armason","team":0,"count":1,"position":[3300,4600]},
+  {"unit":"armawac","team":0,"count":1,"position":[3850,4250]},
+  {"unit":"corblackhy","team":1,"count":1,"position":[3850,4250]},
+  {"unit":"corpt","team":1,"count":1,"position":[3600,4650]},
+  {"unit":"corsy","team":1,"count":1,"position":[4000,4900]}
+ ]
+}

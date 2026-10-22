@@ -1,0 +1,16 @@
+{
+  "stop_minute": 3,
+  "expect": [
+    {"key":"loaded","pattern":"\\[RangedArena\\].* loaded","scope":"any","by_minute":1},
+    {"key":"observed-bastion","pattern":"\\[RangedArena\\].*detected.*unit=legbastion","scope":"any","by_minute":1},
+    {"key":"ranged-owner","pattern":"RANGED: assigned corcat","scope":"any","by_minute":1},
+    {"key":"firing","pattern":"\\[RangedArena\\].*shot.*unit=corcat","scope":"any","by_minute":3},
+    {"key":"bastion-destroyed","pattern":"\\[RangedArena\\].*death.*team=1 unit=legbastion","scope":"any","by_minute":3}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception|has invalid ranged policy","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[RangedArena\\].*ERROR|Error in.*ranged_arena|Removed widget: Ranged combat arena","scope":"any"},
+    {"key":"loss","pattern":"\\[RangedArena\\].*death.*team=0 unit=corcat","scope":"any"}
+  ]
+}

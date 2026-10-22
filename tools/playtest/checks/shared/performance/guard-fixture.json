@@ -1,0 +1,13 @@
+{
+  "stop_minute": 5,
+  "expect": [
+    {"key":"loaded","pattern":"GuardTest\\] loaded","scope":"any","by_minute":1},
+    {"key":"stop","pattern":"GuardTest\\] PASS stop_recovery","scope":"any","by_minute":2},
+    {"key":"change","pattern":"GuardTest\\] PASS target_change","scope":"any","by_minute":3},
+    {"key":"moving","pattern":"GuardTest\\] PASS moving_target","scope":"any","by_minute":4},
+    {"key":"loss","pattern":"GuardTest\\] PASS target_loss_recovery","scope":"any","by_minute":5},
+    {"key":"assist","pattern":"GuardTest\\] PASS production_assist","scope":"any","by_minute":5},
+    {"key":"production","pattern":"GuardTest\\] PASS production_continues","scope":"any","by_minute":5}
+  ],
+  "forbid": [{"key":"errors","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|GuardTest\\] FAIL|Error in.*guard_watch|Removed widget: Guard regression","scope":"any"}]
+}

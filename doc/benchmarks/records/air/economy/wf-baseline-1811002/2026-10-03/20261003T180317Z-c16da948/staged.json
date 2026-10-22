@@ -1,8 +1,0 @@
-{
-  "staged": "2026-10-03T14:59:55",
-  "dll": "C:\\bardev\\s3k-CircuitAI\\build-theatres\\games\\air\\economy\\workforce-paired\\cohort\\20261003T172751Z-47454589\\SkirmishAI.dll",
-  "dll_sha256_16": "7be8085c281c3a0f",
-  "dll_bytes": 7774393,
-  "data": "C:\\bardev\\s3k-CircuitAI\\build-theatres\\games\\air\\economy\\workforce-paired\\cohort\\20261003T172751Z-47454589\\baseline",
-  "ai": "BARbTest/test"
-}

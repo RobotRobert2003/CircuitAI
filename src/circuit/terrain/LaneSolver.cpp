@@ -102,8 +102,16 @@ int Solver::Snap(const Point& pos, int cls) const
 	return -1;
 }
 
+void SearchWorkspace::Begin(std::size_t size)
+{
+    if (stamps.size() != size) { stamps.assign(size, 0); generation = 0; }
+    if (++generation == 0) { std::fill(stamps.begin(), stamps.end(), 0); generation = 1; }
+    heap.clear();
+}
+
 std::vector<int> Solver::PointRoute(const Point& from, const Point& to, int cls, const Grid& threat,
-        float landCost, float waterCost, float threatWeight, float maxWaterThreat, const std::vector<char>* obstacles) const
+        float landCost, float waterCost, float threatWeight, float maxWaterThreat, const std::vector<char>* obstacles,
+        PointWorkspace* workspace, std::uint64_t threatVersion) const
 {
     auto inside = [this](const Point& p) {
         return std::isfinite(p.x) && std::isfinite(p.z) && p.x >= 0 && p.z >= 0
@@ -116,23 +124,60 @@ std::vector<int> Solver::PointRoute(const Point& from, const Point& to, int cls,
         || !std::isfinite(maxWaterThreat) || maxWaterThreat < 0) return {};
     const int origin = Cell(from), goal = Cell(to);
     if (!pass[cls][origin] || !pass[cls][goal]) return {};
-    Grid penalty(height.size()), distance;
-    std::vector<char> blocked(height.size());
-    for (size_t c = 0; c < height.size(); ++c) {
+    PointWorkspace local;
+    auto& ws = workspace == nullptr ? local : *workspace;
+    auto& penalty = ws.penalty;
+    auto& blocked = ws.blocked;
+    auto& distance = ws.distance;
+    auto& previous = ws.previous;
+    if (threatVersion == 0 || obstacles != nullptr || ws.version != threatVersion
+        || ws.terrain != &height || ws.threat != &threat || penalty.size() != height.size()
+        || ws.landCost != landCost || ws.waterCost != waterCost || ws.weight != threatWeight || ws.ceiling != maxWaterThreat
+        || ws.surfaceWeight != mountainSurfaceWeight) {
+      ws.routes.clear(); ws.routeOrder.clear(); ws.nextRoute = 0;
+      ws.surfaceWeight = mountainSurfaceWeight;
+      penalty.resize(height.size()); blocked.resize(height.size());
+      for (size_t c = 0; c < height.size(); ++c) {
         const float value = std::isfinite(threat[c]) ? std::max(0.f, threat[c]) : 1e9f;
         blocked[c] = (height[c] < 0 && value > maxWaterThreat) || (obstacles != nullptr && (*obstacles)[c]);
         penalty[c] = std::min(1e8f, (height[c] < 0 ? waterCost : landCost) + value * threatWeight);
+      }
+      ws.version = obstacles == nullptr ? threatVersion : 0;
+      ws.terrain = &height; ws.threat = &threat;
+      ws.landCost = landCost; ws.waterCost = waterCost; ws.weight = threatWeight; ws.ceiling = maxWaterThreat;
     }
     // Allow escape from a newly threatened starting cell, but not entry into a threatened goal.
-    blocked[origin] = false;
-    if (blocked[goal]) return {};
-    std::vector<int> previous, result;
-    DijkstraMulti({goal}, penalty, cls, nullptr, distance, previous, true, 0.f, &blocked);
-    if (distance[origin] == std::numeric_limits<float>::max()) return {};
+    // Do not mutate cached blocked cells: an escape exception belongs to this
+    // query only, including corner checks and origin==goal.
+    if (goal != origin && blocked[goal]) return {};
+    // The solver observes grid cells, not sub-cell coordinates. Reuse only an
+    // identical directed query under the exact immutable terrain/cost epoch.
+    // This skips a search, never samples threats less often or changes ties.
+    // Lookup O(log K), returned path copy O(P), bounded O(K*P) storage. The
+    // caller retains terrain lifetime; dynamic overlays bypass this cache.
+    const bool reusable = threatVersion != 0 && obstacles == nullptr;
+    const std::array<int,3> key{origin,goal,cls};
+    if (reusable) {
+        const auto found = ws.routes.find(key);
+        if (found != ws.routes.end()) return found->second;
+    }
+    const auto retain = [&](const std::vector<int>& path) {
+        if (!reusable) return;
+        if (ws.routes.size() == PointWorkspace::maximumCachedRoutes) {
+            ws.routes.erase(ws.routeOrder[ws.nextRoute]);
+            ws.routeOrder[ws.nextRoute] = key;
+            ws.nextRoute = (ws.nextRoute + 1) % PointWorkspace::maximumCachedRoutes;
+        } else ws.routeOrder.push_back(key);
+        ws.routes.emplace(key,path);
+    };
+    std::vector<int> result;
+    DijkstraMulti({goal}, penalty, cls, nullptr, distance, previous, true, 0.f, &blocked,
+        0.f, true, nullptr, origin, &ws.search, origin);
+    if (!ws.search.Seen(origin) || distance[origin] == std::numeric_limits<float>::max()) { retain(result); return {}; }
     int at = origin;
     for (size_t step = 0; step < height.size(); ++step) {
         result.push_back(at);
-        if (at == goal) return result;
+        if (at == goal) { retain(result); return result; }
         at = previous[at];
         if (at < 0) break;
     }
@@ -141,28 +186,45 @@ std::vector<int> Solver::PointRoute(const Point& from, const Point& to, int cls,
 
 void Solver::DijkstraMulti(const std::vector<int>& starts, const Grid& penalty, int cls, const Grid* extra,
 		Grid& dist, std::vector<int>& prev, bool reverse, float gradeWeight, const std::vector<char>* blocked, float cliffWeight, bool preferShelf,
-		const Grid* initialCost) const
+		const Grid* initialCost, int terminal, SearchWorkspace* workspace, int escape) const
 {
     CheckCancelled();
     ++searches;
 	const int N = gw * gh;
-	dist.assign(N, std::numeric_limits<float>::max());
-	prev.assign(N, -1);
+    if (workspace != nullptr) {
+        workspace->Begin(N); dist.resize(N); prev.resize(N);
+    } else {
+        dist.assign(N, std::numeric_limits<float>::max()); prev.assign(N, -1);
+    }
+	const auto touch = [&](int c) {
+        if (workspace != nullptr && !workspace->Seen(c)) {
+            workspace->stamps[c] = workspace->generation;
+            dist[c] = std::numeric_limits<float>::max(); prev[c] = -1;
+        }
+    };
+    const auto isBlocked = [&](int c) { return c != escape && blocked != nullptr && (*blocked)[c]; };
 	using QE = std::pair<float, int>;
-	std::priority_queue<QE, std::vector<QE>, std::greater<QE>> q;
+    std::vector<QE> localHeap;
+    auto& q = workspace == nullptr ? localHeap : workspace->heap;
+    const auto push = [&](QE e) { q.push_back(e); std::push_heap(q.begin(), q.end(), std::greater<QE>()); };
 	for (int s : starts) {
+        touch(s);
 		dist[s] = initialCost == nullptr ? 0.f : (*initialCost)[s];
-		q.push({dist[s], s});
+		push({dist[s], s});
 	}
 	const std::vector<char>& p = pass[cls];
 	while (!q.empty()) {
-		const QE e = q.top();
-		q.pop();
+        std::pop_heap(q.begin(), q.end(), std::greater<QE>());
+		const QE e = q.back();
+		q.pop_back();
 		const int c = e.second;
 		if (e.first > dist[c]) {
 			continue;
 		}
         if ((++expanded & 1023) == 0) CheckCancelled();
+        // Only point queries set terminal. Settle, do not stop on discovery:
+        // every predecessor is now final with the legacy strict-< tie rule.
+        if (c == terminal) break;
 		const int cx = c % gw, cz = c / gw;
 		for (const auto& d : NB) {
 			const int nx = cx + d[0], nz = cz + d[1];
@@ -170,7 +232,7 @@ void Solver::DijkstraMulti(const std::vector<int>& starts, const Grid& penalty, 
 				continue;
 			}
 			const int n = nz * gw + nx;
-			if (!p[n] || (blocked != nullptr && (*blocked)[n])) {
+			if (!p[n] || isBlocked(n)) {
 				continue;
 			}
             const int direction = int(&d - NB);
@@ -178,7 +240,7 @@ void Solver::DijkstraMulti(const std::vector<int>& starts, const Grid& penalty, 
             if (!edges.empty() && !(edges[reverse ? n : c] & (1u << (reverse ? opposite : direction)))) continue;
 			// A coarse diagonal must not slip through two blocked corners.
 			if (d[0] != 0 && d[1] != 0 && (!p[cz * gw + nx] || !p[nz * gw + cx]
-				|| (blocked != nullptr && ((*blocked)[cz * gw + nx] || (*blocked)[nz * gw + cx])))) {
+				|| isBlocked(cz * gw + nx) || isBlocked(nz * gw + cx))) {
 				continue;
 			}
 			const float step = cellSize * ((d[0] != 0 && d[1] != 0) ? 1.4142f : 1.f);
@@ -199,10 +261,11 @@ void Solver::DijkstraMulti(const std::vector<int>& starts, const Grid& penalty, 
 			if (extra != nullptr) {
 				w *= (*extra)[n];
 			}
+            touch(n);
 			if (dist[c] + w < dist[n]) {
 				dist[n] = dist[c] + w;
 				prev[n] = c;
-				q.push({dist[n], n});
+				push({dist[n], n});
 			}
 		}
 	}

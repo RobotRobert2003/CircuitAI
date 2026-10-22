@@ -1,6 +1,7 @@
 """Metal-map and unchanged TECH sequence controls for the AIR workforce change."""
 import argparse
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import subprocess
 import sys
 import playtest
@@ -49,7 +50,7 @@ def main():
             subprocess.call([sys.executable, str(playtest.HERE/'audit_metal_check.py'), str(base/'infolog.txt'),
                 '--metal', '--output', str(base/'metal-audit.json')])
         records.append(dict(directory=str(base), exit=code))
-        storage.write_json(playtest.REPO/'build-theatres/workforce-regressions.json', records)
+        storage.write_json(RAW_ROOT / 'workforce-regressions.json', records)
     return any(row['exit'] for row in records)
 
 

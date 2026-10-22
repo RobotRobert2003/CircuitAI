@@ -1,0 +1,90 @@
+{
+  "name": "ranged-starlight-screen",
+  "unit": "armmanni",
+  "description": "Known static front with allied moving Pawns supplying sight; actual AI owns all friendly combat commands. Measure firing and advance through a friendly screen.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    2300
+  ],
+  "photos": [
+    45,
+    90,
+    150
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3000,
+        4000
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 8,
+      "team": 0,
+      "position": [
+        2800,
+        5400
+      ],
+      "columns": 8,
+      "spacing": 320
+    },
+    {
+      "unit": "armhlt",
+      "count": 8,
+      "team": 1,
+      "position": [
+        2800,
+        5550
+      ],
+      "columns": 8,
+      "spacing": 320
+    },
+    {
+      "unit": "armpw",
+      "count": 24,
+      "team": 0,
+      "position": [
+        3100,
+        4750
+      ],
+      "columns": 12,
+      "spacing": 150,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armmanni",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3100,
+        3950
+      ],
+      "columns": 6,
+      "spacing": 320,
+      "after_seconds": 25
+    }
+  ],
+  "assertions": {
+    "min_kills": 8,
+    "min_shooters": 4,
+    "max_losses": 0
+  }
+}

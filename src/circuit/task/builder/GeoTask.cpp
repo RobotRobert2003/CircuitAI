@@ -11,6 +11,7 @@
 #include "resource/EnergyManager.h"
 #include "terrain/TerrainManager.h"
 #include "unit/CircuitUnit.h"
+#include "unit/ally/AllyUnit.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 
@@ -63,12 +64,26 @@ bool CBGeoTask::Execute(CCircuitUnit* unit)
 	)
 
 	const int frame = circuit->GetLastFrame();
+    // A builder can arrive after another worker created the intended frame.
+    // Reuse the normal recovery ownership mechanism rather than issuing a
+    // second build over it. Adoption checks the exact requested definition.
+    if (target == nullptr) AdoptStandingFrame(unit);
 	if (target != nullptr) {
 		TRY_UNIT(circuit, unit,
 			unit->CmdRepair(target, UNIT_CMD_OPTION, CmdTimeout(frame));
 		)
 		return true;
 	}
+    // BAR transfers an upgraded geo to the owner of the geo underneath it.
+    // Revalidate on execution, since ownership may change during travel.
+    for (int id : circuit->GetCallback()->GetFriendlyUnitIdsIn(buildPos, 32.f, false)) {
+        auto* friendly = circuit->GetFriendlyUnit(id);
+        if (friendly && friendly->GetCircuitDef()->GetDef()->IsNeedGeo()
+            && friendly->GetUnit()->GetTeam() != circuit->GetTeamId()) {
+            manager->AbortTask(this);
+            return false;
+        }
+    }
 	if (!circuit->GetTerrainManager()->IsAllyLayoutBlocked(buildDef, buildPos, facing)
         && circuit->GetMap()->IsPossibleToBuildAt(buildDef->GetDef(), buildPos, facing)) {
 		TRY_UNIT(circuit, unit,

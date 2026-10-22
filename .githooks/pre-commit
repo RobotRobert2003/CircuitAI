@@ -1,74 +1,14 @@
 #!/bin/sh
-#
-# Keep doc/roles/*.md in step with data/script/src/roles/*.as
-#
-# Refuses a commit that stages a role's AngelScript without also staging that
-# role's markdown document. Rationale and the update rules are in
-# doc/roles/README.md ("Keeping these documents current").
-#
-# Install:   git config core.hooksPath .githooks
-# Bypass:    git commit --no-verify     (use deliberately, and say why)
-
+# CircuitAI code and its documentation are separate repositories. Validate
+# reviewed source hashes/content in CIRCUIT_DOCS_REPO instead of requiring a
+# Markdown file to be staged in this source checkout.
 set -u
-
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$staged" ] && exit 0
-
-missing=""
 note=""
-
-# 1. Per-role: data/script/src/roles/<name>.as  requires  doc/roles/<name>.md
-for f in $staged; do
-    case "$f" in
-        data/script/src/roles/*.as)
-            role=$(basename "$f" .as)
-            doc="doc/roles/${role}.md"
-            if ! printf '%s\n' $staged | grep -qx "$doc"; then
-                missing="${missing}  ${f}  ->  ${doc}\n"
-            fi
-            ;;
-    esac
-done
-
-# 2. Contract changes: the enum or RoleConfig requires the index document,
-#    because both the contract table and the coverage matrix live there.
-for f in $staged; do
-    case "$f" in
-        data/script/src/types/ai_role.as|data/script/src/types/role_config.as)
-            if ! printf '%s\n' $staged | grep -qx "doc/roles/README.md"; then
-                missing="${missing}  ${f}  ->  doc/roles/README.md\n"
-            fi
-            ;;
-    esac
-done
-
-# 3. Advisory only: per-role settings live in global.as, which changes for many
-#    other reasons too. Warn, never block.
-for f in $staged; do
-    case "$f" in
-        data/script/src/global.as)
-            note="global.as is staged. If a Global::RoleSettings::<Role> value changed, update that role's settings table in doc/roles/<role>.md."
-            ;;
-    esac
-done
-
-if [ -n "$missing" ]; then
-    echo "pre-commit: role documentation is out of step." >&2
-    echo >&2
-    echo "These staged role sources have no matching staged document:" >&2
-    echo >&2
-    printf "$missing" >&2
-    echo >&2
-    echo "Update the document, stage it, and commit again." >&2
-    echo "Rules: doc/roles/README.md -> Keeping these documents current" >&2
-    echo >&2
-    echo "To bypass deliberately: git commit --no-verify" >&2
-    exit 1
-fi
-
 # 4. Content check: when role sources or role documents are staged, verify the
 #    documents against the scripts (functions, wired slots, source markers).
-if printf '%s\n' $staged | grep -qE '^(data/script/src/roles/.*\.as|doc/roles/.*\.md)$'; then
+if printf '%s\n' $staged | grep -qE '^(data/script/src/roles/.*\.as|data/script/src/types/(ai_role|role_config)\.as)$'; then
     py=$(command -v python3 || command -v python)
     if [ -n "$py" ]; then
         if ! "$py" tools/knowledge/check_role_docs.py; then
@@ -85,12 +25,12 @@ fi
 # 5. Practice check (D-076): invariant ids match doc/invariants.md, every
 #    playtest check forbids a broken invariant, every rule row is in the
 #    actor matrix, every decision from D-076 on names its invariant.
-if printf '%s\n' $staged | grep -qE '^(data/script/src/.*\.as|doc/(invariants|actor-matrix|decisions)\.md|doc/roles/.*\.md|tools/playtest/checks/.*\.json)$'; then
+if printf '%s\n' $staged | grep -qE '^(data/script/src/.*\.as|src/circuit/.*\.(cpp|h)|tools/playtest/checks/.*\.json)$'; then
     py=$(command -v python3 || command -v python)
     if [ -n "$py" ]; then
         if ! "$py" tools/knowledge/check_invariants.py; then
             echo >&2
-            echo "pre-commit: the invariant practice is not met (see above); doc/practice-invariants.md says what to add." >&2
+            echo "pre-commit: the invariant practice is not met (see above); ../rjm.bar.docs/projects/circuitai/practice-invariants.md says what to add." >&2
             exit 1
         fi
     else

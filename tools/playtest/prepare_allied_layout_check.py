@@ -1,14 +1,15 @@
 """Stage the explicit shared-layout obstruction probe, never production data."""
 import argparse
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--dir', type=Path, required=True)
 args = parser.parse_args()
 base = args.dir.resolve()
-if not base.is_relative_to((ROOT / 'build-theatres').resolve()):
-    parser.error('fixture must be inside repository build-theatres')
+if not base.is_relative_to((RAW_ROOT).resolve()):
+    parser.error('fixture must be inside benchmark-repository build-theatres')
 script = base / 'AI/Skirmish/BARbTest/test/script'
 for profile in ['experimental_hard', 'experimental_balanced', 'experimental_terrible']:
     path = script / profile / 'main.as'

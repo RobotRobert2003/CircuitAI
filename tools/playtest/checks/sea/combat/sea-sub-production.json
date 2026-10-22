@@ -1,0 +1,15 @@
+{
+  "stop_minute": 6,
+  "expect": [
+    {"key":"loaded","pattern":"\\[SeaArena\\].* loaded","scope":"any","by_minute":1},
+    {"key":"response","pattern":"\\[SEA\\]\\[Response\\] layer=1 .*recruit=(armsub|armroy|corsub|corroy|legnavysub|legnavyfrigate)","scope":"test","by_minute":3},
+    {"key":"counter-started","pattern":"\\[SeaArena\\].* produced .*team=0 unit=(armsub|armroy|corsub|corroy|legnavysub|legnavyfrigate)","scope":"any","by_minute":3},
+    {"key":"new-counter-fired","pattern":"\\[SeaArena\\].* damage .*team=0 .*attackerUnit=(armsub|armroy|corsub|corroy|legnavysub|legnavyfrigate) victimUnit=corsub produced=true","scope":"any","by_minute":6}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

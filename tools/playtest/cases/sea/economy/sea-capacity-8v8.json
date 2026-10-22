@@ -1,0 +1,8 @@
+{
+  "name": "sea-capacity-8v8",
+  "runner": "tools/playtest/run_sea_recovery.py",
+  "minutes": 12,
+  "checks": "sea-capacity-8v8",
+  "capacity": true,
+  "map": "Shore_to_Shore_V3"
+}

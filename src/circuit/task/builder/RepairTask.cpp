@@ -34,7 +34,7 @@ CBRepairTask::~CBRepairTask()
 
 bool CBRepairTask::CanAssignTo(CCircuitUnit* unit) const
 {
-	if (unit->GetCircuitDef()->IsRoleComm()) {
+	if (unit->GetCircuitDef()->IsRoleComm() && unit->GetId() != invitedCommander) {
 		return false;
 	}
 	return IRepairTask::CanAssignTo(unit);
@@ -50,7 +50,15 @@ void CBRepairTask::Start(CCircuitUnit* unit)
 
 void CBRepairTask::OnUnitIdle(CCircuitUnit* unit)
 {
-	Unit* u = target->GetUnit();
+	// D-211: allied repairs deliberately store only targetId (SetRepTarget).
+	// Resolve it just as Execute/Reevaluate do; an ally can disappear before
+	// the idle event. The 8v8 recovery fixture exercises cross-team repair.
+	CAllyUnit* repTarget = target != nullptr ? target : manager->GetCircuit()->GetFriendlyUnit(targetId);
+	if (repTarget == nullptr) {
+		manager->AbortTask(this);
+		return;
+	}
+	Unit* u = repTarget->GetUnit();
 	if (u->GetHealth() < u->GetMaxHealth()) {
 		// unit stuck or event order fail
 		RemoveAssignee(unit);

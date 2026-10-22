@@ -1,0 +1,13 @@
+{
+  "_doc": "D-229: a host role change during first-stockpile funding releases TECH overrides. Natural economy; not a launch-timing benchmark.",
+  "stop_minute": 19,
+  "expect": [
+    {"key": "exit triggered", "pattern": "\\[NukeRoleExit\\] switching", "by_minute": 18, "scope": "any"},
+    {"key": "budget cleanup", "pattern": "role exit released resource priorities", "by_minute": 18, "scope": "tech"},
+    {"key": "incoming role", "pattern": "Role switch complete: now AIR", "by_minute": 18, "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "script error", "pattern": ": ERR\\s+:|SCRIPT CRASH", "scope": "any"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"}
+  ]
+}

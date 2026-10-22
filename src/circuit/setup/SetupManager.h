@@ -61,11 +61,16 @@ public:
 	bool HasStartBoxes() const;
 	// D-127: 1 inside an enemy ally team's start box, 0 not, -1 when no boxes are known
 	int EnemyStartBoxAt(const springai::AIFloat3& pos) const;
+	int FriendlyStartBoxAt(const springai::AIFloat3& pos) const;
 	// D-127: the playing teams' start positions from the start script (fixed or chosen
 	// before the game); a team counts when an AI or a non-spectator player is on it
 	int GetScriptStartCount();
 	springai::AIFloat3 GetScriptStart(int i);
 	bool IsScriptStartEnemy(int i);
+	// Part B1 (field landmarks): every playing team of the start script with its ally
+	// team, and its start position when the script carries one (`known`)
+	struct SScriptTeam { int team; int allyTeam; bool known; springai::AIFloat3 pos; };
+	const std::vector<SScriptTeam>& GetScriptTeams();
 	bool CanChooseStartPos() const;
 
 	void PickStartPos(StartPosType type);
@@ -113,6 +118,7 @@ private:
 	void ParseScriptStarts();
 	struct SScriptStart { springai::AIFloat3 pos; int allyTeam; };
 	std::vector<SScriptStart> scriptStarts;
+	std::vector<SScriptTeam> scriptTeams;
 	bool scriptStartsParsed = false;
 	void FindStart();
 	void CalcStartPos();

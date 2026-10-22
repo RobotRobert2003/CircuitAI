@@ -40,13 +40,13 @@ MapConfig config = MapConfig("{a.map}", limits, spots, null);
             maps.write_text(source, encoding="utf-8")
         (root / "maps/metal_fixture.as").write_text(text, encoding="utf-8")
         if a.cancel_first:
-            manager = root / 'manager/metal_economy.as'
+            manager = root / 'systems/construction/metal_economy.as'
             policy = manager.read_text(encoding='utf-8')
             if 'MetalCancelFixture::Tick' not in policy:
                 policy = '#include "metal_cancel_fixture.as"\n' + policy
                 policy = policy.replace('snapshotFrame = ai.frame;', 'snapshotFrame = ai.frame;\n        MetalCancelFixture::Tick();', 1)
                 manager.write_text(policy, encoding='utf-8')
-            (root / 'manager/metal_cancel_fixture.as').write_text('''// Controlled cancellation, staged tests only. No resource or unit gifts.
+            (root / 'systems/construction/metal_cancel_fixture.as').write_text('''// Controlled cancellation, staged tests only. No resource or unit gifts.
 namespace MetalCancelFixture {
     bool cancelled = false;
     void Tick() {

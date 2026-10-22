@@ -44,6 +44,8 @@ struct SBlockingMap {
 	inline bool IsBlockedLow(int xLow, int zLow, SM notIgnoreMask) const;
 	inline bool IsStruct(int x, int z) const;  // Is blocked by any struct
 	inline bool IsReserved(int x, int z) const;  // held by a reservation and nothing else
+	// Immutable map sites, not the yard/footprint of a live extractor or geo.
+	inline bool IsResourceSite(int x, int z, SM mask = static_cast<SM>(StructMask::ALL)) const;
 	inline void MarkBlocker(int x, int z, StructType structType, SM notIgnoreMask);
 	inline void AddBlocker(int x, int z, StructType structType);
 	inline void DelBlocker(int x, int z, StructType structType);

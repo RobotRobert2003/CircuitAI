@@ -12,8 +12,10 @@ import statistics
 import subprocess
 import sys
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 
 import scorecard
+from benchmark_store import EVIDENCE_ROOT, require_checkout
 
 ROOT = scorecard.ROOT
 MAPS = {'supreme': 'Supreme Isthmus v1.7', 'glacial': 'Glacial Gap v1.1', 'ascendancy': 'Ascendancy v2.2'}
@@ -21,7 +23,7 @@ MAPS = {'supreme': 'Supreme Isthmus v1.7', 'glacial': 'Glacial Gap v1.1', 'ascen
 
 def prepare(args):
     directory = Path(args.directory).resolve()
-    if not directory.is_relative_to(ROOT / 'build-theatres'):
+    if not directory.is_relative_to(RAW_ROOT):
         raise ValueError('Benchmark output must stay inside build-theatres')
     command = [sys.executable, str(ROOT/'tools/playtest/playtest.py'), 'stage', '--dir', str(directory),
                '--dll', args.dll, '--map', MAPS[args.map], '--game', args.game,
@@ -91,7 +93,8 @@ def record(args):
             'missing_teams':sorted(teams-completed), 'errors':errors,
             'timings':{key:summary([r[key] for r in rows if r.get(key) is not None])
                        for key in ['snapshot_ms','queue_ms','solve_ms','publish_ms','post_ms','main_ms']}}
-    out=ROOT/'doc/benchmarks/lane-workers'/manifest['started_at_utc'][:10]
+    require_checkout()
+    out=EVIDENCE_ROOT/'lane-workers'/manifest['started_at_utc'][:10]
     out.mkdir(parents=True,exist_ok=True)
     target=out/(manifest['run_id']+'.json')
     scorecard.write_json(target,result)

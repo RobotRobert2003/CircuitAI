@@ -6,6 +6,8 @@
  */
 
 #include "task/builder/BuilderTask.h"
+#include "task/DormantTaskChain.h"
+#include "terrain/ReservationClaim.h"
 #include "task/builder/BuildChain.h"
 #include "task/builder/DefenceTask.h"  // Only for static_cast<CBDefenceTask*>
 #include "task/RetreatTask.h"
@@ -29,6 +31,8 @@
 
 #include "spring/SpringCallback.h"
 #include "spring/SpringMap.h"
+#include "spring/SpringUnit.h"
+#include "Sim/Units/CommandAI/Command.h"
 
 #include "AISCommands.h"
 #include "Log.h"
@@ -113,11 +117,13 @@ IBuilderTask::IBuilderTask(ITaskModule* mgr, Type type, BuildType buildType)
 
 IBuilderTask::~IBuilderTask()
 {
-	delete nextTask;
+	ReleaseDormantTaskChain(nextTask);
 }
 
 bool IBuilderTask::CanAssignTo(CCircuitUnit* unit) const
 {
+    const auto health = constructionHealth.find(unit);
+    if (health != constructionHealth.end() && manager->GetCircuit()->GetLastFrame() < health->second.retryAfter) return false;
 	// can unit build at all
 	const CCircuitDef* cdef = unit->GetCircuitDef();
 	if (((target == nullptr) || !cdef->IsAbleToAssist() || unit->IsAttrSolo()) && !cdef->CanBuild(buildDef)) {
@@ -125,6 +131,8 @@ bool IBuilderTask::CanAssignTo(CCircuitUnit* unit) const
 	}
 	// is extra buildpower required?
 	CEconomyManager* economyMgr = manager->GetCircuit()->GetEconomyManager();
+	if (buildType == BuildType::MEXUP && economyMgr->IsMexNavigationEnabled()
+			&& !economyMgr->CanReachMex(unit, position)) return false;
 	if (cost.metal < buildPower.metal * buildDef->GetGoalBuildTime(economyMgr->GetAvgMetalIncome())) {  // upper metal bound
 		return false;
 	}
@@ -188,6 +196,7 @@ void IBuilderTask::RemoveAssignee(CCircuitUnit* unit)
 				unit->GetCircuitDef()->GetDef()->GetName(), unit->GetId(), buildDef->GetDef()->GetName(), p.x, p.z,
 				GetPosition().x, GetPosition().z, int(units.size()) - 1, (target != nullptr) ? "yes" : "no", buildFails);
 	}
+	constructionHealth.erase(unit);
 	IUnitTask::RemoveAssignee(unit);
 	traveled.erase(unit);
 	executors.erase(unit);
@@ -228,6 +237,7 @@ void IBuilderTask::Update()
 
 void IBuilderTask::Stop(bool done)
 {
+	constructionHealth.clear();
 	IUnitTask::Stop(done);
 	// D-117 crash (owner's game, build101, F25307): IUnitTask::Stop clears
 	// `units`, and unitIt was left on a freed node; a stopped task stays listed
@@ -305,15 +315,7 @@ bool IBuilderTask::Execute(CCircuitUnit* unit)
 		)
 		return true;
 	}
-	if (geom::is_valid(buildPos)
-		&& !circuit->GetTerrainManager()->IsAllyLayoutBlocked(buildDef, buildPos, facing)
-		&& circuit->GetMap()->IsPossibleToBuildAt(buildDef->GetDef(), buildPos, facing))
-	{
-		TRY_UNIT(circuit, unit,
-			unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(frame));
-		)
-		return true;
-	}
+	if (TryBuildCachedSite(unit)) return true;
 
 	// FIXME: Move to Reevaluate
 	circuit->GetThreatMap()->SetThreatType(unit);
@@ -332,26 +334,7 @@ bool IBuilderTask::Execute(CCircuitUnit* unit)
 		}
 	}
 
-	// D-074: our own frame may already stand on the site (an idle retry after
-	// the engine dropped the command, or the frame-created event still to
-	// come); take it as the target instead of searching and aborting the pin.
-	if (IsExperimental() && (buildDef != nullptr) && geom::is_valid(buildPos)) {
-		for (const auto& kv : circuit->GetTeamUnits()) {
-			CCircuitUnit* u = kv.second;
-			if ((u != nullptr) && !u->IsDead() && (u->GetCircuitDef() == buildDef) && u->GetUnit()->IsBeingBuilt()
-				&& (u->GetPos(frame).SqDistance2D(buildPos) < float(SQUARE_SIZE * 8) * float(SQUARE_SIZE * 8)))
-			{
-				UpdateTarget(u);
-				static_cast<CBuilderManager*>(manager)->MarkUnfinishedUnit(u, this);
-				circuit->LOG("EXP: adopt: %s(%i) takes its standing %s frame at (%.0f, %.0f) as the target",
-						unit->GetCircuitDef()->GetDef()->GetName(), unit->GetId(), buildDef->GetDef()->GetName(), buildPos.x, buildPos.z);
-				TRY_UNIT(circuit, unit,
-					unit->CmdRepair(u, UNIT_CMD_OPTION, CmdTimeout(frame));
-				)
-				return true;
-			}
-		}
-	}
+	if (AdoptStandingFrame(unit)) return true;
 	// Alter/randomize position
 	AIFloat3 pos = (shake > .0f) ? geom::get_near_pos(position, shake) : position;
 	CTerrainManager::CorrectPosition(pos);
@@ -378,6 +361,118 @@ bool IBuilderTask::Execute(CCircuitUnit* unit)
 		return false;
 	}
 	return true;
+}
+
+// Generic and nano execution must apply the same fresh allied-layout and
+// engine checks before reusing a cached footprint. This adds no inventory scan.
+bool IBuilderTask::TryBuildCachedSite(CCircuitUnit* unit)
+{
+    CCircuitAI* circuit = manager->GetCircuit();
+    if (!geom::is_valid(buildPos)
+        || !circuit->GetBuilderManager()->IsBuildPositionAllowed(buildDef, buildPos)
+        || circuit->GetTerrainManager()->IsAllyLayoutBlocked(buildDef, buildPos, facing)
+        || !circuit->GetMap()->IsPossibleToBuildAt(buildDef->GetDef(), buildPos, facing)) return false;
+    TRY_UNIT(circuit, unit,
+        unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(circuit->GetLastFrame()));
+    )
+    return true;
+}
+
+// Only after cached-site rejection or eligible recovery; never a per-tick scan.
+bool IBuilderTask::AdoptStandingFrame(CCircuitUnit* unit)
+{
+    if ((!IsExperimental() && !layoutOwned && !manager->GetCircuit()->GetBuilderManager()->IsConstructionRecoveryEnabled())
+        || !buildDef || !geom::is_valid(buildPos)) return false;
+    CCircuitAI* circuit = manager->GetCircuit();
+    for (const auto& kv : circuit->GetTeamUnits()) {
+        CCircuitUnit* frame = kv.second;
+        if (!frame || frame->IsDead() || frame->IsFinished() || frame->GetCircuitDef() != buildDef
+            || !IsEqualBuildPos(frame)) continue;
+        UpdateTarget(frame);
+        static_cast<CBuilderManager*>(manager)->MarkUnfinishedUnit(frame, this);
+        circuit->LOG("BUILD_RECOVERY: adopt builder=%i frame=%i slot=%i", unit->GetId(), frame->GetId(), pinnedReservation);
+        return true;
+    }
+    return false;
+}
+
+void IBuilderTask::RecoverConstruction(CCircuitUnit* unit, int retryFrames, int releaseFrames)
+{
+    if (isDead || unit->IsDead() || unit->GetTask() != this || units.count(unit) == 0
+        || !buildDef || buildType >= BuildType::REPAIR) return;
+    auto& observation = constructionHealth[unit];
+    CCircuitAI* circuit = manager->GetCircuit();
+    const int frame = circuit->GetLastFrame();
+    // Queue presence protects resource-stalled frames. Pending paths, waits
+    // and moving detours must not be mistaken for a missing engine command.
+    construction::Progress progress{true, unit->IsWaiting(), IsQueryReady(unit),
+        circuit->GetCallback()->Unit_HasCommands(unit->GetId()), false};
+    if (progress.waiting || !progress.pathReady || (target && progress.commands)) {
+        // Healthy framed construction is the common case. Avoid position,
+        // velocity, economy and current-command callbacks for this entire path.
+        observation.stationarySince = -1;
+        observation.Observe(frame, false, retryFrames, releaseFrames);
+        return;
+    }
+    progress.moving = unit->GetUnit()->GetVel().SqLength2D() >= 1e-3f;
+    const auto& pos = unit->GetPos(frame);
+    const bool stationary = observation.StalledCommand(frame, pos.x, pos.z,
+        !target && progress.commands && !progress.waiting && progress.pathReady,
+        2 * releaseFrames);
+    bool stalled = false;
+    if (stationary) {
+        // Require a retry interval's construction resources, not the whole
+        // project cost (a T2 lab can cost more than the base's storage capacity).
+        // Do not infer failure from zero resource use: resource-starved frames
+        // and native reclaim/terraform/wait commands must remain untouched.
+        CEconomyManager* economy = circuit->GetEconomyManager();
+        const int cmd = circuit->GetUnitAPI()->GetCMD(unit->GetId());
+        stalled = (cmd == -buildDef->GetId() || cmd == CMD_MOVE)
+            && construction::CanStart(economy->GetMetalCur(), economy->GetEnergyCur(),
+                cost.metal, cost.energy, buildDef->GetBuildTime(), unit->GetWorkerTime(),
+                float(retryFrames) / FRAMES_PER_SEC);
+    }
+    const auto action = observation.Observe(frame, progress.MissingCommand() || stalled, retryFrames, releaseFrames);
+    if (action == construction::Recovery::NONE) return;
+    if (!target && AdoptStandingFrame(unit)) { constructionHealth.erase(unit); return; }
+    circuit->LOG("BUILD_RECOVERY: team=%i builder=%i def=%s state=%i slot=%i target=%i action=%s failureFrames=%i reason=%s",
+        circuit->GetTeamId(), unit->GetId(), buildDef->GetDef()->GetName(), int(unit->GetTaskState()),
+        reservationId >= 0 ? reservationId : pinnedReservation, target ? target->GetId() : -1,
+        action == construction::Recovery::RETRY ? "retry" : "release", frame - observation.emptySince,
+        stalled ? "funded-unstarted-no-progress" : "missing-command");
+    if (action == construction::Recovery::RETRY) {
+        engaged.erase(unit); approaching.erase(unit); traveled.erase(unit);
+        // Re-use safe approach/path and frame ownership. In legacy compact
+        // mode a finished travel action otherwise prevents Start doing work.
+        if (target || (geom::is_valid(buildPos) && circuit->GetTerrainManager()->CanReachAtSafe(
+                unit, buildPos, unit->GetCircuitDef()->GetBuildDistance()))) {
+            if (IsExperimental()) Update(unit);
+            else Execute(unit);
+        } else {
+            if (unit->GetTravelAct()) unit->GetTravelAct()->StateWait();
+            Update(unit);
+        }
+        return; // Execute may have aborted this task; never read it afterwards.
+    }
+    // A failed worker is not a failed shared project. Keep frames and other
+    // assignees; retire only an unstarted site no worker can safely use.
+    RemoveAssignee(unit);
+    if (unit->GetTask() == this) circuit->LOG("[INVARIANT] INV-174 lost construction assignment retained after recovery builder=%i",unit->GetId());
+    constructionHealth[unit].retryAfter = frame + releaseFrames;
+    if (isDead) return;
+    bool validSite = true, reachable = true;
+    if (!target && units.empty()) {
+        validSite = !geom::is_valid(buildPos)
+            || circuit->GetMap()->IsPossibleToBuildAt(buildDef->GetDef(),buildPos,facing);
+        reachable = false;
+        if (validSite) for (CCircuitUnit* candidate : circuit->GetBuilderManager()->GetWorkers()) {
+            if (candidate == unit || candidate->IsDead() || !candidate->GetCircuitDef()->CanBuild(buildDef)) continue;
+            if (circuit->GetTerrainManager()->CanReachAtSafe(candidate, GetPosition(), candidate->GetCircuitDef()->GetBuildDistance())) {
+                reachable = true; break;
+            }
+        }
+    }
+    if (construction::RetireUnstarted(target != nullptr, !units.empty(), validSite, reachable)) manager->AbortTask(this);
 }
 
 void IBuilderTask::OnUnitIdle(CCircuitUnit* unit)
@@ -920,8 +1015,9 @@ void IBuilderTask::FindBuildSite(CCircuitUnit* builder, const AIFloat3& pos, flo
 	FindFacing(pos);
 
 	CTerrainManager* terrainMgr = manager->GetCircuit()->GetTerrainManager();
-	CTerrainManager::TerrainPredicate predicate = [terrainMgr, builder](const AIFloat3& p) {
-		return terrainMgr->CanReachAtSafe(builder, p, builder->GetCircuitDef()->GetBuildDistance());
+	CTerrainManager::TerrainPredicate predicate = [this, terrainMgr, builder](const AIFloat3& p) {
+		return manager->GetCircuit()->GetBuilderManager()->IsBuildPositionAllowed(buildDef, p)
+            && terrainMgr->CanReachAtSafe(builder, p, builder->GetCircuitDef()->GetBuildDistance());
 	};
 	if (reservationId >= 0) {
 		// A retry: the slot served before is handed back before another search,
@@ -957,8 +1053,12 @@ bool IBuilderTask::PinReservation(int id)
 	}
 	pinRequired = true;
 	layoutOwned = true;
-	pinnedReservation = id;
-	pinFailed = (id < 0) || !terrainMgr->ClaimReservation(id);
+	// Factory activation may already have claimed a default site before the
+	// script pins its chosen site. Preserve ownership on failure; release the
+	// previous claim on successful replacement, and accept re-pinning our own ID.
+	pinFailed = !reservation::ReplaceClaim(pinnedReservation, id,
+		[terrainMgr](int slot) { return terrainMgr->ClaimReservation(slot); },
+		[terrainMgr](int slot) { terrainMgr->UnclaimReservation(slot); });
 	return !pinFailed;
 }
 
@@ -1000,7 +1100,7 @@ void IBuilderTask::ExecuteChain(SBuildChain* chain)
 		return;
 	}
 
-	if (chain->energy > 0.f) {
+	if (chain->energy > 0.f && !circuit->GetBuilderManager()->SuppressEconomyChain(BuildType::ENERGY)) {
 		float energyMake;
 		CCircuitDef* energyDef = circuit->GetEconomyManager()->GetLowEnergy(buildPos, energyMake);
 		if (energyDef != nullptr) {
@@ -1083,6 +1183,11 @@ void IBuilderTask::ExecuteChain(SBuildChain* chain)
 			IBuilderTask* parent = nullptr;
 
 			for (const SBuildInfo& bi : queue) {
+				// The script-owned layout cannot adopt unreserved economy orders.
+				// Do not publish an infinite-timeout hub child which will count as
+				// an in-flight prerequisite forever. Defence/other chains and all
+				// roles without the recovery/layout opt-in retain their old policy.
+				if (builderMgr->SuppressEconomyChain(bi.buildType)) continue;
 				if (!bi.cdef->IsAvailable(circuit->GetLastFrame())
 					|| !terrainMgr->GetImmobileTypeById(bi.cdef->GetImmobileId())->typeUsable)
 				{

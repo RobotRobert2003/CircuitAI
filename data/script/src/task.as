@@ -1,6 +1,5 @@
 #include "define.as"
 
-
 namespace Task {
 
 	enum Priority {
@@ -73,7 +72,6 @@ namespace Task {
 
 }  // namespace Task
 
-
 namespace TaskB {
 
 	SBuildTask Common(Task::BuildType type, Task::Priority priority,
@@ -128,22 +126,7 @@ namespace TaskB {
 		ti.timeout = timeout;
 		return ti;
 	}
-	SBuildTask Pylon(Task::Priority priority, CCircuitDef@ buildDef,
-			const AIFloat3& in position/*, IGridLink@ link*/, float cost,
-			bool isActive = true, int timeout = ASSIGN_TIMEOUT)
-	{
-		SBuildTask ti;
-		ti.type = Task::BuildType::PYLON;
-		ti.priority = priority;
-		@ti.buildDef = buildDef;
-		ti.position = position;
-		ti.cost.metal = cost;
-		ti.cost.energy = 0.f;
-	// 	@ti.link = link;
-		ti.isActive = isActive;
-		ti.timeout = timeout;
-		return ti;
-	}
+
 	SBuildTask Repair(Task::Priority priority,
 			CCircuitUnit@ target, int timeout = ASSIGN_TIMEOUT)
 	{
@@ -182,34 +165,6 @@ namespace TaskB {
 		ti.timeout = timeout;
 		return ti;
 	}
-	SBuildTask Resurrect(Task::Priority priority,
-			const AIFloat3& in position, float cost,
-			int timeout, float radius = .0f)
-	{
-		SBuildTask ti;
-		ti.type = Task::BuildType::RESURRECT;
-		ti.priority = priority;
-		ti.position = position;
-		ti.cost = SResource(cost, 0.f);
-		ti.radius = radius;
-		ti.isActive = true;
-		ti.timeout = timeout;
-		return ti;
-	}
-	SBuildTask Terraform(Task::Priority priority,
-			CCircuitUnit@ target, const AIFloat3& in position = -RgtVector,
-			float cost = 1.0f, bool isActive = true, int timeout = ASSIGN_TIMEOUT)
-	{
-		SBuildTask ti;
-		ti.type = Task::BuildType::TERRAFORM;
-		ti.priority = priority;
-		ti.position = position;
-		ti.cost = SResource(cost, 0.f);
-		@ti.target = target;
-		ti.isActive = isActive;
-		ti.timeout = timeout;
-		return ti;
-	}
 
 	SServBTask Patrol(Task::Priority priority,
 			const AIFloat3& in position, int timeout)
@@ -232,13 +187,7 @@ namespace TaskB {
 		ti.timeout = timeout;
 		return ti;
 	}
-	SServBTask Combat(float powerMod)
-	{
-		SServBTask ti;
-		ti.type = Task::BuildType::COMBAT;
-		ti.powerMod = powerMod;
-		return ti;
-	}
+
 	SServBTask Wait(int timeout)
 	{
 		SServBTask ti;
@@ -249,12 +198,11 @@ namespace TaskB {
 
 }  // namespace TaskB
 
-
 namespace TaskS {
 
 	SRecruitTask Recruit(Task::RecruitType type,
 			Task::Priority priority, CCircuitDef@ buildDef,
-			const AIFloat3& in position, float radius)
+			const AIFloat3& in position, float radius, bool repeat = false)
 	{
 		SRecruitTask ti;
 		ti.type = type;
@@ -262,6 +210,7 @@ namespace TaskS {
 		@ti.buildDef = buildDef;
 		ti.position = position;
 		ti.radius = radius;
+		ti.repeat = repeat;
 		return ti;
 	}
 
@@ -294,7 +243,6 @@ namespace TaskS {
 	}
 
 	}  // namespace TaskS
-
 
 	namespace TaskF {
 

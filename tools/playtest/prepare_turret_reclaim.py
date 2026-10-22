@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import subprocess
 import sys
 
@@ -16,7 +17,7 @@ def main():
     p.add_argument('--profile', default='experimental_balanced')
     args = p.parse_args()
     base = args.dir.resolve()
-    if not base.is_relative_to(ROOT / 'build-theatres'):
+    if not base.is_relative_to(RAW_ROOT):
         p.error('Use an isolated directory under build-theatres')
     subprocess.run([sys.executable, str(HERE / 'playtest.py'), 'stage', '--dir', str(base),
         '--dll', str(args.dll.resolve()), '--map', 'Supreme Isthmus v1.7', '--role', 'TECH',

@@ -1,0 +1,89 @@
+{
+  "name": "ranged-corban-air",
+  "unit": "corban",
+  "description": "Banisher independent compatible air targeting without ground pursuit.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    45,
+    120,
+    210
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3600,
+        4750
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armseer",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3300,
+        4400
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armaser",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        4500
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "corban",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3500,
+        4500
+      ],
+      "spacing": 180
+    },
+    {
+      "unit": "armbrawl",
+      "count": 6,
+      "team": 1,
+      "position": [
+        3500,
+        5400
+      ],
+      "spacing": 150
+    }
+  ],
+  "enemy_destination": [
+    3800,
+    4500
+  ],
+  "assertions": {
+    "min_kills": 1,
+    "min_shooters": 1,
+    "max_losses": 2
+  }
+}

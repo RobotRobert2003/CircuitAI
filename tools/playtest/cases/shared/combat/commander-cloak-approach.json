@@ -1,0 +1,17 @@
+{
+  "name":"commander-cloak-approach", "unit":"armcom", "side":"armada", "role":"FRONT",
+  "description":"A funded commander with replacement workers and a held army screen makes a short cloaked approach to a Thug column.",
+  "map":"Comet Catcher Remake 1.8", "map_key":"comet", "starts":[[4000,4000],[4000,7000]],
+  "camera":[4300,4100,1600], "photos":[24,27,35], "min_spawn_spacing":38,
+  "command_breakdown":true, "commander_observation":true, "hold_friendly":true,
+  "groups":[
+    {"unit":"armcom","team":0,"count":1,"position":[4300,4000],"after_seconds":12},
+    {"unit":"armwar","team":0,"count":3,"columns":3,"spacing":100,"position":[4200,3850],"after_seconds":12},
+    {"unit":"armlab","team":0,"count":1,"position":[3500,3900],"after_seconds":12},
+    {"unit":"armck","team":0,"count":3,"columns":3,"spacing":80,"position":[3500,3700],"after_seconds":12},
+    {"unit":"armeyes","team":0,"count":1,"position":[4500,4300],"after_seconds":12},
+    {"unit":"corthud","team":1,"count":3,"columns":1,"spacing":40,"position":[4300,4270],"after_seconds":23}
+  ],
+  "assertions":{"min_shooters":1,"min_kills":2,"max_losses":0,"min_damage":1000,"max_first_shot_seconds":50},
+  "checks":"commander-cloak"
+}

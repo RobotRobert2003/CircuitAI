@@ -1,0 +1,141 @@
+{
+  "name": "commander-line-work",
+  "storage_scenario": "commander-line-work",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "D-299: a FRONT commander at the front falls back to a Beamer line before two Thud waves; it must order light-laser line turrets up to the line quota (line_income override gives >1), not stack more on the second fallback, drop the timed LLT/AA at the front, repair and reclaim inside the perimeter.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4900,
+    2300
+  ],
+  "photos": [
+    60,
+    110,
+    150,
+    200
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "commander_front_work": true,
+  "commander_initial": true,
+  "hold_friendly": true,
+  "enemy_destination": [
+    4000,
+    4900
+  ],
+  "groups": [
+    {
+      "unit": "armlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3700,
+        4000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3700,
+        3750
+      ],
+      "after_seconds": 45
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        6000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corfus",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        6600
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbeamer",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3900,
+        4700
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbeamer",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4100,
+        4700
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 1,
+      "count": 4,
+      "columns": 4,
+      "spacing": 60,
+      "position": [
+        4000,
+        6300
+      ],
+      "after_seconds": 95
+    },
+    {
+      "unit": "corthud",
+      "team": 1,
+      "count": 4,
+      "columns": 4,
+      "spacing": 60,
+      "position": [
+        4000,
+        6300
+      ],
+      "after_seconds": 175
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 6
+  },
+  "checks": "commander-line-work",
+  "commander_override_events": [
+    {
+      "seconds": 5,
+      "key": "line_income",
+      "value": 2
+    }
+  ]
+}

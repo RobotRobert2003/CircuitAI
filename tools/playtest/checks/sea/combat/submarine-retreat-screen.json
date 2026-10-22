@@ -1,0 +1,9 @@
+{
+ "stop_minute":6,
+ "expect":[
+   {"key":"screen-published","pattern":"RetreatProbe\\] waypoint ship=","scope":"any","by_minute":6},
+   {"key":"health-retreat","pattern":"RetreatProbe\\] state ship=.*retreat=true","scope":"any","by_minute":6},
+   {"key":"combat","pattern":"SeaArena.*damage victim=","scope":"any","by_minute":6}
+ ],
+ "forbid":[{"key":"runtime","pattern":"\\[INVARIANT\\]|SCRIPT CRASH|: ERR\\s+:|Lib exception|SeaArena.*ERROR","scope":"any"}]
+}

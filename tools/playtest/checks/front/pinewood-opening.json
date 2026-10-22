@@ -1,0 +1,12 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {"key":"pinewood-config","pattern":"Registered MapConfig for map match: Pinewood_Derby","by_minute":1,"scope":"any"},
+    {"key":"four-starts","pattern":"StartSpots length=4","by_minute":1,"scope":"any"},
+    {"key":"front-role","pattern":"Setup complete role=0 landLocked=false","by_minute":1,"scope":"any"}
+  ],
+  "forbid": [
+    {"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception","scope":"any"}
+  ]
+}
+

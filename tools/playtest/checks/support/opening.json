@@ -1,0 +1,11 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {"key":"shared-layout","pattern":"SUPPORT\\]\\[Build\\] shared layout","by_minute":1},
+    {"key":"t2-objective","pattern":"Chain\\] objective t2 ","by_minute":1}
+  ],
+  "forbid": [
+    {"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception","scope":"any"},
+    {"key":"wrong-objective","pattern":"Chain\\] objective (nuke|gantry|titan|afus)","scope":"any"}
+  ]
+}

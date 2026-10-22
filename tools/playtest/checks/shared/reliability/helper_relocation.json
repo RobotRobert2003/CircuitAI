@@ -1,0 +1,17 @@
+{
+  "_doc": "Three-minute 8v8 startup coverage for a path-only helper migration. Source/include equivalence is checked separately; this is not a late-game balance benchmark.",
+  "stop_minute": 3,
+  "expect": [
+    {"key":"front", "pattern":"Captured start position .* role=0", "scope":"any", "by_minute":1},
+    {"key":"air", "pattern":"Captured start position .* role=1", "scope":"any", "by_minute":1},
+    {"key":"tech", "pattern":"Captured start position .* role=2", "scope":"any", "by_minute":1},
+    {"key":"sea", "pattern":"Captured start position .* role=3", "scope":"any", "by_minute":1},
+    {"key":"support", "pattern":"Captured start position .* role=4", "scope":"any", "by_minute":1},
+    {"key":"tactical", "pattern":"Captured start position .* role=5", "scope":"any", "by_minute":1},
+    {"key":"screenshot", "pattern":"\\[Playtest\\] screenshot", "scope":"any", "by_minute":2}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope":"any"},
+    {"key":"invariant", "pattern":"\\[INVARIANT\\]", "scope":"any"}
+  ]
+}

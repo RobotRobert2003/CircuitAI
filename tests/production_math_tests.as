@@ -5,14 +5,9 @@ void test_expansion_requires_every_lab_not_total_turrets() { Check(!ProductionMa
 void test_expansion_rejects_unfinished_existing_lab() { Check(!ProductionMath::ExpansionSupportReady(2, 1, 20, 20)); }
 void test_expansion_support_loss_closes_gate() { Check(ProductionMath::ExpansionSupportReady(3, 3, 20, 20) && !ProductionMath::ExpansionSupportReady(3, 3, 19, 20)); }
 void test_expansion_invalid_snapshot_fails_closed() { Check(!ProductionMath::ExpansionSupportReady(-1, 0, 20, 20) && !ProductionMath::ExpansionSupportReady(1, 1, 20, 0)); }
-void test_float_target_includes_bank_drawdown() { Check(ProductionMath::ConstructionPower(50, 5000, 6000, 8, 1.5f, 60) > 600); }
-void test_nonfloating_construction_target_keeps_income_only() { Check(ProductionMath::ConstructionPower(20, 200, 1000, 8, 1.5f, 60) == 160); }
-void test_float_target_rejects_zero_horizon() { Check(ProductionMath::ConstructionPower(50, 5000, 6000, 8, 1.5f, 0) == 0); }
+
 void test_float_target_small_bank_does_not_trigger() { Check(!ProductionMath::MetalFloating(299, 300) && ProductionMath::MetalFloating(750, 1000)); }
-void test_parallel_support_fits_resource_budget() { Check(ProductionMath::SupportQueueReady(2, 3, 2000, 12000, 50, 1000, 210, 3200)); }
-void test_parallel_support_cannot_exceed_cap() { Check(!ProductionMath::SupportQueueReady(3, 3, 2000, 12000, 50, 1000, 210, 3200)); }
-void test_parallel_support_rejects_energy_shortage() { Check(!ProductionMath::SupportQueueReady(2, 3, 2000, 200, 50, 300, 210, 3200)); }
-void test_parallel_support_without_overflow_stays_serial() { Check(!ProductionMath::SupportQueueReady(1, 1, 2000, 12000, 50, 1000, 210, 3200)); }
+
 void test_overflow_short_recruitment_forecast_can_pay_for_worker() { Check(ProductionMath::Funded(5000, 15, 150, 0, 120, 30) && ProductionMath::Funded(4000, 210, 300, 0, 5000, 30) && !ProductionMath::Funded(4000, 210, 300, 20000, 5000, 30)); }
 void test_rate_zero_power_returns_zero() { Check(ProductionMath::Rate(100.0f, 0.0f, 0.5f) == 0.0f); }
 void test_screen_small_fleet_holds_rear() { Check(ProductionMath::Progress(4, 4, 40) == 0.0f); }
@@ -36,11 +31,7 @@ void test_defence_other_tier_already_covers_floor() { Check(ProductionMath::Defe
 void test_defence_wave_escorts_do_not_count_as_home() { Check(ProductionMath::DefenceRecruitTarget(4, 3, 2) == 3); }
 void test_defence_other_tier_losses_restore_recruitment() { Check(ProductionMath::DefenceRecruitTarget(6, 2, 3) == 7); }
 void test_defence_invalid_snapshot_cannot_increase_quota() { Check(ProductionMath::DefenceRecruitTarget(4, -1, 3) == 0); }
-void test_workforce_rounds_up_shortage() { Check(ProductionMath::WorkforceTarget(161.0f, 60.0f, 2, 10) == 3); }
-void test_workforce_exact_target_does_not_overbuild() { Check(ProductionMath::WorkforceTarget(180.0f, 60.0f, 2, 10) == 3); }
-void test_workforce_keeps_t1_floor_after_transition() { Check(ProductionMath::WorkforceTarget(40.0f, 60.0f, 3, 10) == 3); }
-void test_workforce_income_growth_respects_cap() { Check(ProductionMath::WorkforceTarget(10000.0f, 60.0f, 2, 10) == 10); }
-void test_workforce_invalid_power_rejects() { Check(ProductionMath::WorkforceTarget(100.0f, 0.0f, 2, 10) == 0); }
+
 void test_wind_cluster_has_three_columns() { Check(ProductionMath::ClusterAcross(0, 32.0f) == -32.0f && ProductionMath::ClusterAcross(2, 32.0f) == 32.0f && ProductionMath::ClusterAcross(3, 32.0f) == -32.0f); }
 void test_wind_cluster_has_two_touching_rows() { Check(ProductionMath::ClusterAlong(2, 48.0f) == -24.0f && ProductionMath::ClusterAlong(3, 48.0f) == 24.0f); }
 void test_wind_cluster_bounds_include_whole_footprints() { Check(ProductionMath::ClusterDiameterSquared(32.0f, 48.0f) == 18432.0f); }
@@ -64,8 +55,7 @@ void test_rate_more_power_diminishes_gain() {
     float c = ProductionMath::Rate(11500.0f, 5600.0f, 0.5f);
     Check(b > a && c > b && c - b < b - a);
 }
-void test_batch_single_matches_rate() { Check(ProductionMath::BatchRate(100.0f, 20.0f, 0.5f, 1) == ProductionMath::Rate(100.0f, 20.0f, 0.5f)); }
-void test_batch_unequal_products_sums_cycle_time() { Check(ProductionMath::BatchRate(300.0f, 100.0f, 0.5f, 2) == 0.25f); }
+
 void test_budget_energy_limits_output() { Check(ProductionMath::FundedRate(1.0f, 100.0f, 1000.0f, 100.0f, 500.0f) == 0.5f); }
 void test_budget_zero_income_stops_growth() { Check(ProductionMath::FundedRate(1.0f, 100.0f, 1000.0f, 0.0f, 1000.0f) == 0.0f); }
 void test_budget_commitments_count_once() { Check(ProductionMath::Funded(100.0f, 10.0f, 50.0f, 100.0f, 50.0f, 10.0f)); }
@@ -118,21 +108,12 @@ void test_constructor_first_growth_order_admitted() { Check(ProductionMath::Cons
 void test_constructor_second_growth_order_admitted() { Check(ProductionMath::ConstructorTurn(1, 2)); }
 void test_constructor_third_order_yields_to_fighter() { Check(!ProductionMath::ConstructorTurn(2, 2)); }
 void test_constructor_disabled_burst_rejected() { Check(!ProductionMath::ConstructorTurn(0, 0)); }
-void test_constructor_affordable_during_energy_recovery() { Check(ProductionMath::ConstructorFunded(1000, 0, 40, 500, 100, 3200)); }
-void test_constructor_no_energy_supply_rejected() { Check(!ProductionMath::ConstructorFunded(5000, 0, 100, 0, 100, 3200)); }
-void test_constructor_empty_metal_bank_rejected() { Check(!ProductionMath::ConstructorFunded(0, 10000, 100, 1000, 100, 3200)); }
-void test_constructor_negative_cost_rejected() { Check(!ProductionMath::ConstructorFunded(1000, 10000, 50, 1000, -1, 3200)); }
-void test_workforce_fifty_metal_needs_twenty_four_basic_builders() { Check(ProductionMath::WorkforceTarget(50 * 24, 50, 3, 40) == 24); }
-void test_workforce_float_exceeds_old_ten_builder_limit() { Check(ProductionMath::WorkforceTarget(ProductionMath::ConstructionPower(30, 2000, 2000, 24, 1.5f, 60), 50, 3, 40) == 34); }
+
 void test_assist_underpowered_frame_accepts_help() { Check(ProductionMath::AssistUseful(50, 2400, 0.5f, 12)); }
 void test_assist_saturated_frame_releases_next_builder() { Check(!ProductionMath::AssistUseful(100, 2400, 0.5f, 12)); }
 void test_assist_finished_frame_rejected() { Check(!ProductionMath::AssistUseful(0, 2400, 1, 12)); }
 void test_assist_invalid_horizon_rejected() { Check(!ProductionMath::AssistUseful(50, 2400, 0.5f, 0)); }
-void test_strike_large_enemy_force_allows_proportional_screen() { Check(ProductionMath::StrikeReady(10000, 8000, false, 1.25f)); }
-void test_strike_understrength_screen_waits() { Check(!ProductionMath::StrikeReady(9999, 8000, false, 1.25f)); }
-void test_strike_live_incursion_preempts_optional_aircraft() { Check(!ProductionMath::StrikeReady(10000, 100, true, 1.25f)); }
-void test_strike_absent_home_fighters_waits() { Check(!ProductionMath::StrikeReady(0, 0, false, 1.25f)); }
-void test_strike_invalid_ratio_rejected() { Check(!ProductionMath::StrikeReady(10000, 100, false, 0)); }
+
 void test_reclaim_t1_exact_tech_boundary() { Check(ProductionMath::LowTierEnergyReclaim(false, 1450, 200, 1000, 1.25f)); }
 void test_reclaim_t1_below_tech_boundary() { Check(!ProductionMath::LowTierEnergyReclaim(false, 1449, 200, 1000, 1.25f)); }
 void test_reclaim_advanced_exact_tech_boundary() { Check(ProductionMath::LowTierEnergyReclaim(false, 1950, 450, 1000, 1.5f)); }

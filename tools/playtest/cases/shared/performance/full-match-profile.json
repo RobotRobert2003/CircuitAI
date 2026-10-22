@@ -1,0 +1,14 @@
+{
+  "id": "full-match-profile",
+  "domain": "shared",
+  "area": "performance",
+  "kind": "natural",
+  "runner": "run_full_match_performance.py",
+  "checks": "shared/performance/full-match-profile.json",
+  "maps": ["Full Metal Plate 1.7", "Glacial Gap v1.1", "Serene Caldera v1.3"],
+  "seed": 220001,
+  "profile": "experimental_hard",
+  "variants": ["metal-plate: staged mirrored 8v8 land role fixture", "glacial: registered 8v8 starts and profiler-off control", "serene: registered 7 SEA + 1 AIR per side, profiler-off control; --profile experimental_balanced for the active balanced policy", "--data/--game/--profile: explicit matched input pins", "--detail-sea: separate short attribution run with nested SEA timers, route point counts and joint unit/command/origin counters"],
+  "acceptance": ["16 competing AI teams after spectator cleanup", "record real GameOver or explicitly report a stopped/limited benchmark", "per-minute AI and engine timings, native exclusive phases and script labels", "per-team command counts with origin", "rendered screenshots", "archive original strict gameplay verdict"],
+  "limits": ["serial runs only", "ordinary resources, no never-ending mode", "engine profiling adds overhead", "fast-forward FPS is not normal-speed FPS", "different maps are not old/new performance pairs", "local orders do not measure multiplayer datagrams", "natural populations diverge even with fixed initial RNG seeds"]
+}

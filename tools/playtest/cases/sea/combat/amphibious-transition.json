@@ -1,0 +1,13 @@
+{
+  "name": "amphibious-transition",
+  "runner": "tools/playtest/run_sea_invasion.py",
+  "map": "Supreme Isthmus v1.7",
+  "minutes": 24,
+  "checks": "amphibious-transition",
+  "sides": [
+    "armada",
+    "cortex",
+    "legion"
+  ],
+  "supplied": true
+}

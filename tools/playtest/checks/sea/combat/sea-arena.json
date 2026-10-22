@@ -1,0 +1,15 @@
+{
+ "stop_minute":8,
+ "expect":[
+  {"key":"loaded","pattern":"\\[SeaArena\\].* loaded","scope":"any","by_minute":1},
+  {"key":"spawn","pattern":"\\[SeaArena\\].* spawn","scope":"any","by_minute":1},
+  {"key":"combat","pattern":"\\[SeaArena\\].* damage","scope":"any","by_minute":4},
+  {"key":"orders","pattern":"\\[SeaArena\\].* orders","scope":"any","by_minute":2}
+ ],
+ "forbid":[
+  {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+  {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+  {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena|Removed widget: SEA combat arena","scope":"any"},
+  {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+ ]
+}

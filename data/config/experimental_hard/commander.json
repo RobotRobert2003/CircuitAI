@@ -1,6 +1,48 @@
 // Mono-space font required
 {
 "commander": {
+	// Shared commander micro; role policy supplies advance and operating leash.
+	"combat": {
+		"enabled": 1, "scan": 1000, "support": 600,
+		"min_value": 180, "kill_reward": 45, "hp_reserve": 0.35,
+		"retreat": 0.45, "recover": 0.8, "aggression": 0.25,
+		"step": 80, "max_approach": 180, "max_seconds": 12,
+		"align_seconds": 0.6, "shots": 2, "margin": 150,
+		"cloak_seconds": 1.5, "escape_seconds": 4.3,
+		"friendly_margin": 12, "front_workers": 2,
+		"front_distance": 3200, "front_standoff": 650, "front_radius": 500, "front_threat": 3,
+		"front_radar_spacing": 500, "front_laser_spacing": 300,
+		"t3_intercept": 1, "t3_health": 0.2, "t3_distance": 1000, "detection_margin": 32,
+		"donor_reserve": 1200, "grant_limit": 4000,
+		"request_seconds": 3, "grant_seconds": 3,
+		// D-293: fall back to the backline porc line when an enemy group able to hit
+		// the commander (members within group_radius) is worth >= metal inside
+		// range_scale x its weapon range. Per AI: CommanderCombat::Override().
+		"fallback": 1, "fallback_metal": 400, "fallback_range_scale": 2, "fallback_group_radius": 400,
+		"fallback_offset": 120, "fallback_search": 2000, "fallback_hold_seconds": 3, "fallback_porc_range": 1500, "sensor_memory": 10,
+		// D-294: T3 engagement from the line; t3_profiles overrides the plan per unit.
+		"t3_leash": 900, "t3_hold_seconds": 4, "t3_dodge_seconds": 1.2, "t3_hunt_leash": 1800, "t3_screen": 300,
+		"t3_hunt": 0, "t3_artillery_approach": 180, "t3_trade": 0, "t3_retry_seconds": 2, "t3_cloaked_volley_risk": 0.25,
+		"t3_bait_count": 4, "t3_bait_margin": 150, "t3_bait_distance": 120, "t3_bait_spacing": 80, "t3_bait_timeout": 5,
+		// D-299 FRONT commander work ladder: fallback line turrets (1 per line_income metal
+		// income in [line_min, line_max], per line, no stacking), timed LLT + light AA
+		// every timed_interval s after reaching the front until timed_until s of game.
+		"work": 1, "line_income": 20, "line_min": 1, "line_max": 6, "line_radius": 400, "line_spacing": 80,
+		"line_hold_seconds": 60, "line_retry_seconds": 5, "timed_interval": 30, "timed_until": 300,
+		"work_radius": 0, "work_clearance": 400, "repair_health": 0.98, "reclaim_storage": 0.95,
+		"reclaim_metal": 1, "radar_coverage": 0.8, "base_radius": 1500,
+		"t3_profiles": {
+			// Drone carrier: its reach is indirect, so the auto plan never qualifies it
+			// as artillery. Treat as siege; a long hunt requires t3_hunt=1.
+			"legeallterrainmech": {"approach": "hunt"},
+			// Behemoth: slow (16.5) and needs 4-6 hits. From behind its guns face the
+			// line and each volumetric hit lasts longer (D-294 defence arenas).
+			"corjugg": {"approach": "rear"},
+			// Fast, cheap raiders reach turret range before D-gun reach: forward
+			// cloaked ambush ahead of the line (D-294).
+			"legjav": {"advance": 350}, "armmar": {"advance": 200}, "corsok": {"advance": 500}
+		}
+	},
 	"prefix": "",
 	"suffix": "",
 	"unit": {

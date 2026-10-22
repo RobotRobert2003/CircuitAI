@@ -1,0 +1,20 @@
+{
+  "stop_minute": 8.1,
+  "expect": [
+    {"key":"delayed-lab", "pattern":"RecoveryFixture.*delayed TECH lab supplied", "by_minute":2, "scope":"any"},
+    {"key":"front", "pattern":"RecoveryFixture.*recovered team=1 ", "by_minute":8, "scope":"any"},
+    {"key":"air", "pattern":"RecoveryFixture.*recovered team=2 ", "by_minute":8, "scope":"any"},
+    {"key":"support-self", "pattern":"RecoveryFixture.*recovered team=3 ", "by_minute":8, "scope":"any"},
+    {"key":"sea", "pattern":"RecoveryFixture.*recovered team=4 ", "by_minute":8, "scope":"any"},
+    {"key":"tactical", "pattern":"RecoveryFixture.*recovered team=5 ", "by_minute":8, "scope":"any"},
+    {"key":"tech", "pattern":"RecoveryFixture.*recovered team=6 ", "by_minute":8, "scope":"any"}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception|Error in.*builder_recovery", "scope":"any"},
+    {"key":"invariant", "pattern":"INVARIANT", "scope":"any"},
+    {"key":"fixture", "pattern":"RecoveryFixture.*FAIL", "scope":"any"},
+    {"key":"healthy-team", "pattern":"Recovery.*queued team=7 ", "scope":"any"},
+    {"key":"cancelled-request", "pattern":"RecoveryFixture.*given team=3 ", "scope":"any"},
+    {"key":"crash", "pattern":"Access violation|has crashed|Fatal:", "scope":"any"}
+  ]
+}

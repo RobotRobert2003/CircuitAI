@@ -1,0 +1,13 @@
+{
+  "stop_minute": 2.2,
+  "expect": [
+    {"key":"map", "pattern":"\\[JunoEdge\\] map width=", "scope":"any", "by_minute":1},
+    {"key":"launch", "pattern":"\\[JunoEdge\\] launch id=", "scope":"any", "by_minute":2},
+    {"key":"projectile", "pattern":"\\[JunoEdge\\] projectile id=", "scope":"any", "by_minute":2},
+    {"key":"all-impacts", "pattern":"\\[JunoEdge\\] summary launches=12 projectiles=12 impacts=12 outsideFlights=0 outsideImpacts=0", "scope":"any", "by_minute":2.1}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception|Access violation|Error in GameFrame\\(\\)", "scope":"any"},
+    {"key":"invariant", "pattern":"INVARIANT", "scope":"any"}
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "control-yard-lost",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [[7492, 1220], [4814, 11077]],
+  "checks": "sea-control-lost-yard",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "shots": "0.5@4000@5500:1250,1.5@5000@5500:1600,3@6000@5300:2400",
+  "groups": [
+    {"unit": "armroy", "team": 0, "count": 8, "position": [6000, 1200], "columns": 2, "spacing": 180},
+    {"unit": "armfrad", "team": 0, "count": 1, "position": [5200, 800]},
+    {"unit": "corsy", "team": 1, "count": 1, "position": [4800, 800]}
+  ],
+  "remove_units": [{"second": 15, "team": 0, "unit": "armfrad"}]
+}

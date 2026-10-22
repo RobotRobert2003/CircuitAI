@@ -1,0 +1,14 @@
+{
+  "_doc": "D-290 fixture: reclaim_overflow_fixture.lua cheats team 0's bank to 96% the moment its advanced lab is being reclaimed (nuke opening, D-229). The reclaim must pause or defer, and the lab must not go while its refund would overflow. Controlled input: not natural-game evidence.",
+  "stop_minute": 20,
+  "expect": [
+    {"key": "fixture", "pattern": "\\[ReclaimFixture\\] controlled bank fill", "by_minute": 0.5, "scope": "any"},
+    {"key": "filled", "pattern": "\\[ReclaimFixture\\] bank filled to \\d+/\\d+ at lab \\d+ reclaim", "by_minute": 19, "scope": "any"},
+    {"key": "paused", "pattern": "\\[RECLAIM\\] (paused|deferred) (armalab|coralab|legalab) \\d+", "by_minute": 19.5, "scope": "tech", "after_key": "filled"}
+  ],
+  "forbid": [
+    {"key": "script error", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "lab refund overflowed", "pattern": "\\[ReclaimFixture\\] OVERFLOW", "scope": "any"},
+    {"key": "reclaim invariants", "pattern": "\\[INVARIANT\\] INV-(201|209)", "scope": "tech"}
+  ]
+}

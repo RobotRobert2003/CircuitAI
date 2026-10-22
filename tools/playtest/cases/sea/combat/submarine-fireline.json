@@ -1,0 +1,12 @@
+{
+  "name":"submarine-fireline", "starts":[[2300,4400],[8000,4400]],
+  "checks":"sea/combat/submarine-fireline", "fireline_observer":true,
+  "patrol_observer":true,"objective_observer":true,
+  "shots":"0.5@3200@3400:4400,1.3@3600@3400:4400,2.5@3600@3400:4400",
+  "groups":[
+    {"unit":"corsub","team":0,"count":4,"position":[3300,4300],"columns":1,"spacing":110},
+    {"unit":"corfrad","team":0,"count":1,"position":[3000,4200]},
+    {"unit":"armroy","team":1,"count":5,"position":[3800,4300],"columns":1,"spacing":130},
+    {"unit":"corsub","team":0,"count":12,"position":[2400,4200],"columns":3,"spacing":110,"after_seconds":45}
+  ]
+}

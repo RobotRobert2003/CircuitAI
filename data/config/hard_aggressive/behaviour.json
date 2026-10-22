@@ -1370,6 +1370,8 @@
 			},
 			"armfboy": {
 				"role": ["assault", "heavy"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 144, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false, "stage_when_blocked": true},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1381,6 +1383,8 @@
 			},
 			"armfido": {
 				"role": ["skirmish"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1419,7 +1423,8 @@
 			},
 			"armsnipe": {
 				"role": ["anti_heavy"],
-				"attribute": ["siege"],
+				"attribute": ["siege", "ranged", "ret_hold"],
+				"ranged": {"target_mode": "precision", "advance_unknown_radar": true, "range_fraction": 0.94, "spacing": 112, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true, "cloak_on_reload": true},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1533,7 +1538,9 @@
 			},
 			"armmanni": {
 				"role": ["anti_heavy"],
-				"attribute": ["artillery"],
+				"retreat": 0.65,
+				"attribute": ["artillery", "ranged"],
+				"ranged": {"target_mode": "precision", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 256, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1809,7 +1816,8 @@
 			},
 			"cormort": {
 				"role": ["artillery"],
-				"attribute":["skirmish"],
+				"attribute":["skirmish", "ranged"],
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1988,11 +1996,15 @@
 			},
 			"corban": {
 				"role":	["skirmish"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
 			"cortrem": {
 				"role": ["artillery", "heavy"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 192, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -2150,6 +2162,7 @@
 				"power": 1.0
 			},
 			"corcrwh": {
+				"target_min_cost": 300,
 				"role": ["heavy", "air"],
 				"attribute": ["anti_heavy"],
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},

@@ -41,6 +41,13 @@ class LaneUIMemoryTests(unittest.TestCase):
             for team=0,15 do publish(team,1,4) end
             WG.barblink.SetTheatres('all'); widget:DrawScreen(); click('row4')
             for team=0,15 do assert(WG.barblink.TheatreSnapshot(team).visible) end
+            widget:DrawScreen(); click('lanesTeam')
+            for team=0,15 do assert(WG.barblink.TheatreSnapshot(team).visible==(team<8)) end
+            widget:DrawScreen(); click('row2')
+            for team=0,15 do assert(WG.barblink.TheatreSnapshot(team).visible==(team<8)) end
+            widget:DrawScreen(); click('ally1')
+            for team=0,15 do assert(WG.barblink.TheatreSnapshot(team).visible==(team>=8)) end
+            widget:DrawScreen(); click('ally0'); widget:DrawScreen(); click('row4')
             widget:DrawScreen(); click('lanesPlayer')
             assert(WG.barblink.TheatreSnapshot(4).visible)
             assert(not WG.barblink.TheatreSnapshot(0).visible)

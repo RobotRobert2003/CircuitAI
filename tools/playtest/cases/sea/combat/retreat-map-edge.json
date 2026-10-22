@@ -1,0 +1,14 @@
+{
+  "name": "retreat-map-edge",
+  "map": "Shore_to_Shore_V3",
+  "map_key": "shore",
+  "starts": [[2300,80],[13250,80]],
+  "checks": "sea/combat/retreat-map-edge",
+  "retreat_boundary_observer": true,
+  "shots": "0.5@2400@6100:120,1@2400@6100:120",
+  "groups": [
+    {"unit":"corsub","team":0,"count":1,"position":[6000,64]},
+    {"unit":"corpship","team":0,"count":12,"position":[6400,64],"columns":12,"spacing":65},
+    {"unit":"corfrad","team":0,"count":1,"position":[5500,192]}
+  ]
+}

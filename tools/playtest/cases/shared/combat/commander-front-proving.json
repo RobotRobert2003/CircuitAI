@@ -1,0 +1,74 @@
+{
+  "name": "commander-front-proving",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "Real FRONT duty crosses Proving Grounds terrain, takes en-route mex work and resumes progress.",
+  "map": "Proving Grounds v1.0",
+  "map_key": "proving",
+  "starts": [
+    [
+      2524,
+      4194
+    ],
+    [
+      11805,
+      10125
+    ]
+  ],
+  "camera": [
+    3600,
+    4800,
+    2900
+  ],
+  "photos": [
+    55,
+    100,
+    170
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "hold_friendly": true,
+  "groups": [
+    {
+      "unit": "armlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2400,
+        4000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2200,
+        4000
+      ],
+      "after_seconds": 45
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "checks": "commander-front-proving",
+  "commander_front_work": true,
+  "commander_initial": true,
+  "start_metal": 100000,
+  "commander_trace": true,
+  "commander_overrides": {
+    "front_distance": 3600
+  },
+  "front_arrival": [
+    4846,
+    5680,
+    300
+  ]
+}

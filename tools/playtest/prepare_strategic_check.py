@@ -1,6 +1,7 @@
 """Install a controlled strategic-weapon fixture into an isolated staged playtest."""
 import argparse
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import json
 ROOT = Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser(description=__doc__)
@@ -8,8 +9,8 @@ p.add_argument('--dir', type=Path, required=True)
 p.add_argument('--scenario', choices=['juno', 'nuclear'], required=True)
 a = p.parse_args()
 base = a.dir.resolve()
-if not base.is_relative_to(ROOT / 'build-theatres'):
-    p.error('fixture directory must be under repository build-theatres')
+if not base.is_relative_to(RAW_ROOT):
+    p.error('fixture directory must be under benchmark-repository build-theatres')
 widget = base / 'LuaUI/Widgets/strategic_fixture.lua'
 widget.write_text('local scenario = '+json.dumps(a.scenario)+'\n'+(ROOT/'tools/playtest/widgets/strategic_fixture.lua').read_text())
 scripts = base/'AI/Skirmish/BARbTest/test/script/src/manager'

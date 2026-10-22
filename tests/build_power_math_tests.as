@@ -7,6 +7,17 @@ void test_energy_is_independent() {
     Check(!BuildPowerMath::Funded(1000, 200, 160, 160, 0, 2100, 30, 20, 60));
     Check(BuildPowerMath::Funded(1000, 200, 160, 60, 0, 2100, 30, 20, 60));
 }
+void test_sea_growth_uses_budget_limited_completion() {
+    // 13 M/s fully spent, 45% of replaceable yard work funds local growth.
+    // Nominal 450 BP implies an unaffordable 7.7-second constructor; funded
+    // speed pays the same 200 metal over 34 seconds, then supports tidal work.
+    const float budget=13*.45f;
+    const float power=BuildPowerMath::Power(budget,135,3460,200,2000);
+    Check(!BuildPowerMath::Funded(1,0,13,13-budget,0,200,3460/450.0f,125*90.0f/2190,45));
+    Check(BuildPowerMath::Funded(1,0,13,13-budget,0,200,3460/power,125*90.0f/2190,45));
+    // A separately committed project cannot be paid a second time.
+    Check(!BuildPowerMath::Funded(1,0,13,13-budget,90,200,3460/power,125*90.0f/2190,45));
+}
 void test_unaffordable_opening_turret_does_not_veto_constructor() {
     Check(BuildPowerMath::Funded(1000, 200, 160, 60, 0, 2100, 30, 20, 60));
     Check(!BuildPowerMath::Funded(1000, 200, 160, 60, 0, 3200, 15, 20, 60));
@@ -84,4 +95,22 @@ void test_project_arrivals_and_queued_support_count_once() {
     Check(BuildPowerMath::ProjectShortage(600, 700, 300000, 6, 1000, 300) == 0);
     Check(BuildPowerMath::ProjectShortage(600, 700, 6000, 6, 1000, 0) == 0);
     Check(BuildPowerMath::ProjectShortage(600, 700, 300000, 0, 1000, 0) == 0);
+}
+void test_converter_headroom_counts_inactive_and_committed_capacity() {
+    Check(BuildPowerMath::ConversionHeadroom(12000,9000,6000,6000,100)==2900);
+    Check(BuildPowerMath::ConversionHeadroom(12000,9000,6000,12000,100)==-3100);
+    Check(BuildPowerMath::ConversionHeadroom(12000,9000,6000,9000,100)==-100);
+    Check(BuildPowerMath::ConversionHeadroom(12000,1000,2000,6000,100)==5900);
+}
+void test_seaplane_reserve_blocks_a_deficit_that_old_funding_admitted() {
+    Check(BuildPowerMath::Funded(1950,0,80,90,0,1450,60,0,45));
+    Check(!BuildPowerMath::Funded(1950,500,80,90,0,1450,60,0,45));
+    Check(BuildPowerMath::Funded(1950,500,80,80,0,1450,60,0,45));
+    Check(!BuildPowerMath::Funded(1950,500,80,80,1,1450,60,0,45));
+}
+
+void test_tech_package_uses_income_without_impossible_storage_reserve() {
+ Check(!BuildPowerMath::Funded(5000,8000,1500,1200,0,10000,90,0,90));
+ Check(BuildPowerMath::Funded(5000,0,1500,1200,0,18000,90,0,90));
+ Check(!BuildPowerMath::Funded(5000,0,1000,1200,0,18000,90,0,90));
 }

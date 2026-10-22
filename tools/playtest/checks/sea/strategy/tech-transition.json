@@ -1,0 +1,34 @@
+{
+  "stop_minute": 20,
+  "expect": [
+    {
+      "key": "save",
+      "pattern": "\\[SEA\\]\\[TechSave\\] start",
+      "scope": "any",
+      "by_minute": 12
+    },
+    {
+      "key": "t2_yard",
+      "pattern": "\\[SEA\\]\\[TechSave\\] done",
+      "scope": "any",
+      "by_minute": 17
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "sea_invariant",
+      "pattern": "\\[INVARIANT\\] INV-(129|131|145|171|179|180|219)",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

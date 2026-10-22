@@ -1,0 +1,17 @@
+{
+  "_doc": "D-290 (owner): every reclaim of TECH's own structures is attributed ([RECLAIM] <def> <id> by <path> | bank ...), never an energy storage, never one whose refund overflows the bank. Run with RushObjective nuke (D-229 storage and lab refunds) to 17.5 min.",
+  "stop_minute": 17.5,
+  "expect": [
+    {"key": "chain", "pattern": "\\[TECH\\]\\[Chain\\] objective nuke", "by_minute": 0.5, "scope": "tech"},
+    {"key": "estor protected", "pattern": "\\[RECLAIM\\] [1-9]\\d* energy storage def\\(s\\) reclaim-protected", "by_minute": 0.5, "scope": "tech"},
+    {"key": "audit", "pattern": "\\[RECLAIM\\] \\w+ \\d+ by \\S+ \\| bank \\d+/\\d+ refund \\d+ storage-after \\d+", "by_minute": 12, "scope": "tech"},
+    {"key": "t1 lab attributed", "pattern": "\\[RECLAIM\\] (armlab|corlab|leglab) \\d+ by (lab\\.t1|turret\\.join|pull|lab\\.t1\\.reclaim) \\|", "by_minute": 12, "scope": "tech"}
+  ],
+  "forbid": [
+    {"key": "script error", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "energy storage reclaimed", "pattern": "\\[RECLAIM\\] (armestor|corestor|legestor|armuwes|coruwes|leguwestore|armuwadves|coruwadves|legadvestore) \\d+ by", "scope": "tech"},
+    {"key": "script reclaim overflow", "pattern": "\\[RECLAIM\\] \\w+ \\d+ by (?!native)\\S+ \\|.* OVERFLOW", "scope": "tech"},
+    {"key": "reclaim invariants", "pattern": "\\[INVARIANT\\] INV-(201|209)", "scope": "tech"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"}
+  ]
+}

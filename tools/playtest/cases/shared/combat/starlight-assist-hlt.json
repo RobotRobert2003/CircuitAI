@@ -1,0 +1,229 @@
+{
+  "name": "starlight-assist-hlt",
+  "unit": "armmanni",
+  "checks": "starlight-assist-hlt",
+  "description": "D-295 variant: as ranged-starlight-assist, plus three Cortex HLTs (z=5650) covering the direct approach. Assisting Starlights must route their standoff outside static coverage: zero damage to a Starlight from a static weapon (no_static_damage).",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    3700,
+    5800,
+    3000
+  ],
+  "photos": [
+    60,
+    110,
+    170
+  ],
+  "centroid_distance": true,
+  "remove_units_after_seconds": 25,
+  "remove_unit_name": "armeyes",
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3600,
+        4750
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3300,
+        2700
+      ],
+      "spacing": 400,
+      "columns": 2
+    },
+    {
+      "unit": "cortarg",
+      "count": 16,
+      "team": 1,
+      "position": [
+        2800,
+        2900
+      ],
+      "spacing": 160,
+      "columns": 8
+    },
+    {
+      "unit": "corhlt",
+      "count": 3,
+      "team": 1,
+      "position": [
+        3300,
+        5650
+      ],
+      "spacing": 400,
+      "columns": 3
+    },
+    {
+      "unit": "armbull",
+      "count": 10,
+      "team": 0,
+      "position": [
+        3200,
+        6900
+      ],
+      "spacing": 140,
+      "columns": 5,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmart",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3600,
+        7000
+      ],
+      "spacing": 160,
+      "columns": 4,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmanni",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3400,
+        4400
+      ],
+      "spacing": 220,
+      "columns": 4,
+      "after_seconds": 12
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 12
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 32
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 52
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 72
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 92
+    },
+    {
+      "unit": "correap",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        7300
+      ],
+      "spacing": 160,
+      "columns": 2,
+      "after_seconds": 22
+    },
+    {
+      "unit": "correap",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        7300
+      ],
+      "spacing": 160,
+      "columns": 2,
+      "after_seconds": 45
+    },
+    {
+      "unit": "correap",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        7300
+      ],
+      "spacing": 160,
+      "columns": 2,
+      "after_seconds": 68
+    },
+    {
+      "unit": "correap",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        7300
+      ],
+      "spacing": 160,
+      "columns": 2,
+      "after_seconds": 90
+    }
+  ],
+  "enemy_destination": [
+    3500,
+    6950
+  ],
+  "assertions": {
+    "min_shooters": 2,
+    "min_damage": 2500
+  },
+  "no_static_damage": true
+}

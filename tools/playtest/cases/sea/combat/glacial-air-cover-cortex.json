@@ -1,0 +1,72 @@
+{
+  "name": "glacial-air-cover-cortex",
+  "map": "Glacial Gap v1.1",
+  "map_key": "glacial",
+  "starts": [
+    [
+      2100,
+      4400
+    ],
+    [
+      5200,
+      4400
+    ]
+  ],
+  "groups": [
+    {
+      "unit": "corpt",
+      "team": 0,
+      "count": 4,
+      "position": [
+        2700,
+        4100
+      ],
+      "columns": 2,
+      "spacing": 130
+    },
+    {
+      "unit": "corarch",
+      "team": 0,
+      "count": 4,
+      "position": [
+        2700,
+        4310
+      ],
+      "columns": 2,
+      "spacing": 130
+    },
+    {
+      "unit": "armfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2400,
+        4250
+      ]
+    },
+    {
+      "unit": "cortitan",
+      "team": 1,
+      "count": 12,
+      "position": [
+        4200,
+        4350
+      ],
+      "after_seconds": 45,
+      "columns": 4,
+      "spacing": 110
+    }
+  ],
+  "enemy_air_route": [
+    [
+      4200,
+      4350
+    ],
+    [
+      2300,
+      4350
+    ]
+  ],
+  "shots": "1@3500@3200:4400,3@3500@3200:4400",
+  "description": "Supplied air interception coverage; each faction uses its available T1/T2 AA ships. Scripted enemy transit; no claim of equal-metal balance."
+}

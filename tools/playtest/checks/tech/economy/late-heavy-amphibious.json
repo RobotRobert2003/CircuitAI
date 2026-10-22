@@ -1,0 +1,16 @@
+{
+  "_doc": "D-287 water map (Supreme Isthmus): the survey finds assault beach fronts, so after the late latch the gantries build the amphibious heavy (armbanth / corkorg / legeheatraymech by --side). With gantry_income_fixture.lua (injected economy: fixture evidence). Natural variant: no fixture, --set HeavyLateMinutes=12 --set RushObjective='\"gantry\"', --minutes 35.",
+  "stop_minute": 35,
+  "expect": [
+    {"key": "assault beaches", "pattern": "\\[Strategic\\] survey: .*\\(([1-9][0-9]*) assault\\)", "by_minute": 4, "scope": "tech"},
+    {"key": "latched", "pattern": "\\[TECH\\]\\[Heavy\\] late latched .*Marauder-class production closed", "by_minute": 14, "scope": "tech"},
+    {"key": "amphibious batch", "pattern": "\\[TECH\\]\\[Heavy\\] batch .*terrain=amphibious unit=(armbanth|corkorg|legeheatraymech) ", "by_minute": 28, "scope": "tech"},
+    {"key": "amphibious heavy", "pattern": "\\[Playtest\\] finished (armbanth|corkorg|legeheatraymech) team 0", "by_minute": 34, "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"},
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "land heavy on water map", "pattern": "\\[TECH\\]\\[Heavy\\] batch .*terrain=land", "scope": "tech"}
+  ],
+  "pass_on": {"key": "amphibious heavy", "pattern": "\\[Playtest\\] finished (armbanth|corkorg|legeheatraymech) team 0", "scope": "any"}
+}

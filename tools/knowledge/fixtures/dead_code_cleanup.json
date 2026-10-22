@@ -1,0 +1,1428 @@
+{
+  "description": "Approved D-251 removals plus verified orphan dependencies; immutable baseline evidence is external.",
+  "removals": [
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "NanoParallel"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "OpeningNanoMinEnergy"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "EconomyBuildPowerPerMetal"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "StrikeControlRatio"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "BuildPowerFloatFactor"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "BuildPowerBankDrainSeconds"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "FusionAccessFundSeconds"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "TransitionFundSeconds"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "HomeFightersPerMetal"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "StrikeWaveIncrement"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "ScreenUpdateSeconds"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "BaySpacing"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "BayExitClearance"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "BaySearchRings"
+    },
+    {
+      "file": "data/script/src/settings/roles/air.as",
+      "kind": "setting",
+      "name": "NukeLimit"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "NukeLimit"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "MilitaryScoutCap"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "MilitaryAttackThreshold"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "MilitaryRaidMinPower"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "MilitaryRaidAvgPower"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "NanoMetalPerUnit"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "MinimumMetalIncomeForT2VehiclePlant"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "MinimumEnergyIncomeForT2VehiclePlant"
+    },
+    {
+      "file": "data/script/src/settings/roles/front.as",
+      "kind": "setting",
+      "name": "RequiredMetalCurrentForT2VehiclePlant"
+    },
+    {
+      "file": "data/script/src/settings/roles/sea.as",
+      "kind": "setting",
+      "name": "FleetContactSeconds"
+    },
+    {
+      "file": "data/script/src/settings/roles/sea.as",
+      "kind": "setting",
+      "name": "ScoutPatrolCell"
+    },
+    {
+      "file": "data/script/src/settings/roles/sea.as",
+      "kind": "setting",
+      "name": "TechScreenMetal"
+    },
+    {
+      "file": "data/script/src/settings/roles/sea.as",
+      "kind": "setting",
+      "name": "PreplannedYards"
+    },
+    {
+      "file": "data/script/src/settings/roles/sea.as",
+      "kind": "setting",
+      "name": "NukeLimit"
+    },
+    {
+      "file": "data/script/src/settings/roles/tactical.as",
+      "kind": "setting",
+      "name": "NanoEnergyPerUnit"
+    },
+    {
+      "file": "data/script/src/settings/roles/tactical.as",
+      "kind": "setting",
+      "name": "NanoMetalPerUnit"
+    },
+    {
+      "file": "data/script/src/settings/roles/tactical.as",
+      "kind": "setting",
+      "name": "NanoMaxCount"
+    },
+    {
+      "file": "data/script/src/settings/roles/tactical.as",
+      "kind": "setting",
+      "name": "NanoBuildWhenOverMetal"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "AirDefenceMax"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "AirDefenceRadius"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "AirDefenceRingStep"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "AirDefenceRingSize"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "AirDefenceArc"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "AirDefenceShake"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "ExpLabSiteRadius"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "ExpDefenceMaxOrders"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "ExpDefenceRadius"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "InvariantFactoryRadius"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "CommanderMexRadiusAfterOpening"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "LayoutHaloQuantum"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "LayoutCanPlaceMemoSeconds"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "LayoutOverlay"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "ExpDefenceLLT"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "ExpDefenceAA"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "RequiredMetalCurrentForT2Lab"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "MexUpgradesNearBaseRadius"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "MexUpAssistMinEnergyIncome"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "SecondaryT2AssistMetalIncomeMax"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "RequiredMetalCurrentForT2AircraftPlant"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "setting",
+      "name": "MaxT2AircraftPlants"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "lane-setting",
+      "name": "LaneDraw"
+    },
+    {
+      "file": "data/script/src/systems/world/lanes.as",
+      "kind": "lane-load",
+      "name": "LaneDraw"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "lane-setting",
+      "name": "LaneDrawFallbackSeconds"
+    },
+    {
+      "file": "data/script/src/systems/world/lanes.as",
+      "kind": "lane-load",
+      "name": "LaneDrawFallbackSeconds"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "lane-setting",
+      "name": "LaneSymbolSpacing"
+    },
+    {
+      "file": "data/script/src/systems/world/lanes.as",
+      "kind": "lane-load",
+      "name": "LaneSymbolSpacing"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "lane-setting",
+      "name": "LaneSymbolSize"
+    },
+    {
+      "file": "data/script/src/systems/world/lanes.as",
+      "kind": "lane-load",
+      "name": "LaneSymbolSize"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "lane-setting",
+      "name": "LaneLabelSize"
+    },
+    {
+      "file": "data/script/src/systems/world/lanes.as",
+      "kind": "lane-load",
+      "name": "LaneLabelSize"
+    },
+    {
+      "file": "data/script/src/global.as",
+      "kind": "function",
+      "name": "DisableStrategy"
+    },
+    {
+      "file": "data/script/src/global.as",
+      "kind": "function",
+      "name": "EnableDefaultStrategies"
+    },
+    {
+      "file": "data/script/src/helpers/combat/porc_helpers.as",
+      "kind": "function",
+      "name": "Prioritise"
+    },
+    {
+      "file": "data/script/src/helpers/combat/porc_helpers.as",
+      "kind": "function",
+      "name": "Remove"
+    },
+    {
+      "file": "data/script/src/helpers/common/collection_helpers.as",
+      "kind": "function",
+      "name": "DictSize"
+    },
+    {
+      "file": "data/script/src/helpers/construction/economy_helpers.as",
+      "kind": "function",
+      "name": "AllowedT1AircraftPlantCountFromIncome"
+    },
+    {
+      "file": "data/script/src/helpers/construction/economy_helpers.as",
+      "kind": "function",
+      "name": "ShouldAssistFactory"
+    },
+    {
+      "file": "data/script/src/helpers/construction/economy_helpers.as",
+      "kind": "function",
+      "name": "ShouldAssignFreelanceMexAssist"
+    },
+    {
+      "file": "data/script/src/helpers/construction/economy_helpers.as",
+      "kind": "function",
+      "name": "ShouldSecondaryT2AssistPrimary"
+    },
+    {
+      "file": "data/script/src/helpers/construction/economy_helpers.as",
+      "kind": "function",
+      "name": "ShouldBuildT2BotLabFromIncome"
+    },
+    {
+      "file": "data/script/src/helpers/math/air_math.as",
+      "kind": "test-only-function",
+      "name": "BayPitch"
+    },
+    {
+      "file": "data/script/src/helpers/math/air_math.as",
+      "kind": "test-only-function",
+      "name": "LaunchDue"
+    },
+    {
+      "file": "data/script/src/helpers/math/air_math.as",
+      "kind": "test-only-function",
+      "name": "SortieSize"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "test-only-function",
+      "name": "StrikeReady"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "test-only-function",
+      "name": "ConstructorFunded"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "test-only-function",
+      "name": "ConstructionPower"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "test-only-function",
+      "name": "SupportQueueReady"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "test-only-function",
+      "name": "WorkforceTarget"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "test-only-function",
+      "name": "BatchRate"
+    },
+    {
+      "file": "data/script/src/helpers/math/sea_math.as",
+      "kind": "test-only-function",
+      "name": "OpeningFactory"
+    },
+    {
+      "file": "data/script/src/helpers/math/sea_math.as",
+      "kind": "test-only-function",
+      "name": "ForwardWorthwhile"
+    },
+    {
+      "file": "data/script/src/helpers/objectives/objective_helpers.as",
+      "kind": "function",
+      "name": "GetProgressCount"
+    },
+    {
+      "file": "data/script/src/helpers/objectives/objective_helpers.as",
+      "kind": "function",
+      "name": "GetNextStepIndex"
+    },
+    {
+      "file": "data/script/src/helpers/objectives/objective_helpers.as",
+      "kind": "function",
+      "name": "EffectiveRadius"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_helpers.as",
+      "kind": "function",
+      "name": "RandomT1LandFactoryBySide"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_helpers.as",
+      "kind": "function",
+      "name": "RandomT1WaterFactoryBySide"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_limit_helpers.as",
+      "kind": "function",
+      "name": "DisableT3Combat"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_limit_helpers.as",
+      "kind": "function",
+      "name": "ApplyTechDefaults"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_limit_helpers.as",
+      "kind": "function",
+      "name": "GateGantriesByIncome"
+    },
+    {
+      "file": "data/script/src/helpers/spatial/wall_helpers.as",
+      "kind": "function",
+      "name": "AdmitQueued"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "IsT2Lab"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "GetGeoNameForSide"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "GetT2BomberNameForSide"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "GetFloatingAARangeNameForSide"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "GetFloatingHeavyTurretNameForSide"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "IsT1Mex"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "GetAllT2Constructors"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "IsT1LandBuilders"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "IsT2LandBuilder"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "IsArmadaUnit"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "IsCortexUnit"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "function",
+      "name": "IsLegionUnit"
+    },
+    {
+      "file": "data/script/src/helpers/units/unitdef_helpers.as",
+      "kind": "function",
+      "name": "RemoveNoAttrFor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "IsLikelyStarted"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetBuilderTask"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "SetBuilderTask"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "_IsUnassigned"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "IsGantryBuildQueued"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "EnqueueStaticTorpT2"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "EnqueueT1Wind"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "EnqueueT1EnergyStorage"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "EnqueueT1MetalStorage"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "EnqueueAdvEnergyConverter"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT1BotConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT1BotConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT2BotConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT2BotConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT1VehConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT1VehConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT2VehConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT2VehConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT1AirConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT1AirConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT2AirConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT2AirConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT1SeaConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT1SeaConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT2SeaConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT2SeaConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "IsTacticalEnabledFor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetFreelanceT1HoverConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetPrimaryT1HoverConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetSecondaryT1HoverConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "IsTacticalEnabled"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetFreelanceT2BotConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetFreelanceT2VehConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetFreelanceT2AirConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "GetFreelanceT2SeaConstructor"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "function",
+      "name": "IsUnitAvailableForConstruction"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "function",
+      "name": "GetMetalResource"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "function",
+      "name": "GetEnergyResource"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "function",
+      "name": "GetMetalIncome"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "function",
+      "name": "GetEnergyIncome"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "function",
+      "name": "GetEnergyCenter"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "function",
+      "name": "GetEnergyConverterCenter"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "function",
+      "name": "IsUpgraded"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "function",
+      "name": "GetNearestOwnedMexInRange"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "function",
+      "name": "GetT1VehPlantPos"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "function",
+      "name": "GetT2VehPlantPos"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "function",
+      "name": "GetT2AirPlantPos"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "function",
+      "name": "GetT1HoverPlantPos"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "function",
+      "name": "GetFloatingHoverPlantPos"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "function",
+      "name": "GetSeaplanePlatformPos"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "function",
+      "name": "GetLandGantryPos"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "function",
+      "name": "GetWaterGantryPos"
+    },
+    {
+      "file": "data/script/src/roles/tactical/tactical.as",
+      "kind": "function",
+      "name": "Tactical_SelectTacticalObjective"
+    },
+    {
+      "file": "data/script/src/roles/tactical/tactical.as",
+      "kind": "function",
+      "name": "_Tactical_TryGetNextType"
+    },
+    {
+      "file": "data/script/src/roles/tactical/tactical.as",
+      "kind": "function",
+      "name": "_Tactical_TryHandleSeaplaneFactory"
+    },
+    {
+      "file": "data/script/src/roles/tactical/tactical.as",
+      "kind": "function",
+      "name": "_Tactical_TryHandleStandardBuild"
+    },
+    {
+      "file": "data/script/src/roles/tactical/tactical.as",
+      "kind": "function",
+      "name": "_Tactical_TryExecuteChain"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_build.as",
+      "kind": "function",
+      "name": "Planner"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_factories.as",
+      "kind": "function",
+      "name": "CountTier"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "T2LabStands"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "ChainDoneOrOnline"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "T2LabAgain"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "SpamGate"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "NotDraining"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "EnergyFloating"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "NoAfusYet"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "Always"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_rules.as",
+      "kind": "function",
+      "name": "DoSpamLab"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_weapons.as",
+      "kind": "function",
+      "name": "OverWall"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_weapons.as",
+      "kind": "function",
+      "name": "Floats"
+    },
+    {
+      "file": "data/script/src/setup.as",
+      "kind": "function",
+      "name": "SelectRoleConfig"
+    },
+    {
+      "file": "data/script/src/systems/combat/spam.as",
+      "kind": "function",
+      "name": "SetFactoryLane"
+    },
+    {
+      "file": "data/script/src/systems/construction/layout.as",
+      "kind": "function",
+      "name": "SendOverlay"
+    },
+    {
+      "file": "data/script/src/systems/construction/lifecycle.as",
+      "kind": "function",
+      "name": "RetiringNear"
+    },
+    {
+      "file": "data/script/src/systems/production/factory_production.as",
+      "kind": "function",
+      "name": "QueueUnitByName"
+    },
+    {
+      "file": "data/script/src/systems/production/factory_production.as",
+      "kind": "function",
+      "name": "QueueUnitDef"
+    },
+    {
+      "file": "data/script/src/systems/team/roster.as",
+      "kind": "function",
+      "name": "Nearest"
+    },
+    {
+      "file": "data/script/src/systems/team/team_economy.as",
+      "kind": "function",
+      "name": "SendEnergy"
+    },
+    {
+      "file": "data/script/src/systems/world/lanes.as",
+      "kind": "function",
+      "name": "Waypoints"
+    },
+    {
+      "file": "data/script/src/task.as",
+      "kind": "function",
+      "name": "Pylon"
+    },
+    {
+      "file": "data/script/src/task.as",
+      "kind": "function",
+      "name": "Resurrect"
+    },
+    {
+      "file": "data/script/src/task.as",
+      "kind": "function",
+      "name": "Terraform"
+    },
+    {
+      "file": "data/script/src/task.as",
+      "kind": "function",
+      "name": "Combat"
+    },
+    {
+      "file": "data/script/src/types/map_config.as",
+      "kind": "function",
+      "name": "HasFactoryWeights"
+    },
+    {
+      "file": "data/script/src/types/map_config.as",
+      "kind": "function",
+      "name": "SetRoleUnitLimits"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_timeout_waives_schedule_not_minimum"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_timeout_does_not_waive_escort"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_launch_does_not_replace_active_cohort"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_small_pool_waits"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_reserve_does_not_inflate_sortie_escort"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_escort_shortage_uses_smaller_feasible_sortie"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_escort_below_minimum_stays_home"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_no_enemy_air_does_not_require_escorts"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_large_reserve_does_not_require_linear_search"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_fractional_escort_capacity_rounds_down"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_campus_tiles_touch_only_at_configured_clearance"
+    },
+    {
+      "file": "tests/air_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_air_campus_negative_clearance_cannot_overlap"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_float_target_includes_bank_drawdown"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_nonfloating_construction_target_keeps_income_only"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_float_target_rejects_zero_horizon"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_parallel_support_fits_resource_budget"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_parallel_support_cannot_exceed_cap"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_parallel_support_rejects_energy_shortage"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_parallel_support_without_overflow_stays_serial"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_workforce_rounds_up_shortage"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_workforce_exact_target_does_not_overbuild"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_workforce_keeps_t1_floor_after_transition"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_workforce_income_growth_respects_cap"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_workforce_invalid_power_rejects"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_batch_single_matches_rate"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_batch_unequal_products_sums_cycle_time"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_constructor_affordable_during_energy_recovery"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_constructor_no_energy_supply_rejected"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_constructor_empty_metal_bank_rejected"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_constructor_negative_cost_rejected"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_workforce_fifty_metal_needs_twenty_four_basic_builders"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_workforce_float_exceeds_old_ten_builder_limit"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_strike_large_enemy_force_allows_proportional_screen"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_strike_understrength_screen_waits"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_strike_live_incursion_preempts_optional_aircraft"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_strike_absent_home_fighters_waits"
+    },
+    {
+      "file": "tests/production_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_strike_invalid_ratio_rejected"
+    },
+    {
+      "file": "tests/sea_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_sea_policy_boundaries"
+    },
+    {
+      "file": "tests/sea_math_tests.as",
+      "kind": "retired-formula-test",
+      "name": "test_opening_exception_does_not_return_after_factory_loss"
+    },
+    {
+      "file": "data/script/src/define.as",
+      "kind": "unused-state",
+      "name": "NEAR_ZERO"
+    },
+    {
+      "file": "data/script/src/global.as",
+      "kind": "unused-state",
+      "name": "BASE_RADIUS"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "unused-state",
+      "name": "fastAssistGuards"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "unused-state",
+      "name": "T2LabQueuedCount"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "unused-state",
+      "name": "IsT2VehPlantQueued"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "unused-state",
+      "name": "IsT2AirPlantQueued"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "unused-state",
+      "name": "IsT2ShipyardQueued"
+    },
+    {
+      "file": "data/script/src/manager/economy.as",
+      "kind": "unused-state",
+      "name": "isSwitchAssist"
+    },
+    {
+      "file": "data/script/src/roles/tech/tech_weapons.as",
+      "kind": "unused-state",
+      "name": "RANGE_LAND"
+    },
+    {
+      "file": "data/script/src/systems/team/ferry.as",
+      "kind": "unused-state",
+      "name": "StateIdle"
+    },
+    {
+      "file": "data/script/src/systems/team/team_economy.as",
+      "kind": "unused-state",
+      "name": "PULL"
+    },
+    {
+      "file": "data/script/src/systems/team/team_economy.as",
+      "kind": "unused-state",
+      "name": "SHARE"
+    },
+    {
+      "file": "data/script/src/global.as",
+      "kind": "obsolete-include",
+      "name": "types/profile.as"
+    },
+    {
+      "file": "data/script/src/setup.as",
+      "kind": "obsolete-include",
+      "name": "maps/factory_mapping.as"
+    },
+    {
+      "file": "data/script/src/manager/factory.as",
+      "kind": "obsolete-include",
+      "name": "../types/opener.as"
+    },
+    {
+      "file": "data/script/src/types/profile_controller.as",
+      "kind": "obsolete-include",
+      "name": "profile.as"
+    },
+    {
+      "file": "data/script/src/helpers/combat/defense_helpers.as",
+      "kind": "file",
+      "name": "defense_helpers.as"
+    },
+    {
+      "file": "data/script/src/helpers/common/task_helpers.as",
+      "kind": "file",
+      "name": "task_helpers.as"
+    },
+    {
+      "file": "data/script/src/types/profile.as",
+      "kind": "file",
+      "name": "profile.as"
+    },
+    {
+      "file": "data/script/src/maps/factory_mapping.as",
+      "kind": "file",
+      "name": "factory_mapping.as"
+    },
+    {
+      "file": "data/script/src/types/opener.as",
+      "kind": "file",
+      "name": "opener.as"
+    },
+    {
+      "file": "data/script/src/misc/commander.as",
+      "kind": "file",
+      "name": "commander.as"
+    },
+    {
+      "file": "data/script/src/helpers/construction/builder_helpers.as",
+      "kind": "file",
+      "name": "builder_helpers.as"
+    },
+    {
+      "file": "data/script/src/helpers/objectives/objective_helpers.as",
+      "kind": "orphan-function",
+      "name": "HasAnyTypes"
+    },
+    {
+      "file": "data/script/src/helpers/objectives/objective_helpers.as",
+      "kind": "orphan-function",
+      "name": "GetFirstType"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_helpers.as",
+      "kind": "orphan-function",
+      "name": "AppendAll"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_limit_helpers.as",
+      "kind": "orphan-function",
+      "name": "DisableT2Combat"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_limit_helpers.as",
+      "kind": "orphan-function",
+      "name": "DisableGantries"
+    },
+    {
+      "file": "data/script/src/helpers/roles/role_limit_helpers.as",
+      "kind": "orphan-function",
+      "name": "SetGantriesCap"
+    },
+    {
+      "file": "data/script/src/helpers/spatial/map_helpers.as",
+      "kind": "orphan-function",
+      "name": "IsUnitInRangeOfTask"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "orphan-function",
+      "name": "GetStaticT2TorpNameForSide"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "orphan-function",
+      "name": "IsArmadaDef"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "orphan-function",
+      "name": "IsCortexDef"
+    },
+    {
+      "file": "data/script/src/helpers/units/unit_helpers.as",
+      "kind": "orphan-function",
+      "name": "IsLegionDef"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "orphan-function",
+      "name": "IsAdvConverterOffCooldown"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "orphan-function",
+      "name": "MarkAdvConverterEnqueued"
+    },
+    {
+      "file": "data/script/src/roles/tactical/tactical.as",
+      "kind": "orphan-function",
+      "name": "_Tactical_GetObjectiveBuildPos"
+    },
+    {
+      "file": "data/script/src/roles/tactical/tactical.as",
+      "kind": "orphan-function",
+      "name": "_Tactical_GetDefNameFor"
+    },
+    {
+      "file": "data/script/src/settings/roles/tech.as",
+      "kind": "orphan-setting",
+      "name": "Global::RoleSettings::Tech::LifecycleMemorySeconds"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "ConstructorBankCostFraction"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "ConstructorMetalIncomeShare"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "ConstructorMetalReserve"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "ConstructorFundingSeconds"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "ConstructorEnergyIncomeShare"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "ConstructorEnergyReserve"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "RetainedStorageFraction"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "SupportMetalIncomeShare"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "SupportMetalReserve"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "SupportFundingSeconds"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "SupportEnergyIncomeShare"
+    },
+    {
+      "file": "data/script/src/helpers/math/production_math.as",
+      "kind": "orphan-math-constant",
+      "name": "SupportEnergyReserve"
+    },
+    {
+      "file": "data/script/src/manager/builder.as",
+      "kind": "orphan-function",
+      "name": "GetAdvConverterCooldown"
+    }
+  ],
+  "retained_unloaded": [
+    "data/script/src/maps/the_rock_3.as"
+  ]
+}

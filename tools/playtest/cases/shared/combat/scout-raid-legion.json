@@ -1,0 +1,123 @@
+{
+  "name": "scout-raid-legion",
+  "unit": "legscout",
+  "units": [
+    "legscout"
+  ],
+  "checks": "scout-backline-raid",
+  "description": "D-296: six AI-owned legscout (one kept as a native recon scout) against a static front of four corllt and six holding corthud at z=7200-7400, with an economy backline (cormex, corwin, cornanotc) behind it near z=9300. Raiders must route around the armed front and kill economy structures, not fight the front. The advanced radar legarad at z=4300 (range 3500) covers the front line at z=7200-7400 so the turrets are radar dots before any raider is in their range.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "legion",
+  "camera": [
+    4000,
+    8200,
+    3200
+  ],
+  "photos": [
+    60,
+    150,
+    240
+  ],
+  "kill_census": true,
+  "depth_units": true,
+  "econ_targets": [
+    "cormex",
+    "corwin",
+    "cornanotc"
+  ],
+  "groups": [
+    {
+      "unit": "legarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        4000,
+        4300
+      ]
+    },
+    {
+      "unit": "corllt",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7200
+      ],
+      "spacing": 530,
+      "columns": 4
+    },
+    {
+      "unit": "corthud",
+      "count": 6,
+      "team": 1,
+      "position": [
+        3700,
+        7400
+      ],
+      "spacing": 120,
+      "columns": 6
+    },
+    {
+      "unit": "cormex",
+      "count": 8,
+      "team": 1,
+      "position": [
+        3300,
+        9200
+      ],
+      "spacing": 200,
+      "columns": 4
+    },
+    {
+      "unit": "corwin",
+      "count": 8,
+      "team": 1,
+      "position": [
+        3400,
+        9700
+      ],
+      "spacing": 160,
+      "columns": 4
+    },
+    {
+      "unit": "cornanotc",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4500,
+        9400
+      ],
+      "spacing": 200,
+      "columns": 2
+    },
+    {
+      "unit": "legscout",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3800,
+        4000
+      ],
+      "spacing": 96,
+      "columns": 6,
+      "after_seconds": 30
+    }
+  ],
+  "assertions": {
+    "min_kills": 3
+  },
+  "modoptions": {
+    "experimentallegionfaction": 1
+  }
+}

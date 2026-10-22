@@ -92,6 +92,7 @@ void CCircuitDef::InitStatic(CCircuitAI* circuit, CMaskHandler* roleMasker, CMas
 		{"anti_stat",  {ATTR_TYPE(ANTI_STAT),  CCircuitDef::AttrMask::ANTI_STAT}},
 		{"no_repair",  {ATTR_TYPE(NO_REPAIR),  CCircuitDef::AttrMask::NO_REPAIR}},
 		{"no_disrupt", {ATTR_TYPE(NO_DISRUPT), CCircuitDef::AttrMask::NO_DISRUPT}},
+		{"ranged",     {ATTR_TYPE(RANGED),     CCircuitDef::AttrMask::RANGED}},
 	};
 	for (auto& kv : attrs) {
 		CMaskHandler::TypeMask tm = attrMasker->GetTypeMask(kv.first);

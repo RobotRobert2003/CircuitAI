@@ -1,0 +1,102 @@
+{
+  "name": "ranged-cormort",
+  "unit": "cormort",
+  "description": "Supplied cormort firing, safe approach and live target damage; no friendly combat orders from fixture.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "cortex",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    45,
+    120,
+    210
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3900,
+        4750
+      ]
+    },
+    {
+      "unit": "armseer",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3300,
+        4400
+      ]
+    },
+    {
+      "unit": "armaser",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        4900
+      ]
+    },
+    {
+      "unit": "armestor",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        5200
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armllt",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3800,
+        5400
+      ],
+      "spacing": 320
+    },
+    {
+      "unit": "cormort",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3700,
+        4100
+      ],
+      "spacing": 200,
+      "columns": 4
+    },
+    {
+      "unit": "armck",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        3700
+      ]
+    }
+  ],
+  "assertions": {
+    "min_kills": 4,
+    "min_shooters": 1,
+    "max_losses": 0
+  }
+}

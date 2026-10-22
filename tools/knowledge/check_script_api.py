@@ -15,7 +15,7 @@ Usage:
   python tools/knowledge/check_script_api.py
   python tools/knowledge/check_script_api.py --dll "%LOCALAPPDATA%/Programs/Beyond-All-Reason/data/engine/recoil_2026.07.04/AI/Skirmish/SMRTBARb/stable/SkirmishAI.dll"
 
-Exit code 1 on any finding. See .claude/skills/ai-not-moving/SKILL.md.
+Exit code 1 on any finding. See skills/ai-not-moving/SKILL.md.
 """
 import argparse
 import os
@@ -66,28 +66,36 @@ def registrations():
     return members, global_types, global_funcs
 
 
-def script_uses():
+def script_uses(script_dir=SCRIPT_DIR):
     """(file, line, global, member) for every aiXxx.member in the policy scripts."""
     uses = []
-    for dirpath, _, files in os.walk(SCRIPT_DIR):
+    for dirpath, _, files in os.walk(script_dir):
         for name in files:
             if not name.endswith(".as"):
                 continue
             path = os.path.join(dirpath, name)
+            try:
+                shown = os.path.relpath(path, ROOT)
+            except ValueError:  # staged scripts on another drive (benchmark store on H:)
+                shown = path
             for lineno, line in enumerate(read(path).splitlines(), 1):
                 code = line.split("//", 1)[0]
                 for g, m in RE_USE.findall(code):
-                    uses.append((os.path.relpath(path, ROOT), lineno, g, m))
+                    uses.append((shown, lineno, g, m))
     return uses
 
 
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--dll", help="SkirmishAI.dll to check the used declarations against")
+    ap.add_argument("--scripts", default=SCRIPT_DIR, help="Exact staged script tree; defaults to active repository data/script")
     args = ap.parse_args(argv)
 
     members, global_types, _ = registrations()
-    uses = script_uses()
+    if not os.path.isdir(args.scripts):
+        print("Script directory not found: %s" % args.scripts)
+        return 1
+    uses = script_uses(args.scripts)
     findings = 0
     needed_decls = {}
     for path, lineno, g, m in uses:

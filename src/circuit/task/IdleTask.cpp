@@ -84,6 +84,13 @@ void CIdleTask::Update()
 		if (ass->IsDead() || (units.find(ass) == units.end())) {
 			continue;  // left the idle task while an earlier unit was assigned
 		}
+		if (ass->GetTask() != this) {
+			// Never restart another manager's active task through a stale idle
+			// membership. Erase bookkeeping directly: RemoveAssignee clears actions
+			// and would disrupt the legitimate owner we are protecting.
+			units.erase(ass);
+			continue;
+		}
 		manager->AssignTask(ass);  // should RemoveAssignee() on AssignTo()
 		ass->GetTask()->Start(ass);
 	}

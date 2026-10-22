@@ -1,0 +1,13 @@
+{
+  "name":"glacial-shore-scouts", "map":"Glacial Gap v1.1", "map_key":"glacial",
+  "starts":[[13184,4080],[864,4528]],
+  "checks":"sea/combat/supreme-shore-scouts.json",
+  "patrol_observer":true, "objective_observer":true,
+  "progression_audit":{"kind":"shores","unit":"corsy","count":2,"by_seconds":360},
+  "shots":"1@5000@10500:4500,3@5000@7000:4500,6@5000@1500:4500",
+  "groups":[
+    {"unit":"armpt","team":0,"count":3,"position":[11500,4500],"columns":3,"spacing":160},
+    {"unit":"corsy","team":1,"count":1,"position":[864,4528]},
+    {"unit":"corsy","team":1,"count":1,"position":[1536,3840]}
+  ]
+}

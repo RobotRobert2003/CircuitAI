@@ -1,0 +1,293 @@
+{
+  "batch_spawn": true,
+  "name": "commander-population-16",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "Sixteen commanders and 320 held friendly screen units; opposing starts remain outside local observation range. Same fixed population for idle observation overhead.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      800,
+      700
+    ],
+    [
+      2400,
+      700
+    ],
+    [
+      4000,
+      700
+    ],
+    [
+      5600,
+      700
+    ],
+    [
+      800,
+      1950
+    ],
+    [
+      2400,
+      1950
+    ],
+    [
+      4000,
+      1950
+    ],
+    [
+      5600,
+      1950
+    ],
+    [
+      800,
+      3200
+    ],
+    [
+      2400,
+      3200
+    ],
+    [
+      4000,
+      3200
+    ],
+    [
+      5600,
+      3200
+    ],
+    [
+      800,
+      4450
+    ],
+    [
+      2400,
+      4450
+    ],
+    [
+      4000,
+      4450
+    ],
+    [
+      5600,
+      4450
+    ]
+  ],
+  "ally_spots": "1,2,3,4,5,6,7,8",
+  "photos": [
+    35,
+    65
+  ],
+  "camera": [
+    3200,
+    2600,
+    5000
+  ],
+  "min_spawn_spacing": 50,
+  "hold_friendly": true,
+  "hold_all": true,
+  "commander_observation": true,
+  "commander_initial": true,
+  "command_breakdown": true,
+  "groups": [
+    {
+      "unit": "armwar",
+      "team": 0,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        680,
+        860
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 1,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        2280,
+        860
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 2,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        3880,
+        860
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 3,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        5480,
+        860
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 4,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        680,
+        2110
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 5,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        2280,
+        2110
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 6,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        3880,
+        2110
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 7,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        5480,
+        2110
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 8,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        680,
+        3360
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 9,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        2280,
+        3360
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 10,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        3880,
+        3360
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 11,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        5480,
+        3360
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 12,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        680,
+        4610
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 13,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        2280,
+        4610
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 14,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        3880,
+        4610
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armwar",
+      "team": 15,
+      "count": 20,
+      "columns": 5,
+      "spacing": 60,
+      "position": [
+        5480,
+        4610
+      ],
+      "after_seconds": 12
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_kills": 0,
+    "max_losses": 0,
+    "min_damage": 0
+  },
+  "checks": "commander-idle"
+}

@@ -5,7 +5,6 @@ local cfg=VFS.Include("LuaUI/Config/air_arena.lua")
 local groups,units,pending,queue={},{},{},{}
 local waves,current={},nil
 local enabled=false
-local priorDamage,damageHook,priorMessage,messageHook
 local camera,shots=nil,{}
 local genericAttackShot,genericInterceptShot=false,false
 local function event(kind,fields)
@@ -210,7 +209,12 @@ local function observeRoute(f)
                     local safe=across<=probe.safe_below or across>=probe.safe_above
                     event("route_crossing",{wave=w.id,alive=alive,x=math.floor(cx),z=math.floor(cz),flank=safe and 1 or 0})
                     photograph("wave"..w.id.."-flank-crossing",cx,cz,probe.height or 6500)
-                    if not safe and probe.require_flank~=false then
+                    local original=units[w.target]
+                    local requireTarget=not probe.target_units or (original and probe.target_units[UnitDefs[original.def].name])
+                    -- A later frontline-cleanup wave is meant to enter the
+                    -- defended corridor. Enforce flank geometry only for the
+                    -- scenario's declared backline targets, when specified.
+                    if not safe and probe.require_flank~=false and requireTarget then
                         event("error",{reason="direct_corridor_crossed",wave=w.id})
                     end
                 end
@@ -236,15 +240,13 @@ function widget:Initialize()
         local p=g.position or cfg.sites[2][1]
         addGroup({unit=cfg.scout or "armpeep",team=0,count=1,position={p[1]-320,p[2]+320}},"recon")
     end
-    local env=getfenv(0)
-    priorMessage=rawget(env,"RecvSkirmishAIMessage")
-    messageHook=function(team,text) receive(team,text);if priorMessage then return priorMessage(team,text) end end
-    rawset(env,"RecvSkirmishAIMessage",messageHook);Script.UpdateCallIn("RecvSkirmishAIMessage")
-    -- Wrap the handler method, which BAR's regenerated top-level closure calls.
-    -- Wrapping only _G.UnitDamaged loses coverage when another widget loads.
-    priorDamage=widgetHandler.UnitDamaged
-    damageHook=function(self,...) onDamage(...);return priorDamage(self,...) end
-    widgetHandler.UnitDamaged=damageHook;widgetHandler:UpdateCallIn("UnitDamaged")
+    -- BAR's barwidgets sandbox hands user widgets a proxy widgetHandler
+    -- (assigning widgetHandler.UnitDamaged only logs "not available to user
+    -- widgets"), refuses getfenv/setfenv, and keeps RecvSkirmishAIMessage out
+    -- of its callin lists. The callins are therefore plain widget methods
+    -- below (2026-10-14 arena runs had no damage/launch events at all). AI
+    -- messages (launch/end/response/commitment) only arrive if the handler
+    -- forwards widget:RecvSkirmishAIMessage; checks must not depend on them.
     event("loaded",{case=cfg.name,visibility=cfg.visibility,endless=cfg.endless and 1 or 0})
     for id,d in pairs(UnitDefs) do
         if d.canFly and (d.name:sub(1,3)=="arm" or d.name:sub(1,3)=="cor" or d.name:sub(1,3)=="leg")
@@ -272,13 +274,25 @@ function widget:UnitDestroyed(id,def,team)
     for _,w in pairs(waves) do if not w.ended and w.target==id then event("target_dead",{wave=w.id,target=id,cost=UnitDefs[def].metalCost}) end end
     units[id]=nil
 end
+function widget:UnitFinished(id,def,team)
+    if not cfg.factory_production or team~=0 or units[id] or not UnitDefs[def].canFly then return end
+    -- Spawned aircraft already entered through the pending fixture queue.
+    -- These are real completed factory outputs, not supplied replacements.
+    units[id]={team=team,def=def,kind="aircraft",group="production",wave=0}
+    event("spawn",{id=id,team=team,unit=UnitDefs[def].name,kind="aircraft",group="production",cost=UnitDefs[def].metalCost})
+    event("produced",{id=id,team=team,unit=UnitDefs[def].name})
+end
 function widget:GameFrame(f)
+    for _,shot in ipairs(cfg.screenshots or {}) do
+        if f>=shot.second*30 and f<shot.second*30+60 then
+            photograph("perimeter-"..shot.second,shot.x,shot.z,shot.height)
+        end
+    end
     if f==150 then
         Spring.SendCommands("cheat 1")
         if cfg.visibility=="global" then Spring.SendCommands("globallos") end
         enabled=true;event("ready",{visibility=cfg.visibility})
     end
-    if f>=150 and widgetHandler.UnitDamaged~=damageHook then event("error",{reason="damage_handler_replaced"}) end
     if not enabled then return end
     if f%5==0 then observePriorityContact(f) end
     if f%60==0 then observeRoute(f) end
@@ -355,8 +369,14 @@ function widget:DrawScreen()
     end
     gl.Text("AIR COMBAT ARENA: "..cfg.name.." | "..cfg.visibility.." | supplied forces, automatic refill",20,90,16,"o")
 end
-function widget:Shutdown()
-    local env=getfenv(0)
-    if widgetHandler.UnitDamaged==damageHook then widgetHandler.UnitDamaged=priorDamage;widgetHandler:UpdateCallIn("UnitDamaged") end
-    if rawget(env,"RecvSkirmishAIMessage")==messageHook then rawset(env,"RecvSkirmishAIMessage",priorMessage);Script.UpdateCallIn("RecvSkirmishAIMessage") end
+function widget:UnitDamaged(id,def,team,damage,paralyzer,weapon,projectile,attacker,attackerDef,attackerTeam)
+    -- The handler forwards only the first five arguments; recover the attacker.
+    if attacker==nil then
+        attacker=Spring.GetUnitLastAttacker(id)
+        if attacker and attacker>=0 then attackerDef=Spring.GetUnitDefID(attacker);attackerTeam=Spring.GetUnitTeam(attacker) else attacker=nil end
+    end
+    onDamage(id,def,team,damage,paralyzer,weapon,projectile,attacker,attackerDef,attackerTeam)
+end
+function widget:RecvSkirmishAIMessage(team,text)
+    if type(text)=="string" then receive(team,text) end
 end

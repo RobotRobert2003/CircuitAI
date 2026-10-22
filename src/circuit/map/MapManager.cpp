@@ -288,4 +288,21 @@ bool CMapManager::IsInLOS(const AIFloat3& pos) const
 	return losMap[z * losWidth + x] > 0;
 }
 
+bool CMapManager::IsAreaInLOS(const AIFloat3& pos, float radius) const
+{
+	// Exact cached LOS-cell rectangle, not circular UnitDef sight estimates or
+	// unseen-enemy queries. Called only at opt-in placement admission. O(cells
+	// in the requested area), no engine callbacks, allocations or map copies.
+	if (!std::isfinite(pos.x) || !std::isfinite(pos.z) || !std::isfinite(radius)
+	    || radius < 0 || radius > 2048 || losResConv <= 0 || losWidth <= 0 || losMap.empty()) return false;
+	const int height=int(losMap.size())/losWidth;
+	if (pos.x-radius < 0 || pos.z-radius < 0 || pos.x+radius >= losWidth*losResConv
+	    || pos.z+radius >= height*losResConv) return false;
+	const int x1=int(pos.x-radius)/losResConv, x2=int(pos.x+radius)/losResConv;
+	const int z1=int(pos.z-radius)/losResConv, z2=int(pos.z+radius)/losResConv;
+	for (int z=z1; z<=z2; ++z) for (int x=x1; x<=x2; ++x)
+		if (losMap[z*losWidth+x]<=0) return false;
+	return true;
+}
+
 } // namespace circuit

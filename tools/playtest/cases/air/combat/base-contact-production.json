@@ -1,0 +1,19 @@
+{
+  "name":"base-contact-production",
+  "description":"Funded factory may replace bombers while a recurring ground incident has a funded gunship/fighter reserve; genuine production policy stays enabled.",
+  "checks":"base-contact-production",
+  "bomber_only":false,
+  "factory_production":true,
+  "aircraft":[
+    {"unit":"armaca","count":12,"team":0,"position":[2155,11744],"once":true},
+    {"unit":"armhawk","count":24,"team":0,"position":[2155,11744],"once":true},
+    {"unit":"armbrawl","count":30,"team":0,"position":[1500,5500],"once":true}
+  ],
+  "targets":[
+    {"unit":"armaap","count":1,"team":0,"position":[1200,11900],"after_seconds":60,"once":true},
+    {"unit":"corck","count":1,"team":1,"position":[3000,11000]},
+    {"unit":"armvp","count":1,"team":1,"position":[10100,1300]}
+  ],
+  "defenses":[],
+  "refill_seconds":30
+}

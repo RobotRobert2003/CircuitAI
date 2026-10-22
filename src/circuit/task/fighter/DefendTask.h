@@ -15,7 +15,7 @@ namespace circuit {
 class CDefendTask final: public ISquadTask {
 public:
 	CDefendTask(ITaskModule* mgr, const springai::AIFloat3& position,
-				FightType check, FightType promote, float maxPower, float powerMod);
+				FightType check, FightType promote, float maxPower, float powerMod, int gatherDeadline = -1);
 	virtual ~CDefendTask();
 
 	virtual bool CanAssignTo(CCircuitUnit* unit) const override;
@@ -29,6 +29,7 @@ public:
 	void SetMaxPower(float power) { maxPower = power * powerMod; }
 //	void SetWantedTarget(CEnemyInfo* enemy) { SetTarget(enemy); }
 
+	bool IsGather() const { return gatherDeadline >= 0; }
 	FightType GetPromote() const { return promote; }
 	int GetCreatedFrame() const { return createdFrame; }
 
@@ -49,6 +50,7 @@ private:
 	FightType promote;
 	float maxPower;
 	int createdFrame;   // for the wait cap; see Update()
+	int gatherDeadline; // opt-in isolated rally; script owns threshold and deadline
 };
 
 } // namespace circuit

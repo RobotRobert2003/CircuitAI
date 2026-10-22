@@ -83,6 +83,10 @@ private:
 	CMaskHandler::TypeMask AddRole(const std::string& name, int actAsRole);
 
 	void Log(const std::string& msg) const;
+	void PerfBegin(int phase) const;
+	void PerfEnd(int phase) const;
+	void PerfBeginLabel(const std::string& label) const;
+	void PerfEndLabel() const;
 	void AddPoint(const springai::AIFloat3& pos, const std::string& msg) const;
 	void DelPoint(const springai::AIFloat3& pos) const;
 	void AddLine(const springai::AIFloat3& posA, const springai::AIFloat3& posB) const;

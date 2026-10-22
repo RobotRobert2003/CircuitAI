@@ -1,0 +1,86 @@
+{
+  "name": "thug-static-bait",
+  "unit": "corthud",
+  "side": "cortex",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4300,
+    1750
+  ],
+  "photos": [
+    35,
+    60,
+    110
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4200
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4700
+      ]
+    },
+    {
+      "unit": "corthud",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3800,
+        3900
+      ],
+      "columns": 6,
+      "spacing": 64,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armwar",
+      "count": 1,
+      "team": 1,
+      "position": [
+        4000,
+        4500
+      ]
+    },
+    {
+      "unit": "armhlt",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3880,
+        4650
+      ],
+      "spacing": 200
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "max_friendly_damage": 0,
+    "max_losses": 0,
+    "min_kills": 0,
+    "min_types_assigned": 1
+  },
+  "checks": "thug-safe-stage"
+}

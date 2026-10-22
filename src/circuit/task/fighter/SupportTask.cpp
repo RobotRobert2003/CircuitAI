@@ -7,13 +7,16 @@
 
 #include "task/fighter/SupportTask.h"
 #include "task/fighter/SquadTask.h"
+#include "task/fighter/RangedWorld.h"
 #include "module/MilitaryManager.h"
 #include "setup/SetupManager.h"
 #include "terrain/TerrainManager.h"
 #include "terrain/path/PathFinder.h"
 #include "terrain/path/QueryPathMulti.h"
+#include "terrain/path/QueryPathSingle.h"
 #include "unit/CircuitUnit.h"
 #include "CircuitAI.h"
+#include "spring/SpringUnit.h"
 #include "util/Utils.h"
 
 #include "AISCommands.h"
@@ -37,6 +40,11 @@ CSupportTask::~CSupportTask()
 
 void CSupportTask::RemoveAssignee(CCircuitUnit* unit)
 {
+	if (rangedEscort) {
+		static_cast<CMilitaryManager*>(manager)->GetRangedWorld()->ReleaseEscort(unit->GetId());
+		rangedEscort = false;
+		++escortGeneration; escortPath.clear();
+	}
 	IFighterTask::RemoveAssignee(unit);
 	if (units.empty()) {
 		manager->AbortTask(this);
@@ -45,6 +53,7 @@ void CSupportTask::RemoveAssignee(CCircuitUnit* unit)
 
 void CSupportTask::Start(CCircuitUnit* unit)
 {
+	if (TryRangedEscort(unit)) return;
 	if (State::DISENGAGE == state) {
 		return;
 	}
@@ -62,6 +71,104 @@ void CSupportTask::Start(CCircuitUnit* unit)
 		unit->CmdWantedSpeed(NO_SPEED_LIMIT);
 	)
 	state = State::DISENGAGE;  // Wait
+}
+
+bool CSupportTask::ForgetUnit(CCircuitUnit* unit)
+{
+	// This callback is broadcast for unrelated allies too.
+	if (rangedEscort && units.count(unit)) {
+		static_cast<CMilitaryManager*>(manager)->GetRangedWorld()->ReleaseEscort(unit->GetId());
+		rangedEscort=false; ++escortGeneration; escortPath.clear();
+	}
+	return IFighterTask::ForgetUnit(unit);
+}
+
+void CSupportTask::Stop(bool done)
+{
+	escortLifetime.reset(); ++escortGeneration;
+	if (rangedEscort) {
+		auto world=static_cast<CMilitaryManager*>(manager)->GetRangedWorld();
+		for (auto* unit:units) world->ReleaseEscort(unit->GetId());
+	}
+	rangedEscort=false; escortPath.clear();
+	IFighterTask::Stop(done);
+}
+
+bool CSupportTask::TryRangedEscort(CCircuitUnit* unit)
+{
+	auto* military = static_cast<CMilitaryManager*>(manager);
+	if (!military->IsSensorUnit(unit->GetCircuitDef())) return false;
+	if (!military->HasRangedUnits()) {
+		if (rangedEscort) {
+			military->GetRangedWorld()->ReleaseEscort(unit->GetId());
+			pathQueries.erase(unit); ++escortGeneration; escortPath.clear(); rangedEscort=false;
+			TRY_UNIT(manager->GetCircuit(),unit,unit->CmdStop();)
+		}
+		return false;
+	}
+	auto world = military->GetRangedWorld();
+	AIFloat3 dest;
+	if (!world->Escort(unit, dest)) {
+		if (rangedEscort) {
+			pathQueries.erase(unit); rangedEscort=false; ++escortGeneration; escortPath.clear();
+			TRY_UNIT(manager->GetCircuit(),unit,unit->CmdStop();)
+		}
+		return false;
+	}
+	// Artillery tasks are not ISquadTask. Retain support ownership instead of
+	// adding them to FindCandidates and using its squad-only static_cast.
+	auto* circuit = manager->GetCircuit();
+	const auto pos=unit->GetPos(circuit->GetLastFrame());
+	while (escortCursor<escortPath.size() && (pos.SqDistance2D(escortPath[escortCursor])<4096.f
+		|| (escortCursor+1<escortPath.size() && pos.SqDistance2D(escortPath[escortCursor+1])<pos.SqDistance2D(escortPath[escortCursor])))) ++escortCursor;
+	AIFloat3 from=pos;
+	for (size_t i=escortCursor;i<escortPath.size();++i) {
+		if (!world->Safe(from,escortPath[i],32.f,true)) {
+			TRY_UNIT(circuit,unit,unit->CmdStop();)
+			escortPath.clear(); pathQueries.erase(unit); ++escortGeneration; break;
+		}
+		from=escortPath[i];
+	}
+	if (pos.SqDistance2D(dest)<4096.f) {
+		if (rangedEscort && circuit->GetUnitAPI()->GetCMDQueueSize(unit->GetId())>0) {
+			TRY_UNIT(circuit,unit,unit->CmdStop();)
+		}
+		pathQueries.erase(unit); ++escortGeneration; escortPath.clear(); rangedEscort=true; return true;
+	}
+	if (rangedEscort && escortDestination.SqDistance2D(dest)<4096.f
+		&& (pathQueries.count(unit) || circuit->GetUnitAPI()->GetCMDQueueSize(unit->GetId())>0)) return true;
+	pathQueries.erase(unit); rangedEscort=true; escortDestination=dest;
+	auto* finder=circuit->GetPathfinder();
+	// The native path query requires at least one whole coarse-grid cell.
+	auto query=finder->CreatePathSingleQuery(unit,circuit->GetThreatMap(),pos,dest,float(finder->GetSquareSize()));
+	pathQueries[unit]=query;
+	const unsigned version=++escortGeneration;
+	const int id=unit->GetId();
+	const std::weak_ptr<int> alive=escortLifetime;
+	finder->RunQuery(circuit->GetScheduler().get(),query,[this,world,alive,version,id,dest](const IPathQuery* result) {
+		if (alive.expired()) return;
+		auto* query=static_cast<const CQueryPathSingle*>(result);
+		auto* circuit=manager->GetCircuit();
+		auto* unit=circuit->GetTeamUnit(id);
+		if (!unit || unit->GetTask()!=this || !rangedEscort || version!=escortGeneration) return;
+		auto path=query->GetPathInfo()->posPath;
+		if (path.empty()) { pathQueries.erase(unit); return; }
+		path.push_back(dest);
+		AIFloat3 from=unit->GetPos(circuit->GetLastFrame());
+		world->Refresh();
+		for (const auto& p:path) {
+			if (from.SqDistance2D(p)>16.f && !world->Safe(from,p,32.f,true)) {
+				pathQueries.erase(unit); return;
+			}
+			from=p;
+		}
+		TRY_UNIT(circuit,unit,
+			for (size_t i=0;i<path.size();++i) unit->CmdMoveTo(path[i],i?UNIT_COMMAND_OPTION_SHIFT_KEY:0);
+		)
+		escortPath=std::move(path); escortCursor=0;
+		pathQueries.erase(unit);
+	});
+	return true;
 }
 
 /*
@@ -137,6 +244,7 @@ void CSupportTask::Update()
 	if (unit->Blocker() != nullptr) {
 		return;  // Do not interrupt current action
 	}
+	if (TryRangedEscort(unit)) return;
 
 	const std::set<IFighterTask*>& tasksA = static_cast<CMilitaryManager*>(manager)->GetTasks(IFighterTask::FightType::ATTACK);
 	const std::set<IFighterTask*>& tasksD = static_cast<CMilitaryManager*>(manager)->GetTasks(IFighterTask::FightType::DEFEND);
@@ -176,7 +284,19 @@ void CSupportTask::Update()
 			startPos, range, urgentPositions, nullptr, false, std::numeric_limits<float>::max(), true);
 	pathQueries[unit] = query;
 
-	pathfinder->RunQuery(circuit->GetScheduler().get(), query, [this](const IPathQuery* query) {
+	// A legacy squad-join query can still be in flight when ranged guns appear
+	// and this sensor switches to an escort route. Reject that old result using
+	// the same ownership/generation contract as the new route, before touching
+	// its borrowed unit pointer.
+	const std::weak_ptr<int> alive=escortLifetime;
+	const unsigned version=escortGeneration;
+	const int id=unit->GetId();
+	pathfinder->RunQuery(circuit->GetScheduler().get(), query, [this,alive,version,id](const IPathQuery* query) {
+		if(alive.expired() || version!=escortGeneration) return;
+		auto* unit=manager->GetCircuit()->GetTeamUnit(id);
+		if(!unit || unit->GetTask()!=this) return;
+		const auto pending=pathQueries.find(unit);
+		if(pending==pathQueries.end() || pending->second.get()!=query) return;
 		this->ApplyPath(static_cast<const CQueryPathMulti*>(query));
 	});
 }

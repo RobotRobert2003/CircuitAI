@@ -1,0 +1,10 @@
+{
+  "name": "scout-fog",
+  "checks": "sea-fleet-search",
+  "groups": [
+    {"unit":"armpt","team":0,"count":3,"position":[2300,4200]},
+    {"unit":"armpship","team":0,"count":8,"position":[2300,4600]},
+    {"unit":"corpship","team":1,"count":8,"position":[4500,4200]},
+    {"unit":"corpt","team":1,"count":2,"position":[4600,4600]}
+  ]
+}

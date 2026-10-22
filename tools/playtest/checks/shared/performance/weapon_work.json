@@ -1,0 +1,14 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {"key": "opening", "pattern": "\\[Rule\\] (opening\\.mex|chain\\.next)", "scope": "tech", "by_minute": 1},
+    {"key": "probe", "pattern": "\\[WeaponPerf\\] PASS 500 old and 500 new asks", "scope": "any", "by_minute": 3},
+    {"key": "old-timer", "pattern": "label=weapon-fixture-old calls=", "scope": "any", "by_minute": 3},
+    {"key": "new-timer", "pattern": "label=weapon-fixture-new calls=", "scope": "any", "by_minute": 3}
+  ],
+  "forbid": [
+    {"key": "script", "pattern": ": ERR\\s+:|: WARN\\s+:|SCRIPT CRASH|Lib exception|Access violation|Fatal:", "scope": "any"},
+    {"key": "probe-failed", "pattern": "\\[WeaponPerf\\] FAIL", "scope": "any"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "any"}
+  ]
+}

@@ -943,6 +943,8 @@
 			},
 			"legamcluster": {
 				"role": ["artillery"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -953,11 +955,15 @@
 			},
 			"legmed": {
 				"role":	["assault"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
 			"legvcarry": {
 				"role":	["riot"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "carrier", "range_fraction": 0.94, "spacing": 160, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -1038,6 +1044,7 @@
 				"power": 1.0
 			},
 			"legfort": {
+				"target_min_cost": 300,
 				"role": ["heavy", "air"],
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0

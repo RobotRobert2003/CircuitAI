@@ -8,13 +8,70 @@
 #include "script/EconomyScript.h"
 #include "script/ScriptManager.h"
 #include "module/EconomyManager.h"
+#include "module/BuilderManager.h"
+#include "resource/EnergyManager.h"
+#include "spring/SpringMap.h"
 #include "task/builder/BuilderTask.h"
+#include "CircuitAI.h"
+#include "terrain/TerrainManager.h"
+#include "spring/SpringCallback.h"
+#include "unit/ally/AllyUnit.h"
+#include "unit/CircuitUnit.h"
+#include "unit/CircuitDef.h"
+#include "util/Utils.h"
 #include "util/ExtAS.h"
 #include "angelscript/include/angelscript.h"
+#include "angelscript/add_on/scriptarray/scriptarray.h"
 
 namespace circuit {
 
 using namespace springai;
+
+// Explicit script opt-in. BAR permits an advanced geo over an owned T1 geo;
+// its upgrade gadget retires/refunds the old unit on completion. Never reclaim
+// the source here. Scan immutable vent positions, then only local occupants.
+static IUnitTask* EnqueueLocalGeo(CEconomyManager* economy, CCircuitUnit* builder,
+        CCircuitDef* definition, const AIFloat3& center, float radius)
+{
+    if (!builder || !definition || radius <= 0.f || !definition->GetDef()->IsNeedGeo()
+        || !builder->GetCircuitDef()->CanBuild(definition)) return nullptr;
+    auto* circuit = economy->GetCircuit();
+    auto* manager = circuit->GetBuilderManager();
+    auto* terrain = circuit->GetTerrainManager();
+    const int frame = circuit->GetLastFrame();
+    if (!definition->IsAvailable(frame)) return nullptr;
+    const auto& sites = circuit->GetEnergyManager()->GetSpots();
+    int chosen = -1;
+    float best = radius * radius;
+    for (size_t index = 0; index < sites.size(); ++index) {
+        const auto& position = sites[index];
+        const float distance = position.SqDistance2D(center);
+        if (distance > best || terrain->IsZoneAlly(position)
+            || !terrain->CanReachAtSafe(builder, position, builder->GetCircuitDef()->GetBuildDistance())
+            || !terrain->CanBeBuiltAtSafe(definition, position)
+            || terrain->IsAllyLayoutBlocked(definition, position, UNIT_NO_FACING)) continue;
+        bool occupied = false;
+        for (auto* task : manager->GetTasks(IBuilderTask::BuildType::GEO)) {
+            if (task->GetPosition().SqDistance2D(position) < 64.f) { occupied = true; break; }
+        }
+        if (occupied) continue;
+        for (int id : circuit->GetCallback()->GetFriendlyUnitIdsIn(position, 32.f, false)) {
+            auto* friendly = circuit->GetFriendlyUnit(id);
+            if (!friendly || !friendly->GetCircuitDef()->GetDef()->IsNeedGeo()) continue;
+            auto* owned = circuit->GetTeamUnit(id);
+            if (!owned || !owned->IsFinished()
+                || economy->GetEnergyMake(owned->GetCircuitDef()) >= economy->GetEnergyMake(definition)) {
+                occupied = true; break;
+            }
+        }
+        if (occupied || !circuit->GetMap()->IsPossibleToBuildAt(definition->GetDef(), position, UNIT_NO_FACING)) continue;
+        best = distance;
+        chosen = static_cast<int>(index);
+    }
+    if (chosen < 0) return nullptr;
+    return manager->Enqueue(TaskB::Spot(IBuilderTask::BuildType::GEO,
+        IBuilderTask::Priority::HIGH, definition, sites[chosen], chosen));
+}
 
 static void CEconomyManager_SetEnergyCondition(CEconomyManager* mgr, const CCircuitDef* cdef, int limit, float mi, float ei)
 {
@@ -26,8 +83,55 @@ static int CEconomyManager_GetEnergyLimit(CEconomyManager* mgr, const CCircuitDe
 	return mgr->GetEnergyLimit(const_cast<CCircuitDef*>(cdef));
 }
 
+// D-290: the metal storage a definition adds to the team (UnitDef metalStorage).
+// One engine definition read per call; called only when a reclaim is decided.
+static float CEconomyManager_GetMetalStorageOf(CEconomyManager* mgr, const CCircuitDef* cdef)
+{
+	if ((cdef == nullptr) || (cdef->GetDef() == nullptr) || (mgr->GetMetalRes() == nullptr)) {
+		return 0.f;
+	}
+	return std::max(0.f, cdef->GetDef()->GetStorage(mgr->GetMetalRes()));
+}
+
 static void CEconomyManager_ClearAllyStarts(CEconomyManager* mgr) { mgr->ClearAllyStarts(); }
 static void CEconomyManager_AddAllyStart(CEconomyManager* mgr, const AIFloat3& pos) { mgr->AddAllyStart(pos); }
+static void SetMexOwnership(CEconomyManager* mgr, bool enabled, float seconds) { mgr->SetMexOwnership(enabled, seconds); }
+static void SetMexAllyStart(CEconomyManager* mgr, int team, const AIFloat3& pos, int commander) { mgr->SetMexAllyStart(team, pos, commander); }
+static bool CanReachMex(CEconomyManager* mgr, CCircuitUnit* unit, const AIFloat3& pos) { return mgr->CanReachMex(unit, pos); }
+// D-352 mex theatres: policy from the roster (claims, enemy classes, settings), queries for the roles and the widget.
+static void CEconomyManager_SetMexTheatres(CEconomyManager* mgr, bool enabled, float theatreSeconds, float homeRadius) { mgr->SetMexTheatres(enabled, theatreSeconds, homeRadius); }
+static void CEconomyManager_SetMexLaneSettings(CEconomyManager* mgr, float mergeRadius, float mergeShare, float bandRadius) { mgr->SetMexLaneSettings(mergeRadius, mergeShare, bandRadius); }
+static void CEconomyManager_SetMexAllyClaim(CEconomyManager* mgr, int team, const AIFloat3& start, const AIFloat3& anchor,
+		const std::string& groundDef, const std::string& classDef, int readyFrame, float secureSeconds,
+		const std::string& combatDef, int combatReadyFrame, bool laneSpots) {
+	mgr->SetMexAllyClaim(team, start, anchor, groundDef.c_str(), classDef.c_str(), readyFrame, secureSeconds, combatDef.c_str(), combatReadyFrame, laneSpots);
+}
+static void CEconomyManager_RemoveMexAllyClaim(CEconomyManager* mgr, int team) { mgr->RemoveMexAllyClaim(team); }
+static void CEconomyManager_SetMexEnemyClass(CEconomyManager* mgr, const std::string& classDef, float readySeconds) { mgr->SetMexEnemyClass(classDef.c_str(), readySeconds); }
+static int CEconomyManager_MexTheatre(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexTheatre(pos); }
+static int CEconomyManager_MexSpotOwner(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexSpotOwner(pos); }
+static int CEconomyManager_MexSpotRule(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexSpotRule(pos); }
+static float CEconomyManager_MexSpotEnemySeconds(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexSpotEnemySeconds(pos); }
+static float CEconomyManager_MexSpotValue(CEconomyManager* mgr, const AIFloat3& pos, int team) { return mgr->MexSpotValue(pos, team); }
+static int CEconomyManager_MexSpotAdmission(CEconomyManager* mgr, CCircuitUnit* builder, const AIFloat3& pos) { return mgr->MexSpotAdmission(builder, pos); }
+static int CEconomyManager_MexLaneCount(CEconomyManager* mgr) { return mgr->MexLaneCount(); }
+static int CEconomyManager_MexLane(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexLane(pos); }
+static AIFloat3 CEconomyManager_MexLaneChoke(CEconomyManager* mgr, int lane) { return mgr->MexLaneChoke(lane); }
+static AIFloat3 CEconomyManager_MexLaneMidpoint(CEconomyManager* mgr, int lane) { return mgr->MexLaneMidpoint(lane); }
+static float CEconomyManager_MexLaneWidth(CEconomyManager* mgr, int lane) { return mgr->MexLaneWidth(lane); }
+static bool CEconomyManager_MexLaneMember(CEconomyManager* mgr, int lane, int team) { return mgr->MexLaneMember(lane, team); }
+static CScriptArray* CEconomyManager_MexLaneSpine(CEconomyManager* mgr, int lane, int step) {
+	asIScriptEngine* engine = asGetActiveContext()->GetEngine();
+	auto* cache = static_cast<CScriptManager::STypeInfoCache*>(engine->GetUserData());
+	const auto points = mgr->MexLaneSpine(lane, step);
+	CScriptArray* array = CScriptArray::Create(cache->vec3Array, static_cast<asUINT>(points.size()));
+	for (asUINT i = 0; i < array->GetSize(); ++i) *static_cast<AIFloat3*>(array->At(i)) = points[i];
+	return array;
+}
+static std::string CEconomyManager_DescribeMexTerritory(CEconomyManager* mgr) { return mgr->DescribeMexTerritory(); }
+static void CEconomyManager_DumpMexTerritory(CEconomyManager* mgr, const std::string& why) { mgr->DumpMexTerritory(why.c_str()); }
+static bool CEconomyManager_IsMexTheatresEnabled(CEconomyManager* mgr) { return mgr->IsMexTheatresEnabled(); }
+static bool IsOwnMex(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->IsOwnSpot(pos); }
 
 static IUnitTask* CEconomyManager_EnqueueMexWithinAware(
 		CEconomyManager* mgr, CCircuitUnit* builder, const AIFloat3& center, float radius, int maxSpots, bool allyAware)
@@ -39,6 +143,41 @@ static IUnitTask* CEconomyManager_EnqueueMexWithin(
 		CEconomyManager* mgr, CCircuitUnit* builder, const AIFloat3& center, float radius, int maxSpots)
 {
 	return mgr->EnqueueMexWithin(builder, center, radius, maxSpots);
+}
+
+static IUnitTask* CEconomyManager_EnqueueMexAvoiding(CEconomyManager* mgr,
+        CCircuitUnit* builder, const AIFloat3& center, float radius, bool allyAware, CScriptArray* avoid)
+{
+    std::vector<AIFloat3> excluded;
+    if (avoid != nullptr) {
+        excluded.reserve(avoid->GetSize());
+        for (asUINT i=0; i<avoid->GetSize(); ++i) excluded.push_back(*static_cast<AIFloat3*>(avoid->At(i)));
+    }
+    return mgr->EnqueueMexWithin(builder, center, radius, 0, allyAware, excluded);
+}
+
+// Policy-side admission for explicit mex searches. A cached open spot/queued
+// order can outlive allied ownership or a completed extractor. Reevaluate
+// would immediately reject it, leaving a SEA ship choosing the same job on
+// every idle ask. Bounded local callback only for a candidate, not every tick.
+// The caller chooses exclusion/backoff; legacy/native task selection is intact.
+static bool CEconomyManager_IsMexTaskUsable(CEconomyManager* mgr, IUnitTask* task)
+{
+    if (!task || task->IsDead() || task->GetType()!=IUnitTask::Type::BUILDER) return false;
+    auto* mex=static_cast<IBuilderTask*>(task);
+    if (mex->GetBuildType()!=IBuilderTask::BuildType::MEX || !mex->GetBuildDef()) return false;
+    if (mex->GetTarget()) return !mex->GetTarget()->IsDead() && !mex->GetTarget()->IsFinished();
+    auto* circuit=mgr->GetCircuit();
+    auto* terrain=circuit->GetTerrainManager();
+    const auto& pos=mex->GetPosition();
+    if (!geom::is_valid(pos) || (mgr->IsMexNavigationEnabled() ? !mgr->IsOwnSpot(pos) : terrain->IsZoneAlly(pos))
+        || terrain->IsAllyLayoutBlocked(mex->GetBuildDef(),pos,mex->GetFacing())) return false;
+    const auto& ids=circuit->GetCallback()->GetFriendlyUnitIdsIn(pos,mex->GetBuildDef()->GetExtrRangeM(),false);
+    for (int id:ids) {
+        auto* ally=circuit->GetFriendlyUnit(id);
+        if (ally && ally->GetCircuitDef()->IsMex()) return false;
+    }
+    return true;
 }
 
 static IUnitTask* CEconomyManager_EnqueueFieldUpgrade(CEconomyManager* mgr, CCircuitUnit* builder, const AIFloat3& center, float radius)
@@ -60,6 +199,7 @@ CEconomyScript::CEconomyScript(CScriptManager* scr, CEconomyManager* mgr)
 
 	r = engine->RegisterObjectType("CEconomyManager", 0, asOBJ_REF | asOBJ_NOHANDLE); ASSERT(r >= 0);
 	r = engine->RegisterGlobalProperty("CEconomyManager aiEconomyMgr", manager); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "IUnitTask@+ EnqueueLocalGeo(CCircuitUnit@, CCircuitDef@, const AIFloat3& in, float)", asFUNCTION(EnqueueLocalGeo), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "bool IsMetalMap() const", asMETHOD(CEconomyManager, IsMetalMap), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "int GetEffectiveUnitLimit() const", asMETHOD(CEconomyManager, GetEffectiveUnitLimit), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "int GetFieldMexCount(const AIFloat3& in, float) const", asMETHOD(CEconomyManager, GetFieldMexCount), asCALL_THISCALL); ASSERT(r >= 0);
@@ -100,10 +240,39 @@ CEconomyScript::CEconomyScript(CScriptManager* scr, CEconomyManager* mgr)
 	r = engine->RegisterObjectMethod("CEconomyManager", "IUnitTask@+ EnqueueMexWithin(CCircuitUnit@, const AIFloat3& in, float, int, bool allyAware)", asFUNCTION(CEconomyManager_EnqueueMexWithinAware), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "void ClearAllyStarts()", asFUNCTION(CEconomyManager_ClearAllyStarts), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "void AddAllyStart(const AIFloat3& in)", asFUNCTION(CEconomyManager_AddAllyStart), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexOwnership(bool, float)", asFUNCTION(SetMexOwnership), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexAllyStart(int, const AIFloat3& in, int)", asFUNCTION(SetMexAllyStart), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool CanReachMex(CCircuitUnit@, const AIFloat3& in)", asFUNCTION(CanReachMex), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool IsOwnMex(const AIFloat3& in)", asFUNCTION(IsOwnMex), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "int GetMexTaskCountWithin(const AIFloat3& in, float) const", asMETHOD(CEconomyManager, GetMexTaskCountWithin), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "IUnitTask@+ EnqueueMexAvoiding(CCircuitUnit@, const AIFloat3& in, float, bool, array<AIFloat3>@)", asFUNCTION(CEconomyManager_EnqueueMexAvoiding), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool IsMexTaskUsable(IUnitTask@)", asFUNCTION(CEconomyManager_IsMexTaskUsable), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	// D-352 mex theatres (resource/MexTerritory.h): claims and enemy classes are policy from the roster.
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexTheatres(bool, float theatreSeconds, float homeRadius)", asFUNCTION(CEconomyManager_SetMexTheatres), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexLaneSettings(float mergeRadius, float mergeShare, float bandRadius)", asFUNCTION(CEconomyManager_SetMexLaneSettings), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexAllyClaim(int team, const AIFloat3& in start, const AIFloat3& in anchor, const string& in groundDef, const string& in classDef, int readyFrame, float secureSeconds, const string& in combatDef, int combatReadyFrame, bool laneSpots)", asFUNCTION(CEconomyManager_SetMexAllyClaim), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void RemoveMexAllyClaim(int)", asFUNCTION(CEconomyManager_RemoveMexAllyClaim), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexEnemyClass(const string& in, float readySeconds)", asFUNCTION(CEconomyManager_SetMexEnemyClass), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool IsMexTheatresEnabled()", asFUNCTION(CEconomyManager_IsMexTheatresEnabled), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexTheatre(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexTheatre), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexSpotOwner(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexSpotOwner), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexSpotRule(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexSpotRule), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "float MexSpotEnemySeconds(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexSpotEnemySeconds), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "float MexSpotValue(const AIFloat3& in, int team)", asFUNCTION(CEconomyManager_MexSpotValue), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexSpotAdmission(CCircuitUnit@, const AIFloat3& in)", asFUNCTION(CEconomyManager_MexSpotAdmission), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexLaneCount()", asFUNCTION(CEconomyManager_MexLaneCount), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexLane(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexLane), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "AIFloat3 MexLaneChoke(int)", asFUNCTION(CEconomyManager_MexLaneChoke), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "AIFloat3 MexLaneMidpoint(int)", asFUNCTION(CEconomyManager_MexLaneMidpoint), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "float MexLaneWidth(int)", asFUNCTION(CEconomyManager_MexLaneWidth), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool MexLaneMember(int lane, int team)", asFUNCTION(CEconomyManager_MexLaneMember), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "array<AIFloat3>@ MexLaneSpine(int lane, int step)", asFUNCTION(CEconomyManager_MexLaneSpine), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "string DescribeMexTerritory()", asFUNCTION(CEconomyManager_DescribeMexTerritory), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void DumpMexTerritory(const string& in)", asFUNCTION(CEconomyManager_DumpMexTerritory), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	// Per-role energy table overrides (D-047); -1 keeps a field.
 	r = engine->RegisterObjectMethod("CEconomyManager", "void SetEnergyCondition(const CCircuitDef@, int limit, float metalIncome, float energyIncome)", asFUNCTION(CEconomyManager_SetEnergyCondition), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "int GetEnergyLimit(const CCircuitDef@) const", asFUNCTION(CEconomyManager_GetEnergyLimit), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "float GetMetalStorageOf(const CCircuitDef@) const", asFUNCTION(CEconomyManager_GetMetalStorageOf), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-290
 }
 
 CEconomyScript::~CEconomyScript()

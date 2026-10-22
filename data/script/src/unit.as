@@ -69,6 +69,7 @@ namespace Unit {
 		TypeMask NO_STRAFE = aiAttrMasker.GetTypeMask("no_strafe");
 		TypeMask STOCK     = aiAttrMasker.GetTypeMask("stockpile");
 		TypeMask SIEGE     = aiAttrMasker.GetTypeMask("siege");
+		TypeMask RANGED    = aiAttrMasker.GetTypeMask("ranged"); // opt-in land fire/position control
 		TypeMask RET_HOLD  = aiAttrMasker.GetTypeMask("ret_hold");
 		TypeMask RET_FIGHT = aiAttrMasker.GetTypeMask("ret_fight");
 		TypeMask SOLO      = aiAttrMasker.GetTypeMask("solo");

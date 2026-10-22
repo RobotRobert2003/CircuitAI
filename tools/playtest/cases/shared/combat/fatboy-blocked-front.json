@@ -1,0 +1,83 @@
+{
+  "name": "fatboy-blocked-front",
+  "unit": "armfboy",
+  "description": "Four Fatboys start at the rear with an observed outranging static line. They should stage outside its range, not remain at spawn or dive into it; a mobile target then approaches.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    5100,
+    3900
+  ],
+  "photos": [
+    45,
+    90,
+    150
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3200,
+        5700
+      ]
+    },
+    {
+      "unit": "armbrtha",
+      "count": 1,
+      "team": 1,
+      "position": [
+        4000,
+        7500
+      ]
+    },
+    {
+      "unit": "armfboy",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3700,
+        3000
+      ],
+      "spacing": 200
+    },
+    {
+      "unit": "armck",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        2800
+      ]
+    },
+    {
+      "unit": "armstump",
+      "count": 6,
+      "team": 1,
+      "position": [
+        3600,
+        5300
+      ],
+      "spacing": 160,
+      "after_seconds": 100
+    }
+  ],
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 0
+  }
+}

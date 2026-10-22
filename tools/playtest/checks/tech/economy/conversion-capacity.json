@@ -1,0 +1,9 @@
+{
+  "stop_minute":12,
+  "expect":[
+    {"key":"defense-release","pattern":"TechConversion\\] PASS forward defense waits for air economy","by_minute":1,"scope":"any"},
+    {"key":"capacity","pattern":"TechConversion\\] PASS excess capacity rejects converter","by_minute":3,"scope":"any"},
+    {"key":"reactor","pattern":"TechConversion\\] PASS additional reactor completed","by_minute":12,"scope":"any"}
+  ],
+  "forbid":[{"key":"errors","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|TechConversion\\] FAIL|Error in.*tech_conversion","scope":"any"}]
+}

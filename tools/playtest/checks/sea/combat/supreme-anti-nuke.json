@@ -1,0 +1,15 @@
+{
+  "stop_minute":8,
+  "expect":[
+    {"key":"loaded","pattern":"\\[SeaArena\\].* loaded", "scope":"any","by_minute":1},
+    {"key":"base","pattern":"\\[SEA\\]\\[AntiNuke\\].*base=true flagship=-1", "scope":"any","by_minute":2},
+    {"key":"escort","pattern":"\\[SEA\\]\\[AntiNuke\\].*base=false flagship=[0-9]+", "scope":"any","by_minute":2},
+    {"key":"ammo","pattern":"\\[SeaArena\\].*protection.*stockpile=[1-9]", "scope":"any","by_minute":4}
+  ],
+  "forbid":[
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

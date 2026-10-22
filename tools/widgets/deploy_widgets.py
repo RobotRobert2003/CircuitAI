@@ -8,9 +8,9 @@ Usage:
 
 The destination is the game's LuaUI/Widgets folder under %LOCALAPPDATA%
 (override with BAR_DATA_DIR). When it does not exist nothing happens, so the
-script is safe to run on a machine without the game. The Claude Code hook in
-.claude/settings.json runs it with --if-newer --quiet after every file edit
-and shell command, so a changed widget is in the game before the next load.
+script is safe to run on a machine without the game. This is an owner-invoked
+deployment utility; no coding-agent hook runs it. Agents stage test widgets in
+isolated playtest directories and follow the deployment rules in AGENTS.md.
 """
 import os
 import shutil

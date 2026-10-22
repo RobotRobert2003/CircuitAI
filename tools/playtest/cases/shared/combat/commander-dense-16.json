@@ -1,0 +1,294 @@
+{
+  "batch_spawn": true,
+  "name": "commander-dense-16",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "Sixteen initial commanders in eight opposing local battles, each with twenty held screen units. Audit actual active-team counts and casualties; later windows are integration evidence.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      1800,
+      640
+    ],
+    [
+      5200,
+      640
+    ],
+    [
+      1800,
+      2140
+    ],
+    [
+      5200,
+      2140
+    ],
+    [
+      1800,
+      3640
+    ],
+    [
+      5200,
+      3640
+    ],
+    [
+      1800,
+      5140
+    ],
+    [
+      5200,
+      5140
+    ],
+    [
+      1800,
+      960
+    ],
+    [
+      5200,
+      960
+    ],
+    [
+      1800,
+      2460
+    ],
+    [
+      5200,
+      2460
+    ],
+    [
+      1800,
+      3960
+    ],
+    [
+      5200,
+      3960
+    ],
+    [
+      1800,
+      5460
+    ],
+    [
+      5200,
+      5460
+    ]
+  ],
+  "ally_spots": "1,2,3,4,5,6,7,8",
+  "photos": [
+    90,
+    180,
+    300
+  ],
+  "camera": [
+    3200,
+    2600,
+    5000
+  ],
+  "min_spawn_spacing": 50,
+  "hold_all": true,
+  "commander_observation": true,
+  "commander_initial": true,
+  "command_breakdown": true,
+  "groups": [
+    {
+      "unit": "corthud",
+      "team": 0,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        1880,
+        720
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 1,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        5280,
+        720
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 2,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        1880,
+        2220
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 3,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        5280,
+        2220
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 4,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        1880,
+        3720
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 5,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        5280,
+        3720
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 6,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        1880,
+        5220
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 7,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        5280,
+        5220
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 8,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        1640,
+        880
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 9,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        5040,
+        880
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 10,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        1640,
+        2380
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 11,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        5040,
+        2380
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 12,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        1640,
+        3880
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 13,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        5040,
+        3880
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 14,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        1640,
+        5380
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 15,
+      "count": 20,
+      "columns": 5,
+      "spacing": 44,
+      "position": [
+        5040,
+        5380
+      ],
+      "after_seconds": 12
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "min_kills": 1,
+    "max_losses": 1000,
+    "min_damage": 0
+  },
+  "checks": "commander-dense",
+  "commander_all_teams": true
+}

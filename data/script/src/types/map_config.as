@@ -11,8 +11,8 @@
 //   1. If role dictionary contains a side key ("armada"/"cortex"/"legion"), use only that nested dictionary (strict side filtering).
 //   2. Else, treat role dictionary as flat factory->weight table and filter by factory name prefix (legacy behavior).
 //   3. If invalid/empty, fallback to legacy deterministic mapping.
-#include "../helpers/map_helpers.as"
-#include "../helpers/generic_helpers.as"
+#include "../helpers/spatial/map_helpers.as"
+#include "../helpers/common/generic_helpers.as"
 #include "start_spot.as"
 #include "strategic_objectives.as"
 
@@ -28,6 +28,7 @@ class MapConfig {
     float TechOpeningMexRadius = 0.0f;   // D-063: radius of the mex-first opening
     int TechOpeningMexCap = 0;           // 0 = every spot inside the radius
     int TechLayoutNanoRows = 0;          // turret rows in the box
+    bool TechCompactEconomy = false;     // independent small clusters on constrained terrain
 
     MapConfig(string mapNameMatch, dictionary unitLimits) {
         _mapNameMatch = mapNameMatch;
@@ -109,12 +110,6 @@ class MapConfig {
         return "UNKNOWN";
     }
 
-    bool HasFactoryWeights(AiRole role) {
-        string key = RoleKey(role);
-        dictionary@ dummy;
-        return FactoryWeights.get(key, @dummy);
-    }
-
     dictionary@ GetSideFactoryWeightsByRole(AiRole role) {
         string key = RoleKey(role);
         dictionary@ roleDict;
@@ -138,9 +133,6 @@ class MapConfig {
             }
         }
     }
-
-    // Back-compat setter: forward to new API
-    void SetRoleUnitLimits(dictionary@ byRole) { SetRoleUnitLimitOverlays(byRole); }
 
     // Get per-role unit limit overlay for a given role; may return null if none set
     dictionary@ GetRoleUnitLimitOverlayFor(AiRole role) {

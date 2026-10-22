@@ -1,0 +1,15 @@
+{
+  "name": "legion-t2-production",
+  "checks": "legion-t2-production",
+  "production": true,
+  "support_turrets": true,
+  "groups": [
+    {"unit":"leganavalfusion","team":0,"count":4,"position":[1900,4100]},
+    {"unit":"leganavaleconv","team":0,"count":8,"position":[1850,4850]},
+    {"unit":"armuwms","team":0,"count":4,"position":[1900,3900]},
+    {"unit":"legnanotcplat","team":0,"count":6,"position":[2180,4520],"columns":3,"spacing":64},
+    {"unit":"legadvshipyard","team":0,"count":1,"position":[2450,4400]},
+    {"unit":"legnavydestro","team":0,"count":2,"position":[2750,4200]},
+    {"unit":"corah","team":1,"count":8,"position":[3900,4250],"after_seconds":150}
+  ]
+}

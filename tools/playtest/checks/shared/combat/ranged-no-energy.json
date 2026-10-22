@@ -1,0 +1,15 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {"key":"loaded","pattern":"\\[RangedArena\\].* loaded","scope":"any","by_minute":1},
+    {"key":"spawn","pattern":"\\[RangedArena\\].* spawn","scope":"any","by_minute":1},
+    {"key":"orders","pattern":"\\[RangedArena\\].* orders team=0","scope":"any","by_minute":2}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[RangedArena\\].*ERROR|Error in.*ranged_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"},
+    {"key":"energy","pattern":"\\[RangedArena\\].* shot .*unit=armsnipe","scope":"any"}
+  ]
+}

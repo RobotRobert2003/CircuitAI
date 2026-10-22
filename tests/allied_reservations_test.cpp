@@ -1,5 +1,7 @@
 #include "circuit/terrain/AlliedReservations.h"
 #include <iostream>
+#include <random>
+#include "support/allied_reservations_legacy.h"
 
 using circuit::allied_layout::Reservations;
 using circuit::allied_layout::Rect;
@@ -68,6 +70,110 @@ void test_dense_index_agrees_with_rectangle_reference() {
     }
     Check(equivalent, __func__);
 }
+void test_three_roles_keep_private_clusters_but_share_forward_space() {
+    Reservations r;
+    // Owner IDs stand for AIR, SEA and TECH. Policy does not enter the index.
+    for (int owner = 0; owner < 3; ++owner)
+        r.Put(owner, Reservations::ZONE, 1, {owner * 100, 0, owner * 100 + 80, 80});
+    bool isolated = true;
+    for (int owner = 0; owner < 3; ++owner)
+        for (int requester = 0; requester < 3; ++requester)
+            isolated &= r.OverlapsOther(requester, {owner * 100 + 10, 10, owner * 100 + 12, 12}) == (requester != owner);
+    Check(isolated, __func__);
+    // A forward weapon/mex area has individual slots, not an exclusive envelope.
+    r.Put(0, Reservations::SLOT, 9, {100, 200, 104, 204});
+    r.Put(1, Reservations::SLOT, 9, {108, 200, 112, 204});
+    Check(!r.OverlapsOther(2, {104, 200, 108, 204}), __func__);
+    Check(r.OverlapsOther(2, {100, 200, 104, 204}), __func__);
+}
+void test_overlapping_owners_survive_independent_release() {
+    Reservations r;
+    // XOR can equal a real owner's ID; the distinct-owner count must disambiguate.
+    for (int owner : {0, 1, 2, 3, -12, 1000000}) r.Put(owner, Reservations::ZONE, 1, {31, 31, 66, 66});
+    for (int owner : {0, 1, 2, 3, -12, 1000000}) Check(r.OverlapsOther(owner, {32, 32, 33, 33}), __func__);
+    for (int owner : {0, 1, 2, 3, -12}) r.RemoveOwner(owner);
+    Check(!r.OverlapsOther(1000000, {31, 31, 66, 66}) && r.OverlapsOther(0, {65, 65, 66, 66}), __func__);
+    r.RemoveOwner(1000000);
+    Check(!r.OverlapsOther(0, {0, 0, 100, 100}) && r.Size() == 0, __func__);
+    r.Put(3, Reservations::SLOT, 9, {63, 63, 64, 64});
+    Check(r.OverlapsOther(0, {63, 63, 64, 64}), __func__);
+}
+void test_large_nested_claim_counts_do_not_clear_early() {
+    Reservations r;
+    for (int i = 0; i < 70000; ++i) r.Put(4, Reservations::SLOT, i, {31, 31, 33, 33});
+    for (int i = 0; i < 69999; ++i) r.Erase(4, Reservations::SLOT, i);
+    Check(r.Size() == 1 && r.OverlapsOther(5, {32, 32, 33, 33}), __func__);
+    r.Erase(4, Reservations::SLOT, 69999);
+    Check(!r.OverlapsOther(5, {31, 31, 33, 33}), __func__);
+}
+void test_invalid_replacement_releases_previous_claim() {
+    Reservations r;
+    r.Put(0, Reservations::ZONE, 1, {0, 0, 64, 64});
+    r.Put(0, Reservations::ZONE, 1, {-1, 0, 64, 64});
+    Check(r.Size() == 0 && !r.OverlapsOther(1, {0, 0, 64, 64}), __func__);
+}
+void test_full_and_partial_page_claims_release_independently() {
+    Reservations r;
+    r.Put(0, Reservations::ZONE, 1, {0, 0, 64, 64});
+    r.Put(0, Reservations::ZONE, 2, {0, 0, 32, 32});
+    r.Put(0, Reservations::SLOT, 1, {31, 31, 33, 33});
+    r.Put(1, Reservations::SLOT, 1, {31, 31, 33, 33});
+    Check(r.OverlapsOther(0, {31, 31, 32, 32}) && r.OverlapsOther(1, {0, 0, 1, 1}), __func__);
+    r.Erase(1, Reservations::SLOT, 1);
+    Check(!r.OverlapsOther(0, {0, 0, 64, 64}), __func__);
+    r.Erase(0, Reservations::ZONE, 1);
+    Check(r.OverlapsOther(1, {0, 0, 1, 1}) && !r.OverlapsOther(1, {63, 63, 64, 64}), __func__);
+    r.Erase(0, Reservations::ZONE, 2);
+    Check(!r.OverlapsOther(1, {0, 0, 1, 1}) && r.OverlapsOther(1, {32, 32, 33, 33}), __func__);
+    r.RemoveOwner(0);
+    Check(!r.OverlapsOther(1, {0, 0, 64, 64}), __func__);
+}
+void test_random_mutations_match_brute_force_and_legacy() {
+    Reservations r;
+    circuit::allied_layout_legacy::Reservations legacy;
+    std::map<Reservations::Key, Rect> oracle;
+    std::mt19937 random(1974001);
+    const std::array<int, 8> owners{0, 1, 2, 3, -7, 67, 1000000, std::numeric_limits<int>::max()};
+    for (int step = 0; step < 8000; ++step) {
+        const int owner = owners[random() % owners.size()];
+        const int id = int(random() % 300) - 150;
+        const auto kind = Reservations::Kind(random() % 2);
+        const auto oldKind = circuit::allied_layout_legacy::Reservations::Kind(kind);
+        const auto key = Reservations::Key(owner, kind, id);
+        const int operation = random() % 20;
+        if (operation == 0) {
+            r.RemoveOwner(owner); legacy.RemoveOwner(owner);
+            for (auto it = oracle.begin(); it != oracle.end();) {
+                if (std::get<0>(it->first) == owner) it = oracle.erase(it); else ++it;
+            }
+        } else if (operation < 4) {
+            r.Erase(owner, kind, id); legacy.Erase(owner, oldKind, id); oracle.erase(key);
+        } else {
+            const int x = int(random() % 384) - 4, z = int(random() % 384) - 4;
+            const Rect rect{x, z, x + int(random() % 90), z + int(random() % 90)};
+            r.Put(owner, kind, id, rect);
+            legacy.Put(owner, oldKind, id, {rect.x1, rect.z1, rect.x2, rect.z2});
+            oracle.erase(key);
+            if (rect.Valid()) oracle.emplace(key, rect);
+        }
+        Check(r.Size() == oracle.size(), "random ledger size");
+        for (int q = 0; q < 12; ++q) {
+            const int who = owners[random() % owners.size()];
+            const int x = int(random() % 512) - 4, z = int(random() % 512) - 4;
+            const Rect rect{x, z, x + int(random() % 110), z + int(random() % 110)};
+            bool expected = false;
+            if (rect.Valid()) for (const auto& [k, v] : oracle) expected |= std::get<0>(k) != who && v.Overlaps(rect);
+            Check(r.OverlapsOther(who, rect) == expected, "random query matches brute-force rectangles");
+            Check(r.OverlapsOther(who, rect) == legacy.OverlapsOther(who, {rect.x1, rect.z1, rect.x2, rect.z2}), "random query matches legacy index");
+        }
+        if (step % 500 == 0) {
+            // Restore rebuilds from authoritative geometry, never serialized summaries.
+            Reservations restored;
+            for (const auto& [k, v] : oracle) restored.Put(std::get<0>(k), Reservations::Kind(std::get<1>(k)), std::get<2>(k), v);
+            for (int who : owners) Check(restored.OverlapsOther(who, {0, 0, 512, 512}) == r.OverlapsOther(who, {0, 0, 512, 512}), "restored rectangle ledger");
+        }
+    }
+}
 int main() {
     test_foreign_overlap_interior_is_blocked(); test_owner_can_place_inside_own_zone();
     test_touching_edges_leave_no_overlap(); test_cross_bucket_footprint_detects_one_cell_overlap();
@@ -75,6 +181,12 @@ int main() {
     test_release_is_owner_scoped(); test_releasing_last_claim_frees_ground();
     test_invalid_rectangle_cannot_hold_space(); test_separate_alliances_do_not_share();
     test_dense_index_agrees_with_rectangle_reference();
+    test_three_roles_keep_private_clusters_but_share_forward_space();
+    test_overlapping_owners_survive_independent_release();
+    test_large_nested_claim_counts_do_not_clear_early();
+    test_invalid_replacement_releases_previous_claim();
+    test_full_and_partial_page_claims_release_independently();
+    test_random_mutations_match_brute_force_and_legacy();
     std::cout << checks << " allied reservation tests; " << failures << " failures\n";
     return failures != 0;
 }

@@ -1,0 +1,94 @@
+{
+  "name": "mace-aggression-aggressive",
+  "unit": "armham",
+  "side": "armada",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4250,
+    1600
+  ],
+  "photos": [
+    33,
+    60,
+    100
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 2,
+      "position": [
+        3450,
+        4500
+      ],
+      "spacing": 450
+    },
+    {
+      "unit": "armhlt",
+      "team": 1,
+      "count": 4,
+      "position": [
+        3800,
+        4700
+      ],
+      "columns": 4,
+      "spacing": 110,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armham",
+      "team": 0,
+      "count": 16,
+      "position": [
+        3800,
+        3900
+      ],
+      "columns": 8,
+      "spacing": 64,
+      "after_seconds": 25
+    },
+    {
+      "unit": "armrock",
+      "team": 0,
+      "count": 8,
+      "position": [
+        3800,
+        3780
+      ],
+      "columns": 8,
+      "spacing": 64,
+      "after_seconds": 25
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "max_losses": 24,
+    "max_friendly_damage": 5000,
+    "min_types_assigned": 2,
+    "min_damage": 100,
+    "min_kills": 4
+  },
+  "camera_angle": 1.35,
+  "min_spawn_spacing": 64,
+  "units": [
+    "armham",
+    "armrock"
+  ],
+  "formation_observation": true,
+  "command_breakdown": true,
+  "aggression_delta": 1,
+  "storage_scenario": "mace-bias-aggressive",
+  "rush_lifecycle": true
+}

@@ -1,0 +1,15 @@
+{
+  "stop_minute":4,
+  "expect":[
+    {"key":"hold","pattern":"\\[SEA\\]\\[SubFireline\\] hold","scope":"any","by_minute":1},
+    {"key":"replacement","pattern":"\\[SEA\\]\\[SubReplacement\\] form","scope":"any","by_minute":2},
+    {"key":"replacement advance","pattern":"\\[SEA\\]\\[SubReplacement\\] advance","scope":"any","by_minute":4},
+    {"key":"torpedoes","pattern":"\\[SeaArena\\].*damage.*attackerUnit=corsub","scope":"any","by_minute":2}
+  ],
+  "forbid":[
+    {"key":"sub retreat","pattern":"\\[RetreatProbe\\].*retreat=true def=(?:arm|cor)sub","scope":"any"},
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena","scope":"any"}
+  ]
+}

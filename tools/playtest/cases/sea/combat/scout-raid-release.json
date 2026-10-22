@@ -1,0 +1,49 @@
+{
+  "name": "scout-raid-release",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      7492,
+      1220
+    ],
+    [
+      4814,
+      11077
+    ]
+  ],
+  "checks": "sea/combat/scout-raid-release.json",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "shots": "0.5@2200@6000:2300,1.5@2600@6000:2600,3@5000@5500:3200",
+  "groups": [
+    {
+      "unit": "armpt",
+      "team": 0,
+      "count": 4,
+      "position": [
+        6000,
+        1800
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "corsy",
+      "team": 1,
+      "count": 1,
+      "position": [
+        6000,
+        2600
+      ]
+    }
+  ],
+  "progression_audit": {
+    "count": 4,
+    "release_seconds": 30,
+    "target": "corsy",
+    "kind": "scout_release",
+    "unit": "armpt",
+    "minimum_spread": 800
+  }
+}

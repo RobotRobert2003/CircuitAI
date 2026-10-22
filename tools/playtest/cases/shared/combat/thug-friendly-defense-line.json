@@ -1,0 +1,98 @@
+{
+  "name": "thug-friendly-defense-line",
+  "unit": "corthud",
+  "side": "cortex",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    3900,
+    1250
+  ],
+  "photos": [
+    30,
+    50,
+    85
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4200
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4700
+      ]
+    },
+    {
+      "unit": "corthud",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3800,
+        3900
+      ],
+      "columns": 6,
+      "spacing": 64,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armwar",
+      "count": 3,
+      "team": 1,
+      "position": [
+        3900,
+        4500
+      ],
+      "spacing": 90,
+      "after_seconds": 20
+    },
+    {
+      "unit": "corllt",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3800,
+        3500
+      ],
+      "after_seconds": 10,
+      "columns": 6,
+      "spacing": 250
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "max_friendly_damage": 0,
+    "min_kills": 2,
+    "max_losses": 2,
+    "min_types_assigned": 1,
+    "min_damage": 1000,
+    "max_first_shot_seconds": 65
+  },
+  "enemy_destination": [
+    4000,
+    2900
+  ],
+  "camera_angle": 1.35,
+  "min_spawn_spacing": 64,
+  "storage_scenario": "thug-defense-line"
+}

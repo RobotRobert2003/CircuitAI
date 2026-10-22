@@ -1,0 +1,30 @@
+{
+  "stop_minute": 30,
+  "expect": [
+    {
+      "key": "observer",
+      "pattern": "SeaRecoveryTest\\] loaded teams=16",
+      "by_minute": 1,
+      "scope": "any"
+    },
+    {
+      "key": "sub-scaling",
+      "pattern": "SeaRecoveryTest\\] PASS sub-scaling",
+      "by_minute": 30,
+      "scope": "any"
+    },
+    {
+      "key": "start-count",
+      "pattern": "StartSpots length=16",
+      "scope": "any",
+      "by_minute": 3
+    }
+  ],
+  "forbid": [
+    {
+      "key": "errors",
+      "pattern": "INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaRecoveryTest\\] FAIL|Error in.*sea_recovery|Exception:|Null pointer access",
+      "scope": "any"
+    }
+  ]
+}

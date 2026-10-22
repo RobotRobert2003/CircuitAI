@@ -1,0 +1,14 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {"key":"battleship mobilized","pattern":"\\[SEA\\]\\[Fleet\\] armbats.*target=[0-9]", "scope":"any","by_minute":3},
+    {"key":"destroyer mobilized","pattern":"\\[SEA\\]\\[Fleet\\] armroy.*target=[0-9]", "scope":"any","by_minute":3},
+    {"key":"base damaged","pattern":"\\[SeaArena\\].*damage.*team=0.*victimUnit=corsy", "scope":"any","by_minute":3},
+    {"key":"yard destroyed","pattern":"\\[SeaArena\\].*death.*team=1.*unit=corsy", "scope":"any","by_minute":4}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena","scope":"any"}
+  ]
+}

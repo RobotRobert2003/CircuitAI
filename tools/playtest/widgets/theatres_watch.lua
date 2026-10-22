@@ -29,9 +29,9 @@ function widget:GameFrame(f)
         check(a and b and not a.visible and b.visible,"switch player")
         local roster=ui.Roster()
         check(roster[1] and roster[1].role=="AIR" and b and b.geos==6,"non-TECH survey")
-        click(ui,"lanesAll"); stage=4
+        click(ui,"lanesTeam"); stage=4
     elseif stage==4 and f>=1900 then
-        check(ui.TheatreSnapshot(0).visible and ui.TheatreSnapshot(1).visible,"all players")
+        check(ui.TheatreSnapshot(0).visible and ui.TheatreSnapshot(1).visible==Spring.AreTeamsAllied(0,1),"selected team")
         click(ui,"lanesOff")
         check(not ui.TheatreSnapshot(0).visible and not ui.TheatreSnapshot(1).visible,"hide all")
         ui.SetTheatres(0); stage=5

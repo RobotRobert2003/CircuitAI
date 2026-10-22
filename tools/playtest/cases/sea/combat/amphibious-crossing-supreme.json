@@ -1,0 +1,18 @@
+{
+  "name": "amphibious-crossing-supreme",
+  "map": "Supreme Isthmus v1.7", "map_key": "supreme",
+  "starts": [[7492,1220],[4814,11077]],
+  "checks": "sea-arena", "objective_observer": true, "patrol_observer": true,
+  "shots": "0.5@4000@5300:2600,1@4000@5300:2600,3@4000@5300:2600",
+  "groups": [
+    {"unit":"armserp","team":0,"count":6,"position":[5200,1200],"columns":3,"spacing":140},
+    {"unit":"armsub","team":0,"count":6,"position":[4300,2200],"columns":3,"spacing":140},
+    {"unit":"armroy","team":0,"count":6,"position":[5200,1700],"columns":3,"spacing":140},
+    {"unit":"armason","team":0,"count":1,"position":[5100,2400]},
+    {"unit":"armawac","team":0,"count":1,"position":[5200,2400]},
+    {"unit":"armmar","team":1,"count":6,"position":[6000,2400],"columns":2,"spacing":140}
+  ],
+  "enemy_routes": [{"unit":"armmar","points":[[6000,2400],[5100,2900],[4200,3500]]}],
+  "acceptance": {"destroyed_units":{"armmar":4}},
+  "required_log_patterns": ["\\[SEA\\]\\[SubTarget\\].*definition=armmar rank=6 urgent=true"]
+}

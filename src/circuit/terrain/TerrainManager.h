@@ -9,6 +9,7 @@
 #define SRC_CIRCUIT_TERRAIN_TERRAINMANAGER_H_
 
 #include "terrain/BlockingMap.h"
+#include "terrain/LocalReservations.h"
 #include "terrain/BaseLayoutGeometry.h"
 #include "terrain/LayoutRanking.h"
 #include "unit/CoreUnit.h"
@@ -21,6 +22,8 @@
 #include <string>
 #include <deque>
 #include <functional>
+#include <tuple>
+#include <cstdint>
 
 namespace terrain {
 	struct SArea;
@@ -132,6 +135,15 @@ public:
 	int ReserveBuilding(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing, int ttlFrames = 0, int group = 0);
 	// A single reusable slot. Its private zone preserves frame/unit identity after completion.
 	int ReservePersistentBuilding(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing);
+	int ReservePackedBuilding(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing);
+	// Opt-in finite support geometry. Stores slot IDs under key + ".slot.N";
+	// rolls back every new slot if the minimum useful footprint cannot fit.
+	int PlanNavalSupport(const std::string& key, CCircuitDef* nano, CCircuitDef* factory,
+		const springai::AIFloat3& pos, int facing, int maximum, int minimum, float margin);
+	bool IsAreaVisible(const springai::AIFloat3& pos, float radius) const;
+	bool PlanNavalBerth(const std::string& key, CCircuitDef* cdef, const springai::AIFloat3& pos,
+	                    int facing, float length, float margin);
+	bool CanNavalRoute(CCircuitDef* cdef, const springai::AIFloat3& from, const springai::AIFloat3& to);
 	void ReleasePersistentBuilding(int id);
 	int GetReservationState(int id) const; // -1 absent, 0 free, 1 claimed, 2 framed, 3 complete, 4 dead
 	bool IsReservationBuildable(int id) const;
@@ -141,6 +153,7 @@ public:
 	int ReserveClusterEnvelope(int slot, int group);
 	bool IsAllyLayoutBlocked(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing) const;
 	bool CanReserveArea(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong) const;
+	bool IsResourceAreaBlocked(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong) const;
 	bool IsAllyLayoutRectBlocked(const int2& c1, const int2& c2) const;
 	void ShareSlot(int id);
 	void ShareZone(int id);
@@ -151,6 +164,7 @@ public:
 	bool PlanMexCluster(const std::string& name, CCircuitDef* def, const springai::AIFloat3& origin, int facing, int cols, int rows);
 	// A nano block tight against the back of a factory footprint (built or reserved).
 	int ReserveNanoBlockAt(CCircuitDef* nanoDef, CCircuitDef* facDef, const springai::AIFloat3& facPos, int facing, int cols, int rows, int gap);
+	bool CanReserveNanoBlockAt(CCircuitDef* nanoDef, CCircuitDef* facDef, const springai::AIFloat3& facPos, int facing, int cols, int rows, int gap);
 	// The same behind a standing factory: position and facing read from the unit.
 	int ReserveNanoBlock(CCircuitUnit* factory, CCircuitDef* nanoDef, int cols, int rows, int gap);
 	// Dry run of ReserveBuilding: would it be accepted? No marks, no log.
@@ -204,8 +218,30 @@ public:
 	// halfAlong forward and back. Free cells are marked, blocked ones are
 	// holes. Returns the zone id, 0 when nothing could be marked.
 	int ReserveZone(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong, bool corridor);
+	// D-343 (SEA): as ReserveZone, but a rectangle touching a teammate's
+	// reservation is shrunk until it touches none instead of being refused.
+	// The zone never covers allied ground (INV-088).
+	int ReserveZoneAroundAllies(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong);
+    // Read-only world-space bounds; upper corner is exclusive, -1 if absent.
+    springai::AIFloat3 GetZoneCorner(int id, bool upper) const;
 	// D-072: would this footprint cut the zone's free cells into a pocket no unit could leave?
 	bool LeavesPocket(int zone, CCircuitDef* cdef, const springai::AIFloat3& pos, int facing) const;
+	// D-343: can `hull` still sail between two points past every structure and
+	// every reserved footprint (own slots, allied slots)? Zone envelopes and
+	// exit corridors are open water. Bounded local window; planning-time only.
+	bool IsNavalPathClear(CCircuitDef* hull, const springai::AIFloat3& from, const springai::AIFloat3& to) const;
+	// D-343: true when terrain lets `hull` through but reservations do not.
+	bool IsNavalPathReservationBlocked(CCircuitDef* hull, const springai::AIFloat3& from, const springai::AIFloat3& to) const;
+	// D-343: two bits per finished own/allied naval yard near `centre` (forward
+	// lane, rear) set when reservations, not terrain, cut the flagship's path
+	// from its exit mouth. Compare before/after a new reservation.
+	int NavalYardBlockMask(CCircuitDef* hull, const springai::AIFloat3& centre, float radius,
+		float exitLength, float lane, float rear);
+	bool NavalPath(CCircuitDef* hull, const springai::AIFloat3& from, const springai::AIFloat3& to, bool withReservations) const;
+	// D-343: the nearest finished naval factory (own or allied) within radius,
+	// or (-1, 0, -1).
+	springai::AIFloat3 NearestFriendlyNavalYard(const springai::AIFloat3& pos, float radius);
+	bool IsNavalFactoryDef(CCircuitDef* def) const;
 	// A corridor in front of a standing factory: its width plus `margin` each
 	// side, `length` forward from its front edge (the engine sends new units
 	// out through the front). Returns the corridor's zone id, 0 if none.
@@ -240,10 +276,11 @@ public:
 	// search serve a reservation (CR-002: a movement, pylon or terraform search
 	// must never consume a planned slot it cannot own). id >= 0 pins the search
 	// to that slot (a routed builder's task).
-	void BeginReservedSearch(int pinnedId, bool required) {
+	void BeginReservedSearch(int pinnedId, bool required, int facingFilter = -1) {
 		reservationSearch = true;
 		pinnedReservation = pinnedId;
 		pinnedReservationRequired = required;
+		reservationFacingFilter = facingFilter;
 	}
 	bool PlanFactoryPair(const std::string& name, CCircuitDef* firstFactory, CCircuitDef* secondFactory,
 			CCircuitDef* nanoDef, const springai::AIFloat3& base, int facing, int sideOffsetCells, int forwardOffsetCells);
@@ -297,6 +334,8 @@ public:
 	int CountGroupSlotsWithin(int group, const springai::AIFloat3& pos, float radius) const;
 	// The dry run of PackNearGroup: would a footprint fit? Nothing is marked.
 	bool CanPackNearGroup(int zone, CCircuitDef* cdef, int nanoGroup, int facing, float maxReach, float minNanoDist);
+	int PackNearBuiltPower(int zone, CCircuitDef* cdef, int nanoGroup, int facing,
+			const springai::AIFloat3& anchor, float margin);
 	// D-066: the experimental system's placement when no planned slot was
 	// served: the free footprint of cdef nearest to `pos` within `radius`
 	// (cell-exact, deterministic, the def's block mask respected), reserved
@@ -378,7 +417,12 @@ private:
 
 	int allyZoneCells;  // side of a square
 	SBlockingMap blockingMap;
+	std::string resourceLayout; // immutable resource footprints, local blueprint export only
 	std::map<int, SReservation> reservations;
+	local_layout::Reservations localReservations;
+	mutable uint64_t localOracleQueries = 0;
+	mutable uint64_t localOracleMismatches = 0;
+	void IndexLocalSlot(int id);
 	std::map<std::string, int> layoutGroups;
 	std::map<std::string, int> layoutZones;
 	std::map<std::string, int> layoutInts;
@@ -388,6 +432,8 @@ private:
 	int lastReservedFacing = -1;
 	bool ReservationCells(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing, int2& c1, int2& c2) const;
 	bool IsReservationFree(const int2& c1, const int2& c2) const;
+	bool IsResourceFootprintBlocked(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing) const;
+	bool IsResourceBuildingSite(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing) const;
 	void MarkReservation(const int2& c1, const int2& c2, bool mark);
 	void ExpireReservations();
 	std::map<int, SZone> zones;
@@ -396,6 +442,7 @@ private:
 	int pinnedReservation = -1;
 	bool pinnedReservationRequired = false;
 	bool reservationSearch = false;   // set by BeginReservedSearch, consumed by the next FindBuildSite
+	int reservationFacingFilter = -1; // one-shot; opening SEA search must test the actual exit facing
 	bool layoutRefusalLogged = false;
 	bool layoutConfigured = false;
 	bool factoryLineReady = false;
@@ -422,6 +469,8 @@ private:
 	// Cells free for a slot: unblocked, or held by `zone` itself (its marks and
 	// its other structures' yards), and not under another unconsumed slot.
 	bool IsSlotFree(const int2& c1, const int2& c2, int zone, int ignoreId) const;
+	bool IsSlotFreeLegacy(const int2& c1, const int2& c2, int zone, int ignoreId) const;
+	bool IsSlotFreeIndexed(const int2& c1, const int2& c2, int zone, int ignoreId) const;
 	struct SPackCandidate {
 		springai::AIFloat3 pos;
 		float nanoSq;    // squared distance to the nearest slot of the nano group
@@ -430,6 +479,14 @@ private:
 	};
 	std::vector<SPackCandidate> PackCandidates(int zone, CCircuitDef* cdef, int nanoGroup, int facing,
 			const springai::AIFloat3& anchor, float maxReach, float minNanoDist, bool alwaysRing = false) const;  // D-104: alwaysRing scans the ring round the zone too
+	std::vector<SPackCandidate> ComputePackCandidates(int zone, CCircuitDef* cdef, int nanoGroup, int facing,
+			const springai::AIFloat3& anchor, float maxReach, float minNanoDist, bool alwaysRing) const;
+	using EmptyPackKey = std::tuple<int,int,int,int,float,float,bool>;
+	mutable std::set<EmptyPackKey> emptyPackQueries;
+	uint64_t packingRevision = 0;
+	mutable uint64_t emptyPackRevision = 0, emptyPackAllyRevision = 0;
+	mutable unsigned int emptyPackOwnedRevision = 0;
+	mutable int emptyPackFrame = -1;
 	void UnmarkSlot(const int2& c1, const int2& c2);  // served: cells go, except a zone's own marks
 	int FindSlotAt(CCircuitDef* cdef, const springai::AIFloat3& pos) const;
 public:
@@ -438,11 +495,11 @@ public:
 	void MarkSlotRecycled(CCircuitDef* cdef, const springai::AIFloat3& pos);
 	// D-101: a set of up to `count` footprints of cdef, the first flush against a
 	// turret slot of nanoGroup, the rest lined up away from it; the first id, -1
-	int PackSet(int zone, CCircuitDef* cdef, int nanoGroup, int facing, const springai::AIFloat3& anchor, int count, bool ring = false);  // D-108: ring = the ground round the zone within turret reach
+	int PackSet(int zone, CCircuitDef* cdef, int nanoGroup, int facing, const springai::AIFloat3& anchor, int count, bool ring = false, int maximumGapCells = -1);
 	// D-104: the footprint of cdef nearest flush against a turret slot of nanoGroup
 	// (EdgeGap first, then the packer's order); needExit: a factory's exit clear
 	bool PickFlushSite(int zone, CCircuitDef* cdef, int nanoGroup, int facing, const springai::AIFloat3& anchor, bool needExit,
-			springai::AIFloat3& outPos, int& outGap, springai::AIFloat3& outTouch, int* outServedGap = nullptr, bool ring = false);
+			springai::AIFloat3& outPos, int& outGap, springai::AIFloat3& outTouch, int* outServedGap = nullptr, bool ring = false, int maximumGapCells = -1);
 	// D-104: the clusters factories are packed against (the script registers them)
 	void ClearFactoryZones() { factoryZones.clear(); }
 	void AddFactoryZone(int zone, int group) { factoryZones.push_back(std::make_pair(zone, group)); }
@@ -454,6 +511,21 @@ public:
 	static bool MakesAircraft(CCircuitAI* circuit, CCircuitDef* cdef);
 	// D-101: the next unserved slot of cdef in a set, nearest its turret first; -1
 	int NextSetSlot(CCircuitDef* cdef) const;
+    // Scoped, bounded round-robin traversal. A rejected slot remains free for
+    // other movement classes. -2 means budget exhausted, -1 no free candidates.
+    int NextReachableSlot(CCircuitUnit* builder, const CCircuitDef* cdef, int zone, int group, int budget);
+    // Physical losses only; queued replacement claims remain losses until a frame exists.
+    int GetLostReservationCount(const CCircuitDef* cdef) const;
+    int NextLostReservation(CCircuitUnit* builder, const CCircuitDef* cdef, int budget);
+private:
+    using SlotScope = std::pair<int, int>; // positive zone / negative group, def ID
+    struct SlotCandidates { std::set<int> ids; int after = -1, visited = 0; bool sawFree = false; };
+    std::map<SlotScope, SlotCandidates> scopedSlots;
+    std::map<int, SlotCandidates> lostSlots;
+    void ClearLostReservation(int id);
+    void IndexReservation(int id);
+    void EraseReservation(int id);
+public:
 	// D-101: the unserved slots of cdef's sets released; how many
 	int ReleaseSetSlots(CCircuitDef* cdef);
 	// D-101: cells between the footprint at pos and the nearest turret slot of the group
@@ -468,13 +540,15 @@ private:
 	std::vector<std::pair<int, int>> factoryZones;   // D-104: (zone, turret group), the main cluster first
 	int factoryFront = -1;                            // D-104: the facing the labs face (Layout::LabFacing)
 	void RemarkZoneCells(int2 c1, int2 c2);
+	int ReserveZoneMasked(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong,
+		bool corridor, SBlockingMap::SM blockingMask, bool allyHoles = false);
 	void OnStructureGone(CCircuitDef* cdef, const springai::AIFloat3& pos);
 	int ReserveBuildingEx(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing, int ttlFrames, int group,
 			bool armed, bool anyReach, bool tenant, int zone, bool quiet, bool exitsPreflighted = false);
 	int ReserveGridEx(CCircuitDef* cdef, const springai::AIFloat3& frontCentre, int facing, int cols, int rows, int gap,
 			int ttlFrames, bool armed, bool anyReach, bool tenant, int zone, int group);
 	bool FindReservedSite(CCircuitDef* cdef, const springai::AIFloat3& pos, TerrainPredicate& predicate,
-			springai::AIFloat3& outPos, int& outFacing, int& outId);
+			springai::AIFloat3& outPos, int& outFacing, int& outId, int facingFilter);
 	std::unordered_map<CCircuitDef::Id, IBlockMask*> blockInfos;  // owner
 	void MarkBlockerByMask(const SStructure& building, bool block, IBlockMask* mask);
 	void MarkBlocker(const SStructure& building, bool block);

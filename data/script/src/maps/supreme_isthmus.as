@@ -4,7 +4,7 @@
 #include "../types/map_config.as"
 #include "../types/strategic_objectives.as"
 // Step helpers
-#include "../helpers/objective_helpers.as"
+#include "../helpers/objectives/objective_helpers.as"
 
 namespace SupremeIsthmus {
 	// NOTE: This map file intentionally holds only static data (start spots & MapConfig).

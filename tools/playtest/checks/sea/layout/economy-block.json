@@ -1,0 +1,54 @@
+{
+  "stop_minute": 12,
+  "expect": [
+    {
+      "key": "t1",
+      "pattern": "SeaBlock\\] PASS packed armfmkr",
+      "by_minute": 12,
+      "scope": "any"
+    },
+    {
+      "key": "t2",
+      "pattern": "SeaBlock\\] PASS packed armuwmmm",
+      "by_minute": 12,
+      "scope": "any"
+    },
+    {
+      "key": "shipyard",
+      "pattern": "SeaBlock\\] PASS factory assist armsy",
+      "by_minute": 12,
+      "scope": "any"
+    },
+    {
+      "key": "amphibious",
+      "pattern": "SeaBlock\\] PASS factory assist armamsub",
+      "by_minute": 12,
+      "scope": "any"
+    },
+    {
+      "key": "fusion-support",
+      "pattern": "SeaBlock\\] PASS fusion assist",
+      "by_minute": 12,
+      "scope": "any"
+    },
+    {
+      "key": "rear-fusion",
+      "pattern": "SeaBlock\\] PASS rear fusion completed",
+      "by_minute": 12,
+      "scope": "any"
+    },
+    {
+      "key": "square",
+      "pattern": "SeaBlock\\] PASS square turret grid",
+      "by_minute": 12,
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "errors",
+      "pattern": "INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaBlock\\] FAIL|DenseFixture\\] FAIL|Error in.*sea_economy_block",
+      "scope": "any"
+    }
+  ]
+}

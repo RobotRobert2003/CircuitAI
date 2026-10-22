@@ -68,7 +68,7 @@ public:
 	virtual void OnUnitIdle(CCircuitUnit* unit) = 0;
 	virtual void OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker) = 0;
 	virtual void OnUnitDestroyed(CCircuitUnit* unit, CEnemyInfo* attacker) = 0;
-	void OnUnitMoveFailed(CCircuitUnit* unit);
+	virtual void OnUnitMoveFailed(CCircuitUnit* unit);
 
 	virtual void OnTravelEnd(CCircuitUnit* unit);
 	virtual void OnRearmStart(CCircuitUnit* unit);
@@ -84,6 +84,7 @@ public:
 	virtual void Dead();
 	bool IsDead() const { return isDead; }
 	virtual bool IsEnemyReclaim() const { return false; }
+	virtual bool IsExternalControlled() const { return false; }
 
 	// AS API
 	void Abort();

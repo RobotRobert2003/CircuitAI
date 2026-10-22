@@ -14,6 +14,7 @@
 #define SRC_CIRCUIT_TASK_FIGHTER_ROUTETASK_H_
 
 #include "task/fighter/FighterTask.h"
+#include "spring/RouteCommand.h"
 
 #include <map>
 #include <vector>
@@ -39,6 +40,22 @@ public:
 	void SetRoute(std::vector<springai::AIFloat3>&& waypoints);
     // AIR opts into exact final-route deduplication and transient ownership.
     void SetAirControl(bool enabled) { airControl = enabled; }
+    // SEA opts into the same exact route lifetime/queue preservation, with
+    // terrain-checked lane offsets. Defaults leave every other role unchanged.
+    void SetSeaControl(bool enabled) { seaControl = enabled; }
+    void SetMoveCompaction(bool enabled) {
+        if (compactMoves != enabled) { compactMoves = enabled; ++version; dirty = !route.empty(); }
+    }
+    bool SetSeaTarget(int id); // Existing aircraft-only contract.
+    bool SetNavalTarget(int id); // Opt-in water target, priority fire without pursuit.
+    // D-296: opt-in ground priority target (BAR SET_TARGET, OPEN fire) for a
+    // land route raider; not gated on SEA control. -1 cancels. Validated
+    // against a live, legally observed, non-flying contact.
+    bool SetLandTarget(int id);
+    int GetPriorityTarget() const { return seaTarget; }
+    void SetRepairThreshold(float value);
+    // Task-scoped policy: never leaks a SEA firing-line choice to another role.
+    void SetCombatRetreat(bool enabled) { combatRetreat = enabled; }
     void SetAirTarget(int id) { if (airControl && airTarget != id) { airTarget = id; ++version; dirty = true; } }
     bool SetUnitRoute(CCircuitUnit* unit, std::vector<springai::AIFloat3>&& waypoints, float radius);
 	/*
@@ -52,6 +69,7 @@ public:
 	 * backline, so this is kept small. `count` 1 disables the spread.
 	 */
 	void SetLanes(int count, float spacing, float endSpread);
+    void SetRowSpacing(float spacing); // opt-in rows; legacy routes use zero
 	void SetTraversal(bool preserveWaypoints, float radius, bool fightAtEnd);
     void SetHoldPosition(bool enabled) { holdPosition = enabled; }
 	// Opt-in looping engine patrol; ordinary routes retain their traversal.
@@ -80,6 +98,10 @@ private:
 	std::set<CCircuitUnit*> engaging;  // temporarily paused for configured range micro
 	int laneCount;
 	float laneSpacing;
+    float rowSpacing = 0.f;
+    std::map<CCircuitUnit*, unsigned int> rows;
+    std::map<CCircuitUnit*, unsigned int> formationSlots;
+    std::set<unsigned int> freeFormationSlots;
 	float laneEndSpread;
 	unsigned int laneDealt;               // round-robin counter
 	int version;
@@ -90,8 +112,28 @@ private:
 	bool patrol = false;
     bool holdPosition = false;
     bool airControl = false;
+    bool seaControl = false;
+    bool compactMoves = false; // policy opt-in; other roles keep their commands
+    void CompactNavalPolyline(CCircuitUnit* unit, std::vector<springai::AIFloat3>& points) const;
+    struct Dispatch {
+        std::vector<routecommand::Command> commands;
+        int version = -1, target = -1;
+        bool hold = false, naval = false;
+    };
+    std::map<CCircuitUnit*, Dispatch> dispatches;
+    struct IssueTrace { int frame=-1, count=0, reported=-30; };
+    std::map<CCircuitUnit*, IssueTrace> issueTrace;
+    void TraceIssue(CCircuitUnit* unit, unsigned int fromIndex, bool direct);
+    bool ManagedControl() const { return airControl || seaControl; }
     bool hadAssignee = false;
     int airTarget = -1;
+    int seaTarget = -1;
+    bool navalTarget = false;
+    bool landTarget = false; // D-296: seaTarget is a ground target (SetLandTarget)
+    float repairThreshold = 0.f;
+    bool combatRetreat = true;
+    bool SetPriorityTarget(int id, bool naval);
+    void IssuePriorityTarget(CCircuitUnit* unit, int id, bool naval, bool land = false);
     std::map<CCircuitUnit*, int> issuedVersion;
 };
 

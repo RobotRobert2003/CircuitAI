@@ -14,6 +14,7 @@
 #include "util/ExtAS.h"
 #include "util/Utils.h"
 #include "util/Profiler.h"
+#include "util/Performance.h"
 
 #include "Log.h"
 #include "OptionValues.h"
@@ -325,6 +326,7 @@ void CScriptManager::ReleaseContext(asIScriptContext* ctx)
 
 bool CScriptManager::Exec(asIScriptContext* ctx)
 {
+	performance::Scope measured(circuit, performance::SCRIPT);
 #ifdef CIRCUIT_PROFILING
 	const char* scriptSection = nullptr;
 	int row = 0, col = 0;
@@ -350,6 +352,7 @@ bool CScriptManager::Exec(asIScriptContext* ctx)
 	int r = ctx->Execute();
 #endif
 	if (r != asEXECUTION_FINISHED) {
+		performance::UnwindScript(circuit);
 		// The execution didn't complete as expected. Determine what happened.
 		if (r == asEXECUTION_EXCEPTION) {
 			// An exception occurred, let the script writer know what happened so it can be corrected.

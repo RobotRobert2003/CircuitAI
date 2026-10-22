@@ -1,0 +1,45 @@
+{
+  "stop_minute": 40,
+  "expect": [
+    {
+      "key": "competitive-roster",
+      "pattern": "\\[PerfFixture\\] spectator_units=0 competing_ai_teams=16",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "timing",
+      "pattern": "\\[SkirmishPerf\\] frame=7200 units=[1-9]",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "commands",
+      "pattern": "\\[AirOrders\\] frame=1800 team=0",
+      "scope": "any",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception|Access violation|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "instrumentation",
+      "pattern": "Error in GameFrame\\(\\)|Removed widget: Skirmish performance observer|\\[AirOrders\\] ERROR|\\[PerfFixture\\] ERROR",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT",
+      "scope": "any"
+    },
+    {
+      "key": "game-ended",
+      "pattern": "\\[SkirmishPerfEnd\\]",
+      "scope": "any"
+    }
+  ]
+}

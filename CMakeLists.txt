@@ -8,8 +8,11 @@ if(CIRCUIT_BUILD_TESTS)
 	add_subdirectory(tests)
 endif()
 
+# Native source discovery includes the opt-in ranged combat components.
 set(mySourceDirRel         "src/") # Common values are "" or "src"
 set(additionalSources      ${CMAKE_SOURCE_DIR}/rts/System/StringUtil.cpp)
+set(additionalSources      ${additionalSources} ${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/task/fighter/GroundCohorts.cpp)
+set(additionalSources      ${additionalSources} ${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/task/fighter/GroundFormations.cpp)
 set(additionalSources      ${additionalSources} ${CMAKE_SOURCE_DIR}/rts/System/Misc/SpringTime.cpp)
 if (WIN32)  # spring::condition_variable_any requirement
 	set(additionalSources  ${additionalSources} ${CMAKE_SOURCE_DIR}/rts/System/Platform/Win/CriticalSection.cpp)

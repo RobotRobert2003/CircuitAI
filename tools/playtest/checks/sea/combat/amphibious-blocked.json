@@ -1,0 +1,5 @@
+{
+  "stop_minute": 5,
+  "expect":[{"key":"occupied","pattern":"SeaInvasionTest\\] PASS enemy-blocked","by_minute":5,"scope":"any"}],
+  "forbid":[{"key":"errors","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaInvasionTest\\] FAIL|Exception:|Null pointer access|\\[SEA\\]\\[Invasion\\] build","scope":"any"}]
+}

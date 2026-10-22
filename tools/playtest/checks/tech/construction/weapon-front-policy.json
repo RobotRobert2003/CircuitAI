@@ -1,0 +1,1 @@
+{"stop_minute":2,"expect":[{"key":"policy","pattern":"TechWeaponPolicy.*PASS","scope":"any","by_minute":1}],"forbid":[{"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception|TechWeaponPolicy.*FAIL","scope":"any"},{"key":"invariant","pattern":"\\[INVARIANT\\]","scope":"any"}]}

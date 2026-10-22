@@ -1,0 +1,36 @@
+{
+  "_doc": "Read-only retained-default probe with no profile sentinel; compare complete four-phase snapshots after each pair.",
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "retained-settings",
+      "pattern": "\\[SettingsProbe\\] minute-one Global::RoleSettings::Tech::MinAiSwitchTime=",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "derived",
+      "pattern": "\\[DerivedProbe\\] minute-one AirQuotaFrames=9000",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "screenshot",
+      "pattern": "\\[Playtest\\] screenshot",
+      "scope": "any",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    }
+  ]
+}

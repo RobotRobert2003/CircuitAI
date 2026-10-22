@@ -1,0 +1,46 @@
+{
+  "name": "persistent-bomber-waves",
+  "description": "No reactor explosions or defenders: first bomber cohort survives while a funded second cohort must launch after cadence.",
+  "checks": "persistent-bomber-waves",
+  "bomber_only": false,
+  "aircraft": [
+    {
+      "unit": "$t2",
+      "count": 24,
+      "team": 0,
+      "once": true
+    },
+    {
+      "unit": "$fighter2",
+      "count": 24,
+      "team": 0,
+      "once": true
+    },
+    {
+      "unit": "$t2",
+      "count": 24,
+      "team": 0,
+      "after_seconds": 180,
+      "once": true
+    },
+    {
+      "unit": "$fighter2",
+      "count": 24,
+      "team": 0,
+      "after_seconds": 180,
+      "once": true
+    }
+  ],
+  "targets": [
+    {
+      "unit": "armvp",
+      "count": 1,
+      "position": [
+        10100,
+        1300
+      ]
+    }
+  ],
+  "defenses": [],
+  "refill_seconds": 30
+}

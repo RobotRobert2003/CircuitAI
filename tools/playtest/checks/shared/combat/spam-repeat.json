@@ -1,0 +1,37 @@
+{
+  "stop_minute": 3,
+  "expect": [
+    {
+      "key": "spawn",
+      "pattern": "\\[RangedArena\\].*spawn.*unit=armlab",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "repeat",
+      "pattern": "\\[RangedArena\\].*factory.*repeat=true",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "offspring",
+      "pattern": "\\[RangedArena\\].*finished.*unit=armpw",
+      "scope": "any",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR"
+    }
+  ]
+}

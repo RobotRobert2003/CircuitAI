@@ -1,0 +1,10 @@
+{
+  "stop_minute": 20,
+  "expect": [
+    {"key":"commander-assist","pattern":"SeaCapacity\\] PASS commander assists shipyard","by_minute":6,"scope":"any"},
+    {"key":"mex-growth","pattern":"SeaCapacity\\] PASS six completed mexes","by_minute":15,"scope":"any"},
+    {"key":"energy-growth","pattern":"SeaCapacity\\] PASS six completed tidals","by_minute":15,"scope":"any"},
+    {"key":"support-growth","pattern":"SeaCapacity\\] PASS constructed support turret","by_minute":20,"scope":"any"}
+  ],
+  "forbid": [{"key":"errors","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaCapacity\\] FAIL|Error in.*(?:sea_capacity|sea_allied_base)|(?:SeaBase|BaseWatch|BaseProbe)\\] FAIL|global LOS toggled","scope":"any"}]
+}

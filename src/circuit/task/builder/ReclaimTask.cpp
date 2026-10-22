@@ -93,8 +93,17 @@ void CBReclaimTask::AssignTo(CCircuitUnit* unit)
 	lastTouched = manager->GetCircuit()->GetLastFrame();
 }
 
+void CBReclaimTask::RemoveAssignee(CCircuitUnit* unit)
+{
+    IReclaimTask::RemoveAssignee(unit);
+    // A dedicated recovery worker leaving must release its wreck immediately,
+    // otherwise an empty reclaim task blocks resurrection for five minutes.
+    if (recoveryControlled && units.empty() && !IsDead()) manager->AbortTask(this);
+}
+
 bool CBReclaimTask::Reevaluate(CCircuitUnit* unit)
 {
+	if (recoveryControlled) return true; // SEA selector owns target changes.
 	if (!isMetal) {
 		return true;
 	}

@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import subprocess
 import sys
 import playtest
@@ -16,7 +17,7 @@ def main():
     p.add_argument('--clusters', action='store_true')
     a = p.parse_args()
     base = a.dir.resolve()
-    if not base.is_relative_to(playtest.REPO/'build-theatres'):
+    if not base.is_relative_to(RAW_ROOT):
         p.error('Use an isolated build-theatres directory')
     _, name, side, _, _ = next(m for m in MAPS if m[0] == a.map)
     spots = playtest.map_spots(name)

@@ -11,6 +11,7 @@
 #include "module/TaskModule.h"
 #include "task/static/RecruitTask.h"
 #include "unit/CircuitUnit.h"
+#include "util/DefinitionCounts.h"
 
 #include <map>
 
@@ -27,6 +28,7 @@ namespace TaskS {
 		CCircuitDef* buildDef;
 		springai::AIFloat3 position;
 		float radius;
+		bool repeat = false;  // opt-in persistent factory recruitment, owned by script
 	};
 
 	struct SServSTask {
@@ -136,9 +138,13 @@ public:
 	virtual ~CFactoryManager();
 
 	void InitHandlers();
+	bool RegisterScriptFactory(CCircuitDef* def, const CCircuitDef* prototype);
 private:
 	void ReadConfig();
 	void Init();
+	void RefillCompletedFactory(CCircuitUnit::Id id, unsigned long long ticket);
+	std::unordered_map<CCircuitUnit::Id, unsigned long long> completionRefills;
+	unsigned long long nextRefillTicket = 0;
 
 public:
 	virtual int UnitCreated(CCircuitUnit* unit, CCircuitUnit* builder) override;
@@ -166,6 +172,8 @@ public:
 	float GetFacModE() const { return facModE; }
 	bool CanEnqueueTask() const { return factoryTasks.size() < factories.size() * 2; }
 	const std::vector<CRecruitTask*>& GetTasks() const { return factoryTasks; }
+    int GetPendingRecruitCount(const CCircuitDef* def) const;
+    void RefreshPendingRecruit(CRecruitTask* task);
 	bool IsAssistRequired() const { return isAssistRequired; }
 	void ApplySwitchFrame();
 	bool IsSwitchTime();
@@ -217,7 +225,9 @@ private:
 	void EnableFactory(CCircuitUnit* unit);
 	void DisableFactory(CCircuitUnit* unit);
 	virtual IUnitTask* DefaultMakeTask(CCircuitUnit* unit) override;
-	IUnitTask* CreateFactoryTask(CCircuitUnit* unit);
+	IUnitTask* MakeFactoryTask(CCircuitUnit* unit, bool keepActive, bool keepQueued = false);
+    IUnitTask* GetPendingFactoryTask(CCircuitUnit* unit) const;
+	IUnitTask* CreateFactoryTask(CCircuitUnit* unit, bool keepActive = false, bool keepQueued = false);
 	IUnitTask* CreateAssistTask(CCircuitUnit* unit);
 
 	void Watchdog();
@@ -233,6 +243,7 @@ private:
 
 	std::map<CAllyUnit*, IBuilderTask*> unfinishedUnits;
 	std::vector<CRecruitTask*> factoryTasks;  // order matters
+    DefinitionCounts<CRecruitTask*> pendingRecruits;
 	float metalRequire;
 	float energyRequire;
 	float newFacModM = 0.f;

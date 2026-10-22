@@ -1,0 +1,75 @@
+{
+  "name": "fortress-legfort-mixed",
+  "unit": "legfort",
+  "side": "legion",
+  "role": "FRONT",
+  "description": "Supplied heavy aircraft: real task targeting, valuable target behind cheap bots, or cheap-only/AA control.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    25,
+    45,
+    90
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3250,
+        4500
+      ]
+    },
+    {
+      "unit": "armflea",
+      "count": 12,
+      "team": 1,
+      "position": [
+        3670,
+        4720
+      ],
+      "spacing": 110
+    },
+    {
+      "unit": "corgol",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3770,
+        5100
+      ],
+      "spacing": 250
+    },
+    {
+      "unit": "legfort",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3750,
+        4300
+      ],
+      "spacing": 250
+    }
+  ],
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 2
+  }
+}

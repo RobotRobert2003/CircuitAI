@@ -1,0 +1,154 @@
+{
+  "command_breakdown": true,
+  "name": "thug-population",
+  "unit": "corthud",
+  "description": "120 Thugs against stationary energy-storage targets on previously validated Glitters sites; isolate cohort CPU and orders with a surviving army.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "cortex",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    60,
+    120,
+    170
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 3,
+      "team": 0,
+      "position": [
+        3000,
+        4800
+      ],
+      "spacing": 750
+    },
+    {
+      "unit": "armseer",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3000,
+        4000
+      ],
+      "spacing": 400
+    },
+    {
+      "unit": "corthud",
+      "count": 48,
+      "team": 0,
+      "position": [
+        3000,
+        3400
+      ],
+      "spacing": 150,
+      "columns": 16
+    },
+    {
+      "unit": "corthud",
+      "count": 48,
+      "team": 0,
+      "position": [
+        3000,
+        3900
+      ],
+      "spacing": 150,
+      "columns": 16
+    },
+    {
+      "unit": "corthud",
+      "count": 24,
+      "team": 0,
+      "position": [
+        3000,
+        3000
+      ],
+      "spacing": 260,
+      "columns": 12
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        5200
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 30
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        5500
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 70
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        5800
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 110
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        6100
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 150
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        6400
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 190
+    }
+  ],
+  "units": [
+    "corthud"
+  ],
+  "assertions": {
+    "min_shooters": 20,
+    "min_kills": 8,
+    "max_losses": 0,
+    "min_types_assigned": 1
+  },
+  "trace_orders": false
+}

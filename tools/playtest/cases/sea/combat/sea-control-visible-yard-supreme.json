@@ -1,0 +1,14 @@
+{
+  "name": "control-yard-seen",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [[7492, 1220], [4814, 11077]],
+  "checks": "sea-control-visible-yard",
+  "patrol_observer": true,
+  "shots": "0.5@4000@5700:2050,1.5@4000@5700:2050,3@4000@5700:2050",
+  "groups": [
+    {"unit": "armroy", "team": 0, "count": 8, "position": [6000, 1200], "columns": 2, "spacing": 180},
+    {"unit": "armfrad", "team": 0, "count": 1, "position": [5200, 1800]},
+    {"unit": "corsy", "team": 1, "count": 1, "position": [4800, 1800]}
+  ]
+}

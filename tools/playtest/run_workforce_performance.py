@@ -1,6 +1,7 @@
 """Serial paired 8v8 controls. AI timing scope is engine-wide, not per role."""
 import argparse
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import subprocess
 import sys
 import playtest
@@ -39,7 +40,7 @@ def main():
             code=subprocess.call(call+['watch','--dir',str(root),'--role','AIR','--checks','air_workforce_performance',
                 '--minutes',str(a.minutes),'--wall-minutes','60','--keep-going'])
             results.append(dict(directory=str(root),exit=code))
-            storage.write_json(playtest.REPO/'build-theatres/workforce-performance.json',results)
+            storage.write_json(RAW_ROOT / 'workforce-performance.json',results)
     return any(row['exit'] for row in results)
 
 

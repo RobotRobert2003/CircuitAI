@@ -181,7 +181,8 @@ IBuilderTask* CEconomyManager::EnqueueFieldMex(CCircuitUnit* builder, const AIFl
         if (!task->IsDead() && task->GetAssignees().empty() && task->GetBuildDef() != nullptr
             && builder->GetCircuitDef()->CanBuild(task->GetBuildDef())
             && task->GetPosition().SqDistance2D(center) <= radius * radius
-            && terrain->CanReachAtSafe(builder, task->GetPosition(), builder->GetCircuitDef()->GetBuildDistance())) return task;
+            && CanReachMex(builder, task->GetPosition())
+            && (!mexNavigationEnabled || task->GetTarget() != nullptr || IsOwnSpot(task->GetPosition()))) return task;
     }
     auto& grid = circuit->GetGameAttribute()->GetMetalField();
     auto& claims = circuit->GetAllyTeam()->GetMetalClaims();
@@ -231,7 +232,7 @@ IBuilderTask* CEconomyManager::EnqueueFieldMex(CCircuitUnit* builder, const AIFl
             // reservations above protects neighbours without forbidding our base.
             if (!IsOwnSpot(pos)) { ++territory; continue; }
             if (!placeable) { ++footprint; continue; }
-            if (!terrain->CanReachAtSafe(builder, pos, builder->GetCircuitDef()->GetBuildDistance())) { ++unreachable; continue; }
+            if (!CanReachMex(builder, pos)) { ++unreachable; continue; }
             auto* task = mgr->Enqueue(TaskB::Spot(IBuilderTask::BuildType::MEX, IBuilderTask::Priority::HIGH,
                 def, pos, metal_field::SiteTagV1));
             if (task != nullptr) circuit->LOG("METAL_FIELD: team=%i mex=%s x=%.0f z=%.0f isolated=%.2f",
@@ -265,7 +266,7 @@ IBuilderTask* CEconomyManager::EnqueueFieldUpgrade(CCircuitUnit* builder, const 
         if (--candidates < 0) break;
         for (auto* def : metalDefs.GetBuildDefs(builder->GetCircuitDef())) {
             if (def->GetExtractsM() <= old->GetExtractsM() || !def->IsAvailable(circuit->GetLastFrame())) continue;
-            if (!circuit->GetTerrainManager()->CanReachAtSafe(builder, pos, builder->GetCircuitDef()->GetBuildDistance())) continue;
+            if (!CanReachMex(builder, pos)) continue;
             auto* task = mgr->Enqueue(TaskB::Spot(IBuilderTask::BuildType::MEXUP,
                 IBuilderTask::Priority::HIGH, def, pos, metal_field::SiteTagV1));
             return task;

@@ -731,6 +731,11 @@ std::shared_ptr<IMainJob> CTerrainData::UpdateAreas()
 	 *  Reset areaData
 	 */
 	SAreaData& prevAreaData = *pAreaData.load();
+	// O(H) exact comparison on the existing terrain worker, O(1) extra storage.
+	// Includes fine samples outside changed coarse sectors. Publication carries
+	// the revision to every manager before synchronous route readers use it.
+	areaData.heightRevision = circuit::lane::HeightRevision(prevAreaData.heightRevision,
+		prevAreaData.heightMap, areaData.heightMap);
 	decltype(areaData.sector)::iterator its = sector.begin();
 	for (auto& s : prevAreaData.sector) {
 		*its++ = s;

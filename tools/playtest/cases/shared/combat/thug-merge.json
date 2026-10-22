@@ -1,0 +1,88 @@
+{
+  "name": "thug-merge",
+  "unit": "corthud",
+  "side": "cortex",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    3200,
+    4800,
+    2000
+  ],
+  "photos": [
+    35,
+    75,
+    120
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3000,
+        3900
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3000,
+        5100
+      ]
+    },
+    {
+      "unit": "armhlt",
+      "count": 1,
+      "team": 1,
+      "position": [
+        3000,
+        5200
+      ]
+    },
+    {
+      "unit": "corthud",
+      "count": 6,
+      "team": 0,
+      "position": [
+        2400,
+        4000
+      ],
+      "columns": 1,
+      "spacing": 96,
+      "after_seconds": 20
+    },
+    {
+      "unit": "corthud",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3600,
+        4000
+      ],
+      "columns": 1,
+      "spacing": 96,
+      "after_seconds": 20
+    }
+  ],
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 0,
+    "min_types_assigned": 1
+  },
+  "checks": "shared/combat/thug-merge.json",
+  "description": "Two separate six-Thug cohorts approach one HLT, merge into twelve outside coverage and take no casualties."
+}

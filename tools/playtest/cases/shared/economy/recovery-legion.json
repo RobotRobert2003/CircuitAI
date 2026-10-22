@@ -1,0 +1,7 @@
+{
+  "name": "recovery-legion",
+  "description": "8v8 Glacial: all six role gifts produced by captured Legion bot lab, Lua relay, no ferry; verifies actual build menu rather than TECH faction.",
+  "runner": "tools/playtest/run_builder_recovery.py",
+  "arguments": ["--all-donations", "--lab", "leglab", "--relay", "--profile", "experimental_balanced"],
+  "checks": "shared/economy/builder-recovery.json"
+}

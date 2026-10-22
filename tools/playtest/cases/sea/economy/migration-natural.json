@@ -1,0 +1,12 @@
+{
+  "description": "Paired SEA layout migration smoke benchmark, ordinary economy; runner pins each data tree and seed.",
+  "runner": "run_sea_cohort.py",
+  "maps": ["glacial", "supreme", "tundra", "caldera", "erebos"],
+  "minutes": 30,
+  "seed": 1881001,
+  "supplied_assets": false,
+  "checks": "sea/reliability/sea_compile",
+  "scorecard": "analyze_sea.py",
+  "acceptance": ["runtime clean", "opening shipyard by four minutes", "physical ship departure by six minutes"],
+  "limitation": "Smoke pass does not establish economic non-regression, naval strength or safe forward retirement. Compare paired scorecards."
+}

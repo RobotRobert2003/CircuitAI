@@ -1,0 +1,21 @@
+{
+  "name": "performance-spam-arrival",
+  "storage_scenario": "perf-spam-arrival",
+  "unit": "armpw",
+  "role": "FRONT",
+  "description": "Three ordinary spam route members arrive at separate lane endpoints. Completed offset members must hold their endpoint without idle/reissue loops; no SEA or AIR managed recovery is enabled.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [[4000,2400],[4000,9800]],
+  "side": "armada",
+  "camera": [4000,5200,2300],
+  "photos": [60,110,150],
+  "command_breakdown": true,
+  "checks": "performance-spam-arrival",
+  "native_route": {"points": [[4000,4100],[4000,5500]], "lanes": 3, "spacing": 640, "radius": 64},
+  "groups": [
+    {"unit":"armpw","count":3,"team":0,"position":[3700,4100],"spacing":300,"columns":3},
+    {"unit":"armestor","count":1,"team":1,"position":[4000,9000]},
+    {"unit":"armck","count":1,"team":0,"position":[3400,3700]}
+  ]
+}

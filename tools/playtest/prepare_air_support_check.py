@@ -1,14 +1,15 @@
 """Add a physical support-pin obstruction to an already staged AIR capacity game."""
 import argparse
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 
 ROOT = Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--dir', type=Path, required=True)
 a = p.parse_args()
 base = a.dir.resolve()
-if not base.is_relative_to(ROOT / 'build-theatres'):
-    p.error('Use repository build-theatres')
+if not base.is_relative_to(RAW_ROOT):
+    p.error('Use benchmark-repository build-theatres')
 scripts = base / 'AI/Skirmish/BARbTest/test/script'
 for profile in ['experimental_balanced', 'experimental_hard', 'experimental_terrible']:
     path = scripts / profile / 'main.as'

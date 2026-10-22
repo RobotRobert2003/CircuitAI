@@ -1,0 +1,99 @@
+{
+  "name": "response-sub-legion",
+  "production": true,
+  "groups": [
+    {
+      "unit": "legsy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2450,
+        4400
+      ]
+    },
+    {
+      "unit": "legnavyconship",
+      "team": 0,
+      "count": 2,
+      "position": [
+        2300,
+        4800
+      ]
+    },
+    {
+      "unit": "legnavydestro",
+      "team": 0,
+      "count": 2,
+      "position": [
+        2750,
+        4200
+      ]
+    },
+    {
+      "unit": "leganavalfusion",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        4200
+      ]
+    },
+    {
+      "unit": "leganavaleconv",
+      "team": 0,
+      "count": 8,
+      "position": [
+        1850,
+        4850
+      ]
+    },
+    {
+      "unit": "leguwmstore",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        3900
+      ]
+    },
+    {
+      "unit": "corsub",
+      "team": 1,
+      "count": 12,
+      "position": [
+        3900,
+        4250
+      ],
+      "after_seconds": 60
+    },
+    {
+      "unit": "legfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2300,
+        4200
+      ]
+    },
+    {
+      "unit": "leganavalsonarstation",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2800,
+        4650
+      ]
+    },
+    {
+      "unit": "corason",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        4650
+      ]
+    }
+  ],
+  "checks": "sea-sub-production",
+  "support_turrets": true
+}

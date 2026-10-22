@@ -1,0 +1,21 @@
+{
+  "name":"land-siege-cortex", "unit":"cortrem",
+  "description":"Supplied economy and screened static target: actual FRONT factory choices, own combat held to keep demand constant, mobile construction frozen.",
+  "map":"All That Glitters v2.2.3", "map_key":"glitters",
+  "starts":[[4000,2400],[4000,9800]], "side":"cortex",
+  "production":true, "hold_friendly":true, "start_metal":1000000,
+  "checks":"land-siege-production", "camera":[3900,3500,2700], "photos":[60,150,240],
+  "groups":[
+    {"unit":"armarad","count":1,"team":0,"position":[3100,7000]},
+    {"unit":"armeyes","count":4,"team":0,"position":[3600,7460],"spacing":200},
+    {"unit":"armhlt","count":16,"team":1,"position":[3200,7600],"spacing":240,"columns":8},
+    {"unit":"corafus","count":2,"team":0,"position":[3000,2500],"spacing":250},
+    {"unit":"cormmkr","count":12,"team":0,"position":[2800,2900],"spacing":120,"columns":4},
+    {"unit":"coracv","count":2,"team":0,"position":[4700,3200],"spacing":160},
+    {"unit":"corgol","count":5,"team":0,"position":[3300,4400],"spacing":240,"columns":5},
+    {"unit":"coravp","count":2,"team":0,"position":[3600,3500],"spacing":650},
+    {"unit":"cornanotc","count":12,"team":0,"position":[3540,3240],"spacing":120,"columns":8}
+  ],
+  "assertions":{"min_kills":0,"min_shooters":0,"max_losses":0},
+  "production_assertions":{"min_produced":{"cortrem":2},"min_siege_choices":2}
+}

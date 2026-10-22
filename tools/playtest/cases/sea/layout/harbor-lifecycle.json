@@ -1,0 +1,10 @@
+{
+  "description":"Supplied Glacial Gap harbor adoption, physical obstruction and forward replacement. No forced shipyard or production commands.",
+  "runner":"run_sea.py --fixture harbor",
+  "map":"glacial",
+  "side":"armada",
+  "minutes":20,
+  "supplied_assets":true,
+  "checks":"sea/layout/harbor-lifecycle",
+  "limitation":"Supplied economic income and stationary friendly cover isolate construction handover; not a natural economy benchmark."
+}

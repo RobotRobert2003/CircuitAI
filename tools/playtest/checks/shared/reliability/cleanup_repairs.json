@@ -1,0 +1,30 @@
+{
+  "_doc": "Multi-map repair regression. Require startup and screenshots; map-specific roster and useful progression are checked against the staged script and retained role census. Retain every invariant failure.",
+  "stop_minute": 35,
+  "expect": [
+    {
+      "key": "startup",
+      "pattern": "Captured start position .* role=[0-5]",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "screenshot",
+      "pattern": "\\[Playtest\\] screenshot",
+      "scope": "any",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    }
+  ]
+}

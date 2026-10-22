@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 
 ROOT = Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser(description=__doc__)
@@ -15,8 +16,8 @@ p.add_argument('--profile', default='experimental_balanced')
 p.add_argument('--minutes', type=int, default=55)
 a = p.parse_args()
 base = a.dir.resolve()
-if not base.is_relative_to(ROOT / 'build-theatres') or a.seed <= 0:
-    p.error('Use repository build-theatres and a positive seed')
+if not base.is_relative_to(RAW_ROOT) or a.seed <= 0:
+    p.error('Use benchmark-repository build-theatres and a positive seed')
 base.mkdir(parents=True, exist_ok=True)
 source = (ROOT / 'data/script/src/maps/tundra_continents.as').read_text()
 # Keep the real map's known start coordinates. Pair the role and faction

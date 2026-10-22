@@ -1,0 +1,61 @@
+{
+  "name": "large-fleet",
+  "groups": [
+    {
+      "unit": "armroy",
+      "team": 0,
+      "count": 64,
+      "position": [
+        2200,
+        4000
+      ],
+      "columns": 8
+    },
+    {
+      "unit": "corroy",
+      "team": 1,
+      "count": 64,
+      "position": [
+        4000,
+        4000
+      ],
+      "columns": 8
+    },
+    {
+      "unit": "armfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2200,
+        4200
+      ]
+    },
+    {
+      "unit": "corfrad",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4500,
+        4200
+      ]
+    },
+    {
+      "unit": "armason",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2800,
+        4650
+      ]
+    },
+    {
+      "unit": "corason",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        4650
+      ]
+    }
+  ]
+}

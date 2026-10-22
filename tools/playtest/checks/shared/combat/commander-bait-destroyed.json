@@ -1,0 +1,47 @@
+{
+  "stop_minute": 2,
+  "complete_on": {
+    "key": "complete",
+    "pattern": "\\[RangedArena\\].* scenario_complete",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 10,
+  "expect": [
+    {
+      "key": "screen",
+      "pattern": "\\[CommanderT3\\] unit=(?P<commander>\\d+) target=(?P<target>\\d+) action=screen n=",
+      "scope": "any",
+      "by_minute": 0.7
+    },
+    {
+      "key": "result",
+      "pattern": "\\[CommanderT3\\] unit=(?P<commander>\\d+) target=(?P<target>\\d+) action=screen_done status=failed",
+      "same_as": "screen",
+      "scope": "any",
+      "by_minute": 1,
+      "after_key": "screen"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

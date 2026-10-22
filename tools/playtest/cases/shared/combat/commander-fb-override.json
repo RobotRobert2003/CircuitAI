@@ -1,0 +1,101 @@
+{
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4900,
+    1500
+  ],
+  "photos": [
+    20,
+    30,
+    40,
+    55
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "enemy_destination": [
+    4000,
+    4800
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 4
+  },
+  "name": "commander-fb-override",
+  "description": "D-293 per-AI override: the 560-metal group of commander-fallback, but team 0 alone raises fallback_metal to 1000 through CommanderCombat::Override. The override must beat the profile JSON (400), so no fallback.",
+  "groups": [
+    {
+      "unit": "armcom",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        5000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3920,
+        4650
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4080,
+        4650
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armllt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        4250
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corthud",
+      "team": 1,
+      "count": 4,
+      "columns": 4,
+      "spacing": 60,
+      "position": [
+        4000,
+        5900
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "checks": "commander-fb-override",
+  "commander_overrides": {
+    "fallback_metal": 1000
+  }
+}

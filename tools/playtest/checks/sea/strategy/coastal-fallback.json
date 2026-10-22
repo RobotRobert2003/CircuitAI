@@ -1,0 +1,18 @@
+{
+  "stop_minute": 14,
+  "expect": [
+    {"key":"loss", "pattern":"SEA.*Coast.*fallback=true", "by_minute":3,"scope":"any"},
+    {"key":"donation", "pattern":"CoastFixture.*donated .*ck", "by_minute":3,"scope":"any"},
+    {"key":"lab", "pattern":"CoastFixture.*finished (arm|cor|leg)lab", "by_minute":8,"scope":"any"},
+    {"key":"metal-storage", "pattern":"CoastFixture.*finished (armmstor|cormstor|legmstor)", "by_minute":9,"scope":"any"},
+    {"key":"energy-storage", "pattern":"CoastFixture.*finished (armestor|corestor|legestor)", "by_minute":9,"scope":"any"},
+    {"key":"t1-defense", "pattern":"CoastFixture.*finished (armhlt|corhlt|legmg)", "by_minute":10,"scope":"any"},
+    {"key":"t2-defense", "pattern":"CoastFixture.*finished (armpb|corvipe|legapopupdef)", "by_minute":14,"scope":"any"}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception|Error in.*sea_coast", "scope":"any"},
+    {"key":"invariant", "pattern":"INVARIANT", "scope":"any"},
+    {"key":"fixture", "pattern":"CoastFixture.*FAIL", "scope":"any"},
+    {"key":"crash", "pattern":"Access violation|has crashed|Fatal:", "scope":"any"}
+  ]
+}

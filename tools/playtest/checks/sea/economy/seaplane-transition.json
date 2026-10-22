@@ -1,0 +1,12 @@
+{
+  "stop_minute": 10,
+  "expect": [
+    {"key":"income_hold", "pattern":"SeaTransition\\] PASS low-income T2 holds platform", "by_minute":4, "scope":"any"},
+    {"key":"mex", "pattern":"SeaTransition\\] PASS mex completed", "by_minute":10, "scope":"any"},
+    {"key":"platform", "pattern":"SeaTransition\\] PASS platform completed", "by_minute":10, "scope":"any"},
+    {"key":"aircraft", "pattern":"SeaTransition\\] PASS aircraft produced", "by_minute":10, "scope":"any"},
+    {"key":"footprint", "pattern":"SeaTransition\\] footprint slots=(2[0-9]|[3-9][0-9])", "by_minute":10, "scope":"any"},
+    {"key":"support", "pattern":"SeaTransition\\] PASS platform assistance", "by_minute":10, "scope":"any"}
+  ],
+  "forbid": [{"key":"errors", "pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaTransition\\] FAIL|Error in.*sea_transition", "scope":"any"}]
+}

@@ -1,0 +1,30 @@
+{
+  "stop_minute": 10,
+  "expect": [
+    {
+      "key": "submarine-batch",
+      "pattern": "SEA\\]\\[Batch\\].*unit=corssub count=3",
+      "scope": "any",
+      "by_minute": 10
+    },
+    {
+      "key": "frigate-batch",
+      "pattern": "SEA\\]\\[Batch\\].*unit=corfship count=3",
+      "scope": "any",
+      "by_minute": 10
+    },
+    {
+      "key": "destroyer-batch",
+      "pattern": "SEA\\]\\[Batch\\].*unit=corcrus count=3",
+      "scope": "any",
+      "by_minute": 10
+    }
+  ],
+  "forbid": [
+    {
+      "key": "runtime",
+      "pattern": "\\[INVARIANT\\]|SCRIPT CRASH|: ERR\\s+:|Lib exception|SeaArena.*ERROR",
+      "scope": "any"
+    }
+  ]
+}

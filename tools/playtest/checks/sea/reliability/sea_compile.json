@@ -1,0 +1,13 @@
+{
+  "stop_minute": 20,
+  "expect": [
+    {"key":"observer", "pattern":"\\[SeaWatch\\] loaded", "by_minute":1, "scope":"any"},
+    {"key":"opening-yard", "pattern":"\\[SeaWatch\\] finished.*def=(armsy|corsy|legsy) ", "by_minute":4, "scope":"any"},
+    {"key":"first-ship-exit", "pattern":"\\[SeaWatch\\] egress", "by_minute":6, "scope":"any"}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope":"any"},
+    {"key":"invariant", "pattern":"INVARIANT|Error in.*sea_(watch|allied_base_watch)|\\[BaseWatch\\] FAIL", "scope":"any"},
+    {"key":"crash", "pattern":"Access violation|has crashed|Fatal:", "scope":"any"}
+  ]
+}

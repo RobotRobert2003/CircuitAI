@@ -1,0 +1,17 @@
+{
+  "name": "sea-tempo-repair",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [[7492,1220],[4814,11077]],
+  "checks": "sea-arena",
+  "support_turrets": true,
+  "patrol_observer": true,
+  "shots": "0.8@4000@6200:1700,2@4000@6200:1700,4@4000@6200:1700",
+  "groups": [
+    {"unit":"armsy","team":0,"count":1,"position":[6220,1480]},
+    {"unit":"armnanotcplat","team":0,"count":4,"position":[6300,1200],"columns":2,"spacing":64},
+    {"unit":"armfrad","team":0,"count":1,"position":[6400,1300]},
+    {"unit":"armroy","team":0,"count":7,"position":[6000,1400],"columns":3,"spacing":160},
+    {"unit":"corroy","team":1,"count":8,"position":[5700,2200],"columns":4,"spacing":140}
+  ]
+}

@@ -4,7 +4,6 @@
  *  Created on: Dec 1, 2014
  *      Author: rlcevg
  */
-
 #ifndef SRC_CIRCUIT_MODULE_BUILDERMANAGER_H_
 #define SRC_CIRCUIT_MODULE_BUILDERMANAGER_H_
 
@@ -12,6 +11,8 @@
 #include "task/builder/BuilderTask.h"
 #include "terrain/TerrainData.h"
 #include "unit/CircuitUnit.h"
+#include "util/DefinitionCounts.h"
+#include "spring/ResurrectionClaim.h"
 
 #include <map>
 #include <set>
@@ -30,6 +31,7 @@ class CQueryCostMap;
 class CBRepairTask;
 class CBReclaimTask;
 class CCombatTask;
+class CCommanderTask;
 
 struct SBuildChain;
 
@@ -244,6 +246,43 @@ namespace TaskB {
 
 class CBuilderManager final: public ITaskModule {
 public:
+    void ClearBuildRadii() { buildRadii.clear(); }
+    // Optional script-owned placement limits, independent of role names.
+    // Empty for legacy callers. Definition lookup is logarithmic in the small
+    // configured set; final sites are checked as well as requested anchors.
+    void SetBuildRadius(const CCircuitDef* definition, const springai::AIFloat3& center, float radius) {
+        if (!definition) return;
+        if (radius < 0.f) buildRadii.erase(definition->GetId());
+        else buildRadii[definition->GetId()] = {center, radius * radius};
+    }
+    bool IsBuildPositionAllowed(const CCircuitDef* definition, const springai::AIFloat3& position) const {
+        const auto found = buildRadii.find(definition->GetId());
+        return found == buildRadii.end() || position.SqDistance2D(found->second.first) <= found->second.second;
+    }
+    // D-290: script-owned set of definitions our builders never reclaim (TECH:
+    // energy storage). Mechanism only; empty unless a script fills it, so other
+    // roles and the legacy profiles are unchanged. Indexed by definition id:
+    // O(1) test per reclaim enqueue, one bit per definition. Not serialized:
+    // the role's InitHandler rebuilds it after load; a role switch clears it.
+    void SetReclaimProtected(const CCircuitDef* definition, bool isProtected) {
+        if ((definition == nullptr) || (definition->GetId() < 0)) return;
+        const auto index = static_cast<std::size_t>(definition->GetId());
+        if (index >= reclaimProtected.size()) {
+            if (!isProtected) return;
+            reclaimProtected.resize(index + 1, false);
+        }
+        reclaimProtected[index] = isProtected;
+    }
+    bool IsReclaimProtected(const CCircuitDef* definition) const {
+        if ((definition == nullptr) || (definition->GetId() < 0)) return false;
+        const auto index = static_cast<std::size_t>(definition->GetId());
+        return (index < reclaimProtected.size()) && reclaimProtected[index];
+    }
+    void ClearReclaimProtected() { reclaimProtected.clear(); }
+private:
+    std::map<int, std::pair<springai::AIFloat3, float>> buildRadii;
+    std::vector<bool> reclaimProtected;  // D-290: by CCircuitDef::Id
+public:
 	friend class CBuilderScript;
 
 	CBuilderManager(CCircuitAI* circuit);
@@ -266,6 +305,12 @@ public:
 
 	float GetGoalExecTime() const { return goalExecTime; }
 	unsigned int GetWorkerCount() const { return workers.size(); }
+    CCommanderTask* EnqueueCommander(IUnitTask* previous);
+    bool SetCommanderCombatOption(const std::string& name,float value);
+    float GetCommanderEnergyReserve() const;
+    float GetCommanderEnergyDeficit() const;
+    int GetCommanderOperation() const;
+    IUnitTask* CommanderFrontWork(CCircuitUnit* unit,int kind,CCircuitDef* def,float radius);
 	void AddBuildPower(CCircuitUnit* unit);
 	void DelBuildPower(CCircuitUnit* unit);
 	float GetBuildPower() const { return buildPower; }
@@ -279,7 +324,16 @@ public:
 	// gets one construction command with no command timeout, and inside
 	// experimentalDirectRange the engine walks the last leg itself. Off by
 	// default; a role's script turns it on for its own AI instance only.
+	const std::set<CCircuitUnit*>& GetWorkers() const { return workers; }
 	bool IsExperimentalBuild() const { return experimentalBuild; }
+	bool IsConstructionRecoveryEnabled() const { return recoverConstruction; }
+	static bool IsLayoutEconomy(IBuilderTask::BuildType type) {
+		return type == IBuilderTask::BuildType::ENERGY || type == IBuilderTask::BuildType::CONVERT
+			|| type == IBuilderTask::BuildType::STORE || type == IBuilderTask::BuildType::NANO;
+	}
+	bool SuppressEconomyChain(IBuilderTask::BuildType type) const {
+		return recoverConstruction && experimentalBuild && IsLayoutEconomy(type);
+	}
 	bool IsExperimentalAirDirect() const { return experimentalAirDirect; }
 	float GetExperimentalDirectRange() const { return experimentalDirectRange; }
 	float GetExperimentalSearchRadius() const { return experimentalSearchRadius; }
@@ -288,6 +342,19 @@ public:
 	// script pulls them when its sequence says so; nothing else assigns them
 	// in the experimental system.
 	IUnitTask* FindQueuedTask(CCircuitUnit* builder, IBuilderTask::BuildType type);
+	// mode 0: metal features, 1: completed naval repair (optional def filter),
+	// 2: naval wreck resurrection. Script orders the independent queries.
+	IBuilderTask* FindRecoveryTask(CCircuitUnit* unit, int mode, float radius, const CCircuitDef* preferred, int groupLimit = 1, bool highestValue = false, float combatClearance = 0.f);
+    float GetRecoveryMetal(CCircuitUnit* worker, float radius);
+    bool ReceiveResurrectionClaim(const char* message);
+private:
+    struct SRelayedResurrection { ResurrectionClaim claim; int team; int expires; };
+    std::map<int, SRelayedResurrection> relayedResurrections;
+    void RefreshRecoveryFeatures();
+	struct SRecoveryFeature { int id; springai::AIFloat3 pos; float metal; bool resurrect; float vesselMetal; };
+	std::vector<SRecoveryFeature> recoveryFeatures;
+	int recoveryFrame = -100000;
+public:
 	// Turret assist (D-065): the own unit being reclaimed that this builder
 	// can reach without moving (nearest), and the unfinished structure of
 	// `def` it can reach (nearest); null when none.
@@ -310,7 +377,7 @@ public:
 	// apply, each is taken off its task and put on one shared reclaim of the
 	// target now. Returns how many were off it (before applying); -1 if the
 	// target is gone.
-	int TurretsOnReclaim(int targetId, float margin, bool apply);
+	int TurretsOnReclaim(int targetId, float margin, bool apply, bool preserveReclaimPriority = false);
 	int GetQueuedBuildCount(IBuilderTask::BuildType type, const CCircuitDef* buildDef) const;
 	bool CanEnqueueTask(const unsigned mod = 8) const { return buildTasksCount < workers.size() * mod; }
 	const std::set<IBuilderTask*>& GetTasks(IBuilderTask::BuildType type) const;
@@ -320,6 +387,7 @@ public:
 	IBuilderTask* EnqueueLayout(const TaskB::SBuildTask& ti, const std::string& groupName, CCircuitUnit* builder);
 	IBuilderTask* EnqueueFactoryNano(const TaskB::SBuildTask& ti, CCircuitUnit* builder);
 	IUnitTask* Enqueue(const TaskB::SServBTask& ti);
+	IUnitTask* FindMatchingGuard(CCircuitUnit* unit, const TaskB::SServBTask& ti);
 	virtual CRetreatTask* EnqueueRetreat() override;
 	inline IBuilderTask* EnqueueB(const TaskB::SServBTask& ti) {
 		assert((ti.type == IBuilderTask::BuildType::PATROL) || (ti.type == IBuilderTask::BuildType::GUARD));
@@ -334,9 +402,9 @@ private:
 public:
 	virtual void FallbackTask(CCircuitUnit* unit) override;
 
-	void MarkUnfinishedUnit(CAllyUnit* target, IBuilderTask* task) {
-		unfinishedUnits[target] = task;
-	}
+    void MarkUnfinishedUnit(CAllyUnit* target, IBuilderTask* task);
+    // Called at unregister, before any later script can observe a dead unit.
+    void ForgetUnfinishedCount(CAllyUnit* target) { unfinishedCounts.Erase(target); }
 	void MarkRepairUnit(ICoreUnit::Id targetId, CBRepairTask* task) {
 		repairUnits[targetId] = task;
 	}
@@ -349,6 +417,8 @@ public:
 	SBuildChain* GetBuildChain(IBuilderTask::BuildType buildType, CCircuitDef* cdef) const;
 
 	IBuilderTask* GetRepairTask(ICoreUnit::Id unitId) const;
+	// D-299: the repair task for target (own or allied), reused if one exists.
+	IBuilderTask* EnqueueRepairFor(CAllyUnit* target, int timeout, CCircuitUnit* commander = nullptr);
 	IBuilderTask* GetReclaimFeatureTask(const springai::AIFloat3& pos, float radius) const;
 	IBuilderTask* GetResurrectTask(const springai::AIFloat3& pos, float radius) const;
 	void RegisterReclaim(CAllyUnit* unit);
@@ -412,6 +482,8 @@ private:
 	EHandlers destroyedHandler;
 
 	std::map<CAllyUnit*, IBuilderTask*> unfinishedUnits;
+    DefinitionCounts<CAllyUnit*> unfinishedCounts;
+    void EraseUnfinishedUnit(CAllyUnit* target);
 	std::map<ICoreUnit::Id, CBRepairTask*> repairUnits;
 	std::map<CAllyUnit*, CBReclaimTask*> reclaimUnits;
 	std::map<CAllyUnit*, ICoreUnit::Id> reclaimIds;  // the id behind each key: UnregisterReclaim may get a freed pointer (CR-001)
@@ -427,6 +499,10 @@ private:
 	std::map<CCircuitUnit*, int> dangerTime;  // unit: frame
 	int dangerHysteresis;  // frames
 	bool experimentalBuild = false;          // script property (D-064, D-066: the whole experimental build system)
+	bool recoverConstruction = false;        // opt-in TECH/SEA; independent of placement mode
+	int constructionRetrySeconds = 10;
+	int constructionReleaseSeconds = 30;
+	int nextLegacyWatchdog = 0;
 	bool experimentalAirDirect = false;     // opt-in: engine controls flying constructors' last approach
 	float experimentalDirectRange = 1600.f;  // elmos
 	float experimentalSearchRadius = 512.f;  // elmos: how far from the asked anchor a site may be packed (D-066)

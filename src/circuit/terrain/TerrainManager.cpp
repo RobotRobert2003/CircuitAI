@@ -1,3 +1,4 @@
+#include "terrain/ReservationCandidates.h"
 /*
  * TerrainManager.cpp
  *
@@ -7,11 +8,14 @@
 
 #include "terrain/TerrainManager.h"
 #include "terrain/LayoutRanking.h"
+#include "terrain/NavalGeometry.h"
+#include "Sim/MoveTypes/MoveDefHandler.h"
 #include "terrain/BlockRectangle.h"
 #include "terrain/BlockCircle.h"
 #include "terrain/path/PathFinder.h"
 #include "terrain/path/QueryPathWide.h"
 #include "map/ThreatMap.h"
+#include "map/MapManager.h"
 #include "map/InfluenceMap.h"
 #include "module/EconomyManager.h"
 #include "module/BuilderManager.h"  // Only for UpdateAreaUsers
@@ -20,9 +24,11 @@
 #include "scheduler/Scheduler.h"
 #include "setup/SetupManager.h"
 #include "unit/CircuitUnit.h"
+#include "unit/ally/AllyUnit.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 #include "util/Profiler.h"
+#include "util/Performance.h"
 #include "json/json.h"
 
 #include "spring/SpringMap.h"
@@ -37,11 +43,22 @@
 #include <limits>
 #include <cmath>
 #include <chrono>
+#include <cstdlib>
 
 // D-083 diagnosis (KI-419): any layout call over SLOW_CALL_MS is logged with its
 // cost, so a sim stall names the function that caused it.
 namespace {
 inline circuit::layout_rank::Pt ToPt(const springai::AIFloat3& p) { return circuit::layout_rank::Pt{p.x, p.z}; }  // D-094
+// D-314 / KI-591: reject before float-to-int conversion, threat/influence
+// indexing or the flying-unit shortcut. An index-only guard lets x wrap into
+// an adjacent row. These O(1) checks allocate nothing and do not clamp a bad
+// request into a different job. Actual-VM coverage: run_terrain_reachability.py.
+bool ValidReachDestination(const springai::AIFloat3& p, float range = 0.f) {
+    return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z)
+        && p.x >= 0.f && p.z >= 0.f
+        && p.x < springai::AIFloat3::maxxpos && p.z < springai::AIFloat3::maxzpos
+        && std::isfinite(range) && range >= 0.f;
+}
 constexpr double SLOW_CALL_MS = 20.0;
 struct SSlowCall {
 	const char* name; circuit::CCircuitAI* ai; std::chrono::steady_clock::time_point t0;
@@ -356,6 +373,14 @@ void CTerrainManager::ReadConfig()
 
 void CTerrainManager::Init()
 {
+    resourceLayout.clear();
+    const auto describeResource = [this](const char* kind, const int2& a, const int2& b) {
+        char entry[128];
+        snprintf(entry, sizeof(entry), "resource:%s:%i:%i:0:%i:%i:r;", kind,
+            (a.x + b.x) * SQUARE_SIZE, (a.y + b.y) * SQUARE_SIZE,
+            (b.x - a.x) * SQUARE_SIZE * 2, (b.y - a.y) * SQUARE_SIZE * 2);
+        resourceLayout += entry;
+    };
 	const CMetalData::Metals& mspots = circuit->GetMetalManager()->GetSpots();
 	CCircuitDef* cdef = circuit->GetEconomyManager()->GetSideInfo().mexDef;
 	int xsize, zsize;
@@ -376,6 +401,7 @@ void CTerrainManager::Init()
 		int2 m1(x1, z1);
 		int2 m2(x2, z2);
 		blockingMap.Bound(m1, m2);
+        describeResource("metal", m1, m2);
 		for (int z = m1.y; z < m2.y; ++z) {
 			for (int x = m1.x; x < m2.x; ++x) {
 				blockingMap.MarkBlocker(x, z, SBlockingMap::StructType::MEX, notIgnoreMask);
@@ -401,6 +427,7 @@ void CTerrainManager::Init()
 		int2 m1(x1, z1);
 		int2 m2(x2, z2);
 		blockingMap.Bound(m1, m2);
+        describeResource("geo", m1, m2);
 		for (int z = m1.y; z < m2.y; ++z) {
 			for (int x = m1.x; x < m2.x; ++x) {
 				blockingMap.MarkBlocker(x, z, SBlockingMap::StructType::GEO, notIgnoreMask);
@@ -722,7 +749,8 @@ AIFloat3 CTerrainManager::FindBuildSite(CCircuitDef* cdef, const AIFloat3& pos,
 {
 	ZoneScoped;
 	TerrainPredicate predicate = [this, cdef, facing, &requested](const AIFloat3& p) {
-		return (cdef->IsMobile() || !IsAllyLayoutBlocked(cdef, p, facing)) && requested(p);
+		return !IsResourceFootprintBlocked(cdef, p, facing)
+			&& (cdef->IsMobile() || !IsAllyLayoutBlocked(cdef, p, facing)) && requested(p);
 	};
 
 	if (circuit->IsAllyAware()) {
@@ -736,6 +764,8 @@ AIFloat3 CTerrainManager::FindBuildSite(CCircuitDef* cdef, const AIFloat3& pos,
 	lastReservedFacing = -1;
 	const bool serve = reservationSearch;
 	const bool required = pinnedReservationRequired;
+	const int facingFilter = reservationSearch ? reservationFacingFilter : -1;
+	reservationFacingFilter = -1;
 	reservationSearch = false;
 	if (!serve) {
 		pinnedReservation = -1;
@@ -744,7 +774,7 @@ AIFloat3 CTerrainManager::FindBuildSite(CCircuitDef* cdef, const AIFloat3& pos,
 	if (layoutEnabled && serve && !reservations.empty()) {
 		AIFloat3 rpos;
 		int rfacing, rid;
-		if (FindReservedSite(cdef, pos, predicate, rpos, rfacing, rid)) {
+		if (FindReservedSite(cdef, pos, predicate, rpos, rfacing, rid, facingFilter)) {
 			lastReservedId = rid;
 			lastReservedFacing = rfacing;
 			return rpos;
@@ -757,7 +787,8 @@ AIFloat3 CTerrainManager::FindBuildSite(CCircuitDef* cdef, const AIFloat3& pos,
 		return -RgtVector;
 	}
     predicate = [this, cdef, facing, &requested](const AIFloat3& p) {
-        if (!cdef->IsMobile()) {
+        if (IsResourceFootprintBlocked(cdef, p, facing)) return false;
+        if (!cdef->IsMobile() && !IsResourceBuildingSite(cdef, p, facing)) {
             if (IsAllyLayoutBlocked(cdef, p, facing)) return false;
             int2 a, b;
             if (ReservationCells(cdef, Pos2BuildPos(cdef, p, facing), facing, a, b)) {
@@ -882,6 +913,7 @@ bool CTerrainManager::IsReservationFree(const int2& c1, const int2& c2) const
 
 void CTerrainManager::MarkReservation(const int2& c1, const int2& c2, bool mark)
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
 	const SBlockingMap::SM all = static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL);
 	for (int z = c1.y; z < c2.y; ++z) {
 		for (int x = c1.x; x < c2.x; ++x) {
@@ -991,6 +1023,7 @@ int CTerrainManager::ReserveBuildingEx(CCircuitDef* cdef, const AIFloat3& positi
 	const int order = (group == 0) ? 0 : GetGroupCount(group, false);
 	reservations[id] = SReservation{id, cdef, pos, facing, group, (ttlFrames > 0) ? frame + ttlFrames : 0, false,
 			armed, anyReach, tenant, zone, 0, order, false};
+	IndexReservation(id);
 	ShareSlot(id);
 	if (group == 0) {
 		circuit->LOG("RESERVE: %s at (%.0f, %.0f) facing %i (id %i)", cdef->GetDef()->GetName(), pos.x, pos.z, facing, id);
@@ -1054,6 +1087,77 @@ int CTerrainManager::ReserveGridEx(CCircuitDef* cdef, const AIFloat3& frontCentr
 	return ((placed > 0) || (groupIn > 0)) ? group : 0;
 }
 
+bool CTerrainManager::CanReserveNanoBlockAt(CCircuitDef* nanoDef, CCircuitDef* facDef,
+        const AIFloat3& facPos, int facing, int cols, int rows, int gap)
+{
+    // Pure preflight for CrampedLabSite: simulate the future factory footprint
+    // and the support band's insertion order without allocating IDs, changing
+    // allied reservations or dirtying the blocker grids. Final commit keeps its
+    // existing checks. O(rows*columns*footprint + existing exit lanes).
+    if (!layoutEnabled || !nanoDef || !facDef || !nanoDef->GetDef() || !facDef->GetDef()
+        || cols <= 0 || rows <= 0) return false;
+    if (facing < 0 || facing > 3) facing = UNIT_FACING_SOUTH;
+    UnitDef* factory = facDef->GetDef();
+    UnitDef* turret = nanoDef->GetDef();
+    const float cell = SQUARE_SIZE * 2;
+    const float depth = (((facing & 1) ? factory->GetXSize() : factory->GetZSize()) / 2) * cell;
+    const float width = (((facing & 1) ? turret->GetZSize() : turret->GetXSize()) / 2) * cell;
+    const float length = (((facing & 1) ? turret->GetXSize() : turret->GetZSize()) / 2) * cell;
+    const float spacing = std::max(0, gap) * cell;
+    const AIFloat3 forwards[] = {{0,0,1},{1,0,0},{0,0,-1},{-1,0,0}};
+    const AIFloat3 sides[] = {{1,0,0},{0,0,-1},{-1,0,0},{0,0,1}};
+    const AIFloat3 front = facPos - forwards[facing] * (depth * .5f);
+    const float blockWidth = cols * width + (cols - 1) * spacing;
+    const float blockDepth = rows * length + (rows - 1) * spacing;
+    AIFloat3 factoryPosition = facPos;
+    CorrectPosition(factoryPosition);
+    factoryPosition = Pos2BuildPos(facDef, factoryPosition, facing);
+    int2 zoneFirst, zoneLast, factoryFirst, factoryLast;
+    if (!RectCells(front - forwards[facing] * (blockDepth * .5f), facing,
+            blockWidth * .5f, blockDepth * .5f, zoneFirst, zoneLast)
+        || IsAllyLayoutRectBlocked(zoneFirst, zoneLast)
+        || !ReservationCells(facDef, factoryPosition, facing, factoryFirst, factoryLast)) return false;
+    std::vector<layout_rank::CellRect> occupied{{factoryFirst.x,factoryFirst.y,factoryLast.x,factoryLast.y}};
+    auto exits = FactoryExitLanes();
+    int2 exitFirst, exitLast;
+    if (!facDef->IsMobile() && facDef->IsBuilder()
+        && ExitLaneCells(facDef, factoryPosition, facing,
+            EXIT_CLEAR_LENGTH, EXIT_CLEAR_MARGIN, exitFirst, exitLast))
+        exits.push_back({exitFirst.x,exitFirst.y,exitLast.x,exitLast.y});
+    const auto all = static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL);
+    bool heldCell = false;
+    for (int z=zoneFirst.y; z<zoneLast.y && !heldCell; ++z)
+        for (int x=zoneFirst.x; x<zoneLast.x; ++x)
+            if (!blockingMap.IsBlocked(x,z,all)
+                && !(x>=factoryFirst.x && x<factoryLast.x && z>=factoryFirst.y && z<factoryLast.y)) {
+                heldCell=true; break;
+            }
+    if (!heldCell) return false;
+    bool reachable = false;
+    for (int row=0; row<rows; ++row) for (int column=0; column<cols; ++column) {
+        const float back = row*(length+spacing)+length*.5f;
+        const float lateral = (column-(cols-1)*.5f)*(width+spacing);
+        AIFloat3 point = front-forwards[facing]*back+sides[facing]*lateral;
+        CorrectPosition(point);
+        point=Pos2BuildPos(nanoDef,point,facing);
+        int2 first,last;
+        if (!ReservationCells(nanoDef,point,facing,first,last) || !CanBeBuiltAt(nanoDef,point)
+            || FindSlotAt(nanoDef,point)>=0 || IsAllyLayoutRectBlocked(first,last)) continue;
+        const layout_rank::CellRect rectangle{first.x,first.y,last.x,last.y};
+        if (layout_rank::OverlapsAny(rectangle,occupied) || layout_rank::OverlapsAny(rectangle,exits)
+            || localReservations.OverlapsSlot({first.x,first.y,last.x,last.y})) continue;
+        bool free = true;
+        for (int z=first.y; z<last.y && free; ++z) for (int x=first.x; x<last.x; ++x)
+            if (blockingMap.IsResourceSite(x,z) || blockingMap.IsBlocked(x,z,all)) { free=false; break; }
+        // ReserveZone claims only initially free cells. Existing blocked cells
+        // never become owned by the hypothetical zone, including another zone.
+        if (!free) continue;
+        occupied.push_back(rectangle);
+        if (point.SqDistance2D(facPos)<=SQUARE(nanoDef->GetBuildDistance())) reachable=true;
+    }
+    return reachable;
+}
+
 int CTerrainManager::ReserveNanoBlockAt(CCircuitDef* nanoDef, CCircuitDef* facDef, const AIFloat3& facPos, int facing, int cols, int rows, int gap)
 {
 	if ((nanoDef == nullptr) || (facDef == nullptr) || (facDef->GetDef() == nullptr)) {
@@ -1095,12 +1199,34 @@ int CTerrainManager::ReserveNanoBlockAt(CCircuitDef* nanoDef, CCircuitDef* facDe
 	if (zone == 0) {
 		return 0;
 	}
-	return LayBand(zone, nanoDef, frontCentre, facing, cols, rows, gap, true, false, false, 0);
+	const int group = LayBand(zone, nanoDef, frontCentre, facing, cols, rows, gap, true, false, false, 0);
+	if (group <= 0 || GetGroupCount(group, false) == 0) {
+		// A failed support probe must not leave an empty zone blocking the next
+		// candidate. Successful groups retain their zone for future construction.
+		if (group > 0) ReleaseGroup(group);
+		ReleaseZone(zone);
+		return 0;
+	}
+	return group;
 }
 
 
+void CTerrainManager::IndexLocalSlot(int id)
+{
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
+    const auto it = reservations.find(id);
+    int2 a, b;
+    if (it == reservations.end() || it->second.consumed
+            || !ReservationCells(it->second.def, it->second.pos, it->second.facing, a, b)) {
+        localReservations.EraseSlot(id);
+        return;
+    }
+    localReservations.PutSlot(id, {a.x, a.y, b.x, b.y});
+}
+
 void CTerrainManager::ShareSlot(int id)
 {
+    IndexLocalSlot(id);
     const auto it = reservations.find(id);
     if (it == reservations.end()) return;
     int2 a, b;
@@ -1114,12 +1240,18 @@ void CTerrainManager::ShareSlot(int id)
 
 void CTerrainManager::ShareZone(int id)
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
     const auto it = zones.find(id);
     if (it == zones.end()) return;
     const auto& z = it->second;
+    localReservations.PutZone(id, {z.c1.x, z.c1.y, z.c2.x, z.c2.y});
     if (IsAllyLayoutRectBlocked(z.c1, z.c2)) circuit->LOG("[INVARIANT] INV-088: zone %i overlaps an allied plan", id);
     circuit->GetAllyTeam()->GetLayoutReservations().Put(circuit->GetTeamId(), allied_layout::Reservations::ZONE,
         id, {z.c1.x, z.c1.y, z.c2.x, z.c2.y});
+    if (z.corridor) {
+        circuit->GetAllyTeam()->GetLayoutReservations().Put(circuit->GetTeamId(), allied_layout::Reservations::EXIT,
+            id, {z.c1.x, z.c1.y, z.c2.x, z.c2.y});
+    }
 }
 
 bool CTerrainManager::IsAllyLayoutRectBlocked(const int2& c1, const int2& c2) const
@@ -1133,6 +1265,11 @@ bool CTerrainManager::IsAllyLayoutBlocked(CCircuitDef* cdef, const AIFloat3& pos
     int2 a, b;
     if (cdef == nullptr || cdef->IsMobile()) return false;
     if (facing < 0 || facing > 3) facing = UNIT_FACING_SOUTH;
+    // Zone rectangles enclose holes. A genuine resource building wholly on its
+    // matching immutable site may use that cutout; no other footprint may.
+    // Metal maps have no MEX site markers, so their dense field reservations
+    // continue to respect allied cluster ownership exactly as before.
+    if (IsResourceBuildingSite(cdef, pos, facing)) return false;
     return ReservationCells(cdef, Pos2BuildPos(cdef, pos, facing), facing, a, b) && IsAllyLayoutRectBlocked(a, b);
 }
 
@@ -1228,7 +1365,48 @@ bool CTerrainManager::IsEngineBuildable(CCircuitDef* cdef, const AIFloat3& build
 	// past the def's maxHeightDif, water or land the def cannot stand on, a
 	// structure); units standing there and reclaimable features pass (the
 	// builder moves them / reclaims them first)
-	return circuit->GetMap()->IsPossibleToBuildAt(cdef->GetDef(), buildPos, facing);
+	return !IsResourceFootprintBlocked(cdef, buildPos, facing)
+		&& circuit->GetMap()->IsPossibleToBuildAt(cdef->GetDef(), buildPos, facing);
+}
+
+bool CTerrainManager::IsResourceAreaBlocked(const AIFloat3& centre, int facing, float halfAcross, float halfAlong) const
+{
+	int2 a, b;
+	if (!RectCells(centre, facing, halfAcross, halfAlong, a, b)) return true;
+	for (int z = a.y; z < b.y; ++z) for (int x = a.x; x < b.x; ++x) {
+		if (blockingMap.IsResourceSite(x, z)) return true;
+	}
+	return false;
+}
+
+bool CTerrainManager::IsResourceFootprintBlocked(CCircuitDef* cdef, const AIFloat3& pos, int facing) const
+{
+	if (cdef == nullptr || cdef->IsMobile()) return false;
+	// Resource buildings retain their normal site/upgrade path; first-factory
+	// placement exceptions may ignore layouts, but never steal resource ground.
+	SBlockingMap::SM mask = STRUCT_BIT(ALL);
+	if (cdef->GetExtractsM() > 0.f) mask &= ~STRUCT_BIT(MEX);
+	if (cdef->GetDef()->IsNeedGeo()) mask &= ~STRUCT_BIT(GEO);
+	int2 a, b;
+	if (!ReservationCells(cdef, Pos2BuildPos(cdef, pos, facing), facing, a, b)) return true;
+	for (int z = a.y; z < b.y; ++z) for (int x = a.x; x < b.x; ++x) {
+		if (blockingMap.IsResourceSite(x, z, mask)) return true;
+	}
+	return false;
+}
+
+bool CTerrainManager::IsResourceBuildingSite(CCircuitDef* cdef, const AIFloat3& pos, int facing) const
+{
+	if (cdef == nullptr || cdef->IsMobile()) return false;
+	const auto mask = cdef->GetExtractsM() > 0.f ? STRUCT_BIT(MEX)
+		: cdef->GetDef()->IsNeedGeo() ? STRUCT_BIT(GEO) : STRUCT_BIT(NONE);
+	if (mask == STRUCT_BIT(NONE)) return false;
+	int2 a, b;
+	if (!ReservationCells(cdef, Pos2BuildPos(cdef, pos, facing), facing, a, b)) return false;
+	for (int z = a.y; z < b.y; ++z) for (int x = a.x; x < b.x; ++x) {
+		if (!blockingMap.IsResourceSite(x, z, mask)) return false;
+	}
+	return true;
 }
 
 float CTerrainManager::BuildableFraction(CCircuitDef* cdef, const AIFloat3& centre, float halfAcross, float halfAlong, int facing)
@@ -1276,6 +1454,7 @@ float CTerrainManager::BuildableFraction(CCircuitDef* cdef, const AIFloat3& cent
 
 bool CTerrainManager::SetLayoutEnabled(bool enabled)
 {
+	++packingRevision;
 	if (enabled && !layoutConfigured) {
 		if (!layoutRefusalLogged) {
 			layoutRefusalLogged = true;
@@ -1917,7 +2096,8 @@ void CTerrainManager::ReleaseReservation(int id)
 		}
 	}
 	circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::SLOT, it->first);
-	reservations.erase(it);
+	localReservations.EraseSlot(it->first);
+	EraseReservation(it->first);
 }
 
 void CTerrainManager::ReleaseGroup(int group)
@@ -1956,6 +2136,7 @@ int CTerrainManager::GetReservationCount(CCircuitDef* cdef) const
 
 void CTerrainManager::RestoreReservation(int id)
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
 	auto it = reservations.find(id);
 	if (it == reservations.end()) {
 		return;
@@ -1968,28 +2149,156 @@ void CTerrainManager::RestoreReservation(int id)
 	if (ReservationCells(r.def, r.pos, r.facing, c1, c2) && IsSlotFree(c1, c2, r.zone, id)) {
 		MarkReservation(c1, c2, true);
 		r.consumed = false;
+		IndexLocalSlot(r.id);
 		r.unitId = 0;
 		r.claimed = false;
 		circuit->LOG("RESERVE: restored %s at (%.0f, %.0f) (id %i)", r.def->GetDef()->GetName(), r.pos.x, r.pos.z, id);
 	} else {
 		circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::SLOT, it->first);
-		reservations.erase(it);  // something took the ground meanwhile
+		localReservations.EraseSlot(it->first);
+		EraseReservation(it->first);  // something took the ground meanwhile
 	}
 }
 
 void CTerrainManager::FinishReservation(int id, int unitId)
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
 	auto it = reservations.find(id);
 	if (it == reservations.end()) {
 		return;
 	}
 	if ((it->second.zone == 0) || (unitId == 0)) {
 		circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::SLOT, it->first);
-		reservations.erase(it);  // a plain reservation is met and forgotten
+		localReservations.EraseSlot(it->first);
+		EraseReservation(it->first);  // a plain reservation is met and forgotten
 		return;
 	}
 	it->second.claimed = false;
 	it->second.unitId = unitId;  // a zone slot remembers its structure (restore or forget when it goes)
+    ClearLostReservation(id);
+}
+
+bool CTerrainManager::CanNavalRoute(CCircuitDef* cdef, const AIFloat3& from, const AIFloat3& to)
+{
+	if (cdef == nullptr || !geom::is_in_map(from) || !geom::is_in_map(to)) return false;
+	auto* mt = GetMobileTypeById(cdef->GetMobileId());
+	if (mt == nullptr) return false;
+	// Strict membership: GetCurrentMapArea deliberately snaps impossible spawns,
+	// which is inappropriate evidence for a new production berth.
+	// is_in_map admits the far map edge, whose sector index can lie past the
+	// table (Shore to Shore crashed here from SeaLayout::Search); bound both.
+	const int iFrom = GetSectorIndex(from), iTo = GetSectorIndex(to);
+	const int sectors = static_cast<int>(mt->sector.size());
+	if (iFrom < 0 || iFrom >= sectors || iTo < 0 || iTo >= sectors) return false;
+	const auto* a = mt->sector[iFrom].area;
+	return a != nullptr && a == mt->sector[iTo].area;
+}
+
+bool CTerrainManager::PlanNavalBerth(const std::string& key, CCircuitDef* cdef,
+        const AIFloat3& pos, int facing, float length, float margin)
+{
+	if (!layoutEnabled || cdef == nullptr || facing < 0 || facing > 3 || length <= 0.f
+	    || length > 2048.f || margin < 0.f || margin > 256.f
+	    || !CanReserveBuilding(cdef, pos, facing)) return false;
+	const AIFloat3 p = Pos2BuildPos(cdef, pos, facing);
+	const float halfDepth = cdef->GetDef()->GetZSize() * SQUARE_SIZE * .5f;
+	const float halfWidth = cdef->GetDef()->GetXSize() * SQUARE_SIZE * .5f + margin;
+	const AIFloat3 forward(facing == 1 ? 1.f : facing == 3 ? -1.f : 0.f, 0.f,
+	                      facing == 0 ? 1.f : facing == 2 ? -1.f : 0.f);
+	bool hasShip = false;
+	float hullHalf = 0.f, draft = 0.f;
+	for (const auto id : cdef->GetBuildOptions()) {
+		auto* product = circuit->GetCircuitDef(id);
+		if (product == nullptr || !product->IsMobile() || product->GetDef()->IsAbleToFly()) continue;
+		std::unique_ptr<MoveData> move(product->GetDef()->GetMoveData());
+		if (!move || move->GetSpeedModClass() != MoveDef::Ship) continue;
+		hasShip = true;
+		hullHalf = std::max(hullHalf, float(std::max(move->GetXSize(), move->GetZSize())) * SQUARE_SIZE * .5f);
+		draft = std::max(draft, move->GetDepth());
+		if (!CanNavalRoute(product, p, p + forward * (halfDepth + length))) return false;
+	}
+	if (!hasShip || hullHalf > halfWidth) return false;
+	const auto elevation = [this](float x, float z) {
+		return geom::is_in_map(AIFloat3(x,0.f,z)) ? areaData->GetElevationAt(x,z)
+		    : std::numeric_limits<float>::quiet_NaN();
+	};
+	if (!naval::Corridor(p.x,p.z,facing,halfDepth+length,hullHalf,draft,elevation)
+	    || !IsExitClear(cdef,p,facing,length,margin)) return false;
+	int2 low, high;
+	if (!ExitLaneCells(cdef,p,facing,length,margin,low,high) || IsAllyLayoutRectBlocked(low,high)) return false;
+	const int slot = ReservePersistentBuilding(cdef,p,facing);
+	if (slot < 0) return false;
+	const int exit = ReserveZone(p + forward * (halfDepth + length*.5f), facing, halfWidth, length*.5f, true);
+	if (exit <= 0) { ReleasePersistentBuilding(slot); return false; }
+	SetLayoutInt(key+".slot",slot);
+	SetLayoutInt(key+".exit",exit);
+	SetLayoutInt(key+".facing",facing);
+	SetLayoutInt(key+".x",int(p.x)); SetLayoutInt(key+".z",int(p.z));
+	return true;
+}
+
+bool CTerrainManager::IsAreaVisible(const AIFloat3& pos, float radius) const
+{
+	return circuit->GetMapManager()->IsAreaInLOS(pos,radius);
+}
+
+int CTerrainManager::PlanNavalSupport(const std::string& key, CCircuitDef* nano, CCircuitDef* factory,
+        const AIFloat3& pos, int facing, int maximum, int minimum, float margin)
+{
+	SSlowCall slow("PlanNavalSupport", circuit);
+	if (!layoutEnabled || nano==nullptr || factory==nullptr || facing<0 || facing>3
+	    || minimum<1 || maximum<minimum || maximum>128 || margin<0 || margin>256) return 0;
+	const float reach=nano->GetBuildDistance();
+	const auto sites=naval::SupportSites(nano->GetDef()->GetXSize()*SQUARE_SIZE,
+	    nano->GetDef()->GetZSize()*SQUARE_SIZE, factory->GetDef()->GetXSize()*SQUARE_SIZE,
+	    factory->GetDef()->GetZSize()*SQUARE_SIZE,reach,margin);
+	const AIFloat3 forward(facing==1 ? 1.f : facing==3 ? -1.f : 0.f,0.f,facing==0 ? 1.f : facing==2 ? -1.f : 0.f);
+	const AIFloat3 across(forward.z,0.f,-forward.x);
+	std::vector<int> slots; slots.reserve(maximum);
+	// Native private footprint reservations consult the existing allied index.
+	// A single owner-thread call reserves the usable cluster before any ally or
+	// economy callback can interleave. Partial terrain fits are intentional;
+	// an unsuccessful minimum is rolled back, never left as an orphan bank.
+	for (const auto& site: sites) {
+		const auto p=Pos2BuildPos(nano,pos+across*site.across+forward*site.along,facing);
+		if (p.SqDistance2D(pos)>reach*reach) continue;
+		const int id=ReservePersistentBuilding(nano,p,facing);
+		if (id>=0) slots.push_back(id);
+		if (int(slots.size())>=maximum) break;
+	}
+	if (int(slots.size())<minimum) { for (int id:slots) ReleasePersistentBuilding(id); return 0; }
+	for (size_t i=0;i<slots.size();++i) SetLayoutInt(key+".slot."+std::to_string(i),slots[i]);
+	return int(slots.size());
+}
+
+int CTerrainManager::ReservePackedBuilding(CCircuitDef* cdef, const AIFloat3& position, int facing)
+{
+	if (!layoutEnabled || cdef == nullptr || cdef->GetDef() == nullptr || facing < 0 || facing > 3) return -1;
+	const auto mask = blockInfos.find(cdef->GetId());
+	if (mask == blockInfos.end()) return ReservePersistentBuilding(cdef, position, facing);
+	const auto pos = Pos2BuildPos(cdef, position, facing);
+	int2 low, high;
+	if (!ReservationCells(cdef, pos, facing, low, high) || !CanBeBuiltAt(cdef, pos)) return -1;
+	const layout_rank::CellRect footprint{low.x, low.y, high.x, high.y};
+	if (IsAllyLayoutRectBlocked(low, high) || localReservations.OverlapsZone({low.x,low.y,high.x,high.y})
+		|| localReservations.OverlapsSlot({low.x,low.y,high.x,high.y}, -1)
+		|| layout_rank::OverlapsAny(footprint, FactoryExitLanes())) return -1;
+	// Explicit script opt-in honours the JSON spacing mask, as ordinary build
+	// search does. Ignore only permitted soft yards: real structure cells,
+	// resources, allied plans and factory exits remain hard exclusions. The
+	// soft-yard check visits only footprint cells; exit/index checks above keep
+	// their existing cost. No additional building census is needed.
+	const auto blocking = static_cast<SBlockingMap::SM>(~mask->second->GetIgnoreMask());
+	for (int z=low.y; z<high.y; ++z) for (int x=low.x; x<high.x; ++x)
+		if (blockingMap.IsResourceSite(x,z) || blockingMap.IsBlocked(x,z,blocking)) return -1;
+	if (!IsEngineBuildable(cdef,pos,facing)) return -1;
+	auto* definition=cdef->GetDef();
+	const int zone=ReserveZoneMasked(pos,facing,float(definition->GetXSize()/2)*SQUARE_SIZE,
+		float(definition->GetZSize()/2)*SQUARE_SIZE,false,blocking);
+	if (zone<=0) return -1;
+	const int slot=ReserveBuildingEx(cdef,pos,facing,0,0,true,false,false,zone,true);
+	if (slot<0) ReleaseZone(zone);
+	return slot;
 }
 
 int CTerrainManager::ReservePersistentBuilding(CCircuitDef* cdef, const AIFloat3& pos, int facing)
@@ -2062,7 +2371,7 @@ void CTerrainManager::ExpireReservations()
 }
 
 bool CTerrainManager::FindReservedSite(CCircuitDef* cdef, const AIFloat3& pos, TerrainPredicate& predicate,
-		AIFloat3& outPos, int& outFacing, int& outId)
+		AIFloat3& outPos, int& outFacing, int& outId, int facingFilter)
 {
 	const int pinned = pinnedReservation;
 	const bool required = pinnedReservationRequired;
@@ -2157,7 +2466,8 @@ bool CTerrainManager::FindReservedSite(CCircuitDef* cdef, const AIFloat3& pos, T
 			break;
 		}
 		SReservation& r = kv.second;
-		if (r.consumed || r.claimed || (r.def != cdef) || !r.armed) {
+		if (r.consumed || r.claimed || (r.def != cdef) || !r.armed
+            || !layout_rank::MatchesFacingPass(r.facing, facingFilter)) {
 			continue;
 		}
 		// The engine's own test: a wreck or a standing structure keeps the slot
@@ -2184,6 +2494,7 @@ bool CTerrainManager::FindReservedSite(CCircuitDef* cdef, const AIFloat3& pos, T
 		UnmarkSlot(c1, c2);
 	}
 	best->consumed = true;
+	IndexLocalSlot(best->id);
 	best->claimed = true;
 	outPos = best->pos;
 	outFacing = best->facing;
@@ -2220,6 +2531,59 @@ int CTerrainManager::ZoneAt(int x, int z) const
 
 bool CTerrainManager::IsSlotFree(const int2& c1, const int2& c2, int zone, int ignoreId) const
 {
+    const bool result = IsSlotFreeIndexed(c1, c2, zone, ignoreId);
+    // D-199: opt-in differential runtime oracle; never changes the answer.
+    static const bool verify = std::getenv("CIRCUIT_VERIFY_LOCAL_LAYOUT") != nullptr;
+    if (verify) {
+        ++localOracleQueries;
+        if (result != IsSlotFreeLegacy(c1, c2, zone, ignoreId)) {
+            ++localOracleMismatches;
+            circuit->LOG("[INVARIANT] INV-144: local occupancy differs from legacy scan team=%i zone=%i ignore=%i rect=%i,%i,%i,%i",
+                circuit->GetTeamId(), zone, ignoreId, c1.x, c1.y, c2.x, c2.y);
+        }
+        if (localOracleQueries == 1 || localOracleQueries % 100000 == 0)
+            circuit->LOG("[LocalOracle] team=%i frame=%i queries=%llu mismatches=%llu cell_bytes=%llu",
+                circuit->GetTeamId(), circuit->GetLastFrame(),
+                static_cast<unsigned long long>(localOracleQueries), static_cast<unsigned long long>(localOracleMismatches),
+                static_cast<unsigned long long>(localReservations.CellStorageBytes()));
+    }
+    return result;
+}
+
+bool CTerrainManager::IsSlotFreeIndexed(const int2& c1, const int2& c2, int zone, int ignoreId) const
+{
+	if (IsAllyLayoutRectBlocked(c1, c2)) return false;
+	// Fresh unscoped reservations cannot fill holes inside a planned rectangle
+	// (for example after a wreck or old structure disappears). Zone packing and
+	// restoring an existing exact slot retain their explicit authority.
+	if (zone == 0 && ignoreId < 0 && localReservations.OverlapsZone({c1.x, c1.y, c2.x, c2.y})) return false;
+	const SBlockingMap::SM all = static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL);
+	for (int z = c1.y; z < c2.y; ++z) {
+		for (int x = c1.x; x < c2.x; ++x) {
+			if (!blockingMap.IsInBounds(x, z)) {
+				return false;
+			}
+			// A zone only grants permission to overlap its reservation marks and
+			// building yards, never an unoccupied resource node (including load).
+			if (blockingMap.IsResourceSite(x, z)) return false;
+			if (!blockingMap.IsBlocked(x, z, all)) {
+				continue;
+			}
+			// Inside its own zone a slot may stand on the zone's marks and in the
+			// yards of the zone's other structures (converters are stacked, the
+			// spine sits in the fusions' circle); a structure's own cells refuse.
+			if ((zone > 0) && blockingMap.IsReserved(x, z) && (ZoneAt(x, z) == zone)) {
+				continue;
+			}
+			return false;
+		}
+	}
+	if (zone > 0 && localReservations.OverlapsSlot({c1.x, c1.y, c2.x, c2.y}, ignoreId)) return false;
+	return true;
+}
+
+bool CTerrainManager::IsSlotFreeLegacy(const int2& c1, const int2& c2, int zone, int ignoreId) const
+{
 	if (IsAllyLayoutRectBlocked(c1, c2)) return false;
 	// Fresh unscoped reservations cannot fill holes inside a planned rectangle
 	// (for example after a wreck or old structure disappears). Zone packing and
@@ -2236,6 +2600,7 @@ bool CTerrainManager::IsSlotFree(const int2& c1, const int2& c2, int zone, int i
 			if (!blockingMap.IsInBounds(x, z)) {
 				return false;
 			}
+			if (blockingMap.IsResourceSite(x, z)) return false;
 			if (!blockingMap.IsBlocked(x, z, all)) {
 				continue;
 			}
@@ -2353,7 +2718,7 @@ int CTerrainManager::EdgeGapToGroup(CCircuitDef* cdef, const AIFloat3& pos, int 
 }
 
 bool CTerrainManager::PickFlushSite(int zone, CCircuitDef* cdef, int nanoGroup, int facing, const AIFloat3& anchor, bool needExit,
-		AIFloat3& outPos, int& outGap, AIFloat3& outTouch, int* outServedGap, bool ring)
+		AIFloat3& outPos, int& outGap, AIFloat3& outTouch, int* outServedGap, bool ring, int maximumGapCells)
 {
 	if (cdef == nullptr) {
 		return false;
@@ -2409,6 +2774,7 @@ bool CTerrainManager::PickFlushSite(int zone, CCircuitDef* cdef, int nanoGroup, 
 	constexpr int POCKET_TESTS_MAX = 40;  // D-090
 	int pocketTests = 0, tried = 0;
 	for (const SRanked& rk : ranked) {
+		if (maximumGapCells >= 0 && rk.gap > maximumGapCells) continue;
 		if (++tried > 400) {
 			break;
 		}
@@ -2444,7 +2810,7 @@ bool CTerrainManager::PickFlushSite(int zone, CCircuitDef* cdef, int nanoGroup, 
 	return false;
 }
 
-int CTerrainManager::PackSet(int zone, CCircuitDef* cdef, int nanoGroup, int facing, const AIFloat3& anchor, int count, bool ring)
+int CTerrainManager::PackSet(int zone, CCircuitDef* cdef, int nanoGroup, int facing, const AIFloat3& anchor, int count, bool ring, int maximumGapCells)
 {
 	SSlowCall slow("PackSet", circuit);
 	if ((cdef == nullptr) || (count < 1)) {
@@ -2452,9 +2818,20 @@ int CTerrainManager::PackSet(int zone, CCircuitDef* cdef, int nanoGroup, int fac
 	}
 	AIFloat3 pos, touch;
 	int gap = 0;
-	if (!PickFlushSite(zone, cdef, nanoGroup, facing, anchor, false, pos, gap, touch, nullptr, ring)) {
+	if (!PickFlushSite(zone, cdef, nanoGroup, facing, anchor, false, pos, gap, touch, nullptr, ring, maximumGapCells)) {
 		return -1;
 	}
+	// PickFlushSite checks the seed. Previously the remaining line could grow
+	// beyond build range. Gather immutable local geometry
+	// once, then validate each extension before reserving it. This runs only at
+	// set allocation, not per frame; occupancy remains indexed per footprint.
+	std::vector<layout_rank::SupportReach> support;
+	for (const auto& entry : reservations) {
+		const auto& reservation = entry.second;
+		if (reservation.group == nanoGroup && reservation.def != nullptr)
+			support.push_back({ToPt(reservation.pos), reservation.def->GetBuildDistance()});
+	}
+	if (!layout_rank::WithinSupport(ToPt(pos), support)) return -1;
 	const int group = nextGroupId++;
 	const int first = ReserveBuildingEx(cdef, pos, facing, 0, group, true, true, false, zone, true);
 	if (first < 0) {
@@ -2471,6 +2848,9 @@ int CTerrainManager::PackSet(int zone, CCircuitDef* cdef, int nanoGroup, int fac
 	for (int k = 1; (k < count) && ((sx != 0) || (sz != 0)); ++k) {
 		AIFloat3 p(pos.x + float(sx * k) * SQUARE_SIZE * 2, 0.f, pos.z + float(sz * k) * SQUARE_SIZE * 2);
 		p.y = circuit->GetMap()->GetElevationAt(p.x, p.z);
+		if (!layout_rank::WithinSupport(ToPt(p), support)) break;
+		// ReserveBuildingEx below already validates the footprint and all exits.
+		// Do not duplicate that scan for every extension.
 		if (!circuit->GetMap()->IsPossibleToBuildAt(cdef->GetDef(), p, facing) || LeavesPocket(zone, cdef, p, facing)) {
 			break;
 		}
@@ -2565,6 +2945,107 @@ int CTerrainManager::PackFactoryFlush(CCircuitDef* cdef, const AIFloat3& anchor)
 	return id;
 }
 
+void CTerrainManager::IndexReservation(int id)
+{
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
+    const auto& r = reservations.at(id);
+    // Persist in the existing named-int section: no binary layout change.
+    // Load reads that section before indexing slots; the index itself is derived.
+    if (GetLayoutInt("native.lost." + std::to_string(id), 0) != 0)
+        lostSlots[r.def->GetId()].ids.insert(id);
+    for (int scope : {r.zone, -r.group}) {
+        if (!scope) continue;
+        auto& bucket = scopedSlots[{scope, r.def->GetId()}];
+        bucket.ids.insert(id); bucket.visited=0; bucket.sawFree=false;
+    }
+}
+
+void CTerrainManager::EraseReservation(int id)
+{
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
+    auto found = reservations.find(id);
+    if (found == reservations.end()) return;
+    const auto& r = found->second;
+    ClearLostReservation(id);
+    for (int scope : {r.zone, -r.group}) {
+        if (!scope) continue;
+        auto bucket = scopedSlots.find({scope, r.def->GetId()});
+        if (bucket == scopedSlots.end()) continue;
+        bucket->second.ids.erase(id);
+        bucket->second.visited=0; bucket->second.sawFree=false;
+        if (bucket->second.ids.empty()) scopedSlots.erase(bucket);
+    }
+    reservations.erase(found);
+}
+
+int CTerrainManager::NextReachableSlot(CCircuitUnit* builder, const CCircuitDef* cdef, int zone, int group, int budget)
+{
+    if (!builder || !cdef || (zone <= 0 && group <= 0)) return -1;
+    auto scope = scopedSlots.find({group > 0 ? -group : zone, cdef->GetId()});
+    if (scope == scopedSlots.end()) return -1;
+    auto& bucket = scope->second;
+    // All creation, release, expiry and load paths maintain this index. States
+    // (claimed/framed/dead) are read fresh. O(log scopes + B log reservations),
+    // at most B reach/build callbacks. The cursor advances even on rejection:
+    // a blocked prefix cannot starve later slots on successive idle asks.
+    // IDs, not iterators, survive mutation. Shared rotation is fair to different
+    // builders without retaining per-unit cursors after transfer/destruction.
+    const int result = reservation_candidates::Next(bucket.ids, bucket.after, budget, [&](int id) {
+        ++bucket.visited;
+        const auto& r = reservations.at(id);
+        if (r.consumed || r.claimed || r.serveFails >= kDeadSlotFails || (zone > 0 && r.zone != zone)) return false;
+        bucket.sawFree = true;
+        return CanReachAtSafe(builder, r.pos, builder->GetCircuitDef()->GetBuildDistance()) && IsReservationBuildable(id);
+    });
+    if (result >= 0) { bucket.visited=0; bucket.sawFree=false; return result; }
+    if (bucket.visited < int(bucket.ids.size())) return -2;
+    // Only grow the pack after a full cycle proves all existing slots occupied.
+    // Free but unreachable/blocked slots must not cause endless new packs.
+    const bool free = bucket.sawFree; bucket.visited=0; bucket.sawFree=false;
+    return free ? -2 : -1;
+}
+
+void CTerrainManager::ClearLostReservation(int id)
+{
+    const auto found = reservations.find(id);
+    if (found != reservations.end()) {
+        auto bucket = lostSlots.find(found->second.def->GetId());
+        if (bucket != lostSlots.end()) {
+            bucket->second.ids.erase(id);
+            if (bucket->second.ids.empty()) lostSlots.erase(bucket);
+        }
+    }
+    layoutInts.erase("native.lost." + std::to_string(id));
+}
+
+int CTerrainManager::GetLostReservationCount(const CCircuitDef* cdef) const
+{
+    if (cdef == nullptr) return 0;
+    const auto bucket = lostSlots.find(cdef->GetId());
+    return bucket == lostSlots.end() ? 0 : int(bucket->second.ids.size());
+}
+
+int CTerrainManager::NextLostReservation(CCircuitUnit* builder, const CCircuitDef* cdef, int budget)
+{
+    if (builder == nullptr || cdef == nullptr) return -1;
+    auto bucket = lostSlots.find(cdef->GetId());
+    if (bucket == lostSlots.end()) return -1;
+    // Lifecycle maintained IDs, O(log D + B log R), at most B reach/build
+    // queries per decision (B <= 32). No unit scan or recurring polling. A
+    // wreck can outlive three failed starts: only lost capacity gets a fresh
+    // failure budget once its original footprint is safe and buildable again.
+    return reservation_candidates::Next(bucket->second.ids, bucket->second.after, budget, [&](int id) {
+        auto& r = reservations.at(id);
+        if (r.consumed || r.claimed || r.unitId != 0) return false;
+        if (!CanReachAtSafe(builder, r.pos, builder->GetCircuitDef()->GetBuildDistance())) return false;
+        const int failures = r.serveFails;
+        r.serveFails = 0;
+        if (IsReservationBuildable(id)) return true;
+        r.serveFails = failures;
+        return false;
+    });
+}
+
 int CTerrainManager::NextSetSlot(CCircuitDef* cdef) const
 {
 	int best = -1, bestOrder = 1 << 20;
@@ -2588,7 +3069,8 @@ int CTerrainManager::ReleaseSetSlots(CCircuitDef* cdef)
 	std::vector<int> ids;
 	for (const auto& kv : reservations) {
 		const SReservation& r = kv.second;
-		if ((r.def == cdef) && !r.consumed && !r.claimed && (setGroups.count(r.group) > 0) && (r.serveFails < kDeadSlotFails)) {
+		if ((r.def == cdef) && !r.consumed && !r.claimed && (setGroups.count(r.group) > 0) && (r.serveFails < kDeadSlotFails)
+            && GetLayoutInt("native.lost." + std::to_string(r.id), 0) == 0) {
 			ids.push_back(r.id);
 		}
 	}
@@ -2603,6 +3085,7 @@ int CTerrainManager::ReleaseSetSlots(CCircuitDef* cdef)
 
 void CTerrainManager::OnStructureGone(CCircuitDef* cdef, const AIFloat3& pos)
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
 	const int id = FindSlotAt(cdef, pos);
 	if (id < 0) {
 		return;
@@ -2616,7 +3099,8 @@ void CTerrainManager::OnStructureGone(CCircuitDef* cdef, const AIFloat3& pos)
 		circuit->LOG("RESERVE: tenant %s at (%.0f, %.0f) gone; its ground goes to the successor band (id %i)",
 				cdef->GetDef()->GetName(), pos.x, pos.z, id);
 		circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::SLOT, it->first);
-		reservations.erase(it);
+		localReservations.EraseSlot(it->first);
+		EraseReservation(it->first);
 		return;
 	}
 	if (recycledSlots.erase(id) > 0) {
@@ -2626,11 +3110,16 @@ void CTerrainManager::OnStructureGone(CCircuitDef* cdef, const AIFloat3& pos)
 		circuit->LOG("RESERVE: %s at (%.0f, %.0f) reclaimed; its ground is free again (id %i)",
 				cdef->GetDef()->GetName(), pos.x, pos.z, id);
 		circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::SLOT, it->first);
-		reservations.erase(it);
+		localReservations.EraseSlot(it->first);
+		EraseReservation(it->first);
 		return;
 	}
 	r.unitId = 0;
 	r.consumed = false;
+    r.claimed = false;
+    layoutInts["native.lost." + std::to_string(id)] = 1;
+    lostSlots[cdef->GetId()].ids.insert(id);
+	IndexLocalSlot(r.id);
 	int2 c1, c2;
 	if (ReservationCells(cdef, pos, r.facing, c1, c2)) {
 		MarkReservation(c1, c2, true);
@@ -2638,7 +3127,27 @@ void CTerrainManager::OnStructureGone(CCircuitDef* cdef, const AIFloat3& pos)
 	circuit->LOG("RESERVE: %s at (%.0f, %.0f) lost; slot restored (id %i)", cdef->GetDef()->GetName(), pos.x, pos.z, id);
 }
 
+AIFloat3 CTerrainManager::GetZoneCorner(int id, bool upper) const
+{
+    const auto found = zones.find(id);
+    if (found == zones.end()) return {-1.f, 0.f, -1.f};
+    const int2& cell = upper ? found->second.c2 : found->second.c1;
+    return {float(cell.x * SQUARE_SIZE * 2), 0.f, float(cell.y * SQUARE_SIZE * 2)};
+}
+
 int CTerrainManager::ReserveZone(const AIFloat3& centre, int facing, float halfAcross, float halfAlong, bool corridor)
+{
+	return ReserveZoneMasked(centre,facing,halfAcross,halfAlong,corridor,static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL));
+}
+
+int CTerrainManager::ReserveZoneAroundAllies(const AIFloat3& centre, int facing, float halfAcross, float halfAlong)
+{
+	return ReserveZoneMasked(centre, facing, halfAcross, halfAlong, false,
+		static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL), true);
+}
+
+int CTerrainManager::ReserveZoneMasked(const AIFloat3& centre, int facing, float halfAcross, float halfAlong,
+	bool corridor, SBlockingMap::SM blockingMask, bool allyHoles)
 {
 	SSlowCall slow("ReserveZone", circuit);
 	if (!layoutEnabled) {
@@ -2655,13 +3164,39 @@ int CTerrainManager::ReserveZone(const AIFloat3& centre, int facing, float halfA
 		circuit->LOG("RESERVE: %s refused at (%.0f, %.0f): off map", corridor ? "corridor" : "zone", centre.x, centre.z);
 		return 0;
 	}
+	// A rectangle touching any teammate's reservation is refused whole. With
+	// allyHoles (D-343, SEA on shared coasts) it is first shrunk, edge by edge,
+	// until it touches none: the zone is shared with allies as one rectangle,
+	// so it must never cover their ground (INV-088). Each step moves every
+	// edge whose strip holds allied cells inward by one cell, or all four when
+	// only the interior does. At most min(w, h) / 2 steps; each step costs one
+	// page-indexed overlap test per edge.
+	if (allyHoles && (circuit->GetAllyTeam() != nullptr)) {
+		while ((c1.x < c2.x) && (c1.y < c2.y) && IsAllyLayoutRectBlocked(c1, c2)) {
+			const bool west = IsAllyLayoutRectBlocked(c1, int2(c1.x + 1, c2.y));
+			const bool east = IsAllyLayoutRectBlocked(int2(c2.x - 1, c1.y), c2);
+			const bool north = IsAllyLayoutRectBlocked(c1, int2(c2.x, c1.y + 1));
+			const bool south = IsAllyLayoutRectBlocked(int2(c1.x, c2.y - 1), c2);
+			const bool any = west || east || north || south;
+			if (west || !any) ++c1.x;
+			if (east || !any) --c2.x;
+			if (north || !any) ++c1.y;
+			if (south || !any) --c2.y;
+		}
+		if ((c1.x >= c2.x) || (c1.y >= c2.y)) return 0;
+	}
 	if (IsAllyLayoutRectBlocked(c1, c2)) return 0;
+    // Keep immutable resource sites as holes, even when their surrounding
+    // envelope is shared with allies. IsAllyLayoutBlocked admits only the
+    // matching resource building on the whole protected plot; IsSlotFree and
+    // the ordinary placement predicate still reject all unrelated buildings.
+
 	const SBlockingMap::SM all = static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL);
 	const int id = nextZoneId++;
 	int cells = 0;
 	for (int z = c1.y; z < c2.y; ++z) {
 		for (int x = c1.x; x < c2.x; ++x) {
-			if (blockingMap.IsBlocked(x, z, all)) {
+			if (blockingMap.IsBlocked(x, z, blockingMask)) {
 				continue;  // a hole: a mex, a structure, another plan's ground
 			}
 			blockingMap.AddReservationUnderlay(x, z, all);
@@ -2706,6 +3241,7 @@ int CTerrainManager::ReserveExitCone(CCircuitUnit* factory, float length, float 
 
 void CTerrainManager::ReleaseZone(int id)
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
 	auto it = zones.find(id);
 	if (it == zones.end()) {
 		return;
@@ -2718,7 +3254,8 @@ void CTerrainManager::ReleaseZone(int id)
 	}
 	for (int rid : ids) {
 		circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::SLOT, rid);
-		reservations.erase(rid);
+		localReservations.EraseSlot(rid);
+		EraseReservation(rid);
 	}
 	const SZone& zn = it->second;
 	for (int z = zn.c1.y; z < zn.c2.y; ++z) {
@@ -2733,6 +3270,8 @@ void CTerrainManager::ReleaseZone(int id)
 	}
 	circuit->LOG("RESERVE: %s %i released", zn.corridor ? "corridor" : "zone", id);
 	circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::ZONE, id);
+	circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::EXIT, id);
+	localReservations.EraseZone(it->first);
 	zones.erase(it);
 }
 
@@ -2921,6 +3460,7 @@ AIFloat3 CTerrainManager::PackNearPoint(CCircuitDef* cdef, const AIFloat3& pos, 
 		if ((it != reservations.end()) && ReservationCells(cdef, it->second.pos, it->second.facing, c1, c2)) {
 			UnmarkSlot(c1, c2);
 			it->second.consumed = true;
+			IndexLocalSlot(it->first);
 			it->second.claimed = true;
 			lastReservedId = id;
 			lastReservedFacing = it->second.facing;
@@ -3079,8 +3619,46 @@ int CTerrainManager::NextSlotAny(int group, const AIFloat3& anchor) const
  * construction turrets and never beyond their reach.
  */
 std::vector<CTerrainManager::SPackCandidate> CTerrainManager::PackCandidates(int zone, CCircuitDef* cdef, int nanoGroup,
+        int facing, const AIFloat3& anchor, float maxReach, float minNanoDist, bool alwaysRing) const
+{
+    // Cache ONLY empty pure geometry results, never engine terrain/threat or
+    // builder admission. Same-frame scope covers moving positions; all local
+    // blocker/reservation writers, allied writes and team membership invalidate.
+    // Positive ordering and every engine buildability check remain untouched.
+    const auto allyRevision = circuit->GetAllyTeam()->GetLayoutReservations().Revision();
+    const auto ownedRevision = circuit->GetOwnedUnitRevision();
+    const int frame = circuit->GetLastFrame();
+    if (emptyPackFrame != frame || emptyPackRevision != packingRevision
+        || emptyPackAllyRevision != allyRevision || emptyPackOwnedRevision != ownedRevision) {
+        emptyPackQueries.clear(); emptyPackFrame=frame; emptyPackRevision=packingRevision;
+        emptyPackAllyRevision=allyRevision; emptyPackOwnedRevision=ownedRevision;
+    }
+    if (!cdef || !std::isfinite(maxReach) || !std::isfinite(minNanoDist))
+        return ComputePackCandidates(zone,cdef,nanoGroup,facing,anchor,maxReach,minNanoDist,alwaysRing);
+    // Anchor only sorts nonempty results and cannot affect emptiness.
+    const EmptyPackKey key{zone,cdef->GetId(),nanoGroup,facing,maxReach,minNanoDist,alwaysRing};
+    if (emptyPackQueries.count(key)) {
+        static const bool verify = std::getenv("CIRCUIT_VERIFY_EMPTY_PACK") != nullptr;
+        // Correctness runs re-evaluate cache hits against the original search.
+        // Never enable this oracle in timing runs: it deliberately repeats work.
+        if (verify) {
+            auto oracle = ComputePackCandidates(zone,cdef,nanoGroup,facing,anchor,maxReach,minNanoDist,alwaysRing);
+            if (!oracle.empty()) {
+                circuit->LOG("[INVARIANT] empty packing cache diverged");
+                return oracle;
+            }
+        }
+        return {};
+    }
+    auto result=ComputePackCandidates(zone,cdef,nanoGroup,facing,anchor,maxReach,minNanoDist,alwaysRing);
+    if (result.empty()) emptyPackQueries.insert(key);
+    return result;
+}
+
+std::vector<CTerrainManager::SPackCandidate> CTerrainManager::ComputePackCandidates(int zone, CCircuitDef* cdef, int nanoGroup,
 		int facing, const AIFloat3& anchor, float maxReach, float minNanoDist, bool alwaysRing) const
 {
+	performance::Scope measured(circuit, performance::PACK_CANDIDATES);
 	std::vector<SPackCandidate> out;
 	if (!layoutEnabled || (cdef == nullptr) || (cdef->GetDef() == nullptr)) {
 		return out;
@@ -3218,6 +3796,7 @@ std::vector<CTerrainManager::SPackCandidate> CTerrainManager::PackCandidates(int
 
 bool CTerrainManager::LeavesPocket(int zone, CCircuitDef* cdef, const AIFloat3& pos, int facing) const
 {
+	performance::Scope measured(circuit, performance::POCKET);
 	SSlowCall slow("LeavesPocket", circuit);
 	// D-072: a constructor was walled in by a turbine cluster. Every free cell
 	// of the zone must stay connected to the zone's edge once this footprint
@@ -3255,6 +3834,223 @@ bool CTerrainManager::LeavesPocket(int zone, CCircuitDef* cdef, const AIFloat3& 
 		}
 	}
 	return layout_rank::LeavesPocket(open, w, h);  // D-072/D-090 via D-094
+}
+
+bool CTerrainManager::IsNavalPathClear(CCircuitDef* hull, const AIFloat3& from, const AIFloat3& to) const
+{
+	return NavalPath(hull, from, to, true);
+}
+
+bool CTerrainManager::IsNavalPathReservationBlocked(CCircuitDef* hull, const AIFloat3& from, const AIFloat3& to) const
+{
+	// D-343: only a path that terrain allows can be blamed on reservations.
+	// Land between the points, or a dry probe, is never a placement failure.
+	return NavalPath(hull, from, to, false) && !NavalPath(hull, from, to, true);
+}
+
+bool CTerrainManager::NavalPath(CCircuitDef* hull, const AIFloat3& from, const AIFloat3& to, bool withReservations) const
+{
+	performance::Scope measured(circuit, performance::POCKET);
+	SSlowCall slow("IsNavalPathClear", circuit);
+	// D-343: SEA reserves turrets and economy anywhere on flat water, so a new
+	// footprint must not cut the flagship off between its yard mouth and the
+	// sea lane (or the rear repair area). CanNavalRoute only compares terrain
+	// areas; this also counts structures, own reserved slots and allied slots.
+	// Zone envelopes and exit corridors are open water: ships sail through them.
+	if ((hull == nullptr) || (hull->GetDef() == nullptr) || (areaData == nullptr)) {
+		return false;
+	}
+	const auto* mobile = GetMobileType(hull->GetId());
+	if ((mobile == nullptr) || !mobile->canFloat) {
+		return false;
+	}
+	// Ships: their negative draft. Hovers: water only (D-340's rule).
+	const float elevationLimit = std::min(mobile->maxElevation, 0.f);
+	constexpr float CELL = float(base_layout::CELL_ELMOS);
+	const int fromX = int(from.x / CELL), fromZ = int(from.z / CELL);
+	const int toX = int(to.x / CELL), toZ = int(to.z / CELL);
+	const int clearance = (std::max(hull->GetDef()->GetXSize(), hull->GetDef()->GetZSize()) + 3) / 4;
+	const int snap = clearance + 4;
+	const int pad = 2 * clearance + 24;  // 384+ elmos of water beside the straight line
+	const int x1 = std::max(0, std::min(fromX, toX) - pad), z1 = std::max(0, std::min(fromZ, toZ) - pad);
+	const int x2 = std::min(blockingMap.columns, std::max(fromX, toX) + pad + 1);
+	const int z2 = std::min(blockingMap.rows, std::max(fromZ, toZ) + pad + 1);
+	const int w = x2 - x1, h = z2 - z1;
+	// A planning query spans one harbor (a few thousand elmos). Refuse a
+	// map-sized window rather than spend tens of milliseconds on it.
+	constexpr int MAX_CELLS = 384 * 384;
+	if ((w <= 0) || (h <= 0) || (w * h > MAX_CELLS)) {
+		return false;
+	}
+	std::vector<char> open(std::size_t(w) * h, 0);
+	for (int z = 0; z < h; ++z) {
+		for (int x = 0; x < w; ++x) {
+			const int cx = x1 + x, cz = z1 + z;
+			const float elevation = areaData->GetElevationAt((cx + .5f) * CELL, (cz + .5f) * CELL);
+			const bool structure = withReservations && blockingMap.IsStruct(cx, cz) && !blockingMap.IsReserved(cx, cz);
+			open[z * w + x] = (std::isfinite(elevation) && (elevation <= elevationLimit) && !structure) ? 1 : 0;
+		}
+	}
+	const auto close = [&](int ax1, int az1, int ax2, int az2) {
+		for (int z = std::max(az1, z1); z < std::min(az2, z2); ++z) {
+			for (int x = std::max(ax1, x1); x < std::min(ax2, x2); ++x) {
+				open[(z - z1) * w + (x - x1)] = 0;
+			}
+		}
+	};
+	if (!withReservations) {
+		return layout_rank::HullPathClear(open, w, h, fromX - x1, fromZ - z1, toX - x1, toZ - z1, clearance, snap);
+	}
+	// Own slots, planned or served: each becomes a footprint. O(reservations).
+	for (const auto& kv : reservations) {
+		const SReservation& r = kv.second;
+		int2 c1, c2;
+		if ((r.def != nullptr) && ReservationCells(r.def, r.pos, r.facing, c1, c2)) {
+			close(c1.x, c1.y, c2.x, c2.y);
+		}
+	}
+	// Teammates' slots (never their zone envelopes). O(allied entries).
+	if (circuit->GetAllyTeam() != nullptr) {
+		circuit->GetAllyTeam()->GetLayoutReservations().ForEachOther(circuit->GetTeamId(),
+			allied_layout::Reservations::SLOT, {x1, z1, x2, z2},
+			[&](const allied_layout::Rect& r) { close(r.x1, r.z1, r.x2, r.z2); });
+	}
+	return layout_rank::HullPathClear(open, w, h, fromX - x1, fromZ - z1, toX - x1, toZ - z1, clearance, snap);
+}
+
+bool CTerrainManager::IsNavalFactoryDef(CCircuitDef* def) const
+{
+	// A static builder of floating or submarine units (PlanNavalBerth's rule).
+	if ((def == nullptr) || def->IsMobile() || def->GetBuildOptions().empty()) {
+		return false;
+	}
+	for (const auto id : def->GetBuildOptions()) {
+		const CCircuitDef* product = circuit->GetCircuitDef(id);
+		if ((product != nullptr) && product->IsMobile() && !product->IsAbleToFly()
+			&& (product->IsFloater() || product->IsSubmarine())) {
+			return true;
+		}
+	}
+	return false;
+}
+
+AIFloat3 CTerrainManager::NearestFriendlyNavalYard(const AIFloat3& pos, float radius)
+{
+	// D-343: a teammate's finished harbor counts as home for admitting a
+	// first T2 yard beside it. O(friendly units); planning-time only.
+	const int frame = circuit->GetLastFrame();
+	float best = SQUARE(radius);
+	AIFloat3 result(-1.f, 0.f, -1.f);
+	for (const auto& kv : circuit->GetFriendlyUnits()) {
+		CAllyUnit* unit = kv.second;
+		CCircuitDef* def = (unit != nullptr) ? unit->GetCircuitDef() : nullptr;
+		if (!IsNavalFactoryDef(def) || (unit->GetUnit() == nullptr) || (unit->GetUnit()->GetBuildProgress() < 1.f)) {
+			continue;
+		}
+		const AIFloat3 p = unit->GetPos(frame);
+		const float sq = p.SqDistance2D(pos);
+		if (sq <= best) { best = sq; result = p; }
+	}
+	return result;
+}
+
+int CTerrainManager::NavalYardBlockMask(CCircuitDef* hull, const AIFloat3& centre, float radius,
+	float exitLength, float lane, float rear)
+{
+	// D-343: two bits per finished naval yard (own or allied, in unit-id
+	// order) within `radius` of `centre`: bit 2k the forward lane probe, bit
+	// 2k+1 the rear probe, set when terrain lets the flagship through but
+	// reservations do not. The caller compares the mask before and after a
+	// new reservation, so only newly cut paths refuse it; land and paths
+	// already blocked by earlier layouts never veto every later placement.
+	// O(friendly units) to find yards; at most four bounded flood fills each.
+	if ((hull == nullptr) || (areaData == nullptr)) {
+		return 0;
+	}
+	const auto* mobile = GetMobileType(hull->GetId());
+	if ((mobile == nullptr) || !mobile->canFloat) {
+		return 0;
+	}
+	const float limit = std::min(mobile->maxElevation, 0.f);
+	const auto wet = [&](const AIFloat3& p) {
+		if (!geom::is_in_map(p)) return false;
+		const float e = areaData->GetElevationAt(p.x, p.z);
+		return std::isfinite(e) && (e <= limit);
+	};
+	const int frame = circuit->GetLastFrame();
+	const float radiusSq = SQUARE(radius);
+	int mask = 0, yard = 0;
+	for (const auto& kv : circuit->GetFriendlyUnits()) {
+		if (yard >= 8) break;  // bits 0-15; a harbor never has more nearby yards
+		CAllyUnit* unit = kv.second;
+		CCircuitDef* def = (unit != nullptr) ? unit->GetCircuitDef() : nullptr;
+		if (!IsNavalFactoryDef(def) || (def->GetDef() == nullptr) || (unit->GetUnit() == nullptr)) {
+			continue;
+		}
+		const AIFloat3 pos = unit->GetPos(frame);
+		if (pos.SqDistance2D(centre) > radiusSq) {
+			continue;
+		}
+		const int bit = 2 * yard++;
+		const int facing = unit->GetUnit()->GetBuildingFacing();
+		const AIFloat3 forward(facing == 1 ? 1.f : facing == 3 ? -1.f : 0.f, 0.f,
+		                       facing == 0 ? 1.f : facing == 2 ? -1.f : 0.f);
+		const AIFloat3 side(forward.z, 0.f, -forward.x);
+		const float halfDepth = def->GetDef()->GetZSize() * SQUARE_SIZE * .5f;
+		const AIFloat3 mouth = pos + forward * (halfDepth + exitLength);
+		if (!wet(mouth)) {
+			continue;  // a dry mouth is the yard's own exit problem
+		}
+		for (float d = lane; d >= 128.f; d -= 128.f) {
+			const AIFloat3 out = mouth + forward * d;
+			if (wet(out)) {
+				if (IsNavalPathReservationBlocked(hull, mouth, out)) mask |= 1 << bit;
+				break;
+			}
+		}
+		const float across[3] = {0.f, 400.f, -400.f};
+		for (const float a : across) {
+			const AIFloat3 back = pos - forward * rear + side * a;
+			if (wet(back) && NavalPath(hull, mouth, back, false)) {
+				if (!NavalPath(hull, mouth, back, true)) mask |= 1 << (bit + 1);
+				break;
+			}
+		}
+	}
+	// Exit corridors, own and allied, including those of yards not built yet
+	// (a teammate's planned berth was walled in by our dynamic block, D-343).
+	// One end of a corridor is the yard; the bit is set when terrain lets the
+	// hull past either end but reservations let it past neither. Bits 16-29.
+	int exitBit = 16;
+	const auto corridor = [&](int x1, int z1, int x2, int z2) {
+		if (exitBit >= 30) return;
+		const float cx = (x1 + x2) * .5f * SQUARE_SIZE * 2, cz = (z1 + z2) * .5f * SQUARE_SIZE * 2;
+		const AIFloat3 mid(cx, 0.f, cz);
+		if ((mid.SqDistance2D(centre) > radiusSq) || !wet(mid)) return;
+		const bool alongX = (x2 - x1) > (z2 - z1);
+		const float half = (alongX ? (x2 - x1) : (z2 - z1)) * SQUARE_SIZE;  // cells are 16 elmos
+		const AIFloat3 axis(alongX ? 1.f : 0.f, 0.f, alongX ? 0.f : 1.f);
+		bool terrain = false, open = false;
+		for (const float sign : {1.f, -1.f}) {
+			const AIFloat3 end = mid + axis * (sign * (half + lane));
+			if (!wet(end) || !NavalPath(hull, mid, end, false)) continue;
+			terrain = true;
+			if (NavalPath(hull, mid, end, true)) { open = true; break; }
+		}
+		if (terrain && !open) mask |= 1 << exitBit;
+		++exitBit;
+	};
+	for (const auto& kv : zones) {
+		if (kv.second.corridor) corridor(kv.second.c1.x, kv.second.c1.y, kv.second.c2.x, kv.second.c2.y);
+	}
+	if (circuit->GetAllyTeam() != nullptr) {
+		const int r = int(radius / (SQUARE_SIZE * 2)) + 1;
+		const int cx = int(centre.x / (SQUARE_SIZE * 2)), cz = int(centre.z / (SQUARE_SIZE * 2));
+		circuit->GetAllyTeam()->GetLayoutReservations().ForEachOther(circuit->GetTeamId(),
+			allied_layout::Reservations::EXIT, {std::max(0, cx - r), std::max(0, cz - r), cx + r, cz + r},
+			[&](const allied_layout::Rect& e) { corridor(e.x1, e.z1, e.x2, e.z2); });
+	}
+	return mask;
 }
 
 int CTerrainManager::CountGroupSlotsWithin(int group, const AIFloat3& pos, float radius) const
@@ -3482,9 +4278,59 @@ int CTerrainManager::PackNearGroupMost(int zone, CCircuitDef* cdef, int nanoGrou
 	return id;
 }
 
+int CTerrainManager::PackNearBuiltPower(int zone, CCircuitDef* cdef, int nanoGroup, int facing,
+		const AIFloat3& anchor, float margin)
+{
+	// Opt-in mechanism: policy chooses the project and safety margin. Existing
+	// placement callers and ranking are untouched. Snapshot owned completed
+	// static assistants once, on the AI thread; never query wrappers per candidate.
+	if (cdef == nullptr || !std::isfinite(margin) || margin < 0.f
+			|| !std::isfinite(anchor.x) || !std::isfinite(anchor.z)) return -1;
+	performance::Scope measured(circuit, performance::PACK_GROUP);
+	SSlowCall slow("PackNearBuiltPower", circuit);
+	std::vector<layout_rank::BuiltPower> power;
+	const int frame = circuit->GetLastFrame();
+	for (const auto& [id, unit] : circuit->GetTeamUnits()) {
+		if (unit == nullptr || unit->IsDead()) continue;
+		const auto* def = unit->GetCircuitDef();
+		if (def == nullptr || def->IsMobile() || !def->IsAbleToAssist()
+				|| unit->GetUnit()->IsBeingBuilt() || def->GetBuildDistance() <= margin) continue;
+		const AIFloat3 pos = unit->GetPos(frame);
+		power.push_back({{pos.x, pos.z}, SQUARE(def->GetBuildDistance() - margin), def->GetBuildSpeed()});
+	}
+	if (power.empty()) return -1;
+	// Reuse authoritative zone, reservations, allied-space and exit exclusions.
+	// O(N + C*T + C log C), only on a new placement attempt, not per frame.
+	const auto candidates = PackCandidates(zone, cdef, nanoGroup, facing, anchor, 0.f, 0.f, true);
+	struct Site { AIFloat3 pos; float power; float distance; };
+	std::vector<Site> sites;
+	sites.reserve(candidates.size());
+	for (const auto& candidate : candidates) {
+		const float sum = layout_rank::PowerAt({candidate.pos.x, candidate.pos.z}, power);
+		if (sum > 0.f) sites.push_back({candidate.pos, sum, candidate.anchorSq});
+	}
+	std::stable_sort(sites.begin(), sites.end(), [](const Site& a, const Site& b) {
+		return layout_rank::BuiltPowerBefore(a.power, a.distance, b.power, b.distance);
+	});
+	int tried = 0;
+	for (auto& site : sites) {
+		if (++tried > 400) break;
+		site.pos.y = circuit->GetMap()->GetElevationAt(site.pos.x, site.pos.z);
+		if (!IsEngineBuildable(cdef, site.pos, facing) || LeavesPocket(zone, cdef, site.pos, facing)) continue;
+		const int slot = ReserveBuildingEx(cdef, site.pos, facing, 0, 0, true, true, false, zone, true);
+		if (slot >= 0) {
+			circuit->LOG("RESERVE: live power %s at (%.0f, %.0f), %.0f BP/s (id %i)",
+					cdef->GetDef()->GetName(), site.pos.x, site.pos.z, site.power * FRAMES_PER_SEC, slot);
+			return slot;
+		}
+	}
+	return -1;
+}
+
 int CTerrainManager::PackNearGroup(int zone, CCircuitDef* cdef, int nanoGroup, int facing, const AIFloat3& anchor,
 		float maxReach, float minNanoDist, int group)
 {
+	performance::Scope measured(circuit, performance::PACK_GROUP);
 	SSlowCall slow("PackNearGroup", circuit);
 	constexpr int POCKET_TESTS_MAX = 40;  // D-090
 	int pocketTests = 0;
@@ -3519,6 +4365,7 @@ int CTerrainManager::PackNearGroup(int zone, CCircuitDef* cdef, int nanoGroup, i
 
 bool CTerrainManager::CanPackNearGroup(int zone, CCircuitDef* cdef, int nanoGroup, int facing, float maxReach, float minNanoDist)
 {
+	performance::Scope measured(circuit, performance::CAN_PACK);
 	SSlowCall slow("CanPackNearGroup", circuit);
 	const std::vector<SPackCandidate> candidates = PackCandidates(zone, cdef, nanoGroup, facing, ZeroVector, maxReach, minNanoDist);
 	int tried = 0;
@@ -3593,7 +4440,7 @@ float CTerrainManager::FlatFraction(const AIFloat3& centre, int facing, float ha
 
 std::string CTerrainManager::DescribeLayout() const
 {
-	std::string out;
+	std::string out = resourceLayout;
 	char buf[160];
 	const int cell = SQUARE_SIZE * 2;
 	for (const auto& kv : zones) {
@@ -3605,6 +4452,13 @@ std::string CTerrainManager::DescribeLayout() const
 	for (const auto& kv : reservations) {
 		const SReservation& r = kv.second;
 		UnitDef* unitDef = r.def->GetDef();
+		// Only the opt-in observer pays for this independent footprint audit.
+		// It also detects incompatible saved plans without silently moving an
+		// active construction task. The played probe separately verifies allied
+		// resource cutout access inside the surrounding zone envelopes.
+		if (IsResourceFootprintBlocked(r.def, r.pos, r.facing)) {
+			circuit->LOG("[INVARIANT] INV-172 reserved footprint overlaps a resource site: %i", r.id);
+		}
 		const int w = (((r.facing & 1) == 0) ? unitDef->GetXSize() : unitDef->GetZSize()) / 2 * cell;
 		const int d = (((r.facing & 1) == 1) ? unitDef->GetXSize() : unitDef->GetZSize()) / 2 * cell;
 		const char state = (r.unitId != 0) ? 'b' : (r.consumed ? 's' : (r.claimed ? 'c' : (r.armed ? 'p' : 'h')));
@@ -3617,6 +4471,7 @@ std::string CTerrainManager::DescribeLayout() const
 
 void CTerrainManager::ResetLayout()
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
 	// A task may already own a consumed or merely claimed slot. Stop those
 	// tasks before deleting the registry so none can build from a stale pin
 	// after a runtime role change.
@@ -3761,6 +4616,9 @@ void CTerrainManager::LoadLayout(std::istream& is)
 	circuit->GetAllyTeam()->GetLayoutReservations().RemoveOwner(circuit->GetTeamId());
 	zones.clear();
 	reservations.clear();
+	scopedSlots.clear();
+    lostSlots.clear();
+	localReservations.Clear();
 	uint32_t groupNameCount = 0;
 	utils::binary_read(is, groupNameCount);
 	for (uint32_t i = 0; i < groupNameCount; ++i) {
@@ -3851,6 +4709,7 @@ void CTerrainManager::LoadLayout(std::istream& is)
 			continue;
 		}
 		reservations[r.id] = r;
+		IndexReservation(r.id);
 		ShareSlot(r.id);
 		if (!r.consumed && (r.zone == 0)) {
 			int2 c1, c2;
@@ -4439,6 +5298,7 @@ AIFloat3 CTerrainManager::FindBuildSiteByMaskLow(CCircuitDef* cdef, const AIFloa
 
 void CTerrainManager::MarkBlockerByMask(const SStructure& building, bool block, IBlockMask* mask)
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
 	UnitDef* unitDef = building.cdef->GetDef();
 	int facing = building.facing;
 	const AIFloat3& pos = building.pos;
@@ -4519,6 +5379,7 @@ void CTerrainManager::MarkBlockerByMask(const SStructure& building, bool block, 
 
 void CTerrainManager::MarkBlocker(const SStructure& building, bool block)
 {
+    ++packingRevision; // invalidate exact empty-geometry reuse on mutation
 	CCircuitDef* cdef = building.cdef;
 	auto search = blockInfos.find(cdef->GetId());
 	if (search != blockInfos.end()) {
@@ -4565,6 +5426,7 @@ void CTerrainManager::MarkBlocker(const SStructure& building, bool block)
 
 void CTerrainManager::MarkZoneAlly(const AIFloat3& pos, bool block)
 {
+	++packingRevision;
 	const int xsize = allyZoneCells;
 	const int zsize = allyZoneCells;
 
@@ -4592,6 +5454,7 @@ void CTerrainManager::MarkZoneAlly(const AIFloat3& pos, bool block)
 
 void CTerrainManager::MarkZoneOwn(const AIFloat3& pos, bool block)
 {
+	++packingRevision;
 	const int xsize = allyZoneCells;
 	const int zsize = allyZoneCells;
 
@@ -4619,6 +5482,7 @@ void CTerrainManager::MarkZoneOwn(const AIFloat3& pos, bool block)
 
 void CTerrainManager::MarkBusPath()
 {
+	++packingRevision;
 	for (auto& kv : busQueries) {
 		FactoryPathQuery& fpq = kv.second;
 		std::shared_ptr<IPathQuery>& pQuery = fpq.query;
@@ -4790,6 +5654,7 @@ std::pair<SArea*, bool> CTerrainManager::GetCurrentMapArea(CCircuitDef* cdef, co
 
 bool CTerrainManager::CanMoveToPos(SArea* area, const AIFloat3& destination)
 {
+	if (!ValidReachDestination(destination)) return false;
 	const int iS = GetSectorIndex(destination);
 	if (!terrainData->IsSectorValid(iS)) {
 		return false;
@@ -4909,12 +5774,15 @@ SAreaSector* CTerrainManager::GetClosestSectorWithAltitude(SArea* sourceArea, co
 
 SAreaSector* CTerrainManager::GetClosestSector(SArea* sourceArea, const int destinationSIndex)
 {
+	if (sourceArea == nullptr) return nullptr;
+	std::vector<SAreaSector>& TMSectors = GetSectorList(sourceArea);
+	if (destinationSIndex < 0 || size_t(destinationSIndex) >= TMSectors.size()
+			|| TMSectors[destinationSIndex].S == nullptr) return nullptr;
 	auto iAS = sourceArea->sectorClosest.find(destinationSIndex);
 	if (iAS != sourceArea->sectorClosest.end()) {  // It's already been determined
 		return iAS->second;
 	}
 
-	std::vector<SAreaSector>& TMSectors = GetSectorList(sourceArea);
 	if (sourceArea == TMSectors[destinationSIndex].area) {
 		sourceArea->sectorClosest[destinationSIndex] = &TMSectors[destinationSIndex];
 		return &TMSectors[destinationSIndex];
@@ -5134,6 +6002,7 @@ bool CTerrainManager::CanBeBuiltAtSafe(CCircuitDef* cdef, const AIFloat3& positi
 
 bool CTerrainManager::CanReachAt(CCircuitUnit* unit, const AIFloat3& destination, const float range)
 {
+	if (unit == nullptr || !ValidReachDestination(destination, range)) return false;
 	if (unit->GetCircuitDef()->GetImmobileId() != -1) {  // A hub or factory
 		return unit->GetPos(circuit->GetLastFrame()).SqDistance2D(destination) < SQUARE(range);
 	}
@@ -5142,14 +6011,22 @@ bool CTerrainManager::CanReachAt(CCircuitUnit* unit, const AIFloat3& destination
 		return true;
 	}
 	const int iS = GetSectorIndex(destination);
+	// KI-612: an off-map destination (SEA replacement-line candidates) has no
+	// sector; GetClosestSector indexed past the table and crashed the engine.
+	if (!terrainData->IsSectorValid(iS)) {
+		return false;
+	}
 	if (area->sector.find(iS) != area->sector.end()) {
 		return true;
 	}
-	return GetClosestSector(area, iS)->S->position.SqDistance2D(destination) < SQUARE(range);
+	const SAreaSector* closest = GetClosestSector(area, iS);
+	return closest != nullptr && closest->S != nullptr
+		&& closest->S->position.SqDistance2D(destination) < SQUARE(range);
 }
 
 bool CTerrainManager::CanReachAtSafe(CCircuitUnit* unit, const AIFloat3& destination, const float range, const float threat)
 {
+	if (unit == nullptr || !ValidReachDestination(destination, range)) return false;
 	if (circuit->GetThreatMap()->GetThreatAt(destination) > threat) {
 		return false;
 	}
@@ -5158,6 +6035,7 @@ bool CTerrainManager::CanReachAtSafe(CCircuitUnit* unit, const AIFloat3& destina
 
 bool CTerrainManager::CanReachAtSafe2(CCircuitUnit* unit, const AIFloat3& destination, const float range)
 {
+	if (unit == nullptr || !ValidReachDestination(destination, range)) return false;
 	if (circuit->GetInflMap()->GetInfluenceAt(destination) < -INFL_EPS) {
 		return false;
 	}
@@ -5166,18 +6044,27 @@ bool CTerrainManager::CanReachAtSafe2(CCircuitUnit* unit, const AIFloat3& destin
 
 bool CTerrainManager::CanMobileReachAt(SArea* area, const AIFloat3& destination, const float range)
 {
+	if (!ValidReachDestination(destination, range)) return false;
 	if (area == nullptr) {  // A flying unit
 		return true;
 	}
 	const int iS = GetSectorIndex(destination);
+	// KI-612: an off-map destination (SEA replacement-line candidates) has no
+	// sector; GetClosestSector indexed past the table and crashed the engine.
+	if (!terrainData->IsSectorValid(iS)) {
+		return false;
+	}
 	if (area->sector.find(iS) != area->sector.end()) {
 		return true;
 	}
-	return GetClosestSector(area, iS)->S->position.SqDistance2D(destination) < SQUARE(range);
+	const SAreaSector* closest = GetClosestSector(area, iS);
+	return closest != nullptr && closest->S != nullptr
+		&& closest->S->position.SqDistance2D(destination) < SQUARE(range);
 }
 
 bool CTerrainManager::CanMobileReachAtSafe(SArea* area, const AIFloat3& destination, const float range, const float threat)
 {
+	if (!ValidReachDestination(destination, range)) return false;
 	if (circuit->GetThreatMap()->GetBuilderThreatAt(destination) > threat) {
 		return false;
 	}

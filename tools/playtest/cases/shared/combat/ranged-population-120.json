@@ -1,0 +1,153 @@
+{
+  "name": "ranged-population-120",
+  "unit": "armsnipe",
+  "description": "Serial 120-unit CPU/order combat fixture against five separately positioned, attackable energy-storage waves. Record casualties and commands; performance comparisons require matching pins and observer.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    60,
+    180
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 3,
+      "team": 0,
+      "position": [
+        3000,
+        4800
+      ],
+      "spacing": 750
+    },
+    {
+      "unit": "armseer",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3000,
+        4000
+      ],
+      "spacing": 400
+    },
+    {
+      "unit": "armsnipe",
+      "count": 48,
+      "team": 0,
+      "position": [
+        3000,
+        3400
+      ],
+      "spacing": 150,
+      "columns": 16
+    },
+    {
+      "unit": "cormort",
+      "count": 48,
+      "team": 0,
+      "position": [
+        3000,
+        3900
+      ],
+      "spacing": 150,
+      "columns": 16
+    },
+    {
+      "unit": "armmanni",
+      "count": 24,
+      "team": 0,
+      "position": [
+        3000,
+        3000
+      ],
+      "spacing": 260,
+      "columns": 12
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        5200
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 30
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        5500
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 70
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        5800
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 110
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        6100
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 150
+    },
+    {
+      "unit": "armestor",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3100,
+        6400
+      ],
+      "spacing": 140,
+      "columns": 16,
+      "after_seconds": 190
+    }
+  ],
+  "units": [
+    "armsnipe",
+    "cormort",
+    "armmanni"
+  ],
+  "assertions": {
+    "min_kills": 1,
+    "min_shooters": 8,
+    "max_losses": 0
+  },
+  "trace_orders": false
+}

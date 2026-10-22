@@ -1,0 +1,13 @@
+{
+  "stop_minute":5,
+  "expect":[
+    {"key":"loaded","pattern":"\\[RangedArena\\].*loaded case=land-siege","scope":"any","by_minute":1},
+    {"key":"spawn","pattern":"\\[RangedArena\\].*spawn.*unit=(coravp|armavp|legavp|coralab|legalab)","scope":"any","by_minute":2},
+    {"key":"orders","pattern":"\\[RangedArena\\].*orders team=0","scope":"any","by_minute":2}
+  ],
+  "forbid":[
+    {"key":"script","pattern":": ERR\\s+:"},
+    {"key":"invariant","pattern":"\\[INVARIANT\\]"},
+    {"key":"fixture","pattern":"\\[RangedArena\\].*ERROR"}
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {
+      "key": "observer",
+      "pattern": "SeaRecoveryTest\\] loaded teams=2",
+      "by_minute": 1,
+      "scope": "any"
+    },
+    {
+      "key": "reclaim",
+      "pattern": "SeaRecoveryTest\\] PASS reclaim",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "flagship-repair",
+      "pattern": "SeaRecoveryTest\\] PASS flagship-repair",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "resurrect",
+      "pattern": "SeaRecoveryTest\\] PASS resurrect",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "ordinary-repair",
+      "pattern": "SeaRecoveryTest\\] PASS ordinary-repair",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "t1-producing",
+      "pattern": "SeaRecoveryTest\\] PASS t1-producing",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "t2-producing",
+      "pattern": "SeaRecoveryTest\\] PASS t2-producing",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "platform-producing",
+      "pattern": "SeaRecoveryTest\\] PASS platform-producing",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "sub-scaling",
+      "pattern": "SeaRecoveryTest\\] PASS sub-scaling",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "grouped-resurrection",
+      "pattern": "SeaRecoveryTest\\] PASS grouped-resurrection",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "high-value-resurrection",
+      "pattern": "SeaRecoveryTest\\] PASS high-value-resurrection",
+      "by_minute": 8,
+      "scope": "any"
+    },
+    {
+      "key": "repair-before-reclaim",
+      "pattern": "SeaRecoveryTest\\] PASS repair-before-reclaim",
+      "by_minute": 1,
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "errors",
+      "pattern": "INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaRecoveryTest\\] FAIL|Error in.*sea_recovery|Exception:|Null pointer access",
+      "scope": "any"
+    }
+  ]
+}

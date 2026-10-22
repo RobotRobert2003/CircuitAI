@@ -1,0 +1,12 @@
+{
+  "_doc": "Actual-host strategy/profile smoke check; no economy or batch completion assertion.",
+  "stop_minute": 2,
+  "expect": [
+    {"key": "strategy masks", "pattern": "\\[HeavyStrategyTest\\] PASS", "by_minute": 1, "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"},
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "strategy failure", "pattern": "\\[HeavyStrategyTest\\] FAIL", "scope": "any"}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {"key":"shipyard","pattern":"DenseFixture\\] PASS support armsy","by_minute":8,"scope":"any"},
+    {"key":"amphibious","pattern":"DenseFixture\\] PASS support armamsub","by_minute":8,"scope":"any"}
+  ],
+  "forbid": [{"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|DenseFixture\\] FAIL|Error in.*dense_economy","scope":"any"}]
+}

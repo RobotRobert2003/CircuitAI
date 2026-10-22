@@ -1,0 +1,19 @@
+{
+  "name": "incinerator-front-push",
+  "unit": "leginc",
+  "description": "Four Incinerators must advance through two observed static lines without fixture combat orders; tests native assault ownership after ranged units were separated.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [[4000,2400],[4000,9800]],
+  "side": "legion",
+  "camera": [4000,5200,2400],
+  "photos": [45,120,210],
+  "groups": [
+    {"unit":"armarad","count":1,"team":0,"position":[3200,5100]},
+    {"unit":"armllt","count":3,"team":1,"position":[3700,5100],"spacing":240},
+    {"unit":"armhlt","count":3,"team":1,"position":[3700,6000],"spacing":240},
+    {"unit":"leginc","count":4,"team":0,"position":[3640,4100],"spacing":240},
+    {"unit":"legck","count":1,"team":0,"position":[3400,3400]}
+  ],
+  "assertions": {"min_kills":6,"min_shooters":0,"max_losses":0}
+}

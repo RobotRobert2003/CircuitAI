@@ -24,6 +24,7 @@ def analyze(lines, end_frame=None):
     waves, units, catalog, errors, classes = {}, {}, {}, [], {}
     total = Counter()
     screenshots = []
+    overlaps = []
     last_frame = 0
     def unit_stats(team, name):
         key = str(team) + ':' + name
@@ -66,6 +67,14 @@ def analyze(lines, end_frame=None):
         elif kind == 'energy' and float(e['current']) < 1000:
             errors.append({'event': 'energy_shortage', **e})
         elif kind == 'launch':
+            # A live task alone is not proof of a surviving cohort. Require a
+            # recent independent engine aircraft census at the later launch.
+            for earlier in waves.values():
+                if (not earlier['completed'] and earlier.get('alive', 0) > 0
+                        and frame - earlier.get('flight_frame', -100000) <= 150):
+                    overlaps.append({'wave': int(e['wave']), 'launch_frame': frame,
+                                     'earlier_wave': earlier['wave'], 'earlier_alive': earlier['alive'],
+                                     'observed_frame': earlier['flight_frame']})
             ids = [int(s) for s in e['ids'].split(',')]
             waves[int(e['wave'])] = {
                 'wave': int(e['wave']), 'launch_frame': frame, 'target': int(e['target']), 'ids': ids,
@@ -75,11 +84,13 @@ def analyze(lines, end_frame=None):
                 'target_damage': 0.0, 'paralysis': 0.0, 'aircraft_metal_lost': 0.0,
                 'target_metal_destroyed': 0.0, 'survivors': None, 'home': None,
             }
-        elif kind in ('detected', 'response', 'damage', 'target_dead', 'death', 'end'):
+        elif kind in ('detected', 'response', 'damage', 'target_dead', 'death', 'end', 'flight'):
             w = waves.get(int(e.get('wave', 0)))
             if not w or w['completed']:
                 continue
-            if kind == 'detected' and w['detected_frame'] is None:
+            if kind == 'flight':
+                w.update(alive=int(e['alive']), flight_frame=frame)
+            elif kind == 'detected' and w['detected_frame'] is None:
                 w['detected_frame'] = frame
             elif kind == 'response' and e['active'] == '1' and w['response_frame'] is None:
                 w['response_frame'] = frame
@@ -111,6 +122,7 @@ def analyze(lines, end_frame=None):
     attackers = [s for s in classes.values() if s.get('kind') == 'aircraft' and s['team'] == 0]
     return {'last_frame': last_frame, 'measurement_end_frame': end_frame, 'events': dict(total), 'fixture_errors': errors, 'waves': list(waves.values()),
             'completed_waves': len(completed), 'censored_waves': len(waves)-len(completed),
+            'observed_overlaps': overlaps,
             'screenshots': screenshots, 'loaded_air_catalog': catalog,
             'unit_classes': list(classes.values()),
             'attacker_health_damage': sum(s['health_damage'] for s in attackers),

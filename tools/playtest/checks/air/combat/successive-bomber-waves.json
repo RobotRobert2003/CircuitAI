@@ -1,0 +1,15 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {"key":"loaded","pattern":"\\[AirArena\\] event=loaded","scope":"any","by_minute":1},
+    {"key":"first-wave","pattern":"\\[AirArena\\] event=launch .*wave=1","scope":"any","by_minute":3},
+    {"key":"second-wave","pattern":"\\[AirArena\\] event=launch .*wave=2","scope":"any","by_minute":6},
+    {"key":"afus-damage","pattern":"\\[AirArena\\] event=damage .*amount=[1-9][0-9.]* .*emp=0 team=1 vdef=armafus .*wave=[1-9]","scope":"any","by_minute":8}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT|\\[AirOrders\\] ERROR","scope":"any"},
+    {"key":"fixture","pattern":"\\[AirArena\\] event=error|Removed widget: AIR combat arena|Error in.*air_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

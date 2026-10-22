@@ -1,0 +1,12 @@
+{
+  "scenario": "production-capacity",
+  "domain": "sea",
+  "area": "economy",
+  "map": "Supreme Isthmus v1.7",
+  "runner": "tools/playtest/run_sea_transition.py",
+  "arguments": ["--capacity", "--minutes", "12"],
+  "purpose": "Observe real commander and support decisions with supplied bank, T2 shipyard and later sustained income; no override of SEA builder/factory delegates.",
+  "variants": ["armada compact", "cortex compact", "legion compact", "armada experimental", "natural Supreme", "natural Glacial"],
+  "checks": "sea/economy/production-capacity.json",
+  "limitations": ["Supplied units are not natural tech timing evidence.", "Natural runs use their existing checks and this read-only observer.", "Fixture global visibility does not prove fog-buffer admission; test ordinary visibility separately."]
+}

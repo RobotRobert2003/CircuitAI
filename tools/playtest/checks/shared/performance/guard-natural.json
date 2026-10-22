@@ -1,0 +1,6 @@
+{
+  "stop_minute": 10,
+  "expect": [{"key":"loaded","pattern":"GuardTest\\] loaded","scope":"any","by_minute":1},
+    {"key":"complete","pattern":"GuardTest\\] frame=18000","scope":"any","by_minute":10.1}],
+  "forbid": [{"key":"errors","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|GuardTest\\] FAIL|Error in.*guard_watch|Removed widget: Guard regression|global LOS toggled","scope":"any"}]
+}

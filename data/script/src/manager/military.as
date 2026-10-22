@@ -1,12 +1,40 @@
 #include "../define.as"
 #include "../unit.as"
-#include "../helpers/generic_helpers.as"
-#include "porc_policy.as"
-#include "spam.as"
-#include "ferry.as"
-#include "amphibious_ops.as"
+#include "../helpers/common/generic_helpers.as"
+#include "../systems/combat/porc_policy.as"
+#include "../systems/combat/spam.as"
+#include "../systems/combat/scout_raid.as"
+#include "../systems/team/ferry.as"
+#include "../systems/amphibious/amphibious_ops.as"
 
 namespace Military {
+
+    // Cohort travel policy; native targeting/terrain/safety may stop the move.
+    // Called only after a contact/objective is cleared, not per member/frame.
+    AIFloat3 AiGroundObjective(CCircuitUnit@ u, const AIFloat3& in previous)
+    {
+        if (u is null) return previous;
+        const AIFloat3 pos = u.GetPos(ai.frame);
+        const int lane = Lanes::BestLane(Lanes::BOT);
+        if (lane >= 0) {
+            float nearest = 1e30f;
+            int step = 0;
+            // Bounded samples follow lane bends instead of a map-wide search.
+            for (int i = 0; i <= 20; ++i) {
+                const float distance = pos.SqDistance2D(aiBattle.GetLanePoint(lane, float(i) / 20.0f));
+                if (distance < nearest) { nearest = distance; step = i; }
+            }
+            return aiBattle.GetLanePoint(lane, float(AiMin(20, step + 2)) / 20.0f);
+        }
+        const array<AIFloat3> starts = Lanes::EnemyStarts();
+        AIFloat3 goal = previous;
+        float nearest = 1e30f;
+        for (uint i = 0; i < starts.length(); ++i) {
+            const float distance = pos.SqDistance2D(starts[i]);
+            if (distance > 256.0f * 256.0f && distance < nearest) { nearest = distance; goal = starts[i]; }
+        }
+        return goal;
+    }
 
 	// ==================== Hooks (config / role-driven) ====================
 
@@ -38,11 +66,18 @@ namespace Military {
 			return aiMilitaryMgr.DefaultMakeTask(u);
 		}
 
-		IUnitTask@ t = AmphibiousOps::MilitaryTask(u);
+		IUnitTask@ t = TechHeavyDelivery::MilitaryTask(u);
+        if (t !is null) return t;
+        @t = AmphibiousOps::MilitaryTask(u);
         if (t !is null) return t;
         @t = TechFlank::MilitaryTask(u);
 		if (t !is null) return t;
 		@t = Spam::MilitaryMakeTask(u);   // spam units join their factory's route
+		if (t !is null) return t;
+		@t = ScoutRaid::MilitaryMakeTask(u);   // D-296: non-spam land scouts raid the backline
+		if (t !is null) return t;
+		// Preserve specialist owners above; production is unaffected.
+		@t = aiMilitaryMgr.TryMakeRangedTask(u);
 		if (t !is null) return t;
 
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;
@@ -67,6 +102,7 @@ namespace Military {
 	void AiTaskRemoved(IUnitTask@ task, bool done)
 	{
 		Spam::OnTaskRemoved(task);
+		ScoutRaid::TaskRemoved(task);
 		TechFlank::TaskRemoved(task);
         AmphibiousOps::TaskRemoved(task);
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;
@@ -88,9 +124,11 @@ namespace Military {
 
 	void AiUnitRemoved(CCircuitUnit@ unit, Unit::UseAs usage)
 	{
+        TechHeavyDelivery::Removed(unit);
 		Team::Ferry::OnUnitRemoved(unit);
 		TechFlank::UnitRemoved(unit);
         AmphibiousOps::UnitRemoved(unit);
+        ScoutRaid::UnitRemoved(unit);
 
 		// Delegate to role-specific handler if registered
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;
@@ -103,6 +141,9 @@ namespace Military {
 	{
         AmphibiousOps::Reset(); // ephemeral routes are rebuilt through Military::AiMakeTask
         AmphibiousOps::lastTick = -100000; // a loaded frame may precede the last live update
+        FrontOpener::Load(); // retire ephemeral opener task ownership after reload
+        ScoutRaid::Reset(); // raid routes are rebuilt through Military::AiMakeTask
+        ScoutRaid::lastTick = -100000;
 	}
 
 	void AiSave(OStream& ostream)

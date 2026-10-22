@@ -1,0 +1,78 @@
+{
+  "name": "fleet-composition-cortex-t2",
+  "checks": "sea/combat/fleet-composition-cortex-t2",
+  "production": true,
+  "support_turrets": true,
+  "shots": "2@3500@2500:4450,6@4500@3500:4450,10@4500@3500:4450",
+  "groups": [
+    {
+      "unit": "corasy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2450,
+        4400
+      ]
+    },
+    {
+      "unit": "coracsub",
+      "team": 0,
+      "count": 12,
+      "position": [
+        2100,
+        4900
+      ],
+      "columns": 6,
+      "spacing": 64
+    },
+    {
+      "unit": "correcl",
+      "team": 0,
+      "count": 10,
+      "position": [
+        1900,
+        4600
+      ],
+      "columns": 5,
+      "spacing": 64
+    },
+    {
+      "unit": "coruwfus",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        4200
+      ]
+    },
+    {
+      "unit": "coruwmmm",
+      "team": 0,
+      "count": 8,
+      "position": [
+        1850,
+        4850
+      ]
+    },
+    {
+      "unit": "coruwms",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        3900
+      ]
+    },
+    {
+      "unit": "cornanotcplat",
+      "team": 0,
+      "count": 12,
+      "position": [
+        2150,
+        4500
+      ],
+      "columns": 6,
+      "spacing": 64
+    }
+  ]
+}

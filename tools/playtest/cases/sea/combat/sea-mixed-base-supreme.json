@@ -1,0 +1,13 @@
+{
+  "name": "mixed-base", "map": "Supreme Isthmus v1.7", "map_key": "supreme",
+  "starts": [[7492,1220],[4814,11077]], "checks": "sea/combat/sea-mixed-base",
+  "patrol_observer": true, "objective_observer": true,
+  "shots": "0.4@4300@5700:1400,1.2@4300@5300:1400,2.5@4300@4900:1400",
+  "groups": [
+    {"unit":"armbats","team":0,"count":2,"position":[6000,1800],"columns":1,"spacing":180},
+    {"unit":"armroy","team":0,"count":4,"position":[6000,1200],"columns":2,"spacing":180},
+    {"unit":"armfrad","team":0,"count":1,"position":[5200,800]},
+    {"unit":"corsy","team":1,"count":1,"position":[4800,800]},
+    {"unit":"cortide","team":1,"count":6,"position":[4900,1050],"spacing":100}
+  ]
+}

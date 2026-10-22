@@ -1,7 +1,9 @@
 """Prepare isolated AIR fixtures after playtest.py stage; never edits production data."""
+from script_settings import role_settings_path
 import argparse
 import json
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import re
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,8 +15,8 @@ def main():
     parser.add_argument('--seed', type=int, default=930146)
     args = parser.parse_args()
     base = args.dir.resolve()
-    if not base.is_relative_to((ROOT / 'build-theatres').resolve()):
-        parser.error('fixture directory must be under repository build-theatres')
+    if not base.is_relative_to((RAW_ROOT).resolve()):
+        parser.error('fixture directory must be under benchmark-repository build-theatres')
     script = base / 'script.txt'
     text = script.read_text()
     text = re.sub(r'\bFixedRNGSeed\s*=\s*\d+;', '', text, flags=re.I)
@@ -43,7 +45,7 @@ def main():
     if args.scenario not in ['natural', 'legacy']:
         (widgets / 'air_fixture.lua').write_text('local scenario = ' + json.dumps(args.scenario) + '\n' + (ROOT / 'tools/playtest/widgets/air_fixture.lua').read_text())
     if args.scenario == 'legacy':
-        path = base / 'AI/Skirmish/BARbTest/test/script/src/global.as'
+        path = role_settings_path(base / 'AI/Skirmish/BARbTest/test/script/src', 'Air')
         source = path.read_text()
         before, marker, after = source.partition('namespace Air {')
         if not marker or 'bool ExperimentalBuild = true;' not in after:
@@ -51,15 +53,15 @@ def main():
         path.write_text(before + marker + after.replace('bool ExperimentalBuild = true;', 'bool ExperimentalBuild = false;', 1))
     if args.scenario == 'screen':
         # Isolate screen geometry at supplied fleet sizes, independent of economy.
-        path = base / 'AI/Skirmish/BARbTest/test/script/src/global.as'
+        path = role_settings_path(base / 'AI/Skirmish/BARbTest/test/script/src', 'Air')
         path.write_text(path.read_text().replace('int HomeFighterFloor = 6;', 'int HomeFighterFloor = 60;'))
     if args.scenario == 'defence':
         # Bound fixture load; six-plus-bay capacity has its own full stress test.
-        path = base / 'AI/Skirmish/BARbTest/test/script/src/global.as'
+        path = role_settings_path(base / 'AI/Skirmish/BARbTest/test/script/src', 'Air')
         path.write_text(path.read_text().replace('int MaxProductionBays = 0;', 'int MaxProductionBays = 3;'))
     if args.scenario == 'idle':
         # Force a real idle interval only in the staged test controller.
-        path = base / 'AI/Skirmish/BARbTest/test/script/src/manager/air_production.as'
+        path = base / 'AI/Skirmish/BARbTest/test/script/src/systems/air/air_production.as'
         source = path.read_text()
         marker = 'const bool basic = UnitHelpers::IsT1AircraftPlant(name);'
         if marker not in source:

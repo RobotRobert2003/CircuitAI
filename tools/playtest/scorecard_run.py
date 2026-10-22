@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 
 import scorecard
 import storage
@@ -27,8 +28,8 @@ def main():
     dest = Path(args.dir).resolve() if args.dir else storage.allocate(
         'tech','strategy','scorecard',args.map,'benchmark', legion=args.legion, swap=args.swap)
     # Never accept a destination inside the live install.
-    if not dest.is_relative_to(ROOT / 'build-theatres'):
-        p.error('--dir must be inside this repository build-theatres directory')
+    if not dest.is_relative_to(RAW_ROOT):
+        p.error('--dir must be inside this benchmark-repository build-theatres directory')
     tool = ROOT / 'tools/playtest/playtest.py'
     factions = ['cortex', 'legion' if args.legion == 'on' else 'armada']
     if args.swap: factions.reverse()

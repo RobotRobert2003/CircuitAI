@@ -1,0 +1,118 @@
+{
+  "name": "ranged-mixed-flat",
+  "unit": "armsnipe",
+  "description": "Mixed firing ranges with sensors built before guns; safe marginal coverage and stable cohort ownership.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    45,
+    120,
+    210
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3200,
+        3500
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armseer",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3300,
+        4000
+      ],
+      "spacing": 200
+    },
+    {
+      "unit": "armaser",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3200,
+        3900
+      ],
+      "spacing": 220
+    },
+    {
+      "unit": "armhlt",
+      "count": 3,
+      "team": 1,
+      "position": [
+        3750,
+        5550
+      ],
+      "spacing": 280
+    },
+    {
+      "unit": "armfboy",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3500,
+        4400
+      ],
+      "spacing": 240,
+      "after_seconds": 30
+    },
+    {
+      "unit": "armsnipe",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3500,
+        4200
+      ],
+      "spacing": 240,
+      "after_seconds": 30
+    },
+    {
+      "unit": "armmanni",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3500,
+        4000
+      ],
+      "spacing": 300,
+      "after_seconds": 30
+    }
+  ],
+  "units": [
+    "armsnipe",
+    "armfboy",
+    "armmanni"
+  ],
+  "assertions": {
+    "min_kills": 1,
+    "min_shooters": 2,
+    "max_losses": 1,
+    "min_sensor_advance": 600
+  },
+  "sensor_units": [
+    "armseer",
+    "armaser"
+  ]
+}

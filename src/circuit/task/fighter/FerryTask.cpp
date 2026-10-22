@@ -18,15 +18,18 @@
 #include "task/builder/WaitTask.h"
 #include "spring/SpringUnit.h"
 #include "terrain/TerrainManager.h"
+#include "terrain/BattleAnalysis.h"
 #include "spring/SpringCallback.h"
 #include "unit/CircuitUnit.h"
 #include "unit/CircuitDef.h"
+#include "unit/TransportUtils.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 
 #include "AISCommands.h"
 #include "Sim/Units/CommandAI/Command.h"
 #include "Command.h"
+#include "UnitDef.h"
 #include "Log.h"
 #include "spring/SpringMap.h"
 
@@ -55,11 +58,18 @@ using namespace springai;
 #define FERRY_LIFT_HEIGHT		(SQUARE_SIZE / 2)
 #define FERRY_GROUND_TOLERANCE	1.f
 #define FERRY_LANDED_TICKS		2
+constexpr int FERRY_MISSING_UNLOAD_TICKS = 2;
 #define FERRY_RISE				(SQUARE_SIZE * 2)  // D-112: aboard = risen this much above where the cargo stood
 #define FERRY_RISE_GRACE		(FRAMES_PER_SEC * 4)  // D-112: time after the load for the cargo to rise
 #define FERRY_UNLOAD_RADIUS		(SQUARE_SIZE * 32)  // D-110: the area unload's radius: the engine refuses an unload with no standing room for the cargo inside it (played: 96 at a teammate's start never found any)
 // Close enough to the drop to issue the unload.
 #define FERRY_DROP_DIST			(SQUARE_SIZE * 12)
+// Recoil HoverAirMoveType::GetGoalRadius permits MOVE completion at 64 elmos.
+// Advance intermediate points before that stop, using the same 96-elmo
+// handoff as unloading. Every outgoing leg is still checked from the actual
+// aircraft position; arrival tolerance never authorizes cutting an AA corner.
+// Regression: run_heavy_front.py --mode turns --deliveries 2 (D-318).
+constexpr float FERRY_WAYPOINT_DIST = FERRY_DROP_DIST;
 #define FERRY_LOAD_RETRIES		2
 #define FERRY_UNLOAD_RETRIES	2
 // Landing-spot search around the drop; doubled per unload retry.
@@ -178,6 +188,8 @@ void CFerryTask::Enter(EState next)
 {
 	state_ = next;
 	stateFrame = manager->GetCircuit()->GetLastFrame();
+	missingUnloadTicks = 0;
+    landedTicks = 0;
 }
 
 bool CFerryTask::IsExpired(int frame) const
@@ -238,6 +250,14 @@ void CFerryTask::HoldCargo(CCircuitUnit* cargo)
 {
 	CCircuitAI* circuit = manager->GetCircuit();
 	CBuilderManager* builderMgr = circuit->GetBuilderManager();
+	if (cargo != nullptr && cargo->GetManager() == circuit->GetMilitaryManager()) {
+        auto* transport = GetTransport();
+        if (transport == nullptr) return;
+        auto* military = circuit->GetMilitaryManager();
+        military->AssignTask(cargo, military->EnqueueCargoHold(transport->GetId()));
+        TRY_UNIT(circuit, cargo, cargo->CmdStop();)
+        return;
+    }
 	if ((cargo == nullptr) || (cargo->GetManager() != builderMgr)) {
 		return;
 	}
@@ -268,6 +288,12 @@ void CFerryTask::Fail(const char* why)
 		landPos = FindLandingSpot(cargo, transport->GetPos(frame), FERRY_LAND_SEARCH * 3);
 		if (!geom::is_valid(landPos)) landPos = FindLandingSpot(cargo, holdPos, FERRY_LAND_SEARCH * 3);
 		if (!geom::is_valid(landPos)) { Enter(EState::DUMPING); GoTo(transport, holdPos); return; }
+        if (routed) {
+            circuit->LOG("FERRY: routed run failed (%s) | cargo=%i; safe recovery",why,cargoId);
+            Enter(EState::DUMPING);
+            GoTo(transport,landPos);
+            return;
+        }
 		circuit->LOG("FERRY: run failed (%s) | cargo=%i state=%i; setting it down at (%.0f, %.0f)",
 				why, cargoId, int(state_), landPos.x, landPos.z);
 		TRY_UNIT(circuit, transport,
@@ -287,9 +313,133 @@ void CFerryTask::Fail(const char* why)
 void CFerryTask::GoTo(CCircuitUnit* unit, const AIFloat3& pos)
 {
 	CCircuitAI* circuit = manager->GetCircuit();
+    if (routed) {
+        const int frame = circuit->GetLastFrame();
+        auto* battle = circuit->GetBattle();
+        const auto& here = unit->GetPos(frame);
+        // Both an unsolved path and a newly unsafe corner consume the same
+        // bounded recovery budget. This closure owns no heap state or cache.
+        const auto blocked = [&]() {
+            if (flightBlockedFrame<0) {
+                flightBlockedFrame=frame;
+                circuit->LOG("FERRY: route blocked | cargo=%i state=%i from=(%.0f, %.0f) goal=(%.0f, %.0f) origin-covered=%i",
+                    cargoId,int(state_),here.x,here.z,pos.x,pos.z,
+                    battle->AirThreatAlong(here,here,flightPadding)>maxAirThreat);
+            }
+            // Script chooses the wait; a covered origin needs KI-632's
+            // separate escape rule. Recovery retains the cargo until unload.
+            if (state_==EState::TO_DROP && frame-flightBlockedFrame>=flightBlockedTimeout
+                && battle->AirThreatAlong(here,here,flightPadding)<=maxAirThreat) {
+                Fail("blocked flight corridor"); return;
+            }
+            if (circuit->GetUnitAPI()->GetCMDQueueSize(unit->GetId())>0) unit->CmdStop();
+        };
+        const bool changed = flightGoal.SqDistance2D(pos) > SQUARE(16.f);
+        if (changed) { flight.clear(); flightIndex=0; flightOrdered=false; flightRetry=-1; }
+        // O(reached points), amortized over this owned route; no unit census or
+        // extra scheduler. Adjacent reached points cannot consume extra ticks.
+        while (!flight.empty() && flightIndex+1 < flight.size()
+            && here.SqDistance2D(flight[flightIndex]) < SQUARE(FERRY_WAYPOINT_DIST)) {
+            ++flightIndex; flightOrdered=false;
+            if (state_==EState::TO_DROP) stateFrame=frame;
+        }
+        const bool unsafe = !flight.empty() && battle->AirThreatAlong(here,flight[flightIndex],flightPadding)>maxAirThreat;
+        if (unsafe) { flight.clear(); flightOrdered=false; flightRetry=-1; }
+        if (flight.empty()) {
+            if (frame < flightRetry) return;
+            flightRetry=frame+FRAMES_PER_SEC; // retry failed geometry, never delay live threat checks
+            flight=battle->SafeAirRoute(here,pos,maxAirThreat,flightPadding);
+            flightGoal=pos; flightIndex=0;
+            if (flight.empty()) {
+                // Cancel a now-unsafe live MOVE before waiting for a clear path.
+                blocked(); return;
+            }
+            // A solve can start with an adjacent grid corner already reached.
+            // Do not credit that as flight progress or restart its deadline.
+            while (flightIndex+1<flight.size()
+                && here.SqDistance2D(flight[flightIndex])<SQUARE(FERRY_WAYPOINT_DIST)) ++flightIndex;
+            if (battle->AirThreatAlong(here,flight[flightIndex],flightPadding)>maxAirThreat) {
+                flight.clear(); flightOrdered=false;
+                blocked(); return;
+            }
+            if (flightBlockedFrame>=0) {
+                circuit->LOG("FERRY: route resumed | cargo=%i blocked-frames=%i",cargoId,frame-flightBlockedFrame);
+                flightBlockedFrame=-1;
+            }
+        }
+        if (flightIndex+1<flight.size() && here.SqDistance2D(flight[flightIndex])<SQUARE(64.f)) {
+            circuit->LOG("[INVARIANT] INV-224 cargo=%i intermediate flight point is already within engine MOVE completion radius",cargoId);
+        }
+        // Only retain this task's own live movement. Empty/interrupted queues
+        // recover, and a new waypoint/AA publication is checked on every update.
+        auto* command=unit->GetCurrentCommand();
+        if (flightOrdered && unit->GetTask()==this && command->GetId()==CMD_MOVE
+            && command->GetOptions()==0 && command->GetTimeOut()==flightExpiry && flightExpiry>frame
+            && circuit->GetUnitAPI()->GetCMDQueueSize(unit->GetId())==1) {
+            const auto params=command->GetParams();
+            if (params.size()==3 && params[0]==flight[flightIndex].x
+                && params[1]==flight[flightIndex].y && params[2]==flight[flightIndex].z) return;
+        }
+        flightExpiry=frame+FERRY_TRAVEL_TIMEOUT;
+        TRY_UNIT(circuit,unit,
+            unit->CmdMoveTo(flight[flightIndex],0,flightExpiry);
+        )
+        flightOrdered=true;
+        return;
+    }
 	TRY_UNIT(circuit, unit,
 		unit->CmdMoveTo(pos, 0, circuit->GetLastFrame() + FERRY_TRAVEL_TIMEOUT);
 	)
+}
+
+void CFerryTask::FlyDrop(CCircuitUnit* unit)
+{
+    if (!routed || mission.empty()) { GoTo(unit,dropPos); return; }
+    while (missionIndex+1<mission.size() && manager->GetCircuit()->GetBattle()
+        ->AirThreatAlong(mission[missionIndex],mission[missionIndex],flightPadding)>maxAirThreat) ++missionIndex;
+    while (missionIndex+1<mission.size() && unit->GetPos(manager->GetCircuit()->GetLastFrame())
+        .SqDistance2D(mission[missionIndex])<SQUARE(FERRY_WAYPOINT_DIST)) {
+        ++missionIndex;
+        stateFrame=manager->GetCircuit()->GetLastFrame(); // progress on a long route
+    }
+    GoTo(unit,mission[missionIndex]);
+}
+
+bool CFerryTask::SetCargoRoute(int id, const std::vector<AIFloat3>& points,
+        float surfaceThreat, float airThreat, float padding, float blockedSeconds)
+{
+    if (InRun() || points.empty() || points.size()>32 || !std::isfinite(padding)
+        || padding<0.f || padding>512.f || !std::isfinite(surfaceThreat)
+        || !std::isfinite(airThreat) || airThreat<0.f || airThreat>=1.f
+        || !std::isfinite(blockedSeconds) || blockedSeconds<1.f || blockedSeconds>90.f) return false;
+    for (const auto& point:points) {
+        if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)
+            || point.x<0.f || point.z<0.f || point.x>=CTerrainManager::GetTerrainWidth()
+            || point.z>=CTerrainManager::GetTerrainHeight()) return false;
+    }
+    auto* cargo=manager->GetCircuit()->GetTeamUnit(id);
+    auto* aircraft=GetTransport();
+    if (cargo==nullptr || aircraft==nullptr || !CanCarry(id)) return false;
+    auto* battle=manager->GetCircuit()->GetBattle();
+    auto previous=aircraft->GetPos(manager->GetCircuit()->GetLastFrame());
+    const auto pickup=cargo->GetPos(manager->GetCircuit()->GetLastFrame());
+    if (battle->SafeAirRoute(previous,pickup,airThreat,padding).empty()) return false;
+    previous=pickup;
+    std::vector<AIFloat3> accepted;
+    for (size_t i=0;i<points.size();++i) {
+        const auto& point=points[i];
+        // An AA emplacement on a lane bend must not make that exact point a
+        // compulsory stop. Preserve safe lane anchors; detour to the next one.
+        if (i+1<points.size() && battle->AirThreatAlong(point,point,padding)>airThreat) continue;
+        if (battle->SafeAirRoute(previous,point,airThreat,padding).empty()) return false;
+        accepted.push_back(point);
+        previous=point;
+    }
+    // Validate the complete mission before acquiring/holding the cargo.
+    routed=true; flightPadding=padding; mission=std::move(accepted); missionIndex=0;
+    flightBlockedTimeout=int(blockedSeconds*FRAMES_PER_SEC);
+    flight.clear(); flightRetry=-1; flightOrdered=false; flightBlockedFrame=-1;
+    return BeginCargo(id,points.back(),surfaceThreat,airThreat);
 }
 
 void CFerryTask::SetHoldPos(const AIFloat3& pos)
@@ -303,13 +453,35 @@ void CFerryTask::SetHoldPos(const AIFloat3& pos)
 	}
 }
 
+bool CFerryTask::CanCarry(int id) const
+{
+    auto* cargo = manager->GetCircuit()->GetTeamUnit(id);
+    auto* transport = GetTransport();
+    if (cargo == nullptr || transport == nullptr || cargo == transport || cargo->GetUnit()->IsBeingBuilt()) return false;
+    auto* task = cargo->GetTask();
+    if (task != nullptr && (task->GetType() == IUnitTask::Type::PLAYER || task->IsExternalControlled())) return false;
+    auto* load = cargo->GetCircuitDef()->GetDef();
+    auto* carrier = transport->GetCircuitDef()->GetDef();
+    // Definition-level preflight, once per dispatch. Recoil uses footprint
+    // scale 2 for transport size. Lua restrictions and dynamic mass can still
+    // refuse loading; the existing load deadline is the authoritative fallback.
+    return transport::CanCarry(carrier, load);
+}
+
 bool CFerryTask::SetCargo(int id, const AIFloat3& pos, float surfaceThreat, float airThreat)
+{
+    if (InRun() || manager->GetCircuit()->GetTeamUnit(id)==nullptr || !geom::is_valid(pos) || !CanCarry(id)) return false;
+    routed=false; mission.clear(); flight.clear(); flightOrdered=false;
+    return BeginCargo(id,pos,surfaceThreat,airThreat);
+}
+
+bool CFerryTask::BeginCargo(int id, const AIFloat3& pos, float surfaceThreat, float airThreat)
 {
 	if ((state_ != EState::IDLE) && (state_ != EState::DONE) && (state_ != EState::FAILED)) {
 		return false;  // a run is already in flight
 	}
 	CCircuitUnit* cargo = manager->GetCircuit()->GetTeamUnit(id);
-	if ((cargo == nullptr) || !geom::is_valid(pos)) {
+	if ((cargo == nullptr) || !geom::is_valid(pos) || !CanCarry(id)) {
 		return false;
 	}
 	cargoId = id;
@@ -335,6 +507,11 @@ bool CFerryTask::SetCargo(int id, const AIFloat3& pos, float surfaceThreat, floa
 
 void CFerryTask::Reset()
 {
+    if (routed && InRun() && GetTransport()!=nullptr && GetCargo()!=nullptr
+        && IsAboard(GetCargo(),GetTransport(),manager->GetCircuit()->GetLastFrame())) {
+        Fail("reset requested while carrying");
+        return;
+    }
 	cargoId = -1;
 	landPos = -RgtVector;
 	unloadRetries = 0;
@@ -346,7 +523,7 @@ void CFerryTask::Reset()
 		GoTo(transport, holdPos);
 		// D-112: a unit still aboard (a failed run, a wrong load) is set down at
 		// home, never carried off; an empty transport finishes this at once
-		TRY_UNIT(manager->GetCircuit(), transport,
+		if (!routed) TRY_UNIT(manager->GetCircuit(), transport,
 			transport->CmdUnloadUnitsInArea(holdPos, FERRY_UNLOAD_RADIUS, UNIT_COMMAND_OPTION_SHIFT_KEY, manager->GetCircuit()->GetLastFrame() + FERRY_TRAVEL_TIMEOUT * 2);
 		)
 	}
@@ -373,6 +550,11 @@ void CFerryTask::Update()
 	if (transport == nullptr) {
 		return;
 	}
+
+    if (routed && (state_==EState::IDLE || state_==EState::DONE || state_==EState::FAILED)
+        && geom::is_valid(holdPos) && transport->GetPos(frame).SqDistance2D(holdPos)>SQUARE(64.f)) {
+        GoTo(transport,holdPos);
+    }
 
 	switch (state_) {
 		case EState::IDLE:
@@ -454,7 +636,7 @@ void CFerryTask::Update()
 				// climb shows whether it is aboard (a loaded transport hovers low until
 				// ordered); the load itself is over, so this order cannot cut it short
 				if (cargo->GetPos(frame).SqDistance2D(transport->GetPos(frame)) < SQUARE(FERRY_LOADED_DIST)) {
-					GoTo(transport, dropPos);
+					FlyDrop(transport);
 				}
 			}
 			const bool inGrace = !loadPending && (frame - loadDoneFrame < FERRY_RISE_GRACE);
@@ -462,7 +644,7 @@ void CFerryTask::Update()
 				circuit->LOG("FERRY: cargo %i aboard; flying to (%.0f, %.0f)", cargoId, dropPos.x, dropPos.z);
 				loadDoneFrame = -1;
 				Enter(EState::TO_DROP);
-				GoTo(transport, dropPos);
+				FlyDrop(transport);
 			} else if (inGrace && !IsExpired(frame)) {
 				// waiting for the rise
 			} else if (!loadPending || IsExpired(frame)) {
@@ -498,10 +680,14 @@ void CFerryTask::Update()
 					return;
 				}
 			}
-			if (transport->GetPos(frame).SqDistance2D(dropPos) < SQUARE(FERRY_DROP_DIST)) {
+			if (routed) {
+                FlyDrop(transport);
+                if (state_!=EState::TO_DROP) return; // blocked-route recovery now owns it
+            }
+			if ((!routed || missionIndex+1 >= mission.size()) && transport->GetPos(frame).SqDistance2D(dropPos) < SQUARE(FERRY_DROP_DIST)) {
 				CCircuitUnit* cargo = GetCargo();
 				if (!geom::is_valid(landPos)) {
-					landPos = FindLandingSpot(cargo, dropPos, FERRY_LAND_SEARCH);
+					landPos = FindLandingSpot(cargo, dropPos, routed ? 64.f : FERRY_LAND_SEARCH);
 					if (!geom::is_valid(landPos)) { Fail("no safe landing ground"); return; }
 					if (landPos.SqDistance2D(dropPos) > SQUARE(SQUARE_SIZE * 2)) {
 						circuit->LOG("FERRY: drop (%.0f, %.0f) is occupied; landing cargo %i at (%.0f, %.0f)",
@@ -510,8 +696,11 @@ void CFerryTask::Update()
 				}
 				// D-110: the area unload (what a player's unload order is): the engine
 				// finds the room within the radius, where the exact spot often failed
+				if (routed && circuit->GetBattle()->AirThreatAlong(transport->GetPos(frame),landPos,flightPadding)>maxAirThreat) {
+                    Fail("landing approach became unsafe"); return;
+                }
 				TRY_UNIT(circuit, transport,
-					transport->CmdUnloadUnitsInArea(landPos, FERRY_UNLOAD_RADIUS, 0, frame + FERRY_UNLOAD_TIMEOUT);
+					transport->CmdUnloadUnitsInArea(landPos, routed ? 64.f : FERRY_UNLOAD_RADIUS, 0, frame + FERRY_UNLOAD_TIMEOUT);
 				)
 				Enter(EState::UNLOADING);
 			} else if (IsExpired(frame)) {
@@ -525,6 +714,10 @@ void CFerryTask::Update()
 				Fail("cargo gone while unloading");
 				return;
 			}
+            if (routed && IsAboard(cargo,transport,frame)
+                && circuit->GetBattle()->AirThreatAlong(transport->GetPos(frame),landPos,flightPadding)>maxAirThreat) {
+                Fail("anti-air appeared during unload"); return;
+            }
 			ReportUnload(transport, cargo, frame);  // D-110 diagnostic
 			// Landed when the cargo sits on the ground - exactly, for two
 			// updates running. A hanging unit is never exactly on the ground,
@@ -545,6 +738,11 @@ void CFerryTask::Update()
 			const bool notAboard = !IsAboard(cargo, transport, frame);
 			const bool landed = onGround || (!IsLifted(cargo, frame) && notAboard) || (unloadOver && notAboard);
 			landedTicks = landed ? (landedTicks + 1) : 0;
+			// Supreme reproduction: the engine rejected the area order immediately,
+			// leaving cargo airborne and an empty queue for the entire 45 s timeout.
+			// Reconcile two observations before retrying a different legal spot;
+			// an active descent or detached cargo never takes this recovery branch.
+			missingUnloadTicks = (unloadOver && !landed) ? missingUnloadTicks + 1 : 0;
 			if (landedTicks >= FERRY_LANDED_TICKS) {
 				circuit->LOG("FERRY: delivered cargo %i at (%.0f, %.0f)", cargoId, landPos.x, landPos.z);
 				Enter(EState::DONE);
@@ -553,16 +751,17 @@ void CFerryTask::Update()
 				if (geom::is_valid(holdPos)) {
 					GoTo(transport, holdPos);
 				}
-			} else if (IsExpired(frame)) {
+			} else if (IsExpired(frame) || missingUnloadTicks >= FERRY_MISSING_UNLOAD_TICKS) {
 				if (++unloadRetries > FERRY_UNLOAD_RETRIES) {
 					Fail("unload did not take");
 				} else {
 					// The spot was not clear after all (a unit walked onto it, the
 					// engine disagreed). Widen the search from where we hover.
 					refusedDrops.push_back(landPos);  // D-091: never this spot again
-					landPos = FindLandingSpot(cargo, transport->GetPos(frame), FERRY_LAND_SEARCH * (unloadRetries + 1));
+					landPos = FindLandingSpot(cargo, routed ? dropPos : transport->GetPos(frame), routed ? 96.f : FERRY_LAND_SEARCH * (unloadRetries + 1));
 					if (!geom::is_valid(landPos)) { Fail("no safe retry ground"); return; }
 					dropPos = landPos;
+                    if (routed) { mission={landPos}; missionIndex=0; }
 					circuit->LOG("FERRY: unload retry %i for cargo %i at (%.0f, %.0f)", unloadRetries, cargoId, landPos.x, landPos.z);
 					Enter(EState::TO_DROP);
 					GoTo(transport, landPos);
@@ -572,6 +771,41 @@ void CFerryTask::Update()
 
 		case EState::DUMPING: {
 			CCircuitUnit* cargo = GetCargo();
+            if (routed && cargo!=nullptr) {
+                // A descending attached cargo can fall below IsAboard's lift
+                // threshold. Do not cancel its unload and release ownership
+                // then: wait for an empty engine queue and two observations,
+                // just as normal delivery does. CMD_UNLOAD_UNIT is the engine's
+                // internal child of our area unload, not a foreign command.
+                const bool unloadOver=circuit->GetUnitAPI()->GetCMDQueueSize(transport->GetId())==0;
+                landedTicks=(unloadOver && !IsAboard(cargo,transport,frame))?landedTicks+1:0;
+                if (landedTicks>=FERRY_LANDED_TICKS) {
+                    circuit->LOG("FERRY: cargo %i set down after a failed run (unload complete)",cargoId);
+                    cargoId=-1; Enter(EState::FAILED);
+                    if (geom::is_valid(holdPos)) GoTo(transport,holdPos);
+                    return;
+                }
+                if (landedTicks>0) return; // reconcile release, never reissue an unload here
+                if (!geom::is_valid(landPos) || IsExpired(frame)) {
+                    landPos=FindLandingSpot(cargo,transport->GetPos(frame),FERRY_LAND_SEARCH*3);
+                    if (!geom::is_valid(landPos)) landPos=FindLandingSpot(cargo,holdPos,FERRY_LAND_SEARCH*3);
+                    Enter(EState::DUMPING);
+                }
+                if (!geom::is_valid(landPos)) { GoTo(transport,holdPos); return; }
+                if (transport->GetPos(frame).SqDistance2D(landPos)>SQUARE(FERRY_DROP_DIST)) {
+                    GoTo(transport,landPos); return;
+                }
+                if (circuit->GetBattle()->AirThreatAlong(transport->GetPos(frame),landPos,flightPadding)>maxAirThreat) {
+                    landPos=-RgtVector; return;
+                }
+                const int command=transport->GetCurrentCommand()->GetId();
+                if (command!=CMD_UNLOAD_UNITS && command!=CMD_UNLOAD_UNIT) {
+                    TRY_UNIT(circuit,transport,
+                        transport->CmdUnloadUnitsInArea(landPos,64.f,0,frame+FERRY_UNLOAD_TIMEOUT);
+                    )
+                }
+                return;
+            }
 			ReportUnload(transport, cargo, frame);  // D-110 diagnostic
 			if ((cargo == nullptr) || !IsAboard(cargo, transport, frame)) {
 				circuit->LOG("FERRY: cargo %i set down after a failed run (%s)", cargoId, (cargo == nullptr) ? "gone" : "not aboard");

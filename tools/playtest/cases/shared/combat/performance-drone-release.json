@@ -1,0 +1,27 @@
+{
+  "name": "performance-drone-release",
+  "storage_scenario": "perf-drone-release",
+  "unit": "legvcarry",
+  "role": "FRONT",
+  "description": "Game-controlled carrier drones must retain gadget orders. Observe carrier destruction and surviving drone release where the pinned game permits it; record immediate drone death separately. Includes an independent drone as a negative control.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [[4000,2400],[4000,9800]],
+  "side": "legion",
+  "camera": [4000,4700,2400],
+  "photos": [45,100,150],
+  "observe_children": true,
+  "command_breakdown": true,
+  "drone_ownership": true,
+  "remove_units_after_seconds": 90,
+  "remove_unit_name": "legvcarry",
+  "start_metal": 1000000,
+  "groups": [
+    {"unit":"armarad","count":1,"team":0,"position":[3900,4750]},
+    {"unit":"legvcarry","count":4,"team":0,"position":[3700,4100],"spacing":200,"columns":4},
+    {"unit":"legdrone","count":1,"team":0,"position":[3500,4600]},
+    {"unit":"armestor","count":8,"team":1,"position":[4000,5200],"spacing":160},
+    {"unit":"armllt","count":2,"team":1,"position":[3800,5600],"spacing":320},
+    {"unit":"armck","count":1,"team":0,"position":[3400,3700]}
+  ]
+}

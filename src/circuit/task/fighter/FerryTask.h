@@ -61,18 +61,34 @@ public:
 	// Begin a run. Fails (returns false, state unchanged) when a run is
 	// already in flight or the cargo id is not one of our units.
 	bool SetCargo(int cargoId, const springai::AIFloat3& dropPos, float surfaceThreat = -1.f, float airThreat = -1.f);
+	bool CanCarry(int cargoId) const;
+    // Opt-in route mission. Old SetCargo callers retain direct ferry behavior.
+    bool SetCargoRoute(int cargoId, const std::vector<springai::AIFloat3>& points,
+        float surfaceThreat, float airThreat, float padding, float blockedSeconds = 90.f);
 	int GetState() const { return int(state_); }
 	int GetCargoId() const { return cargoId; }
 	// Back to IDLE and home. Safe to call in any state; the cargo is released.
 	void Reset();
 
 private:
+    bool BeginCargo(int id, const springai::AIFloat3& pos, float surfaceThreat, float airThreat);
 	CCircuitUnit* GetTransport() const;
 	CCircuitUnit* GetCargo() const;
 	// Off the ground by more than FERRY_LIFT_HEIGHT: the only observable that
 	// separates "carried" from "stood under the transport".
 	bool IsLifted(CCircuitUnit* cargo, int frame) const;
 	void GoTo(CCircuitUnit* unit, const springai::AIFloat3& pos);
+    void FlyDrop(CCircuitUnit* unit);
+    bool routed = false;
+    float flightPadding = 0.f;
+    std::vector<springai::AIFloat3> mission, flight;
+    size_t missionIndex = 0, flightIndex = 0;
+    springai::AIFloat3 flightGoal{-1.f, -1.f, -1.f};
+    int flightRetry = -1;
+    bool flightOrdered = false;
+    int flightExpiry = -1;
+    int flightBlockedFrame = -1; // diagnostic episode, cleared on a solved leg/new mission
+    int flightBlockedTimeout = 90 * FRAMES_PER_SEC;
 	// The engine refuses an unload onto occupied ground and says nothing; a
 	// recipient's start position is its base. Ask the engine for the nearest
 	// clear footprint for the cargo instead; `around` when it finds none.
@@ -94,6 +110,7 @@ private:
 	int loadRetries;
 	int unloadRetries;
 	int landedTicks = 0;  // consecutive updates the cargo was seen on the ground while unloading
+	int missingUnloadTicks = 0; // empty carrier queue while cargo still follows it
 	bool OnFactoryYard(CCircuitUnit* cargo, int frame);
 	springai::AIFloat3 yardPos;
 	int groundTicks = 0;  // D-091: consecutive updates the cargo was on the ground in flight to the drop

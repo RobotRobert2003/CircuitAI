@@ -1,0 +1,15 @@
+{
+  "name":"supreme-anti-nuke",
+  "map":"Supreme Isthmus v1.7", "map_key":"supreme",
+  "starts":[[7492,1220],[4814,11077]],
+  "checks":"sea/combat/supreme-anti-nuke.json",
+  "patrol_observer":true, "protection_observer":true,
+  "shots":"1@4000@6100:1800,3@4000@6100:1800,6@4000@6100:1800",
+  "groups":[
+    {"unit":"armantiship","team":0,"count":1,"position":[6500,1400]},
+    {"unit":"armantiship","team":0,"count":1,"position":[6100,1800],"after_seconds":20},
+    {"unit":"armepoch","team":0,"count":1,"position":[6000,1200]},
+    {"unit":"armfrad","team":0,"count":1,"position":[5200,1800]},
+    {"unit":"corsy","team":1,"count":1,"position":[4800,1800]}
+  ]
+}

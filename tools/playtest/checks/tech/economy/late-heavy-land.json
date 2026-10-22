@@ -1,0 +1,15 @@
+{
+  "_doc": "D-287 land map (All That Glitters): with gantry_income_fixture.lua the late latch closes on income once fixture phase 1 lands (first T2 lab, fallback 12 min) and the gantries build the land heavy (armthor / corkorg / legerailtank by --side). INV-198 (no late Marauder-class gantry product) is covered by the invariant forbid. Injected economy: fixture evidence. Natural variant: no fixture, --set HeavyLateMinutes=12 --set RushObjective='\"gantry\"', --minutes 35.",
+  "stop_minute": 35,
+  "expect": [
+    {"key": "latched", "pattern": "\\[TECH\\]\\[Heavy\\] late latched .*Marauder-class production closed", "by_minute": 14, "scope": "tech"},
+    {"key": "land batch", "pattern": "\\[TECH\\]\\[Heavy\\] batch .*terrain=land unit=(armthor|corkorg|legerailtank) ", "by_minute": 28, "scope": "tech"},
+    {"key": "land heavy", "pattern": "\\[Playtest\\] finished (armthor|corkorg|legerailtank) team 0", "by_minute": 34, "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"},
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "amphibious on land", "pattern": "\\[TECH\\]\\[Heavy\\] batch .*terrain=amphibious", "scope": "tech"}
+  ],
+  "pass_on": {"key": "land heavy", "pattern": "\\[Playtest\\] finished (armthor|corkorg|legerailtank) team 0", "scope": "any"}
+}

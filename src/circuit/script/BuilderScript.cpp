@@ -75,6 +75,14 @@ CBuilderScript::CBuilderScript(CScriptManager* scr, CBuilderManager* mgr)
 
 	r = engine->RegisterObjectType("CBuilderManager", 0, asOBJ_REF | asOBJ_NOHANDLE); ASSERT(r >= 0);
 	r = engine->RegisterGlobalProperty("CBuilderManager aiBuilderMgr", manager); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CBuilderManager", "void ClearBuildRadii()", asMETHOD(CBuilderManager, ClearBuildRadii), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CBuilderManager", "void SetBuildRadius(const CCircuitDef@, const AIFloat3& in, float)", asMETHOD(CBuilderManager, SetBuildRadius), asCALL_THISCALL); ASSERT(r >= 0);
+	// D-290: script-owned reclaim protection (TECH: energy storage); empty by default
+	r = engine->RegisterObjectMethod("CBuilderManager", "void SetReclaimProtected(const CCircuitDef@, bool)", asMETHOD(CBuilderManager, SetReclaimProtected), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CBuilderManager", "bool IsReclaimProtected(const CCircuitDef@) const", asMETHOD(CBuilderManager, IsReclaimProtected), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CBuilderManager", "void ClearReclaimProtected()", asMETHOD(CBuilderManager, ClearReclaimProtected), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CBuilderManager", "float GetRecoveryMetal(CCircuitUnit@, float)", asMETHOD(CBuilderManager, GetRecoveryMetal), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CBuilderManager", "IUnitTask@+ FindRecoveryTask(CCircuitUnit@, int, float, const CCircuitDef@, int groupLimit = 1, bool highestValue = false, float combatClearance = 0)", asMETHOD(CBuilderManager, FindRecoveryTask), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "IUnitTask@+ DefaultMakeTask(CCircuitUnit@)", asMETHOD(CBuilderManager, DefaultMakeTask), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "void AbortTask(IUnitTask@)", asMETHODPR(CBuilderManager, AbortTask, (IUnitTask*), void), asCALL_THISCALL); ASSERT(r >= 0);  // D-108: a builder handed a dedicated role drops its other job
 	r = engine->RegisterObjectMethod("CBuilderManager", "void AssignTask(CCircuitUnit@, IUnitTask@)", asMETHODPR(CBuilderManager, AssignTask, (CCircuitUnit*, IUnitTask*), void), asCALL_THISCALL); ASSERT(r >= 0);  // D-112: one unit onto a task (it leaves its old task, which carries on without it)
@@ -82,6 +90,7 @@ CBuilderScript::CBuilderScript(CScriptManager* scr, CBuilderManager* mgr)
 	r = engine->RegisterObjectMethod("CBuilderManager", "IUnitTask@+ EnqueueLayout(const SBuildTask& in, const string& in, CCircuitUnit@)", asMETHOD(CBuilderManager, EnqueueLayout), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "IUnitTask@+ EnqueueFactoryNano(const SBuildTask& in, CCircuitUnit@)", asMETHOD(CBuilderManager, EnqueueFactoryNano), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "IUnitTask@+ Enqueue(const SServBTask& in)", asMETHODPR(CBuilderManager, Enqueue, (const TaskB::SServBTask&), IUnitTask*), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CBuilderManager", "IUnitTask@+ FindMatchingGuard(CCircuitUnit@, const SServBTask& in)", asMETHOD(CBuilderManager, FindMatchingGuard), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "IUnitTask@+ EnqueueRetreat()", asMETHOD(CBuilderManager, EnqueueRetreat), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "uint GetWorkerCount() const", asMETHOD(CBuilderManager, GetWorkerCount), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "float GetBuildPowerNear(const AIFloat3& in, float) const", asMETHOD(CBuilderManager, GetBuildPowerNear), asCALL_THISCALL); ASSERT(r >= 0);
@@ -89,6 +98,9 @@ CBuilderScript::CBuilderScript(CScriptManager* scr, CBuilderManager* mgr)
 	r = engine->RegisterObjectMethod("CBuilderManager", "int GetQueuedBuildCount(int, const CCircuitDef@) const", asFUNCTION(CBuilderManager_GetQueuedBuildCount), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("CBuilderManager", "int dangerHysteresis", asOFFSET(CBuilderManager, dangerHysteresis)); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("CBuilderManager", "bool experimentalBuild", asOFFSET(CBuilderManager, experimentalBuild)); ASSERT(r >= 0);
+	r = engine->RegisterObjectProperty("CBuilderManager", "bool recoverConstruction", asOFFSET(CBuilderManager, recoverConstruction)); ASSERT(r >= 0);
+	r = engine->RegisterObjectProperty("CBuilderManager", "int constructionRetrySeconds", asOFFSET(CBuilderManager, constructionRetrySeconds)); ASSERT(r >= 0);
+	r = engine->RegisterObjectProperty("CBuilderManager", "int constructionReleaseSeconds", asOFFSET(CBuilderManager, constructionReleaseSeconds)); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("CBuilderManager", "bool experimentalAirDirect", asOFFSET(CBuilderManager, experimentalAirDirect)); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "CCircuitUnit@ FindReclaimTargetFor(CCircuitUnit@)", asMETHOD(CBuilderManager, FindReclaimTargetFor), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "CCircuitUnit@ FindUnfinishedFor(CCircuitUnit@, const CCircuitDef@)", asMETHOD(CBuilderManager, FindUnfinishedFor), asCALL_THISCALL); ASSERT(r >= 0);
@@ -98,9 +110,14 @@ CBuilderScript::CBuilderScript(CScriptManager* scr, CBuilderManager* mgr)
 	r = engine->RegisterObjectMethod("CBuilderManager", "int CountUnfinishedNear(const AIFloat3& in, float, float, const CCircuitDef@)", asMETHOD(CBuilderManager, CountUnfinishedNear), asCALL_THISCALL); ASSERT(r >= 0);  // D-098
 	r = engine->RegisterObjectMethod("CBuilderManager", "float GetBuildPowerNearExcept(const AIFloat3& in, float, const CCircuitDef@, const CCircuitDef@, const CCircuitUnit@) const", asMETHOD(CBuilderManager, GetBuildPowerNearExcept), asCALL_THISCALL); ASSERT(r >= 0);  // D-105
 	r = engine->RegisterObjectMethod("CBuilderManager", "CCircuitUnit@ FindOwnNear(const AIFloat3& in, float, const CCircuitDef@)", asMETHOD(CBuilderManager, FindOwnNear), asCALL_THISCALL); ASSERT(r >= 0);  // D-077
-	r = engine->RegisterObjectMethod("CBuilderManager", "int TurretsOnReclaim(int, float, bool)", asMETHOD(CBuilderManager, TurretsOnReclaim), asCALL_THISCALL); ASSERT(r >= 0);  // D-078
+	r = engine->RegisterObjectMethod("CBuilderManager", "int TurretsOnReclaim(int, float, bool, bool preserveReclaimPriority = false)", asMETHOD(CBuilderManager, TurretsOnReclaim), asCALL_THISCALL); ASSERT(r >= 0);  // D-078
 	r = engine->RegisterObjectProperty("CBuilderManager", "float experimentalDirectRange", asOFFSET(CBuilderManager, experimentalDirectRange)); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("CBuilderManager", "float experimentalSearchRadius", asOFFSET(CBuilderManager, experimentalSearchRadius)); ASSERT(r >= 0);
+    r=engine->RegisterObjectMethod("CBuilderManager","bool SetCommanderCombatOption(const string &in, float)",asMETHOD(CBuilderManager,SetCommanderCombatOption),asCALL_THISCALL); ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBuilderManager","float GetCommanderEnergyReserve() const",asMETHOD(CBuilderManager,GetCommanderEnergyReserve),asCALL_THISCALL); ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBuilderManager","float GetCommanderEnergyDeficit() const",asMETHOD(CBuilderManager,GetCommanderEnergyDeficit),asCALL_THISCALL); ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBuilderManager","int GetCommanderOperation() const",asMETHOD(CBuilderManager,GetCommanderOperation),asCALL_THISCALL); ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBuilderManager","IUnitTask@+ CommanderFrontWork(CCircuitUnit@, int, CCircuitDef@, float)",asMETHOD(CBuilderManager,CommanderFrontWork),asCALL_THISCALL); ASSERT(r>=0);
 	r = engine->RegisterObjectMethod("CBuilderManager", "IUnitTask@+ FindQueuedTask(CCircuitUnit@, int type)", asFUNCTION(CBuilderManager_FindQueuedTask), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 
 }

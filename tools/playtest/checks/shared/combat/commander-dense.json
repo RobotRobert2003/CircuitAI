@@ -1,0 +1,51 @@
+{
+  "stop_minute": 6,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "combat",
+      "pattern": "\\[Commander\\].*shot_confirmed",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "population",
+      "pattern": "\\[RangedArena\\].*fixture_ready supplied=320",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "all_teams",
+      "pattern": "\\[RangedArena\\].*commander_combat_inputs=16",
+      "scope": "any",
+      "by_minute": 5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

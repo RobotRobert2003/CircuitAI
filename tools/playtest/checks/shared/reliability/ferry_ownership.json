@@ -1,0 +1,16 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {"key":"armck", "pattern":"FerryOwnershipTest\\] PASS armck", "scope":"any", "by_minute":1},
+    {"key":"corck", "pattern":"FerryOwnershipTest\\] PASS corck", "scope":"any", "by_minute":1},
+    {"key":"legck", "pattern":"FerryOwnershipTest\\] PASS legck", "scope":"any", "by_minute":1},
+    {"key":"armca", "pattern":"FerryOwnershipTest\\] PASS armca", "scope":"any", "by_minute":1},
+    {"key":"corca", "pattern":"FerryOwnershipTest\\] PASS corca", "scope":"any", "by_minute":1},
+    {"key":"legca", "pattern":"FerryOwnershipTest\\] PASS legca", "scope":"any", "by_minute":1}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope":"any"},
+    {"key":"fixture", "pattern":"FerryOwnershipTest\\] FAIL", "scope":"any"},
+    {"key":"invariant", "pattern":"\\[INVARIANT\\]", "scope":"any"}
+  ]
+}

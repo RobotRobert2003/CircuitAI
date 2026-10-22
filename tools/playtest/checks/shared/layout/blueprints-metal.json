@@ -1,0 +1,63 @@
+{
+  "stop_minute": 8.1,
+  "expect": [
+    {"key": "foreign-field", "pattern": "\\[LayoutResource\\] PASS metal field respects ally cluster", "scope": "any"},
+    {
+      "key": "ui",
+      "pattern": "\\[BlueprintCheck\\] PASS completed",
+      "scope": "any"
+    },
+    {
+      "key": "resources",
+      "pattern": "\\[LayoutResource\\] PASS resource audit",
+      "scope": "any"
+    },
+    {
+      "key": "metal-exception",
+      "pattern": "\\[LayoutResource\\] PASS metal map exception",
+      "scope": "any"
+    },
+    {
+      "key": "geo",
+      "pattern": "\\[LayoutResource\\] PASS geothermal sites retained",
+      "scope": "any"
+    },
+    {
+      "key": "air-snapshot",
+      "pattern": "\\[BlueprintCheck\\] PASS team snapshot AIR",
+      "scope": "any"
+    },
+    {
+      "key": "tech-snapshot",
+      "pattern": "\\[BlueprintCheck\\] PASS team snapshot TECH",
+      "scope": "any"
+    },
+    {
+      "key": "metal-field-open",
+      "pattern": "PASS metal field accepts ordinary zone",
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]|\\[LayoutResource\\] FAIL|\\[BlueprintCheck\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "widget",
+      "pattern": "Error in.*(blueprint|gui_barb_team_link)|barb.*LuaUI.*error",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

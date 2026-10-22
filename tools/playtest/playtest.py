@@ -14,7 +14,7 @@ widget, the infolog and the screenshots all live there. The install is read
 for the engine, the game archives, the maps and the last lobby script
 (modoptions template) only.
 
-Doc: tools/playtest/README.md. Skill: .claude/skills/playtest/SKILL.md.
+Doc: tools/playtest/README.md. Skill: skills/playtest/SKILL.md.
 """
 import argparse
 import datetime as dt
@@ -28,11 +28,14 @@ import sys
 import time
 from pathlib import Path
 import storage
+import engine_process
+from symbol_store import stage_symbols
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 LOCALAPPDATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
-BAR_DATA = LOCALAPPDATA / "Programs" / "Beyond-All-Reason" / "data"  # read-only
+# read-only; BAR_DATA_DIR overrides it for a machine-wide install (e.g. C:\Program Files\Beyond-All-Reason\data)
+BAR_DATA = Path(os.environ.get("BAR_DATA_DIR") or (LOCALAPPDATA / "Programs" / "Beyond-All-Reason" / "data"))
 BUILD_AI = Path(r"C:\bardev\bar-RecoilEngine\build-amd64-windows\install\AI\Skirmish\BARb\stable")
 DEFAULT_DIR = Path(r"C:\bardev\barb-playtest")
 AI_SHORT = "BARbTest"
@@ -40,6 +43,7 @@ AI_VERSION = "test"
 PROD_AI_SHORT = "SMRTBARb"
 PROD_AI_VERSION = "stable"
 FPS = 30
+_engines = {}  # owned handles, keyed by canonical write-dir; closed after watch/stop
 ROLE_INT = {"FRONT": 0, "AIR": 1, "TECH": 2, "SEA": 3, "SUPPORT": 4, "TACTICAL": 5}
 SIDES = ["armada", "cortex", "legion"]
 
@@ -147,9 +151,82 @@ def sha16(p):
     return h.hexdigest()[:16]
 
 
+def seed_archive_cache(source, directory):
+    """Copy stable scanner metadata; the engine still validates paths/mtimes.
+
+    No shared writable cache or pathfinder state. Missing/unstable metadata is
+    simply a cold load. Bound reads and retain a receipt for paired timing runs.
+    """
+    receipt = []
+    for path in sorted(Path(source).glob('ArchiveCache*.lua')):
+        if not re.fullmatch(r'ArchiveCache\d+\.lua', path.name):
+            continue
+        target = Path(directory) / 'cache' / path.name
+        temporary = target.with_name(target.name + '.seed')
+        if target.exists():
+            continue
+        try:
+            before = path.stat()
+            if before.st_size > 16 * 1024 * 1024:
+                continue
+            data = path.read_bytes()
+            after = path.stat()
+            if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns) or len(data) != before.st_size:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_bytes(data)
+            temporary.replace(target)
+            receipt.append({'name': path.name, 'source': str(path), 'bytes': len(data),
+                            'sha256': hashlib.sha256(data).hexdigest()})
+        except OSError:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            continue  # cache reuse is optional; staging/engine errors remain fatal
+    (Path(directory) / 'archive-cache-seed.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    return receipt
+
+
+OPPONENT_SHORT = "BARbBase"
+OPPONENT_VERSION = "base"
+
+
+def stage_opponent(d, dll, data):
+    """A second, pinned build of this AI for head-to-head runs: 'prod' teams
+    play it. Staged in the write directory only, never the BAR install."""
+    dst = d / "AI" / "Skirmish" / OPPONENT_SHORT / OPPONENT_VERSION
+    dst.mkdir(parents=True, exist_ok=True)
+    if not dll.exists():
+        die("no opponent DLL at %s" % dll)
+    shutil.copy2(dll, dst / "SkirmishAI.dll")
+    for sub in ("config", "script"):
+        if (dst / sub).exists():
+            shutil.rmtree(dst / sub)
+        shutil.copytree(data / sub, dst / sub, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy2(data / "AIOptions.lua", dst / "AIOptions.lua")
+    info = (data / "AIInfo.lua").read_text(encoding="utf-8")
+    info, n1 = re.subn(r"value\s*=\s*'[^']*',(\s*-- AI name - !This comment is used for parsing!)",
+                       "value  = '%s',\\1" % OPPONENT_SHORT, info)
+    info, n2 = re.subn(r"value\s*=\s*'[^']*',(\s*-- AI version - !This comment is used for parsing!)",
+                       "value  = '%s',\\1" % OPPONENT_VERSION, info)
+    if n1 != 1 or n2 != 1:
+        die("opponent AIInfo.lua markers not found")
+    (dst / "AIInfo.lua").write_text(info, encoding="utf-8")
+    log("staged opponent %s/%s from %s" % (OPPONENT_SHORT, OPPONENT_VERSION, dll))
+
+
 def stage(args):
+    stage_started = time.monotonic()
+    if not str(args.dir).strip():
+        die("empty playtest directory; benchmark allocation must succeed before staging")
     d = Path(args.dir)
+    if d.resolve() == REPO.resolve() or d.resolve() in REPO.resolve().parents:
+        die("playtest write directory cannot be the source checkout or its parent")
+    if getattr(args, 'headless', False):
+        args.shots = ''
     d.mkdir(parents=True, exist_ok=True)
+    seed_archive_cache(BAR_DATA / 'cache', d)
     ai_dst = d / "AI" / "Skirmish" / AI_SHORT / AI_VERSION
     ai_dst.mkdir(parents=True, exist_ok=True)
 
@@ -161,7 +238,7 @@ def stage(args):
     shutil.copy2(dll_src, ai_dst / "SkirmishAI.dll")
     dbg = dll_src.with_suffix(".dbg")
     if dbg.exists():
-        shutil.copy2(dbg, ai_dst / "SkirmishAI.dbg")
+        stage_symbols(dbg, ai_dst / "SkirmishAI.dbg")
 
     data_src = Path(args.data) if args.data else REPO / "data"
     for sub in ("config", "script"):
@@ -169,20 +246,14 @@ def stage(args):
             shutil.rmtree(ai_dst / sub)
         shutil.copytree(data_src / sub, ai_dst / sub, ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copy2(data_src / "AIOptions.lua", ai_dst / "AIOptions.lua")
-    # setting overrides inside Global::RoleSettings::Tech of the STAGED global.as only
-    for kv in (args.set or []):
-        key, _, val = kv.partition("=")
-        gp = ai_dst / "script" / "src" / "global.as"
-        g = gp.read_text(encoding="utf-8")
-        a = g.index("namespace Tech {")
-        b = g.index("\n        }", a)
-        block = g[a:b]
-        pat = re.compile(r"^(\s*(?:int|float|bool|string)\s+%s\s*=\s*)([^;]+);" % re.escape(key.strip()), re.M)
-        if not pat.search(block):
-            die("--set %s: no such Tech setting" % key)
-        block = pat.sub(lambda m: m.group(1) + val.strip() + ";", block, count=1)
-        gp.write_text(g[:a] + block + g[b:], encoding="utf-8")
-        log("set Tech::%s = %s" % (key.strip(), val.strip()))
+    # Apply only to the staged copy; supports both current and pinned old layouts.
+    from script_settings import apply_override
+    for expression in (args.set or []):
+        try:
+            setting = apply_override(ai_dst / "script/src", expression)
+        except ValueError as error:
+            die(str(error))
+        log("set " + setting)
 
     info = (data_src / "AIInfo.lua").read_text(encoding="utf-8")
     info, n1 = re.subn(r"value\s*=\s*'[^']*',(\s*-- AI name - !This comment is used for parsing!)",
@@ -193,6 +264,8 @@ def stage(args):
         die("AIInfo.lua markers not found (shortName %d, version %d)" % (n1, n2))
     info = info.replace("value  = 'BARbarIAn'", "value  = 'BARb playtest'")
     (ai_dst / "AIInfo.lua").write_text(info, encoding="utf-8")
+    if getattr(args, "opponent_dll", None):
+        stage_opponent(d, Path(args.opponent_dll), Path(args.opponent_data or (REPO / "data")))
 
     # settings: the user's, read once, with the playtest overrides on top
     prod_cfg = BAR_DATA / "springsettings.cfg"
@@ -278,6 +351,7 @@ def stage(args):
         args.role, 0, float(args.speed), float(args.minutes) + 0.5, ", ".join(shots), planLua)
     tpl = (HERE / "widgets" / "playtest_camera.lua").read_text(encoding="utf-8")
     (wdir / "playtest_camera.lua").write_text(tpl.replace("__CFG__", cfg), encoding="utf-8")
+    shutil.copy2(HERE / 'widgets' / 'playtest_lifecycle.lua', wdir / 'playtest_lifecycle.lua')
     # extra widgets under test (e.g. tools/widgets/gui_barb_team_link.lua), staged into
     # the playtest's own write dir only, never the live game's
     for extra in (args.extra_widget or []):
@@ -288,8 +362,10 @@ def stage(args):
     (d / "screenshots").mkdir(exist_ok=True)
     manifest = {
         "staged": dt.datetime.now().isoformat(timespec="seconds"),
+        "staging_seconds": time.monotonic() - stage_started,
         "dll": str(dll_src), "dll_sha256_16": sha16(dll_src), "dll_bytes": dll_src.stat().st_size,
         "data": str(data_src), "ai": "%s/%s" % (AI_SHORT, AI_VERSION),
+        "mode": getattr(args, 'mode', 'fast'), "requested_speed": float(args.speed),
     }
     (d / "staged.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     log("staged %s (%s, %d bytes) + %s into %s" % (dll_src.name, manifest["dll_sha256_16"], manifest["dll_bytes"], data_src, ai_dst))
@@ -355,7 +431,7 @@ def write_script(args, d):
     if not map_name:
         die("no map: pass --map")
     if not map_archive_present(map_name):
-        log("WARNING: no archive for '%s' under %s/maps; the engine will fail to load it" % (map_name, BAR_DATA))
+        die("no archive for '%s' under %s/maps; install the exact map version before launching" % (map_name, BAR_DATA))
     spots = map_spots(map_name, args.map_file)
     teams = choose_teams(args, spots)
 
@@ -397,10 +473,19 @@ def write_script(args, d):
         L += ["\t[TEAM%d]" % t, "\t{", "\t\tAllyTeam=%d;" % ally, "\t\tTeamLeader=0;",
               "\t\tSide=%s;" % side, "\t\tRgbColor=%s;" % COLOURS[t % len(COLOURS)],
               "\t\tStartPosX=%d;" % int(x), "\t\tStartPosZ=%d;" % int(z), "\t\tHandicap=%d;" % (int(args.bonus) if (t == 0 and args.bonus) else 0), "\t}"]
-        short, ver = (AI_SHORT, AI_VERSION) if kind == "test" else (PROD_AI_SHORT, PROD_AI_VERSION)
+        # --prod-ai names an installed opponent (e.g. stock BARb) that keeps its
+        # own default options: the test build's AI options are not passed to it.
+        prod_ai = getattr(args, "prod_ai", None)
+        opponent = getattr(args, "opponent_dll", None)
+        if kind == "test":
+            short, ver = AI_SHORT, AI_VERSION
+        elif opponent:
+            short, ver = OPPONENT_SHORT, OPPONENT_VERSION
+        else:
+            short, ver = prod_ai or PROD_AI_SHORT, getattr(args, "prod_version", None) or PROD_AI_VERSION
         L += ["\t[AI%d]" % t, "\t{", "\t\tShortName=%s;" % short, "\t\tVersion=%s;" % ver,
               "\t\tName=%s-%s-%d;" % (short, role.lower(), t), "\t\tTeam=%d;" % t, "\t\tHost=0;", "\t\tIsFromDemo=0;"]
-        if ai_opts:
+        if ai_opts and (kind == "test" or opponent or not prod_ai):
             L.append("\t\t[OPTIONS] { %s }" % " ".join("%s=%s;" % kv for kv in ai_opts.items()))
         L += ["\t}"]
     L += ["}", ""]
@@ -425,11 +510,17 @@ def launch(args):
     d = Path(args.dir).resolve()
     if not (d / "script.txt").exists() or not (d / "AI" / "Skirmish" / AI_SHORT / AI_VERSION / "SkirmishAI.dll").exists():
         die("nothing staged in %s: run 'stage' first" % d)
-    if running_pids(d):
-        die("a playtest engine is already running (pids %s): 'stop' it first" % running_pids(d))
+    # Recoil refuses a write drive with <=1024 MiB free. Reject before spawning
+    # and leave some room for the retained log/replay; never delete evidence.
+    if shutil.disk_usage(d).free < 1536 * 1024 * 1024:
+        die("less than 1.5 GiB free on playtest drive; reclaim redundant build caches before launching: %s" % d)
+    existing = running_pids(d)
+    if existing:
+        die("a playtest engine is already running (pids %s): 'stop' it first" % existing)
     eng = engine_dir(args.engine)
     exe = eng / ("spring-headless.exe" if getattr(args, "headless", False) else "spring.exe")
     storage.capture_inputs(d, exe)
+    storage.capture_system(d, exe)  # host specs: results from different devices are not one cohort
     # a fresh infolog per run; the previous one is kept with its run
     info = d / "infolog.txt"
     if info.exists():
@@ -443,12 +534,23 @@ def launch(args):
         except OSError:
             pass
     cmd = [str(exe), "--write-dir", str(d), str(d / "script.txt")]
+    (d / 'playtest-stop.txt').unlink(missing_ok=True)
     log("launch: " + " ".join(cmd))
     proc = subprocess.Popen(cmd, cwd=str(eng), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
-    pid_file(d).write_text(str(proc.pid), encoding="utf-8")
-    (d / "launched.json").write_text(json.dumps({"pid": proc.pid, "engine": str(eng),
-                                                 "at": dt.datetime.now().isoformat(timespec="seconds")}), encoding="utf-8")
+    handle = None
+    try:
+        handle = engine_process.EngineProcess(proc.pid)
+        record = dict(handle.identity(d), engine=str(eng), command=cmd,
+                      at=dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"))
+        (d / "launched.json").write_text(json.dumps(record), encoding="utf-8")
+        _engines[engine_process.canonical(d)] = handle
+        pid_file(d).write_text(str(proc.pid), encoding="utf-8")
+    except BaseException:
+        proc.kill()  # Popen still owns this exact child handle
+        proc.wait()
+        if handle is not None: handle.close()
+        raise
     log("engine pid %d, engine %s" % (proc.pid, eng.name))
     return proc.pid
 
@@ -459,9 +561,10 @@ def running_pids(d):
     ps = ("Get-CimInstance Win32_Process -Filter \"Name='spring.exe' or Name='spring-headless.exe'\" | "
           "ForEach-Object { \"$($_.ProcessId)|$($_.CommandLine)\" }")
     try:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=30).stdout
-    except Exception:
-        return []
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                             timeout=5, check=True).stdout
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError("Engine inventory unavailable; not evidence of exit") from error
     # the exact write dir: "--write-dir <dir>" followed by a space, a quote or the
     # end (a plain substring test matched C:\bardev\barb-playtest inside
     # C:\bardev\barb-playtest-sim1, so one run's stop killed parallel runs)
@@ -474,22 +577,46 @@ def running_pids(d):
     return pids
 
 
+def owned_engine(d):
+    key = engine_process.canonical(d)
+    if key not in _engines:
+        manifest = Path(d) / 'launched.json'
+        if not manifest.exists():
+            return None
+        _engines[key] = engine_process.attach(json.loads(manifest.read_text()), d)
+    return _engines[key]
+
+
+def engine_alive(d):
+    # Old archived logs can still be judged with --no-stop; live supervision
+    # uses a retained handle and never polls PowerShell in the watch loop.
+    process = owned_engine(d)
+    return process.alive() if process else False
+
+
+def request_stop(d):
+    (Path(d) / 'playtest-stop.txt').write_text('stop\n', encoding='ascii')
+
+
 def stop(args, quiet=False):
     d = Path(args.dir)
-    pids = set(running_pids(d))
+    process = owned_engine(d)
     pf = pid_file(d)
-    if pf.exists():
-        try:
-            pids.add(int(pf.read_text().strip()))
-        except ValueError:
-            pass
     killed = []
-    for pid in pids:
-        r = subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, text=True)
-        if r.returncode == 0:
-            killed.append(pid)
-    if pf.exists():
-        pf.unlink()
+    if process:
+        try:
+            if process.alive():
+                request_stop(d)
+                deadline = time.monotonic() + float(getattr(args, 'shutdown_seconds', 6))
+                while process.alive() and time.monotonic() < deadline:
+                    time.sleep(.1)
+                if process.alive():
+                    process.terminate()
+                killed.append(process.pid)
+        finally:
+            process.close()
+            _engines[engine_process.canonical(d)] = None
+    pf.unlink(missing_ok=True)
     if not quiet:
         log("stopped %s" % (killed if killed else "nothing (no playtest engine running)"))
     return killed
@@ -512,7 +639,45 @@ def load_checks(path):
     return json.loads(p.read_text(encoding="utf-8")), p
 
 
+def validate_checks(path):
+    checks, _ = load_checks(path)
+    keys = {e['key'] for e in checks.get('expect', [])}
+    for item in checks.get('expect', []) + checks.get('forbid', []) + [checks[k] for k in ('pass_on', 'complete_on') if k in checks]:
+        if not item.get('key'):raise ValueError('Every check needs a key')
+        re.compile(item['pattern'])
+        if item.get('after_key') and item['after_key'] not in keys:
+            raise ValueError('Unknown predecessor: ' + item['after_key'])
+        if item.get('same_as'):
+            previous=next((e for e in checks.get('expect', []) if e['key']==item['same_as']),None)
+            if previous is None:raise ValueError('Unknown binding: '+item['same_as'])
+            names=set(re.compile(previous['pattern']).groupindex)
+            if not names or not names.issubset(re.compile(item['pattern']).groupindex):
+                raise ValueError('same_as needs the predecessor named groups: '+item['key'])
+    return checks
+
+
 def watch(args):
+    try:
+        return _watch(args)
+    except BaseException as error:
+        d = Path(args.dir)
+        if d.exists():
+            failure=json.dumps({'error': repr(error), 'verdict': 'FAIL'},indent=2)
+            (d / 'runner-error.json').write_text(failure)
+            archive=d/'runs'/storage.run_id();archive.mkdir(parents=True,exist_ok=False)
+            (archive/'runner-error.json').write_text(failure)
+            report='# Playtest report: FAIL\n\nRunner exception: '+repr(error)+'\n'
+            (archive/'report.md').write_text(report)
+            (d/'report.md').write_text(report)
+            for name in ('infolog.txt','staged.json','launched.json','teams.json'):
+                if (d/name).exists():shutil.copy2(d/name,archive/name)
+        raise
+    finally:
+        if not args.no_stop:
+            stop(args, quiet=True)
+
+
+def _watch(args):
     d = Path(args.dir)
     checks, checks_path = load_checks(args.checks)
     checks_bytes = checks_path.read_bytes()
@@ -525,6 +690,11 @@ def watch(args):
     expects = [dict(e, seen=None) for e in checks.get("expect", [])]
     forbids = list(checks.get("forbid", []))
     pass_on = checks.get("pass_on")
+    complete_on = checks.get('complete_on')
+    complete_frame = None
+    grace_frames = int(float(checks.get('completion_grace_seconds', 10)) * FPS)
+    if complete_on:
+        complete_on = dict(complete_on, re=re.compile(complete_on['pattern']))
     for e in expects:
         e["re"] = re.compile(e["pattern"])
     for f in forbids:
@@ -541,11 +711,19 @@ def watch(args):
     widget_loaded = False
     verdict = None
     reason = ""
+    decided_frame = None
+    decided_text = ""
     started = time.time()
+    first_progress = None
+    last_frame_time = started
     wall_limit = float(args.wall_minutes) * 60 if args.wall_minutes else (stop_minute * 90 + 240)
     pos = 0
     buf = ""
     last_report = 0
+    last_progress = time.time()
+    shutdown_started = None
+    startup_seconds = float(getattr(args, 'startup_seconds', 120))
+    stall_seconds = float(getattr(args, 'stall_seconds', 60))
 
     def minute(fr):
         return fr / (60.0 * FPS)
@@ -569,11 +747,19 @@ def watch(args):
                 fm = FRAME_RE.search(line)
                 event_frame = int(fm.group(1)) if fm else frame
                 if fm:
+                    if int(fm.group(1)) > frame:
+                        last_progress = time.time()
+                        last_frame_time = last_progress
+                        if first_progress is None:first_progress=(event_frame,last_progress)
                     frame = max(frame, event_frame)
                 if "[Playtest] widget loaded" in line:
                     widget_loaded = True
-                if re.search(r": ERR\s+:", line) or "Fix compilation errors" in line:
+                if decided_frame is None and "[Playtest] decided:" in line:
+                    decided_frame = event_frame
+                    decided_text = line.split("decided: ", 1)[-1][:120]
+                if re.search(r": ERR\s+:|SCRIPT CRASH|Lib exception|Access violation|has crashed|Fatal:", line) or "Fix compilation errors" in line:
                     errors.append(line)
+                    verdict, reason = 'FAIL', 'script/engine error'
                 am = AI_RE.search(line)
                 this_sid = None
                 text = line
@@ -599,12 +785,19 @@ def watch(args):
                         verdict = "FAIL"
                         reason = "forbidden line"
                 for e in expects:
-                    if e["seen"] is None and e["re"].search(text if am else line) and scope_ok(e.get("scope", "tech"), this_sid):
+                    matched = e['re'].search(text if am else line) if e['seen'] is None else None
+                    if matched and scope_ok(e.get("scope", "tech"), this_sid):
+                        if e.get('after_minute') is not None and minute(event_frame)<float(e['after_minute']):continue
+                        if e.get('same_as'):
+                            previous=next((o for o in expects if o['key']==e['same_as']),None)
+                            bound=previous.get('bindings',{}) if previous else {}
+                            if not bound or any(matched.groupdict().get(k)!=v for k,v in bound.items()):continue
                         # Judge the event frame, not when its buffered log batch
                         # was polled. A late match must not erase a deadline miss.
                         if e.get("by_minute") is not None and minute(event_frame) > float(e["by_minute"]):
                             continue
                         e["seen"] = (event_frame, (text if am else line)[-200:])
+                        e['bindings']=matched.groupdict()
                         if e.get("after_key"):
                             other = next((o for o in expects if o["key"] == e["after_key"]), None)
                             if other is None or other["seen"] is None or other["seen"][0] is None or other["seen"][0] > event_frame:
@@ -614,6 +807,8 @@ def watch(args):
                 if pass_on and pass_on["re"].search(text if am else line) and scope_ok(pass_on.get("scope", "tech"), this_sid):
                     verdict = verdict or "PASS"
                     reason = reason or "pass_on '%s'" % pass_on["key"]
+                if complete_on and complete_frame is None and complete_on['re'].search(text if am else line) and scope_ok(complete_on.get('scope', 'any'), this_sid):
+                    complete_frame = event_frame
         # deadlines
         for e in expects:
             if e["seen"] is None and e.get("by_minute") is not None and minute(frame) > float(e["by_minute"]):
@@ -621,33 +816,57 @@ def watch(args):
                 e["seen"] = (None, "missed")
                 verdict = "FAIL"
                 reason = "deadline"
-        alive = bool(running_pids(d)) if (time.time() - last_report) > 5 else True
+        alive = engine_alive(d)
         if (time.time() - last_report) > 5:
             last_report = time.time()
             log("%.1f min, frame %d, %d timeline lines, %d failures%s" % (minute(frame), frame, len(timeline), len(failures),
                                                                         "" if sid is not None else ", team 0 not identified yet"))
-        if verdict == "FAIL" and not args.keep_going:
-            break
+        finished = verdict == 'FAIL' and not args.keep_going
+        if complete_frame is not None and frame >= complete_frame + grace_frames and all(e['seen'] and e['seen'][0] is not None for e in expects):
+            verdict = verdict or 'PASS'
+            reason = reason or 'scenario complete with survival grace'
+            finished = True
         if frame >= stop_frame:
             verdict = verdict or "PASS"
             reason = reason or "reached %.0f min" % stop_minute
-            break
-        if not alive and frame > 0:
+            finished = True
+        # A decided game (one ally team left with living units, reported once a
+        # minute by playtest_camera.lua) is not worth playing to stop_minute:
+        # nothing the AI does after that is evidence. --play-decided keeps the
+        # old behaviour for fixtures that need the loser's side to stay dead.
+        if decided_frame is not None and not getattr(args, 'play_decided', False):
+            verdict = verdict or "PASS"
+            reason = reason or "game decided at %.1f min (%s)" % (minute(decided_frame), decided_text)
+            finished = True
+        if getattr(args, 'stop_when_met', False) and expects and all(e["seen"] is not None and e["seen"][0] is not None for e in expects):
+            verdict = verdict or "PASS"
+            reason = reason or "all expectations met at %.1f min" % minute(frame)
+            finished = True
+        if not alive:
             # The engine can flush its final seconds while running_pids polls.
             # Consume that tail before deciding an accelerated run ended early.
             if info.exists() and info.stat().st_size > pos:
                 continue
-            verdict = verdict or ("FAIL" if frame < stop_frame else "PASS")
-            reason = reason or "engine exited at %.1f min" % minute(frame)
-            break
-        if not alive and frame == 0 and time.time() - started > 90:
-            verdict = "FAIL"
-            reason = "engine exited before the game started"
+            verdict = verdict or ("FAIL" if frame < stop_frame and not finished else "PASS")
+            reason = reason or ("engine exited before the game started" if frame == 0
+                                else "engine exited at %.1f min" % minute(frame))
             break
         if time.time() - started > wall_limit:
-            verdict = verdict or "FAIL"
-            reason = reason or "wall clock limit"
-            break
+            verdict, reason = 'FAIL', 'wall clock limit'
+            finished = True
+        if not shutdown_started and ((frame <= 0 and time.time() - started > startup_seconds) or
+                                     (frame > 0 and time.time() - last_progress > stall_seconds)):
+            verdict, reason = 'FAIL', 'startup timeout' if frame <= 0 else 'simulation progress timeout'
+            finished = True
+        if finished and shutdown_started is None:
+            if args.no_stop:
+                break
+            shutdown_started = time.time()
+            request_stop(d)
+        if shutdown_started is not None and time.time() - shutdown_started >= float(getattr(args, 'shutdown_seconds', 6)):
+            stop(argparse.Namespace(dir=str(d), shutdown_seconds=0), quiet=True)
+            # Re-read the flushed tail before final verdict/archive.
+            continue
         time.sleep(float(args.poll))
 
     missing = [e["key"] for e in expects if e["seen"] is None or e["seen"][0] is None]
@@ -706,6 +925,15 @@ def watch(args):
     report = "\n".join(R)
     (run_dir / "report.md").write_text(report, encoding="utf-8")
     (d / "report.md").write_text(report, encoding="utf-8")
+    timings = {'wall_seconds': time.time() - started, 'simulation_seconds': frame / FPS,
+               'staging_seconds': staged.get('staging_seconds'),
+               'complete_frame': complete_frame, 'shutdown_seconds': time.time() - shutdown_started if shutdown_started else None,
+               'mode': staged.get('mode',getattr(args, 'mode', 'fast')),
+               'requested_speed': staged.get('requested_speed'),
+               'startup_seconds': first_progress[1]-started if first_progress else None,
+               'achieved_simulation_speed': ((frame-first_progress[0])/FPS/(last_frame_time-first_progress[1])
+                    if first_progress and last_frame_time>first_progress[1] else None)}
+    (run_dir / 'runner-timing.json').write_text(json.dumps(timings, indent=2))
     storage.archive_metadata(d, run_dir, checks_bytes, verdict, reason, frame, not args.no_stop)
     print(report if args.print_report else "\n".join(R[:9 + len(expects) + len(forbids) + 4]))
     log("report: %s" % (run_dir / "report.md"))
@@ -722,12 +950,13 @@ def add_common(p):
 def add_stage_args(p):
     p.add_argument("--dll", help="SkirmishAI.dll to test (default: the docker build's install copy)")
     p.add_argument("--data", help="AI data dir with config/ script/ AIOptions.lua AIInfo.lua (default: the repo's data/)")
-    p.add_argument("--set", action="append", help='override a Global::RoleSettings::Tech setting in the staged script, e.g. --set RushObjective=\'"afus"\'')
-    p.add_argument("--speed", default="1", help="game speed the widget sets at frame 1 (setminspeed/setmaxspeed)")
+    p.add_argument("--set", action="append", help='override a role setting (Key=value means Tech; Air.Key=value selects Air) in the staged script, e.g. --set RushObjective=\'"afus"\'')
+    p.add_argument("--mode", choices=['fast', 'visual', 'performance'], default='fast')
+    p.add_argument("--speed", default="20", help="requested speed; achieved simulation speed is recorded separately")
     p.add_argument("--speed-plan", help="speed changes during the game, 'minute:speed,...' (e.g. '0:20,14:1,16:20')")
     p.add_argument("--slow-near-shots", action="store_true", help="speed 1 from 0.3 min before each screenshot until just after it, --speed between")
     p.add_argument("--minutes", default=None, help="game minutes to play (default: the checks file's stop_minute)")
-    p.add_argument("--shots", default="1,3,6,10", help="screenshot minutes, each optionally @height and @x:z (a map position to centre on), e.g. 2@1500,6,10@3000,27@1400@900:9700")
+    p.add_argument("--shots", default="", help="opt-in screenshot minutes (visual mode), optionally @height@x:z")
     p.add_argument("--cam-height", default="2200", help="overhead camera height for screenshots")
     p.add_argument("--width", default="1920")
     p.add_argument("--height", default="1080")
@@ -740,6 +969,10 @@ def add_script_args(p):
     p.add_argument("--roles", default="all", help="roles to field on both sides, e.g. TECH,FRONT; 'all' = every spot")
     p.add_argument("--others", default="test", choices=["test", "prod", "none"],
                    help="the other AIs: this build (test), the deployed SMRTBARb (prod), or enemies only (none)")
+    p.add_argument("--prod-ai", help="ShortName of the installed AI used for 'prod' teams (e.g. BARb for stock); it gets no test AI options")
+    p.add_argument("--prod-version", help="version of --prod-ai (default stable)")
+    p.add_argument("--opponent-dll", help="head-to-head: 'prod' teams play this pinned build of the AI (staged as BARbBase/base)")
+    p.add_argument("--opponent-data", help="data/ for --opponent-dll (default: the repo's data/)")
     p.add_argument("--side", default="cortex", choices=SIDES, help="the side of the AI under test")
     p.add_argument("--ally-spots", help="1-based spot numbers of the ally side, e.g. '1,2,3,4,5,6,7,8' (default: first half)")
     p.add_argument("--modoption", action="append", help="key=value override in [MODOPTIONS]")
@@ -757,8 +990,13 @@ def add_watch_args(p):
     p.add_argument("--wall-minutes", default=None)
     p.add_argument("--keep-going", action="store_true", help="do not stop at the first failure")
     p.add_argument("--no-stop", action="store_true", help="leave the game running after the verdict")
+    p.add_argument("--play-decided", action="store_true", help="keep playing after one ally team is left alive (default: stop, the rest is not evidence)")
+    p.add_argument("--stop-when-met", action="store_true", help="stop as soon as every expect line has been seen (forbids after that point are not observed)")
     p.add_argument("--print-report", action="store_true")
     p.add_argument("--timeline-lines", type=int, default=400)
+    p.add_argument('--startup-seconds', type=float, default=120)
+    p.add_argument('--stall-seconds', type=float, default=60)
+    p.add_argument('--shutdown-seconds', type=float, default=6)
 
 
 def main():
@@ -770,6 +1008,8 @@ def main():
     p = sub.add_parser("stop"); add_common(p)
     p = sub.add_parser("run"); add_common(p); add_stage_args(p); add_script_args(p); add_watch_args(p)
     args = ap.parse_args()
+    if args.cmd in ('watch', 'run'):
+        validate_checks(args.checks)  # invalid checks must never leave a launched engine
 
     if args.cmd == "stop":
         stop(args)

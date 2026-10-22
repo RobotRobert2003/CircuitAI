@@ -1,0 +1,51 @@
+{
+  "stop_minute": 5,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[AirArena\\] event=loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "ground-contact",
+      "pattern": "\\[AIR\\]\\[BaseResponse\\] contact=true",
+      "scope": "tech",
+      "by_minute": 2
+    },
+    {
+      "key": "batch-release",
+      "pattern": "\\[AIR\\]\\[BaseResponse\\] wave=(?:[4-9]|[1-9][0-9]+) wanted=(?:[4-9]|[1-9][0-9]+) .*reason=assembled",
+      "scope": "tech",
+      "by_minute": 3
+    },
+    {
+      "key": "gunship-damage",
+      "pattern": "\\[AirArena\\] event=damage .*adef=armbrawl .*team=1",
+      "scope": "any",
+      "by_minute": 5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT|\\[AirOrders\\] ERROR",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[AirArena\\] event=error|Removed widget: AIR combat arena|Error in.*air_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

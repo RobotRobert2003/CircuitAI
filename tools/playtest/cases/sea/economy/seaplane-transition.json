@@ -1,0 +1,11 @@
+{
+  "name": "seaplane-transition",
+  "map": "Supreme Isthmus v1.7",
+  "runner": "tools/playtest/run_sea_transition.py",
+  "description": "Supplied capital/T1 yard/fusion and T2 yard at 120 seconds; verify low income holds the platform despite abundant bank. Naval fusions/converters supplied at 240 seconds create sustained income; SEA then creates the platform, support and aircraft through normal policy. Enemy builders are frozen.",
+  "variants": ["armada compact", "cortex experimental", "legion compact"],
+  "checks": "sea/economy/seaplane-transition.json",
+  "minutes": 10,
+  "seed": 2091,
+  "supplied": true
+}

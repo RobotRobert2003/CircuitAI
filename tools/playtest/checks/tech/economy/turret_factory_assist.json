@@ -1,0 +1,16 @@
+{
+  "_doc": "D-289 (owner): construction turrets with nothing high-priority in reach assist a producing, non-spam factory in reach. Run with RushObjective t2 and the turret_watch.lua census; the census lines ([TurretWatch] ... idle I factory F) are the pass metric read from the log (idle turrets under 10% in the 3 minutes after the T2 lab completes).",
+  "stop_minute": 14,
+  "expect": [
+    {"key": "chain", "pattern": "\\[TECH\\]\\[Chain\\] objective t2", "by_minute": 0.5, "scope": "tech"},
+    {"key": "census", "pattern": "\\[TurretWatch\\] frame=\\d+ team 0 turrets", "by_minute": 1, "scope": "any"},
+    {"key": "factory assist", "pattern": "\\[TECH\\]\\[Turret\\] \\d+ assists factory (armlab|corlab|leglab|armalab|coralab|legalab) \\d+", "by_minute": 13, "scope": "tech"},
+    {"key": "t2 lab assisted", "pattern": "\\[TECH\\]\\[Turret\\] \\d+ assists factory (armalab|coralab|legalab) \\d+", "by_minute": 13.5, "scope": "tech"}
+  ],
+  "forbid": [
+    {"key": "script error", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "turret idle (INV-200)", "pattern": "\\[INVARIANT\\] INV-200", "scope": "tech"},
+    {"key": "foreign manager task", "pattern": "refused task of another manager for (arm|cor|leg)nanotc", "scope": "tech"},
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "tech"}
+  ]
+}

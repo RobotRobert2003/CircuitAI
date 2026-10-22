@@ -6,6 +6,8 @@ namespace AirEconomyProbe {
     IUnitTask@ guard;
     bool moved = false, released = false, worked = false, planned = false, adopted = false;
     int sampled = -100000;
+    dictionary fusionsChecked; // fusion unit id -> reported once
+    dictionary aiFusions;      // fusion frames seen as AirBuild project targets (not fixture gifts)
     void Tick()
     {
         if (ai.teamId != 0 || Global::AISettings::Role != AiRole::AIR) return;
@@ -96,6 +98,31 @@ namespace AirEconomyProbe {
                 if (d !is null && AirEcoLayout::Managed(d)) ++economy;
             }
             GenericHelpers::LogUtil("[AirEconomyProbe] workers=" + total + " guard=" + guarding + " advancedEco=" + economy, 1);
+            // D-292: every fusion AIR built itself stands on slot 0 of a fusion-kind
+            // module. Fixture-supplied reactors (growth scenario gives fusions) are
+            // never AirBuild projects, so only frames seen on a project are judged.
+            for (uint i = 0; i < AirBuild::projects.length(); ++i) {
+                IBuilderTask@ t = cast<IBuilderTask>(AirBuild::projects[i]);
+                if (t !is null && !t.IsDead() && t.target !is null && AirEcoLayout::IsFusion(t.target.circuitDef))
+                    aiFusions.set("" + t.target.id, AirEcoLayout::fallbackTasks.findByRef(AirBuild::projects[i]) >= 0);
+            }
+            for (uint i = 0; i < ids.length(); ++i) {
+                CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
+                if (u is null || u.GetBuildProgress() < 1.0f || !AirEcoLayout::IsFusion(u.circuitDef)
+                    || !aiFusions.exists("" + u.id) || fusionsChecked.exists("" + u.id)) continue;
+                fusionsChecked.set("" + u.id, true);
+                bool onModule = false;
+                for (uint m = 0; m < AirEcoLayout::modules.length() && !onModule; ++m)
+                    onModule = AirEcoLayout::modules[m].kind == AirEcoLayout::KindFusion
+                        && AirEcoLayout::modules[m].slots.length() > 0
+                        && aiTerrainMgr.GetReservationUnit(AirEcoLayout::modules[m].slots[0]) is u;
+                bool fallback = false;
+                aiFusions.get("" + u.id, fallback);
+                const AIFloat3 pos = u.GetPos(ai.frame);
+                GenericHelpers::LogUtil("[AirEconomyProbe] " + (onModule ? "PASS fusion on module slot "
+                    : fallback ? "NOTE fusion on logged fallback site " : "FAIL fusion off layout ")
+                    + u.circuitDef.GetName() + " " + int(pos.x) + "," + int(pos.z), 1);
+            }
         }
     }
 }

@@ -1,0 +1,10 @@
+{
+  "name": "surface-sub-danger",
+  "checks": "sea-sub-screen",
+  "groups": [
+    {"unit":"armpship","team":0,"count":8,"position":[2900,4250]},
+    {"unit":"corsub","team":1,"count":8,"position":[3900,4250]},
+    {"unit":"armason","team":0,"count":1,"position":[2800,4650]},
+    {"unit":"corason","team":1,"count":1,"position":[4000,4650]}
+  ]
+}

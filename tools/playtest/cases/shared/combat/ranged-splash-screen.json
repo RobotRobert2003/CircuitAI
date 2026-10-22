@@ -1,0 +1,105 @@
+{
+  "name": "ranged-splash-screen",
+  "unit": "cortrem",
+  "description": "Long-range bombardment with an allied frontline screen: no avoidable splash through friendly units.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    45,
+    120,
+    210
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3600,
+        4750
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armseer",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3300,
+        4400
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armaser",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        4500
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "cortrem",
+      "count": 3,
+      "team": 0,
+      "position": [
+        3300,
+        3950
+      ],
+      "spacing": 300
+    },
+    {
+      "unit": "armrock",
+      "count": 8,
+      "team": 0,
+      "position": [
+        3500,
+        5000
+      ],
+      "spacing": 150
+    },
+    {
+      "unit": "armllt",
+      "count": 8,
+      "team": 1,
+      "position": [
+        3400,
+        5700
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armck",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3100,
+        3500
+      ],
+      "spacing": 160
+    }
+  ],
+  "assertions": {
+    "min_kills": 2,
+    "min_shooters": 2,
+    "max_losses": 0
+  }
+}

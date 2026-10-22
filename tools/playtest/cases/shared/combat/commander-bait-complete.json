@@ -1,0 +1,73 @@
+{
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      2600
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4400,
+    1600
+  ],
+  "photos": [
+    26,
+    32,
+    45
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "enemy_commander_home": true,
+  "completion_after_seconds": 60,
+  "groups": [
+    {
+      "unit": "armcom",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4000,
+        4000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4250,
+        4600
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corjugg",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4000,
+        4900
+      ],
+      "after_seconds": 23
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_kills": 0,
+    "min_damage": 0,
+    "max_losses": 3
+  },
+  "name": "commander-bait-complete",
+  "checks": "commander-bait-complete",
+  "description": "Exclusive commander bait construction: observe complete from an actual turret frame; no competing builder task."
+}

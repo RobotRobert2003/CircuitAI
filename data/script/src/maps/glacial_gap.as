@@ -12,7 +12,7 @@ namespace GlacialGap {
 	StartSpot@[] spots = {
 		StartSpot(AIFloat3(  490, 0,  1140), AiRole::TECH, false),       
 		StartSpot(AIFloat3(  1800, 0, 1400), AiRole::FRONT, false),       
-		StartSpot(AIFloat3(  430, 0, 2300), AiRole::FRONT, false),        
+		StartSpot(AIFloat3(  430, 0, 2300), AiRole::AIR, false),   // south of TECH (490, 1140)
 		StartSpot(AIFloat3(  1800, 0, 2550), AiRole::FRONT, false),    
 
 		StartSpot(AIFloat3(  1430, 0, 4000), AiRole::SEA, false),     
@@ -23,7 +23,7 @@ namespace GlacialGap {
 		StartSpot(AIFloat3(  12572, 0,  1400), AiRole::FRONT, false),       
 		StartSpot(AIFloat3(  14000, 0, 1100), AiRole::TECH, false),       
 		StartSpot(AIFloat3(  12640, 0, 2500), AiRole::FRONT, false),        
-		StartSpot(AIFloat3(  13890, 0, 2246), AiRole::FRONT, false),    
+		StartSpot(AIFloat3(  13890, 0, 2246), AiRole::AIR, false),   // south of TECH (14000, 1100)
 
 		StartSpot(AIFloat3(  12925, 0, 4000), AiRole::SEA, false),     
 		StartSpot(AIFloat3(  13700, 0, 4600), AiRole::SEA, false),      

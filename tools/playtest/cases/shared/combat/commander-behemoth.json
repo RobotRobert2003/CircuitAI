@@ -1,0 +1,14 @@
+{
+  "name":"commander-behemoth", "unit":"armcom", "side":"armada", "role":"TACTICAL",
+  "description":"An Armada commander intercepts a Behemoth already inside its D-gun zone. Fresh damage controls repeat fire.",
+  "map":"Comet Catcher Remake 1.8", "map_key":"comet", "starts":[[4000,4000],[4000,7000]],
+  "camera":[4250,4150,1200], "photos":[24,28,35,50], "min_spawn_spacing":60,
+  "command_breakdown":true, "commander_observation":true,
+  "groups":[
+    {"unit":"armcom","team":0,"count":1,"position":[4300,4000],"after_seconds":12},
+    {"unit":"armeyes","team":0,"count":1,"position":[4500,4250],"after_seconds":12},
+    {"unit":"corjugg","team":1,"count":1,"position":[4300,4190],"after_seconds":23}
+  ],
+  "assertions":{"min_shooters":1,"min_kills":1,"max_losses":0,"min_damage":100000,"max_first_shot_seconds":40},
+  "checks":"commander-combat"
+}

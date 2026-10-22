@@ -1,0 +1,108 @@
+{
+  "name": "ranged-supreme-front",
+  "unit": "armmanni",
+  "units": [
+    "armmanni",
+    "legmed"
+  ],
+  "description": "Supreme central-land push with mixed restricted-arc ranged vehicles behind allied Pawns. Fixture gives vision; the AI owns all friendly combat orders.",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      4800,
+      8200
+    ],
+    [
+      7500,
+      4000
+    ]
+  ],
+  "side": "legion",
+  "camera": [
+    6400,
+    6500,
+    2800
+  ],
+  "photos": [
+    45,
+    90,
+    150,
+    210
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        5900,
+        7100
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 6,
+      "team": 0,
+      "position": [
+        6100,
+        5900
+      ],
+      "columns": 6,
+      "spacing": 200
+    },
+    {
+      "unit": "armhlt",
+      "count": 6,
+      "team": 1,
+      "position": [
+        6100,
+        5700
+      ],
+      "columns": 6,
+      "spacing": 200
+    },
+    {
+      "unit": "armpw",
+      "count": 24,
+      "team": 0,
+      "position": [
+        5700,
+        6450
+      ],
+      "columns": 8,
+      "spacing": 128,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armmanni",
+      "count": 6,
+      "team": 0,
+      "position": [
+        5700,
+        7200
+      ],
+      "columns": 3,
+      "spacing": 300,
+      "after_seconds": 25
+    },
+    {
+      "unit": "legmed",
+      "count": 6,
+      "team": 0,
+      "position": [
+        5600,
+        6850
+      ],
+      "columns": 3,
+      "spacing": 300,
+      "after_seconds": 25
+    }
+  ],
+  "assertions": {
+    "min_kills": 6,
+    "min_shooters": 4,
+    "max_losses": 0,
+    "min_types_assigned": 2
+  }
+}

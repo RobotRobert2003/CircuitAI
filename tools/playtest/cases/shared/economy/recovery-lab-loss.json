@@ -1,0 +1,7 @@
+{
+  "name": "recovery-lab-loss",
+  "description": "8v8 Glacial: all six actual gifts, native messaging fallback, captured Cortex bot lab destroyed during first recruit then replaced; no ferry.",
+  "runner": "tools/playtest/run_builder_recovery.py",
+  "arguments": ["--all-donations", "--destroy-lab", "--lab", "corlab", "--profile", "experimental_hard"],
+  "checks": "shared/economy/builder-recovery.json"
+}

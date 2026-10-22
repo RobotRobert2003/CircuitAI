@@ -1,0 +1,19 @@
+{
+  "name": "base-contact-release",
+  "description": "An observed mobile constructor remains in AIR's base radius while a funded T2 pool must still launch at enemy economy; escort gates remain enabled.",
+  "checks": "base-contact-release",
+  "bomber_only": false,
+  "aircraft": [
+    {"unit":"$t2","count":24,"team":0,"once":true},
+    {"unit":"$fighter2","count":24,"team":0,"once":true},
+    {"unit":"corvamp","count":6,"team":1,"position":[9500,1800],"once":true}
+  ],
+  "targets": [
+    {"unit":"armafus","count":1,"position":[10100,1300]},
+    {"unit":"armmmkr","count":4,"position":[10300,1700]},
+    {"unit":"corck","count":1,"team":1,"position":[3000,11000],"once":true}
+  ],
+  "defenses": [],
+  "refill_seconds": 30
+}
+

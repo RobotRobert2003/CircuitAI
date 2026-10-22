@@ -1,24 +1,23 @@
 // Helpers & Role Handlers
-#include "manager/commands.as"
-#include "manager/artillery_policy.as"
-#include "helpers/generic_helpers.as"
-#include "helpers/map_helpers.as"
-#include "helpers/unit_helpers.as"
-#include "helpers/role_helpers.as"
-#include "helpers/limits_helpers.as"
-#include "helpers/porc_helpers.as"
-#include "helpers/layout_helpers.as"
+#include "systems/presentation/commands.as"
+#include "systems/diagnostics/artillery_policy.as"
+#include "helpers/common/generic_helpers.as"
+#include "helpers/spatial/map_helpers.as"
+#include "helpers/units/unit_helpers.as"
+#include "helpers/roles/role_helpers.as"
+#include "helpers/roles/limits_helpers.as"
+#include "helpers/combat/porc_helpers.as"
+#include "helpers/spatial/layout_helpers.as"
 #include "global.as"
 #include "maps.as"
-#include "maps/factory_mapping.as"
 
 // Role Handlers (renamed folder)
-#include "roles/front.as"
-#include "roles/support.as"
-#include "roles/air.as"
-#include "roles/tech.as"
-#include "roles/sea.as"
-#include "roles/tactical.as"
+#include "roles/front/front.as"
+#include "roles/support/support.as"
+#include "roles/air/air.as"
+#include "roles/tech/tech.as"
+#include "roles/sea/sea.as"
+#include "roles/tactical/tactical.as"
 
 // Role configuration (unit caps / behavior tuning)
 #include "types/role_config.as"
@@ -28,7 +27,8 @@
 #include "manager/builder.as"
 #include "manager/factory.as"
 #include "manager/economy.as"
-#include "manager/metal_economy.as"
+#include "systems/construction/metal_economy.as"
+#include "systems/combat/commander_combat.as"
 
 namespace Factory {
 	CCircuitDef@ AiGetFactoryToBuild(const AIFloat3& in pos, bool isStart, bool isReset) {
@@ -37,8 +37,7 @@ namespace Factory {
 		@result = GetDefaultFactory(pos, isStart, isReset);
 
 		string factoryName = (result is null) ? "<null>" : result.GetName();
-		//int factoryCount = (result is null) ? 0 : result.count;
-		
+
 		// Pre-log context
 		GenericHelpers::LogUtil("[Factory] isStart=" + isStart + " isReset=" + isReset +
 			" side=" + Global::AISettings::Side + " role=" + Global::AISettings::Role +
@@ -46,7 +45,6 @@ namespace Factory {
 			" pos=(" + pos.x + "," + pos.z + ")" +
 			" factoryName=" + factoryName,
 			2);
-		
 
 		// Lazy initialize map/profile when real start position first known
 		if (isStart && !Global::Map::MapResolved) {
@@ -78,7 +76,6 @@ namespace Factory {
 
 		return result;
 	}
-
 
 	CCircuitDef@ GetDefaultFactory(const AIFloat3& in pos, bool isStart, bool isReset) {
 		GenericHelpers::LogUtil("call GetDefaultFactory pos=(" + pos.x + "," + pos.z + ")" + " isStart=" + isStart + " isReset=" + isReset, 4);
@@ -273,6 +270,8 @@ namespace Setup {
 		if (Global::Map::MapResolved) return;
 
 		CheckModOptions();
+		aiEconomyMgr.SetMexOwnership(Global::RoleSettings::MexOwnershipEnabled,
+			Global::RoleSettings::MexOwnershipSeconds);
 		// Role masks used by Military's threat/cost caches. FactoryProduction owns
 		// the table but only builds it when a role enables dynamic production, and
 		// no role does; without this every cached enemy threat and cost stays 0.
@@ -336,7 +335,6 @@ namespace Setup {
 
 		PrintGameDetails(startPos);
 
-
 		//Loop all role match functions, and return first match as the role config
 		RoleConfig@ matchedCfg = RoleConfigs::Match(derivedRole, side, startPos, defaultFactoryName);
 
@@ -346,7 +344,6 @@ namespace Setup {
 			GenericHelpers::LogUtil("[Role] Default Role: " + defaultRole, 2);
 
 			matchedCfg = RoleConfigs::Match(defaultRole, side, startPos, defaultFactoryName);
-
 
 			if (matchedCfg is null) {
 				GenericHelpers::LogUtil("[Role] Fatal Error: No RoleConfig found for role " + derivedRole + "; AI may malfunction", 3);
@@ -450,10 +447,6 @@ namespace Setup {
 		RoleSupport::Register();
 		RoleSea::Register();
 		RoleTactical::Register();
-	}
-
-	RoleConfig@ SelectRoleConfig(AiRole role) {
-		return RoleConfigs::Get(role);
 	}
 
 } // namespace Setup

@@ -103,6 +103,14 @@ bool IReclaimTask::Execute(CCircuitUnit* unit)
 
 void IReclaimTask::OnUnitIdle(CCircuitUnit* unit)
 {
+	// A rejected/finished command belongs to this worker, not to all workers
+	// sharing a live explicit reclaim target. Detach it for normal reassignment
+	// while the others continue. Area reclaim and the last worker retain their
+	// existing terminal behavior. No retry loop or extra commands are introduced.
+	if (target != nullptr && !target->IsDead() && units.size() > 1) {
+		RemoveAssignee(unit);
+		return;
+	}
 	manager->AbortTask(this);
 }
 

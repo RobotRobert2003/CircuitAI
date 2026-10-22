@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 
 ROOT = Path(__file__).resolve().parents[2]
 MAPS = {
@@ -25,7 +26,7 @@ a=p.parse_args()
 if not 0<=a.marauder_delay_seconds<=300: p.error('Marauder delay must be between 0 and 300 seconds')
 if a.speed is not None and not 0<a.speed<=100: p.error('Speed must be greater than 0 and at most 100')
 base=a.dir.resolve()
-if not base.is_relative_to(ROOT/'build-theatres'): p.error('Use repository build-theatres')
+if not base.is_relative_to(RAW_ROOT): p.error('Use benchmark-repository build-theatres')
 base.mkdir(parents=True,exist_ok=True)
 name,tech,air,enemy=MAPS[a.map]
 fixture=base/'starts.as'

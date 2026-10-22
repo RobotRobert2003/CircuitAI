@@ -1,9 +1,0 @@
-{
-  "donation_stop_seconds": 600,
-  "enemy_frozen": true,
-  "profile": "experimental_hard",
-  "scenario": "lifecycle",
-  "seed": 1810001,
-  "side": "armada",
-  "supplied_assets": true
-}

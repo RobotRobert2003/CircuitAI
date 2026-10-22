@@ -26,7 +26,7 @@ namespace PawnRetreat {
 	// pass may flag isolated starts that need hover/amphibious to break out.
 	StartSpot@[] spots = {
 		StartSpot(AIFloat3( 467, 0, 3013), AiRole::FRONT, false), // P1  front
-		StartSpot(AIFloat3(1973, 0,  996), AiRole::FRONT, false), // P2  front
+		StartSpot(AIFloat3(1973, 0,  996), AiRole::TECH,  false), // P2  tech: the map corner on the far side from AIR (P5)
 		StartSpot(AIFloat3(3116, 0, 2094), AiRole::FRONT, false), // P3  front
 		StartSpot(AIFloat3(5156, 0, 1043), AiRole::FRONT, false), // P4  front
 		StartSpot(AIFloat3(7082, 0,  344), AiRole::AIR,   false), // P5  air
@@ -34,7 +34,7 @@ namespace PawnRetreat {
 		StartSpot(AIFloat3(9383, 0, 1017), AiRole::FRONT, false), // P7  front
 		StartSpot(AIFloat3(9792, 0, 3036), AiRole::FRONT, false), // P8  front
 		StartSpot(AIFloat3(9828, 0, 7288), AiRole::FRONT, false), // P9  front
-		StartSpot(AIFloat3(8289, 0, 9336), AiRole::FRONT, false), // P10 front
+		StartSpot(AIFloat3(8289, 0, 9336), AiRole::TECH,  false), // P10 tech: the map corner on the far side from AIR (P13)
 		StartSpot(AIFloat3(7128, 0, 8200), AiRole::FRONT, false), // P11 front
 		StartSpot(AIFloat3(5092, 0, 9261), AiRole::FRONT, false), // P12 front
 		StartSpot(AIFloat3(3153, 0, 9959), AiRole::AIR,   false), // P13 air

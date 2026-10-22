@@ -3,8 +3,9 @@ namespace AirArenaProbe {
     int serial = 0;
     int lastCommitment = -100000;
     bool rosterReported = false;
-    bool active = false, t1 = false, responding = false;
-    CAirWaveTask@ observed = null;
+    bool responding = false;
+    array<CAirWaveTask@> observed;
+    array<int> serials;
     void Tick()
     {
         if (ai.teamId > 1 || Global::AISettings::Role != AiRole::AIR) return;
@@ -22,45 +23,42 @@ namespace AirArenaProbe {
             }
             return;
         }
-        CAirWaveTask@ wave = cast<CAirWaveTask>(AirWaves::waveTask);
-        const bool second = wave !is null && !wave.IsDead();
-        // Evaluation can launch the next sortie in the same role update.
-        // Retain the observed task identity instead of testing the new task.
-        if (active && observed !is null && observed.IsDead()) {
-            const bool done = t1 ? AirRaids::wave !is observed
-                : AirWaves::lastWaveEvaluated || (AirWaves::waveTask !is null && AirWaves::waveTask !is observed);
-            if (done) {
-                WidgetLink::Send("arena", "end|" + serial + "|" + ai.frame + "|" + AirWaves::learnedResistance);
-                active = false; @observed = null;
-            }
+        // Observe each task identity independently. Surviving committed waves
+        // may overlap; watching only the newest pointer conceals later launches.
+        for (int i = int(observed.length())-1; i >= 0; --i) {
+            if (!observed[i].IsDead()) continue;
+            WidgetLink::Send("arena", "end|" + serials[i] + "|" + ai.frame + "|" + AirWaves::learnedResistance);
+            observed.removeAt(i); serials.removeAt(i);
         }
-        if (!active && (second || (AirRaids::wave !is null && !AirRaids::wave.IsDead()))) {
-            t1 = !second;
-            if (t1) @wave = AirRaids::wave;
-            const dictionary@ cohort = t1 ? @AirRaids::cohort : @AirWaves::evaluationCohort;
-            array<string>@ ids = cohort.getKeys();
-            if (ids.length() == 0) return;
-            ids.sortAsc();
-            string members;
-            for (uint i = 0; i < ids.length(); ++i) members += (i == 0 ? "" : ",") + ids[i];
-            active = true; ++serial;
-            @observed = wave;
+        for (uint i = 0; i < AirOperations::operations.length(); ++i) {
+            CAirWaveTask@ wave = AirOperations::operations[i];
+            if (wave is null || wave.IsDead() || observed.findByRef(wave) >= 0) continue;
+            array<CCircuitUnit@>@ units = wave.GetUnits();
+            array<string> ids;
+            for (uint j = 0; j < units.length(); ++j)
+                if (units[j] !is null && (AirWaves::IsWaveBomber(units[j].circuitDef) || AirRaids::IsBomber(units[j].circuitDef)))
+                    ids.insertLast("" + units[j].id);
+            if (ids.isEmpty()) continue;
+            ids.sortAsc(); string members;
+            for (uint j = 0; j < ids.length(); ++j) members += (j == 0 ? "" : ",") + ids[j];
+            ++serial; observed.insertLast(wave); serials.insertLast(serial);
             WidgetLink::Send("arena", "launch|" + serial + "|" + ai.frame + "|" + wave.GetStrikeTargetId()
                 + "|" + AirWaves::learnedResistance + "|" + members);
         }
-        if (active && observed !is null && !observed.IsDead() && ai.frame-lastCommitment >= 10*SECOND) {
-            lastCommitment = ai.frame;
+        if (ai.frame-lastCommitment < 10*SECOND) return;
+        lastCommitment = ai.frame;
+        array<string>@ escorts = AirOperations::escorts.getKeys();
+        for (uint i = 0; i < observed.length(); ++i) {
             int live = 0, owned = 0;
-            array<string>@ escorts = AirOperations::escorts.getKeys();
-            for (uint i = 0; i < escorts.length(); ++i) {
+            for (uint j = 0; j < escorts.length(); ++j) {
                 IUnitTask@ owner;
-                CCircuitUnit@ unit = ai.GetTeamUnit(parseInt(escorts[i]));
-                if (unit is null || !AirOperations::escorts.get(escorts[i], @owner) || owner !is observed) continue;
+                CCircuitUnit@ unit = ai.GetTeamUnit(parseInt(escorts[j]));
+                if (unit is null || !AirOperations::escorts.get(escorts[j], @owner) || owner !is observed[i]) continue;
                 ++live;
                 if (unit.task is owner) ++owned;
             }
-            WidgetLink::Send("arena", "commitment|" + serial + "|" + live + "|" + owned
-                + "|" + AirScreen::IntrusionCost() + "|" + observed.GetState());
+            WidgetLink::Send("arena", "commitment|" + serials[i] + "|" + live + "|" + owned
+                + "|" + AirScreen::IntrusionCost() + "|" + observed[i].GetState());
         }
     }
 }

@@ -1,0 +1,20 @@
+{
+  "name":"supreme-anti-nuke-moving",
+  "map":"Supreme Isthmus v1.7", "map_key":"supreme",
+  "starts":[[7492,1220],[4814,11077]],
+  "checks":"sea/combat/supreme-anti-nuke.json",
+  "patrol_observer":true, "protection_observer":true,
+  "progression_audit":{"kind":"protection","support":"armantiship","flagship":"armepoch",
+    "home":[6500,1400],"home_radius":608,"coverage":1400,"escort_from":60,
+    "minimum_travel":600,"remove_seconds":300,"home_by":420},
+  "shots":"1@4800@5700:2200,3@4800@5700:2200,7@4800@5700:2200",
+  "remove_units":[{"second":300,"team":0,"unit":"armepoch"}],
+  "friendly_routes":[{"unit":"armepoch","points":[[6000,1200],[5000,2400],[4400,3400]]}],
+  "groups":[
+    {"unit":"armantiship","team":0,"count":1,"position":[6500,1400]},
+    {"unit":"armantiship","team":0,"count":1,"position":[6100,1800],"after_seconds":20},
+    {"unit":"armepoch","team":0,"count":1,"position":[6000,1200]},
+    {"unit":"armfrad","team":0,"count":1,"position":[5200,1800]},
+    {"unit":"corsy","team":1,"count":1,"position":[4400,3400]}
+  ]
+}

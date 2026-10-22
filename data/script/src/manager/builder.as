@@ -1,22 +1,22 @@
 #include "../unit.as"
 #include "../task.as"
 #include "../global.as"
-#include "../helpers/generic_helpers.as"
+#include "../helpers/common/generic_helpers.as"
 // Unit helpers for selecting defs by side
-#include "../helpers/unit_helpers.as"
+#include "../helpers/units/unit_helpers.as"
 // UnitDef helpers for counts
-#include "../helpers/unitdef_helpers.as"
+#include "../helpers/units/unitdef_helpers.as"
 // Guard assignment helper utilities
-#include "../helpers/guard_helpers.as"
+#include "../helpers/construction/guard_helpers.as"
 // Map helpers (distance/range checks)
-#include "../helpers/map_helpers.as"
+#include "../helpers/spatial/map_helpers.as"
 // Shared enum for strategic building types
 #include "../types/building_type.as"
 // Team state: T1 constructor registry for orphan rescue
-#include "team.as"
-#include "ferry.as"
-#include "layout.as"
-#include "sea_assist.as"
+#include "../systems/team/team.as"
+#include "../systems/team/ferry.as"
+#include "../systems/construction/layout.as"
+#include "../systems/team/sea_assist.as"
 
 namespace Builder {
 	// CCircuitUnit is registered as asOBJ_NOCOUNT (see InitScript.cpp).
@@ -142,8 +142,6 @@ namespace Builder {
 	dictionary primaryT1HoverConstructorGuards;
 	dictionary secondaryT1HoverConstructorGuards;
 
-	dictionary fastAssistGuards;
-
 	// Pool of unassigned workers (builders not currently guarding primary/secondary leaders)
 	// Key: worker id as string; Value: CCircuitUnit@ of the worker
 	dictionary unassignedWorkers;
@@ -255,13 +253,6 @@ namespace Builder {
 
 		BuilderTaskTrack() { isTaskAdded = false; createdFrame = 0; graceUntilFrame = 0; timeoutFrame = 0; }
 
-		bool IsLikelyStarted() const {
-			// Heuristic: if task was added and unit is within a conservative build range of the build pos
-			// Consider ~SQUARE_SIZE * 48 as a practical start range for most constructors
-			if (!isTaskAdded || task is null || unit is null) return false;
-			const float startRange = SQUARE_SIZE * 48.0f;
-			return MapHelpers::IsUnitInRangeOfTask(unit, task, startRange);
-		}
 	}
 
 	// Pure helper: does this builder BuildType normally carry a buildDef and represent a construction task?
@@ -452,33 +443,6 @@ namespace Builder {
 		return _TaskTrackFindByTask(task);
 	}
 
-
-	// --- Per-builder task mapping helpers ---
-	IUnitTask@ GetBuilderTask(CCircuitUnit@ u) {
-		GenericHelpers::LogUtil("[BUILDER] GetBuilderTask: enter", 6);
-		if (u is null) return null;
-		string key = "" + u.id;
-		IUnitTask@ t = null;
-		builderCurrentTasks.get(key, @t);
-		return t;
-	}
-
-	void SetBuilderTask(CCircuitUnit@ u, IUnitTask@ task) {
-		GenericHelpers::LogUtil("[BUILDER] SetBuilderTask: enter", 6);
-		if (u is null) return;
-		string key = "" + u.id;
-		if (task is null) {
-			builderCurrentTasks.delete(key);
-			return;
-		}
-		// Only cache actual construction tasks; skip guard/assist/reclaim/repair/patrol/combat/wait
-		IBuilderTask@ builderTask = cast<IBuilderTask>(task);
-		if (builderTask is null) return;
-		Task::BuildType bt = Task::BuildType(builderTask.GetBuildType());
-		if (!_IsConstructionBuildType(bt)) return;
-		builderCurrentTasks.set(key, @task);
-	}
-
 	void ClearBuilderTaskByUnit(CCircuitUnit@ u) {
 		GenericHelpers::LogUtil("[BUILDER] ClearBuilderTaskByUnit: enter", 6);
 		if (u is null) return;
@@ -516,17 +480,9 @@ namespace Builder {
 		string key = "" + u.id;
 		unassignedWorkers.delete(key);
 	}
-	bool _IsUnassigned(CCircuitUnit@ u) {
-		GenericHelpers::LogUtil("[BUILDER] _IsUnassigned: enter", 6);
-		if (u is null) return false;
-		string key = "" + u.id;
-		CCircuitUnit@ tmp = null;
-		return unassignedWorkers.get(key, @tmp);
-	}
 
 	// Build queue counters/flags
 	// T2 bot labs: use a queued counter like fusion/afus
-	int T2LabQueuedCount = 0;
 	bool IsFusionQueued = false;
 	bool IsAdvancedFusionQueued = false;
 	// Counts of queued Fusion/Advanced Fusion build tasks (across all roles)
@@ -552,9 +508,6 @@ namespace Builder {
 	// Counts of queued Nuclear Silo build tasks (across all factions)
 	int NukeSiloQueuedCount = 0;
 	// Track queued states for other factory types similar to IsT2LabQueued
-	bool IsT2VehPlantQueued = false;
-	bool IsT2AirPlantQueued = false;
-	bool IsT2ShipyardQueued = false;
 
 	// Cooldown tracking (frames)
 	const int T2_FACTORY_COOLDOWN_FRAMES = 180 * SECOND;   // cooldown for any T2 factory (bot/veh/air/ship)
@@ -628,28 +581,11 @@ namespace Builder {
 	bool IsNanoOffCooldown()      { return (ai.frame - lastNanoEnqueueFrame) >= GetNanoCooldownFrames(); }
 	void MarkNanoEnqueued()       { lastNanoEnqueueFrame = ai.frame; }
 	bool IsAdvSolarOffCooldown()  { return (ai.frame - lastAdvSolarEnqueueFrame) >= ADV_SOLAR_COOLDOWN_FRAMES; }
-	
-	int GetAdvConverterCooldown() {
-		float energyIncome = Economy::GetMinEnergyIncomeLast10s();
-		if (energyIncome > 12000.0f) {
-			return 10 * SECOND;
-		} else if (energyIncome > 6000.0f) {
-			return 30 * SECOND;
-		}
-		return 60 * SECOND;
-	}
 
-	bool IsAdvConverterOffCooldown()  { 
-		return (ai.frame - lastAdvConverterEnqueueFrame) >= GetAdvConverterCooldown(); 
-	}
-	
 	void MarkAdvSolarEnqueued()   { lastAdvSolarEnqueueFrame = ai.frame; }
-	void MarkAdvConverterEnqueued()   { lastAdvConverterEnqueueFrame = ai.frame; }
+
 	bool IsAntiNukeOffCooldown()  { return (ai.frame - lastAntiNukeEnqueueFrame) >= ANTI_NUKE_COOLDOWN_FRAMES; }
 	void MarkAntiNukeEnqueued()   { lastAntiNukeEnqueueFrame = ai.frame; }
-
-	// Experimental gantry (T3) queued flags
-	// Legacy gantry flags removed; rely on counters below
 
 	/******************************************************************************
     
@@ -660,7 +596,7 @@ namespace Builder {
 	// T2 Lab queued check is not provided here; call Factory::IsT2LabBuildQueued() directly from roles.
 	bool IsFusionBuildQueued() { return FusionQueuedCount > 0 || IsFusionQueued; }
 	bool IsAdvancedFusionBuildQueued() { return AdvancedFusionQueuedCount > 0 || IsAdvancedFusionQueued; }
-	bool IsGantryBuildQueued() { return (LandGantryQueuedCount + WaterGantryQueuedCount) > 0; }
+
 	bool IsNukeSiloBuildQueued() { return NukeSiloQueuedCount > 0; }
 
 	// A reactor is "under construction" only once its build task has a target: the
@@ -717,7 +653,6 @@ namespace Builder {
 		return _ReactorUnderConstruction(FusionBuildTask);
 	}
 
-
 	// Redirect build power onto an in-progress reactor. Repairing an unfinished
 	// structure is the engine's assist mechanism - IBuilderTask::UpdateTarget issues
 	// the same CmdRepair to its own assignees - and IRepairTask::SetRepTarget treats
@@ -759,7 +694,6 @@ namespace Builder {
 		}
 		return null;
 	}
-
 
 	// Promotion sub-steps split out for clarity and future extension (air/veh)
 	void PromotePrimaryT1BotIfNeeded()
@@ -1265,13 +1199,6 @@ namespace Builder {
 		return _EnqueueGenericByName(Task::BuildType::DEFENCE, name, anchor, shake, timeoutFrames, prio);
 	}
 
-	IUnitTask@ EnqueueStaticTorpT2(const string &in unitSide, const AIFloat3 &in anchor, float shake, int timeoutFrames, Task::Priority prio = Task::Priority::NOW)
-	{
-		string name = UnitHelpers::GetStaticT2TorpNameForSide(unitSide);
-		GenericHelpers::LogUtil("[BUILDER] Enqueue T2 Torpedo Launcher '" + name + "'", 2);
-		return _EnqueueGenericByName(Task::BuildType::DEFENCE, name, anchor, shake, timeoutFrames, prio);
-	}
-
 	IUnitTask@ EnqueueStaticRadar(const string &in unitSide, const AIFloat3 &in anchor, float shake, int timeoutFrames, Task::Priority prio = Task::Priority::NOW)
 	{
 		string name = UnitHelpers::GetStaticRadarNameForSide(unitSide);
@@ -1538,43 +1465,6 @@ namespace Builder {
 		return t;
 	}
 
-	// Wind turbine, energy storage, metal storage: the eco planner's (D-058).
-	// Served a layout slot when TECH has one (the wind band, the storage strip).
-	IUnitTask@ EnqueueT1Wind(const string &in unitSide, const AIFloat3 &in anchor, float shake, int timeoutFrames, Task::Priority prio = Task::Priority::NORMAL)
-	{
-		CCircuitDef@ def = ai.GetCircuitDef(UnitHelpers::GetWindNameForSide(unitSide));
-		if (def is null || !def.IsAvailable(ai.frame)) return null;
-		if (Global::energyAllowed !is null && !Global::energyAllowed(def.GetName())) return null;   // D-077
-		IUnitTask@ t = aiBuilderMgr.Enqueue(
-			TaskB::Common(Task::BuildType::ENERGY, prio, def, anchor, shake, true, timeoutFrames)
-		);
-		GenericHelpers::LogUtil("[BUILDER] Enqueue Wind", 2);
-		if (t !is null) _SetEnergyBuildTask(t);
-		return t;
-	}
-
-	IUnitTask@ EnqueueT1EnergyStorage(const string &in unitSide, const AIFloat3 &in anchor, float shake, int timeoutFrames, Task::Priority prio = Task::Priority::NORMAL)
-	{
-		CCircuitDef@ def = ai.GetCircuitDef(UnitHelpers::GetEnergyStorageNameForSide(unitSide));
-		if (def is null || !def.IsAvailable(ai.frame)) return null;
-		IUnitTask@ t = aiBuilderMgr.Enqueue(
-			TaskB::Common(Task::BuildType::STORE, prio, def, anchor, shake, true, timeoutFrames)
-		);
-		GenericHelpers::LogUtil("[BUILDER] Enqueue Energy Storage", 2);
-		return t;
-	}
-
-	IUnitTask@ EnqueueT1MetalStorage(const string &in unitSide, const AIFloat3 &in anchor, float shake, int timeoutFrames, Task::Priority prio = Task::Priority::NORMAL)
-	{
-		CCircuitDef@ def = ai.GetCircuitDef(UnitHelpers::GetMetalStorageNameForSide(unitSide));
-		if (def is null || !def.IsAvailable(ai.frame)) return null;
-		IUnitTask@ t = aiBuilderMgr.Enqueue(
-			TaskB::Common(Task::BuildType::STORE, prio, def, anchor, shake, true, timeoutFrames)
-		);
-		GenericHelpers::LogUtil("[BUILDER] Enqueue Metal Storage", 2);
-		return t;
-	}
-
 	IUnitTask@ EnqueueSeaplanePlatform(const string &in unitSide, const AIFloat3 &in anchor, float squareSize, int timeoutFrames, Task::Priority prio = Task::Priority::HIGH)
 	{
 		string platName = UnitHelpers::GetSeaplanePlatformNameForSide(unitSide);
@@ -1710,31 +1600,6 @@ namespace Builder {
 		);
 		GenericHelpers::LogUtil("[BUILDER] Enqueue T2 Vehicle Plant result=" + (t is null ? "null" : "ok"), 2);
 		if (t !is null) { MarkT2VehFactoryEnqueued(); }
-		return t;
-	}
-
-	IUnitTask@ EnqueueAdvEnergyConverter(const string &in unitSide, const AIFloat3 &in anchor, float squareSize, int timeoutFrames)
-	{
-		// Enforce per-structure cooldown to avoid rapid consecutive converter builds
-		if (!IsAdvConverterOffCooldown()) {
-			int remaining = GetAdvConverterCooldown() - (ai.frame - lastAdvConverterEnqueueFrame);
-			GenericHelpers::LogUtil("[BUILDER] EnqueueAdvEnergyConverter: blocked by cooldown (remainingFrames=" + remaining + ")", 2);
-			return null;
-		}
-		
-		CCircuitDef@ t2EnergyConverter = ai.GetCircuitDef(UnitHelpers::GetAdvEnergyConverterNameForSide(unitSide));
-		int t2EnergyConverterCount = (t2EnergyConverter is null ? -1 : t2EnergyConverter.count);
-		GenericHelpers::LogUtil("[BUILDER] t2EnergyConverter def=" + (t2EnergyConverter is null ? "<null>" : t2EnergyConverter.GetName()) + " count=" + t2EnergyConverterCount, 2);
-
-		if (t2EnergyConverter is null) return null;
-
-		GenericHelpers::LogUtil("[BUILDER] Enqueue t2EnergyConverter at (" + anchor.x + "," + anchor.z + ") repr=" + (t2EnergyConverter is null ? "<null>" : t2EnergyConverter.GetName()), 2);
-
-		IUnitTask@ t = aiBuilderMgr.Enqueue(
-			TaskB::Factory(Task::Priority::NORMAL, t2EnergyConverter, anchor, t2EnergyConverter, squareSize, false, true, timeoutFrames)
-		);
-		GenericHelpers::LogUtil("[BUILDER] Enqueue t2EnergyConverter result=" + (t is null ? "null" : "ok"), 2);
-		if (t !is null) { MarkAdvConverterEnqueued(); }
 		return t;
 	}
 
@@ -2119,6 +1984,12 @@ namespace Builder {
 	}
 
 	IUnitTask@ AiMakeTask(CCircuitUnit@ u) {
+		// Ferry gifts belong to logistics before shared spam/track providers.
+		// Returning the hold lets native transfer only this worker; never abort
+		// its old shared construction task to park a donated constructor.
+		if (Team::Ferry::IsGift(u.id)) return Team::Ferry::GiftTask(u);
+		if (Team::Recovery::IsGift(u.id))
+			return aiBuilderMgr.Enqueue(TaskB::Wait(2 * SECOND));
 		IUnitTask@ t = null;
 		GenericHelpers::LogUtil("[BUILDER] AiMakeTask called for builder id=" + u.id, 4);
 		// Finish what you started (D-050). Native re-evaluates a builder's task
@@ -2154,7 +2025,10 @@ namespace Builder {
 		}
 
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;
-		if (MetalEconomy::Active() && Global::AISettings::Role != AiRole::AIR && Global::AISettings::Role != AiRole::TECH
+		@t = SeaCoast::Build(u); // SEA-only lost-water recovery precedes discretionary spam.
+		if (t is null) @t = EdgeLanes::BuilderTask(u); // owner, 2026-10-17: two FRONTs build the edge lane labs
+		if (t is null) @t = Spam::BuilderMakeTask(u);
+		if (t is null && MetalEconomy::Active() && !SeaLayout::Active() && Global::AISettings::Role != AiRole::AIR && Global::AISettings::Role != AiRole::TECH
 			&& !UnitHelpers::IsCommander(u.circuitDef) && u.circuitDef.IsMobile()) @t = MetalEconomy::EconomyTask(u);
 		if (t is null && cfg !is null && cfg.BuilderAiMakeTaskHandler !is null) {
 			@t = cfg.BuilderAiMakeTaskHandler(u);
@@ -2162,6 +2036,7 @@ namespace Builder {
 		// If no role-specific task or handler returned null, fallback to default
 		if (t is null) {
 			@t = aiBuilderMgr.DefaultMakeTask(u);
+			if (SeaLayout::Enabled()) @t = SeaBuild::LayoutTask(u,t);
 		}
 
 		// Record tracking for this builder if any (best-effort owner): grace ~3s, timeout ~45s
@@ -2179,6 +2054,9 @@ namespace Builder {
 
 	void AiTaskAdded(IUnitTask@ task)
 	{
+		if (Global::AISettings::Role == AiRole::TECH && Global::RoleSettings::Tech::ExperimentalBuild)
+			Invariants::ConstructionAdmitted(task);
+		if (Global::AISettings::Role == AiRole::TECH) TechReclaim::Audit(task);   // D-290: every reclaim of ours, named by path
 		if (Global::AISettings::Role == AiRole::AIR && Global::RoleSettings::Air::ExperimentalBuild) AirBuild::Added(task);
 		GenericHelpers::LogUtil("[BUILDER] AiTaskAdded called", 4);
 		// Mex ownership and upgrade state are role-independent: every role needs
@@ -2342,6 +2220,7 @@ namespace Builder {
 
 	void AiTaskRemoved(IUnitTask@ task, bool done)
 	{
+		SeaEconomy::Removed(task);
 		MetalEconomy::Removed(task, done);
 		{
 			IBuilderTask@ mexTask = cast<IBuilderTask>(task);
@@ -2507,6 +2386,8 @@ namespace Builder {
 		GenericHelpers::LogUtil("[BUILDER] Enter AiUnitAdded", 4);
 		if (unit is null) return;
 
+		if (Team::Recovery::OnUnitAdded(unit)) return;
+
 		// Role-independent, like the mex bookkeeping in AiTaskAdded: SEA counts
 		// its construction ships here, TACTICAL unlocks its shipyard caps the
 		// moment it owns one. Each branch checks its own AiRole.
@@ -2538,9 +2419,6 @@ namespace Builder {
 		// Handle constructor-specific registration
 		int ctorTier = UnitHelpers::GetConstructorTier(cdef);
 		string uname = (cdef is null ? "" : cdef.GetName());
-		if (ctorTier == 1 || uname == "legnavyconship") {
-			Team::RegisterT1Constructor(unit);   // orphan-rescue donor pool
-		}
 		int ctorCat = 0; // 1=bot, 2=veh, 3=air, 4=sea, 5=hover
 
 		// TODO: Consider moving constructor category/tier detection into UnitHelpers
@@ -2899,7 +2777,7 @@ namespace Builder {
 		ClearBuilderTaskByUnit(unit);
 		// Also clear any tracked pending task for this unit
 		ClearTrackByBuilder(unit);
-		Team::UnregisterT1Constructor(unit);
+		Team::Recovery::OnUnitRemoved(unit);
 
 		// Clear tracked references
 		if (Builder::commander is unit)                 {
@@ -2971,8 +2849,6 @@ namespace Builder {
 		// Recompute tracking eligibility after removals/promotions
 		RecomputeTrackEligibleBuilders();
 
-
-
 		// Delegate to role-specific
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;
 		if (cfg !is null && cfg.BuilderAiUnitRemoved !is null)
@@ -3038,82 +2914,6 @@ namespace Builder {
 			Builder::secondaryT2SeaConstructor, @Builder::secondaryT2SeaConstructorGuards, sMax);
 		_TryFillGuardSlotsFor(Builder::primaryT1HoverConstructor, @Builder::primaryT1HoverConstructorGuards,
 			Builder::secondaryT1HoverConstructor, @Builder::secondaryT1HoverConstructorGuards, gMax);
-	}
-
-	/******************************************************************************
-
-	GETTERS (expose key bot constructor references)
-
-	******************************************************************************/
-	CCircuitUnit@ GetPrimaryT1BotConstructor() {
-		PromotePrimaryT1BotIfNeeded();
-		return Builder::primaryT1BotConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT1BotConstructor() {
-		PromoteSecondaryT1BotIfNeeded();
-		return Builder::secondaryT1BotConstructor;
-	}
-	CCircuitUnit@ GetPrimaryT2BotConstructor() {
-		PromotePrimaryT2BotIfNeeded();
-		return Builder::primaryT2BotConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT2BotConstructor() {
-		PromoteSecondaryT2BotIfNeeded();
-		return Builder::secondaryT2BotConstructor;
-	}
-
-	// Vehicle getters
-	CCircuitUnit@ GetPrimaryT1VehConstructor() {
-		PromotePrimaryT1VehIfNeeded();
-		return Builder::primaryT1VehConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT1VehConstructor() {
-		PromoteSecondaryT1VehIfNeeded();
-		return Builder::secondaryT1VehConstructor;
-	}
-	CCircuitUnit@ GetPrimaryT2VehConstructor() {
-		PromotePrimaryT2VehIfNeeded();
-		return Builder::primaryT2VehConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT2VehConstructor() {
-		PromoteSecondaryT2VehIfNeeded();
-		return Builder::secondaryT2VehConstructor;
-	}
-
-	// Aircraft getters
-	CCircuitUnit@ GetPrimaryT1AirConstructor() {
-		PromotePrimaryT1AirIfNeeded();
-		return Builder::primaryT1AirConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT1AirConstructor() {
-		PromoteSecondaryT1AirIfNeeded();
-		return Builder::secondaryT1AirConstructor;
-	}
-	CCircuitUnit@ GetPrimaryT2AirConstructor() {
-		PromotePrimaryT2AirIfNeeded();
-		return Builder::primaryT2AirConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT2AirConstructor() {
-		PromoteSecondaryT2AirIfNeeded();
-		return Builder::secondaryT2AirConstructor;
-	}
-
-	// Sea getters
-	CCircuitUnit@ GetPrimaryT1SeaConstructor() {
-		PromotePrimaryT1SeaIfNeeded();
-		return Builder::primaryT1SeaConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT1SeaConstructor() {
-		PromoteSecondaryT1SeaIfNeeded();
-		return Builder::secondaryT1SeaConstructor;
-	}
-	CCircuitUnit@ GetPrimaryT2SeaConstructor() {
-		PromotePrimaryT2SeaIfNeeded();
-		return Builder::primaryT2SeaConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT2SeaConstructor() {
-		PromoteSecondaryT2SeaIfNeeded();
-		return Builder::secondaryT2SeaConstructor;
 	}
 
 	// Tactical getters/config
@@ -3201,12 +3001,6 @@ namespace Builder {
 		_EnsureTacticalFromUnassignedFor(TacticalCategory::HOVER);
 	}
 
-	// Removed category-specific tactical enable wrappers; use SetTacticalEnabled(bool)
-
-	bool IsTacticalEnabledFor(int category) {
-		return TacticalEnabled;
-	}
-
 	CCircuitUnit@ GetTacticalFor(int category) {
 		if (category == TacticalCategory::BOT) return Builder::tacticalBotConstructor;
 		if (category == TacticalCategory::VEH) return Builder::tacticalVehConstructor;
@@ -3226,21 +3020,6 @@ namespace Builder {
 		return null;
 	}
 
-	// Freelance hover getter (T1 only)
-	CCircuitUnit@ GetFreelanceT1HoverConstructor() { return Builder::freelanceT1HoverConstructor; }
-
-	// Hover getters (T1 only)
-	CCircuitUnit@ GetPrimaryT1HoverConstructor() {
-		PromotePrimaryT1HoverIfNeeded();
-		return Builder::primaryT1HoverConstructor;
-	}
-	CCircuitUnit@ GetSecondaryT1HoverConstructor() {
-		PromoteSecondaryT1HoverIfNeeded();
-		return Builder::secondaryT1HoverConstructor;
-	}
-
-	// Deprecated single tactical API retained for compatibility with roles; defaults to hover
-	bool IsTacticalEnabled() { return TacticalEnabled; }
 	void SetTacticalEnabled(bool enabled) {
 		TacticalEnabled = enabled;
 		if (enabled) {
@@ -3260,20 +3039,7 @@ namespace Builder {
 	}
 	CCircuitUnit@ GetTacticalConstructor() { return Builder::tacticalHoverConstructor; }
 
-	// Simple wrappers (no promotion logic yet)
-	CCircuitUnit@ GetFreelanceT2BotConstructor() { return Builder::freelanceT2BotConstructor; }
-	CCircuitUnit@ GetFreelanceT2VehConstructor() { return Builder::freelanceT2VehConstructor; }
-	CCircuitUnit@ GetFreelanceT2AirConstructor() { return Builder::freelanceT2AirConstructor; }
-	CCircuitUnit@ GetFreelanceT2SeaConstructor() { return Builder::freelanceT2SeaConstructor; }
 	CCircuitUnit@ GetCommander() { return Builder::commander; }
-
-	// --- Availability helper ---
-	bool IsUnitAvailableForConstruction(const string &in defName) {
-		if (defName.length() == 0) return false;
-		CCircuitDef@ d = ai.GetCircuitDef(defName);
-		return (d !is null) && d.IsAvailable(ai.frame);
-	}
-	
 
 	void AiLoad(IStream& istream)
 	{

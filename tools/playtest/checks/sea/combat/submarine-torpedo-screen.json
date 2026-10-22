@@ -1,0 +1,11 @@
+{
+ "stop_minute":6,
+ "expect":[
+  {"key":"tower-visible","pattern":"SeaArena.*detected.*unit=cortl","scope":"any","by_minute":2},
+  {"key":"perimeter","pattern":"SubPerimeter","scope":"any","by_minute":6}
+ ],
+ "forbid":[
+  {"key":"tower-losses","pattern":"SeaArena.*damage.*attackerUnit=cortl victimUnit=(armsub|armserp)","scope":"any"},
+  {"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaArena.*ERROR","scope":"any"}
+ ]
+}

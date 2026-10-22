@@ -37,6 +37,9 @@ public:
 
 	void EnqueueUpdate();
 	bool IsUpdating() const { return isUpdating; }
+    // Owner-thread publication token, not the recycled double-buffer address.
+    // Background drawers never write the currently published default layers.
+    std::uint64_t GetPublicationVersion() const { return publicationVersion; }
 
 	void SetEnemyUnitRange(CEnemyUnit* e) const;
 	void SetEnemyUnitThreat(CEnemyUnit* e) const;
@@ -138,6 +141,7 @@ private:
 	std::atomic<SThreatData*> pThreatData;
 	CCircuitDef::RoleT defRole; // represents non-modded roles
 	bool isUpdating;
+    std::uint64_t publicationVersion = 0;
 
 	float* cloakThreat;
 	float* shieldArray;

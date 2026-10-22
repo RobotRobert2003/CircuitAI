@@ -1,0 +1,87 @@
+{
+  "name": "thug-solo",
+  "unit": "corthud",
+  "side": "cortex",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4300,
+    1750
+  ],
+  "photos": [
+    35,
+    60,
+    110
+  ],
+  "groups": [
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4200
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3550,
+        4700
+      ]
+    },
+    {
+      "unit": "corthud",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3800,
+        3900
+      ],
+      "columns": 6,
+      "spacing": 64,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armmex",
+      "count": 1,
+      "team": 1,
+      "position": [
+        3900,
+        4350
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armmex",
+      "count": 1,
+      "team": 1,
+      "position": [
+        3900,
+        4700
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "min_kills": 2,
+    "max_losses": 0,
+    "min_types_assigned": 1,
+    "max_target_response_seconds": 90
+  },
+  "description": "One Thug attacks exposed economy immediately, without waiting for a group."
+}

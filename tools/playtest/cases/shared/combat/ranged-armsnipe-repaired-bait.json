@@ -1,0 +1,109 @@
+{
+  "name": "ranged-sniper-bait",
+  "unit": "armsnipe",
+  "description": "Repair-supported heavy bait beside static coverage: useful safe fire and no heavy-target pursuit.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [
+    45,
+    120,
+    210
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3600,
+        4750
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armseer",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3300,
+        4400
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armaser",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        4500
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armfboy",
+      "count": 1,
+      "team": 1,
+      "position": [
+        4200,
+        5450
+      ],
+      "spacing": 160
+    },
+    {
+      "unit": "armhlt",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3900,
+        5650
+      ],
+      "spacing": 400
+    },
+    {
+      "unit": "armnanotc",
+      "count": 6,
+      "team": 1,
+      "position": [
+        4300,
+        5650
+      ],
+      "spacing": 96,
+      "columns": 3
+    },
+    {
+      "unit": "armsnipe",
+      "count": 6,
+      "team": 0,
+      "position": [
+        3400,
+        4400
+      ],
+      "spacing": 220,
+      "columns": 3
+    }
+  ],
+  "enemy_repair": true,
+  "assertions": {
+    "min_kills": 1,
+    "min_shooters": 2,
+    "max_losses": 0
+  },
+  "start_metal": 1000000
+}

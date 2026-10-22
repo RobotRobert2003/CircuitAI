@@ -1,8 +1,10 @@
 """Rendered early/mid/late AIR combat capability checks; supplied units, not economy."""
+from script_settings import role_settings_path
 import argparse
 import json
 import re
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import subprocess
 import sys
 
@@ -17,8 +19,8 @@ p.add_argument('--seed', type=int, default=1621)
 p.add_argument('--assembly-radius', type=float)
 a = p.parse_args()
 base = a.dir.resolve()
-if not base.is_relative_to(ROOT / 'build-theatres') or a.seed <= 0:
-    p.error('Use repository build-theatres and a positive seed')
+if not base.is_relative_to(RAW_ROOT) or a.seed <= 0:
+    p.error('Use benchmark-repository build-theatres and a positive seed')
 if a.assembly_radius is not None and not 64 <= a.assembly_radius <= 800:
     p.error('Assembly radius must be between 64 and 800')
 base.mkdir(parents=True, exist_ok=True)
@@ -40,7 +42,7 @@ source, count = re.subn(r'(\[GAME\]\s*\{)', lambda m: m[1] + '\n FixedRNGSeed=' 
 assert count == 1
 start_script.write_text(source)
 if a.assembly_radius is not None:
-    settings = scripts / 'global.as'
+    settings = role_settings_path(scripts, 'Air')
     source, count = re.subn(r'float StrikeAssemblyRadius = [\d.]+f;',
         'float StrikeAssemblyRadius = ' + str(a.assembly_radius) + 'f;', settings.read_text())
     assert count == 1

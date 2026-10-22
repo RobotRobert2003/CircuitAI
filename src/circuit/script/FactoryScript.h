@@ -31,6 +31,7 @@ public:
 public:
 	bool IsSwitchTime(int lastSwitchFrame);
 	bool IsSwitchAllowed(CCircuitDef* facDef);
+	bool CanRefillImmediately(CCircuitUnit* unit);
 	CCircuitDef* GetFactoryToBuild(const springai::AIFloat3& pos, bool isStart, bool isReset);
 
 private:
@@ -42,6 +43,7 @@ private:
 	struct SScriptInfo {
 		asIScriptFunction* isSwitchTime = nullptr;
 		asIScriptFunction* isSwitchAllowed = nullptr;
+		asIScriptFunction* canRefillImmediately = nullptr;
 		asIScriptFunction* getFactoryToBuild = nullptr;
 	} factoryInfo;
 };

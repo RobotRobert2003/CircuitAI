@@ -1,0 +1,16 @@
+{
+  "name":"commander-energy", "unit":"armcom", "side":"armada", "role":"SUPPORT",
+  "description":"At 22 seconds team 0 sends its bank to allied team 1; a nearby T1 column triggers a budgeted energy request and autonomous D-gun.",
+  "map":"Comet Catcher Remake 1.8", "map_key":"comet", "starts":[[4000,4000],[4000,7000],[2500,4000]],
+  "ally_spots":"1,3", "enemy_team":2, "start_energy":0, "commander_energy_test":true,
+  "camera":[4250,4150,1200], "photos":[25,35], "min_spawn_spacing":38,
+  "command_breakdown":true, "commander_observation":true,
+  "groups":[
+    {"unit":"armcom","team":0,"count":1,"position":[4300,4000],"after_seconds":12},
+    {"unit":"armeyes","team":0,"count":1,"position":[4500,4250],"after_seconds":12},
+    {"unit":"armafus","team":1,"count":1,"position":[2500,4500],"after_seconds":12},
+    {"unit":"corak","team":2,"count":5,"columns":1,"spacing":40,"position":[4300,4080],"after_seconds":23}
+  ],
+  "assertions":{"min_shooters":1,"min_kills":3,"max_losses":0,"min_damage":800,"max_first_shot_seconds":40},
+  "checks":"commander-energy"
+}

@@ -1,0 +1,19 @@
+{
+  "stop_minute": 24,
+  "expect": [
+    {"key":"partial-survey","pattern":"SeaInvasionTest\\] PASS partial-survey-blocked","by_minute":2,"scope":"any"},
+    {"key":"complex","pattern":"SeaInvasionTest\\] PASS complex-finished","by_minute":18,"scope":"any"},
+    {"key":"gantry","pattern":"SeaInvasionTest\\] PASS gantry-finished","by_minute":18,"scope":"any"},
+    {"key":"complex-production","pattern":"SeaInvasionTest\\] PASS complex-produced","by_minute":18,"scope":"any"},
+    {"key":"gantry-production","pattern":"SeaInvasionTest\\] PASS gantry-produced","by_minute":18,"scope":"any"},
+    {"key":"landfall","pattern":"SeaInvasionTest\\] PASS landfall","by_minute":18,"scope":"any"},
+    {"key":"backline","pattern":"SeaInvasionTest\\] PASS backline-reached","by_minute":18,"scope":"any"},
+    {"key":"escort","pattern":"SeaInvasionTest\\] PASS factory-escorted","by_minute":18,"scope":"any"},
+    {"key":"complex-support","pattern":"SeaInvasionTest\\] PASS complex-support-six","by_minute":18,"scope":"any"},
+    {"key":"gantry-support","pattern":"SeaInvasionTest\\] PASS gantry-support-twelve","by_minute":24,"scope":"any"},
+    {"key":"gantry-landing","pattern":"SeaInvasionTest\\] PASS gantry-landfall","by_minute":24,"scope":"any"},
+    {"key":"gantry-backline","pattern":"SeaInvasionTest\\] PASS gantry-backline","by_minute":24,"scope":"any"},
+    {"key":"combat","pattern":"SeaInvasionTest\\] PASS amphibian-damaged-economy","by_minute":24,"scope":"any"}
+  ],
+  "forbid":[{"key":"errors","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaInvasionTest\\] FAIL|Exception:|Null pointer access","scope":"any"}]
+}

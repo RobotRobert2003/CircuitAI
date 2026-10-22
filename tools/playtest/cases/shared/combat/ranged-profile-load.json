@@ -1,0 +1,154 @@
+{
+  "name": "ranged-profile-load",
+  "unit": "armsnipe",
+  "description": "One-minute actual-VM profile admission smoke. All ten enrolled unit types are spawned; this is not a combat efficacy benchmark.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [],
+  "groups": [
+    {
+      "unit": "armfboy",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3000,
+        4000
+      ]
+    },
+    {
+      "unit": "armfido",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3180,
+        4000
+      ]
+    },
+    {
+      "unit": "armsnipe",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3360,
+        4000
+      ]
+    },
+    {
+      "unit": "armmanni",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3540,
+        4000
+      ]
+    },
+    {
+      "unit": "cormort",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3720,
+        4000
+      ]
+    },
+    {
+      "unit": "corban",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3900,
+        4000
+      ]
+    },
+    {
+      "unit": "cortrem",
+      "count": 1,
+      "team": 0,
+      "position": [
+        4080,
+        4000
+      ]
+    },
+    {
+      "unit": "legamcluster",
+      "count": 1,
+      "team": 0,
+      "position": [
+        4260,
+        4000
+      ]
+    },
+    {
+      "unit": "legmed",
+      "count": 1,
+      "team": 0,
+      "position": [
+        4440,
+        4000
+      ]
+    },
+    {
+      "unit": "legvcarry",
+      "count": 1,
+      "team": 0,
+      "position": [
+        4620,
+        4000
+      ]
+    },
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3700,
+        4750
+      ]
+    },
+    {
+      "unit": "armestor",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3700,
+        5400
+      ],
+      "spacing": 200
+    }
+  ],
+  "units": [
+    "armfboy",
+    "armfido",
+    "armsnipe",
+    "armmanni",
+    "cormort",
+    "corban",
+    "cortrem",
+    "legamcluster",
+    "legmed",
+    "legvcarry"
+  ],
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 0,
+    "min_types_assigned": 10
+  },
+  "checks": "ranged-profile-load"
+}

@@ -1,0 +1,9 @@
+{
+  "stop_minute": 5,
+  "expect": [{"key":"physical gifts","pattern":"\\[HeavyDeliveryTest\\] PASS final delivered=3", "by_minute":5,"scope":"any"}],
+  "forbid": [
+    {"key":"delivery","pattern":"\\[HeavyDeliveryTest\\] FAIL","scope":"any"},
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"\\[INVARIANT\\]","scope":"tech"}
+  ]
+}

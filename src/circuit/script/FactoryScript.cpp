@@ -20,12 +20,7 @@ using namespace springai;
 // count already contains frames; count only orders without a frame here.
 static int CFactoryManager_GetPendingRecruitCount(const CFactoryManager* manager, const CCircuitDef* def)
 {
-	if (def == nullptr) return 0;
-	int count = 0;
-	for (const CRecruitTask* task : manager->GetTasks()) {
-		if (!task->IsDead() && (task->GetBuildDef() == def) && (task->GetTarget() == nullptr)) ++count;
-	}
-	return count;
+    return manager->GetPendingRecruitCount(def);
 }
 
 CFactoryScript::CFactoryScript(CScriptManager* scr, CFactoryManager* mgr)
@@ -41,6 +36,7 @@ CFactoryScript::CFactoryScript(CScriptManager* scr, CFactoryManager* mgr)
 	r = engine->RegisterObjectProperty("SRecruitTask", "CCircuitDef@ buildDef", asOFFSET(TaskS::SRecruitTask, buildDef)); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("SRecruitTask", "AIFloat3 position", asOFFSET(TaskS::SRecruitTask, position)); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("SRecruitTask", "float radius", asOFFSET(TaskS::SRecruitTask, radius)); ASSERT(r >= 0);
+	r = engine->RegisterObjectProperty("SRecruitTask", "bool repeat", asOFFSET(TaskS::SRecruitTask, repeat)); ASSERT(r >= 0);
 
 	r = engine->RegisterObjectType("SServSTask", sizeof(TaskS::SServSTask), asOBJ_VALUE | asOBJ_POD); ASSERT(r >= 0);
 	static_assert(sizeof(TaskS::SServSTask::type) == sizeof(char), "IBuilderTask::BuildType is not uint8!");
@@ -57,11 +53,14 @@ CFactoryScript::CFactoryScript(CScriptManager* scr, CFactoryManager* mgr)
 	r = engine->RegisterGlobalProperty("CFactoryManager aiFactoryMgr", manager); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "CCircuitDef@ DefaultGetFactoryToBuild(const AIFloat3& in, bool, bool)", asMETHOD(CFactoryManager, DefaultGetFactoryToBuild), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ DefaultMakeTask(CCircuitUnit@)", asMETHOD(CFactoryManager, DefaultMakeTask), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ MakeFactoryTask(CCircuitUnit@, bool keepActive, bool keepQueued = false)", asMETHOD(CFactoryManager, MakeFactoryTask), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ GetPendingFactoryTask(CCircuitUnit@) const", asMETHOD(CFactoryManager, GetPendingFactoryTask), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "void AbortTask(IUnitTask@)", asMETHODPR(CFactoryManager, AbortTask, (IUnitTask*), void), asCALL_THISCALL); ASSERT(r >= 0);  // D-076: a retiring factory drops its task
 	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ Enqueue(const SRecruitTask& in)", asMETHODPR(CFactoryManager, Enqueue, (const TaskS::SRecruitTask&), CRecruitTask*), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ Enqueue(const SServSTask& in)", asMETHODPR(CFactoryManager, Enqueue, (const TaskS::SServSTask&), IUnitTask*), asCALL_THISCALL); ASSERT(r >= 0);
 //	r = engine->RegisterObjectMethod("CFactoryManager", "IUnitTask@+ EnqueueRetreat()", asMETHOD(CFactoryManager, EnqueueRetreat), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "CCircuitDef@ GetRoleDef(const CCircuitDef@, Type) const", asMETHOD(CFactoryManager, GetRoleDef), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CFactoryManager", "bool RegisterScriptFactory(CCircuitDef@, const CCircuitDef@)", asMETHOD(CFactoryManager, RegisterScriptFactory), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "int GetFactoryCount() const", asMETHOD(CFactoryManager, GetFactoryCount), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CFactoryManager", "int GetPendingRecruitCount(const CCircuitDef@) const", asFUNCTION(CFactoryManager_GetPendingRecruitCount), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("CFactoryManager", "bool isAssistRequired", asOFFSET(CFactoryManager, isAssistRequired)); ASSERT(r >= 0);
@@ -88,8 +87,20 @@ bool CFactoryScript::Init()
 	InitModule(mod);
 	factoryInfo.isSwitchTime = script->GetFunc(mod, "bool AiIsSwitchTime(int)");
 	factoryInfo.isSwitchAllowed = script->GetFunc(mod, "bool AiIsSwitchAllowed(CCircuitDef@)");
+	factoryInfo.canRefillImmediately = mod->GetFunctionByDecl("bool AiCanRefillImmediately(CCircuitUnit@)");
 	factoryInfo.getFactoryToBuild = script->GetFunc(mod, "CCircuitDef@ AiGetFactoryToBuild(const AIFloat3& in, bool, bool)");
 	return true;
+}
+
+bool CFactoryScript::CanRefillImmediately(CCircuitUnit* unit)
+{
+	// Optional completion policy: legacy profiles retain their idle scheduling.
+	if (factoryInfo.canRefillImmediately == nullptr) return false;
+	asIScriptContext* ctx = script->PrepareContext(factoryInfo.canRefillImmediately);
+	ctx->SetArgObject(0, unit);
+	const bool result = script->Exec(ctx) && ctx->GetReturnByte();
+	script->ReturnContext(ctx);
+	return result;
 }
 
 bool CFactoryScript::IsSwitchTime(int lastSwitchFrame)

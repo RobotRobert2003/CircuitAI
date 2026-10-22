@@ -1,0 +1,15 @@
+{
+  "stop_minute":8,
+  "expect":[
+    {"key":"observer","pattern":"\\[SeaArena\\].* loaded","scope":"any","by_minute":1},
+    {"key":"registration","pattern":"\\[SEA\\]\\[Factory\\] Legion T2 runtime metadata ready","scope":"any","by_minute":1},
+    {"key":"t2-constructor","pattern":"\\[SeaArena\\].* finished .*team=0 unit=leganavyconsub","scope":"any","by_minute":4},
+    {"key":"t2-combat","pattern":"\\[SeaArena\\].* finished .*team=0 unit=leganavy(cruiser|battlesub|heavysub|aaship|battleship|missileship|artyship|flagship|antiswarm)","scope":"any","by_minute":8}
+  ],
+  "forbid":[
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena|Removed widget: SEA combat arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

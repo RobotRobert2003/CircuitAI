@@ -1,6 +1,7 @@
 """Fixed idle-constructor populations: isolate census scaling from diverging battles."""
 import argparse
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import subprocess
 import sys
 import playtest
@@ -43,7 +44,7 @@ def main():
         code=subprocess.call(call+['watch','--dir',str(root),'--role','AIR','--checks','air_workforce_scaling',
             '--minutes','11','--wall-minutes','15','--keep-going'])
         results.append(dict(directory=str(root),exit=code))
-        storage.write_json(playtest.REPO/'build-theatres/workforce-scaling.json',results)
+        storage.write_json(RAW_ROOT / 'workforce-scaling.json',results)
     return any(r['exit'] for r in results)
 
 

@@ -1,0 +1,11 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {"key":"spawn","pattern":"SeaArena.*spawn","scope":"any","by_minute":1},
+    {"key":"edge-candidate","pattern":"RetreatBoundary\\] rejected ship=","scope":"any","by_minute":2},
+    {"key":"orders","pattern":"SeaArena.*orders","scope":"any","by_minute":2}
+  ],
+  "forbid": [
+    {"key":"runtime","pattern":"\\[INVARIANT\\]|SCRIPT CRASH|: ERR\\s+:|Lib exception|SeaArena.*ERROR|Access violation|has crashed","scope":"any"}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "stop_minute": 30,
+  "expect": [
+    {"key":"observer", "pattern":"\\[RangedArena\\].*loaded", "scope":"any", "by_minute":1},
+    {"key":"natural-thug", "pattern":"\\[RangedArena\\].*finished.*unit=corthud", "scope":"any", "by_minute":15},
+    {"key":"cohort-owner", "pattern":"RANGED: assigned corthud", "scope":"any", "by_minute":15},
+    {"key":"actual-fire", "pattern":"\\[RangedArena\\].*shot.*unit=corthud", "scope":"any", "by_minute":20}
+  ],
+  "pass_on":{"key":"game-over", "pattern":"\\[FullMatchEnd\\]", "scope":"any"},
+  "forbid":[
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception|Access violation|Fatal:", "scope":"any"},
+    {"key":"invariant", "pattern":"INVARIANT", "scope":"any"},
+    {"key":"observer-error", "pattern":"\\[RangedArena\\].*ERROR|Error in GameFrame|Removed widget: Full match performance|\\[PerfFixture\\] ERROR", "scope":"any"}
+  ]
+}

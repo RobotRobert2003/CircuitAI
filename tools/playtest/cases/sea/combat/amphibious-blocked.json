@@ -1,0 +1,1 @@
+{"name":"amphibious-blocked","runner":"tools/playtest/run_sea_invasion.py","map":"Supreme Isthmus v1.7","minutes":5,"checks":"amphibious-blocked","blocked":true,"supplied":true}

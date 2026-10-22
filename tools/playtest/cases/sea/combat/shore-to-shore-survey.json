@@ -1,0 +1,13 @@
+{
+  "name":"shore-to-shore-survey", "map":"Shore_to_Shore_V3", "map_key":"shore",
+  "starts":[[2000,1740],[13250,1740]],
+  "checks":"sea/combat/supreme-shore-scouts.json",
+  "patrol_observer":true, "objective_observer":true,
+  "progression_audit":{"kind":"shores","unit":"corsy","count":2,"by_seconds":360},
+  "shots":"1@6000@7000:1740,3@3500@13000:1740,6@3500@13000:1740",
+  "groups":[
+    {"unit":"armpt","team":0,"count":4,"position":[2500,1740],"columns":2,"spacing":160},
+    {"unit":"corsy","team":1,"count":1,"position":[13000,1100]},
+    {"unit":"corsy","team":1,"count":1,"position":[13000,2400]}
+  ]
+}

@@ -10,6 +10,7 @@
 
 #include "terrain/TerrainData.h"
 #include "util/MaskHandler.h"
+#include "unit/RangedPolicy.h"
 
 #include "UnitDef.h"
 
@@ -91,14 +92,14 @@ public:
 		SOLO, BASE, DG_COST, DG_STILL,
 		JUMP, ONOFF, VAMPIRE, RARE,
 		FENCE, REARM, NO_DGUN, ANTI_STAT,
-		NO_REPAIR, NO_DISRUPT, _SIZE_};
+		NO_REPAIR, NO_DISRUPT, RANGED, _SIZE_};
 	enum AttrMask: RoleM {
 		MELEE     = 0x00000001, BOOST      = 0x00000002, NO_JUMP  = 0x00000004, NO_STRAFE = 0x00000008,
 		STOCK     = 0x00000010, SIEGE      = 0x00000020, RET_HOLD = 0x00000040, RET_FIGHT = 0x00000080,
 		SOLO      = 0x00000100, BASE       = 0x00000200, DG_COST  = 0x00000400, DG_STILL  = 0x00000800,
 		JUMP      = 0x00001000, ONOFF      = 0x00002000, VAMPIRE  = 0x00004000, RARE      = 0x00008000,
 		FENCE     = 0x00010000, REARM      = 0x00020000, NO_DGUN  = 0x00040000, ANTI_STAT = 0x00080000,
-		NO_REPAIR = 0x00100000, NO_DISRUPT = 0x00200000};
+		NO_REPAIR = 0x00100000, NO_DISRUPT = 0x00200000, RANGED = 0x00400000};
 	using AttrT = std::underlying_type<AttrType>::type;
 	using AttrM = std::underlying_type<AttrMask>::type;
 
@@ -189,6 +190,9 @@ public:
 	bool IsAttrAntiStat()  const { return attr & AttrMask::ANTI_STAT; }
 	bool IsAttrNoRepair()  const { return attr & AttrMask::NO_REPAIR; }  // also per-unit
 	bool IsAttrNoDisrupt() const { return attr & AttrMask::NO_DISRUPT; }  // also per-unit
+	bool IsAttrRanged() const { return attr & AttrMask::RANGED; }
+	const RangedPolicy& GetRangedPolicy() const { return rangedPolicy; }
+	void SetRangedPolicy(const RangedPolicy& value) { rangedPolicy = value; }
 
 	bool IsHoldFire()   const { return fireState == FireType::HOLD; }
 	bool IsReturnFire() const { return fireState == FireType::RETURN; }
@@ -224,6 +228,8 @@ public:
 	void AdjustSinceFrame(int frame) { sinceFrame = frame + cooldown; }
 	bool IsAvailable() const { return buildAllowed && maxThisUnit > count; }
 	bool IsBuildAllowed() const { return buildAllowed; }
+	float GetTargetMinCost() const { return targetMinCost; }
+	void SetTargetMinCost(float value) { targetMinCost = value; }
 	float GetStandoff() const { return standoff; }
 	void SetStandoff(float value) { standoff = value; }
 	void SetBuildAllowed(bool value) { buildAllowed = value; }
@@ -383,6 +389,7 @@ public:
 	float GetWaterThreat() const { return waterThrDmg * sqrtf(health + maxShield * SHIELD_MOD); }
 
 private:
+	RangedPolicy rangedPolicy;
 	static RoleName* roleNames;
 	static AttrName* attrNames;
 
@@ -442,6 +449,7 @@ private:
 
 	// ---- Bit fields ---- BEGIN
 	bool buildAllowed = true;  // JSON construction veto, independent of temporary role caps
+	float targetMinCost = 0.f; // Opt-in valuable-contact preference; zero is legacy.
 	float standoff = 0.f;  // Fraction of weapon range to hold; zero keeps legacy micro.
 	bool isIgnore : 1;
 

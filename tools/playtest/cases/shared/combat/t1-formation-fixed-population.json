@@ -1,0 +1,138 @@
+{
+  "command_breakdown": true,
+  "name": "t1-formation-fixed-population",
+  "unit": "corthud",
+  "description": "Serial mixed formation control: 60 Thugs plus 60 rockets against 32 heavy turrets; require unchanged populations before comparing CPU and commands.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "cortex",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [60, 150],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 3,
+      "team": 0,
+      "position": [
+        3000,
+        4800
+      ],
+      "spacing": 750
+    },
+    {
+      "unit": "armseer",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3000,
+        4000
+      ],
+      "spacing": 400
+    },
+    {
+      "unit": "corthud",
+      "count": 24,
+      "team": 0,
+      "position": [
+        3000,
+        3400
+      ],
+      "spacing": 150,
+      "columns": 12
+    },
+    {
+      "unit": "corthud",
+      "count": 24,
+      "team": 0,
+      "position": [
+        3000,
+        3900
+      ],
+      "spacing": 150,
+      "columns": 12
+    },
+    {
+      "unit": "corthud",
+      "count": 12,
+      "team": 0,
+      "position": [
+        3000,
+        3000
+      ],
+      "spacing": 260,
+      "columns": 12
+    },
+    {
+      "unit": "armhlt",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3000,
+        5500
+      ],
+      "spacing": 150,
+      "columns": 16,
+      "after_seconds": 10
+    },
+    {
+      "unit": "corstorm",
+      "count": 24,
+      "team": 0,
+      "position": [
+        3000,
+        3280
+      ],
+      "spacing": 150,
+      "columns": 12
+    },
+    {
+      "unit": "corstorm",
+      "count": 24,
+      "team": 0,
+      "position": [
+        3000,
+        3780
+      ],
+      "spacing": 150,
+      "columns": 12
+    },
+    {
+      "unit": "corstorm",
+      "count": 12,
+      "team": 0,
+      "position": [
+        3000,
+        2880
+      ],
+      "spacing": 260,
+      "columns": 12
+    }
+  ],
+  "units": [
+    "corthud",
+    "corstorm"
+  ],
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 0,
+    "min_types_assigned": 1
+  },
+  "trace_orders": false,
+  "checks": "thug-safe-stage",
+  "storage_scenario": "formation-fixed-count"
+}

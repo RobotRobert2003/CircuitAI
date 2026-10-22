@@ -1,0 +1,14 @@
+{
+  "stop_minute": 5,
+  "expect": [
+    {"key":"loaded","pattern":"\\[SeaArena\\].* loaded","scope":"any","by_minute":1},
+    {"key":"spawn","pattern":"\\[SeaArena\\].* spawn","scope":"any","by_minute":1},
+    {"key":"search-orders","pattern":"\\[SEA\\]\\[Fleet\\]","scope":"any","by_minute":2},
+    {"key":"contact-damage","pattern":"\\[SeaArena\\].* damage","scope":"any","by_minute":5}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena","scope":"any"}
+  ]
+}

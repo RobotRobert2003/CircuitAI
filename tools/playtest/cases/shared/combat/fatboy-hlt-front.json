@@ -1,0 +1,94 @@
+{
+  "name": "fatboy-hlt-front",
+  "unit": "armfboy",
+  "description": "Fatboys deploy from base toward an identified HLT line; require safe staging before a later exposed tank cohort.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    4000,
+    5100,
+    3900
+  ],
+  "photos": [
+    45,
+    90,
+    150
+  ],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3200,
+        5700
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        5800
+      ]
+    },
+    {
+      "unit": "armhlt",
+      "count": 3,
+      "team": 1,
+      "position": [
+        3680,
+        5900
+      ],
+      "spacing": 320
+    },
+    {
+      "unit": "armfboy",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3700,
+        3000
+      ],
+      "spacing": 200
+    },
+    {
+      "unit": "armck",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        2800
+      ]
+    },
+    {
+      "unit": "armstump",
+      "count": 6,
+      "team": 1,
+      "position": [
+        3600,
+        5300
+      ],
+      "spacing": 160,
+      "after_seconds": 100
+    }
+  ],
+  "deployment_assertions": {"seconds": 100, "minimum": 500},
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 0
+  }
+}

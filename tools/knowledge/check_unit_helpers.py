@@ -1,4 +1,4 @@
-"""Validate data/script/src/helpers/unit_helpers.as (and other scripts) against the shared game cache.
+"""Validate data/script/src/helpers/units/unit_helpers.as (and other scripts) against the shared game cache.
 
 Checks:
   1. every quoted arm*/cor*/leg* id in data/script/src exists in BAR and is reachable from a commander build tree
@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 DOCS = os.environ.get("BAR_DOCS_DIR", os.path.abspath(os.path.join(ROOT, "..", "rjm.bar.docs")))
 CACHE = os.path.join(DOCS, "tools", "knowledge", ".cache", "kb.json")
-HELPERS = os.path.join(ROOT, "data", "script", "src", "helpers", "unit_helpers.as")
+HELPERS = os.path.join(ROOT, "data", "script", "src", "helpers", "units", "unit_helpers.as")
 SIDE_WORDS = {"armada", "cortex", "legion"}
 ID_RE = re.compile(r'"((?:arm|cor|leg)[a-z0-9_]{2,})"')
 # ids in generic/aggregate lists that are deliberately not from the lab in question
@@ -64,7 +64,7 @@ def main():
     # 1. unknown / unreachable ids across all scripts (comments stripped)
     for f in glob.glob(os.path.join(ROOT, "data", "script", "src", "**", "*.as"), recursive=True):
         rel = os.path.relpath(f, ROOT).replace("\\", "/")
-        if "/factory_production/" in rel:
+        if "/systems/production/factory_configs/" in rel:
             continue  # dead code path (UseDynamicFactoryProduction = false everywhere)
         s = re.sub(r"//[^\n]*", "", io.open(f, encoding="utf-8", errors="replace").read())
         for uid in sorted(set(ids_in(s))):

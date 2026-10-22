@@ -1,0 +1,12 @@
+{
+  "_doc": "D-306: actual-VM load of the shared TECH graph and reservation/factory bindings. Startup only, not gameplay acceptance.",
+  "stop_minute": 0.5,
+  "expect": [
+    {"key": "TECH initialized", "pattern": "experimental build system on", "by_minute": 0.5, "scope": "tech"},
+    {"key": "observer initialized", "pattern": "\\[Playtest\\] widget loaded", "by_minute": 0.5, "scope": "any"}
+  ],
+  "forbid": [
+    {"key": "invariant", "pattern": "\\[INVARIANT\\]", "scope": "any"},
+    {"key": "runtime failure", "pattern": ": ERR\\s+:|: WARN\\s+:|SCRIPT CRASH|Lib exception|Access violation|has crashed", "scope": "any"}
+  ]
+}

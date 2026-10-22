@@ -1,0 +1,9 @@
+{
+ "stop_minute":6,
+ "expect":[
+  {"key":"flagship-selected","pattern":"SubTarget.*definition=corblackhy rank=5","scope":"any","by_minute":3},
+  {"key":"flagship-damaged","pattern":"SeaArena.*attackerUnit=armserp victimUnit=corblackhy","scope":"any","by_minute":4},
+  {"key":"factory-selected","pattern":"SubTarget.*definition=corsy rank=2","scope":"any","by_minute":6}
+ ],
+ "forbid":[{"key":"runtime","pattern":"INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaArena.*ERROR","scope":"any"}]
+}

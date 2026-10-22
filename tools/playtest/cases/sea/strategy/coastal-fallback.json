@@ -1,0 +1,12 @@
+{
+  "id": "sea-coastal-fallback",
+  "domain": "sea",
+  "area": "strategy",
+  "kind": "supplied",
+  "runner": "run_sea_coast.py",
+  "checks": "sea/strategy/coastal-fallback.json",
+  "maps": ["Supreme Isthmus v1.7", "Glacial Gap v1.1"],
+  "variants": ["lost: all factions, 14-minute opening or 25-minute amphibious defense", "held: naval foothold negative control", "retake: stable naval recovery, 15 minutes"],
+  "acceptance": ["real donated constructor builds inland lab", "storage completes", "T1 and T2 coastal defenses complete", "25-minute lost variant: radar, sonar defense, jammer, walls and medium mines complete; amphibious attacker takes damage", "no fallback while foothold survives", "stable naval recovery", "no script errors or invariants"],
+  "limits": ["supplied liquidity", "unrelated actors frozen", "not win-rate or multiplayer performance evidence"]
+}

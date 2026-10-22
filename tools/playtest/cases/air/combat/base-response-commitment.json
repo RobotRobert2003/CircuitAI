@@ -1,0 +1,19 @@
+{
+  "name": "base-response-commitment",
+  "checks": "base-response-commitment",
+  "description": "Ground and air intruders reach home after an offensive wave departs; free reserves defend while committed escorts remain with their bombers",
+  "bomber_only": false,
+  "aircraft": [
+    {"unit":"$t2","count":32,"team":0,"once":true},
+    {"unit":"$fighter2","count":24,"team":0,"once":true},
+    {"unit":"corshad","count":12,"team":1,"position":[2800,11000],"after_seconds":180,"once":true}
+  ],
+  "targets": [
+    {"unit":"armafus","count":1,"position":[10100,1300]},
+    {"unit":"armmmkr","count":4,"position":[10300,1700]},
+    {"unit":"armwin","count":6,"team":0,"position":[2600,11300],"once":true},
+    {"unit":"armmar","count":6,"team":1,"position":[2800,11000],"after_seconds":180,"once":true}
+  ],
+  "defenses": [{"unit":"armrl","count":1,"position":[9500,1500]}],
+  "refill_seconds": 30
+}

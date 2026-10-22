@@ -1,0 +1,16 @@
+{
+  "stop_minute": 5,
+  "expect": [
+    {"key":"loaded","pattern":"\\[SeaArena\\].* loaded","scope":"any","by_minute":1},
+    {"key":"spawn","pattern":"\\[SeaArena\\].* spawn.*unit=armroy","scope":"any","by_minute":1},
+    {"key":"orders","pattern":"\\[SeaArena\\].* orders team=0","scope":"any","by_minute":2},
+    {"key":"timer","pattern":"\\[WorkforcePerf\\].*ai_all_p95_ms=","scope":"any","by_minute":2}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT","scope":"any"},
+    {"key":"fixture","pattern":"\\[SeaArena\\].*ERROR|Error in.*sea_arena|\\[WorkforcePerf\\].*ERROR","scope":"any"},
+    {"key":"loss","pattern":"\\[SeaArena\\].*death.*team=0","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

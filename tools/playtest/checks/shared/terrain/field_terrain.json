@@ -1,0 +1,58 @@
+{
+  "_doc": "D-326 terrain map, any map: one FIELD_PERF from the owning AI, the team-link terrain view loads the file with ground classes, the watcher takes the screenshot series (full, dim, blueprint, ground alone, seas and ponds, summits, narrowest choke, legend). Stage gui_barb_team_link.lua plus field_watch.lua, pass --shots \"\" and --mode visual.",
+  "stop_minute": 3,
+  "expect": [
+    {
+      "key": "field analysed",
+      "pattern": "FIELD_PERF",
+      "by_minute": 1.5,
+      "scope": "any"
+    },
+    {
+      "key": "field loaded",
+      "pattern": "\\[FieldCheck\\] PASS loaded",
+      "by_minute": 2.5,
+      "scope": "any"
+    },
+    {
+      "key": "ground classes",
+      "pattern": "\\[FieldCheck\\] PASS ground classes present",
+      "by_minute": 2.5,
+      "scope": "any"
+    },
+    {
+      "key": "full map screenshot",
+      "pattern": "\\[Playtest\\] screenshot field full",
+      "by_minute": 3,
+      "scope": "any"
+    },
+    {
+      "key": "screenshot series",
+      "pattern": "\\[FieldCheck\\] PASS screenshots",
+      "by_minute": 3,
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script error",
+      "pattern": ": ERR\\s+:",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "field failure",
+      "pattern": "FIELD: worker failed|FIELD: check failed|\\[FieldCheck\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "widget error",
+      "pattern": "Error in.*BARb team link|Failed to load.*gui_barb_team_link|\\[BARb link\\] message error",
+      "scope": "any"
+    }
+  ]
+}

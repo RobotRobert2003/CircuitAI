@@ -17,9 +17,12 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from benchmark_store import RAW_ROOT
+
+from benchmark_store import EVIDENCE_ROOT, require_checkout
 
 ROOT = Path(__file__).resolve().parents[2]
-STORE = ROOT / 'doc/benchmarks/scorecards'
+STORE = EVIDENCE_ROOT / 'scorecards'
 SCHEMA = 2
 MODEL_VERSION = '6.1.2'
 
@@ -232,6 +235,8 @@ def make_card(manifest, parsed):
 
 
 def record(directory, run, store=STORE):
+    if store == STORE:
+        require_checkout()
     directory, run, store = Path(directory), Path(run), Path(store)
     # A reusable engine directory may already contain a later experiment.
     # Prefer the watcher's snapshot for every input used to derive this card.
@@ -325,7 +330,7 @@ def load_model():
     try:
         import openskill
     except ImportError:
-        sys.path.insert(0, str(ROOT / 'build-theatres/scorecard-deps'))
+        sys.path.insert(0, str(RAW_ROOT / 'scorecard-deps'))
         import openskill
     version = importlib.metadata.version('openskill')
     if version != MODEL_VERSION:
@@ -375,6 +380,8 @@ def ratings_for(cards):
 
 
 def rebuild(store=STORE):
+    if store == STORE:
+        require_checkout()
     store=Path(store)
     store.mkdir(parents=True,exist_ok=True)
     lock=store/'.rebuild-lock'

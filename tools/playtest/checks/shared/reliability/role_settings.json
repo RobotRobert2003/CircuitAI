@@ -1,0 +1,54 @@
+{
+  "_doc": "D-250 settings extraction: profile override and forced TECH nuke strategy retain values through setup and one minute.",
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "profile-override",
+      "pattern": "\\[SettingsProbe\\] after-main Global::RoleSettings::Tech::MinAiSwitchTime=401",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "nuke-strategy",
+      "pattern": "\\[SettingsProbe\\] after-main Global::RoleSettings::Tech::StrategyMask=4",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "settings-persist",
+      "pattern": "\\[SettingsProbe\\] minute-one Global::RoleSettings::Tech::MinAiSwitchTime=401",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "screenshot",
+      "pattern": "\\[Playtest\\] screenshot",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "json-override",
+      "pattern": "\\[SettingsProbe\\] minute-one Global::RoleSettings::Tech::WeaponStartMetalIncome=205",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "role-cli-override",
+      "pattern": "\\[SettingsProbe\\] before-main Global::RoleSettings::Air::RadarMaxWaitSeconds=91",
+      "scope": "any",
+      "by_minute": 1
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    }
+  ]
+}

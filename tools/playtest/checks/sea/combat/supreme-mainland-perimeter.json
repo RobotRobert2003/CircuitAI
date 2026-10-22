@@ -1,0 +1,34 @@
+{
+  "stop_minute": 6,
+  "expect": [
+    {
+      "key": "spawn",
+      "pattern": "SeaArena.*spawn.*unit=armserp",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "perimeter",
+      "pattern": "SEA\\]\\[SubPerimeter\\]",
+      "scope": "any",
+      "by_minute": 3
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "SeaArena.*ERROR",
+      "scope": "any"
+    }
+  ]
+}

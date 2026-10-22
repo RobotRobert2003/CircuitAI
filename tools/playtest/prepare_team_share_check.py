@@ -2,13 +2,14 @@
 import argparse
 import json
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--dir', type=Path, required=True)
 args = parser.parse_args()
 base = args.dir.resolve()
-if not base.is_relative_to(ROOT / 'build-theatres'):
+if not base.is_relative_to(RAW_ROOT):
     parser.error('Use an isolated directory under build-theatres')
 teams = json.loads((base / 'teams.json').read_text())['teams']
 donors = {}

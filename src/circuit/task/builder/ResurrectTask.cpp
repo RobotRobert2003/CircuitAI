@@ -96,6 +96,7 @@ bool CBResurrectTask::Execute(CCircuitUnit* unit)
 
 bool CBResurrectTask::Reevaluate(CCircuitUnit* unit)
 {
+	if (recoveryControlled) return true; // SEA selector owns target changes.
 	CCircuitAI* circuit = manager->GetCircuit();
 	if (units.empty()) {
 		return true;
@@ -161,6 +162,13 @@ bool CBResurrectTask::Reevaluate(CCircuitUnit* unit)
 
 void CBResurrectTask::OnUnitIdle(CCircuitUnit* unit)
 {
+    // A failed/finished member must not cancel its crew's productive commands.
+    // The last member retains legacy completion; SEA reselects the now-idle
+    // member using live feature legality on its next callback.
+    if (recoveryControlled && units.size() > 1) {
+        RemoveAssignee(unit);
+        return;
+    }
 	manager->AbortTask(this);
 }
 

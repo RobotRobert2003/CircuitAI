@@ -1,0 +1,19 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {"key":"loaded","pattern":"\\[AirArena\\] event=ready","scope":"any","by_minute":1},
+    {"key":"early-cover","pattern":"\\[AIR\\]\\[Screen\\] fighters=4 .*width=600 maturity=0","scope":"any","by_minute":2},
+    {"key":"map-span","pattern":"\\[AIR\\]\\[Screen\\].*width=11902 maturity=1","scope":"any","by_minute":3},
+    {"key":"physical-spread","pattern":"\\[AirPerimeterProbe\\].*team=0 .*physical_span=1[0-9]{4}","scope":"any","by_minute":5},
+    {"key":"ground-defense","pattern":"\\[AIR\\]\\[BaseResponse\\] contact=true","scope":"any","by_minute":5},
+    {"key":"bomber-escorts","pattern":"\\[AirPerimeterProbe\\].*team=0 .*ground=0 committed=[1-9]","scope":"any","by_minute":7},
+    {"key":"screenshot","pattern":"\\[AirArena\\] event=screenshot","scope":"any","by_minute":3}
+  ],
+  "forbid": [
+    {"key":"ground-escort","pattern":"\\[AirPerimeterProbe\\].*ground=[1-9]","scope":"any"},
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"INVARIANT|\\[AirOrders\\] ERROR","scope":"any"},
+    {"key":"fixture","pattern":"\\[AirArena\\] event=error|Removed widget: AIR combat arena|Failed to load: air_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "sea/economy/conversion-surplus",
+  "description": "Convert mature tidal surplus and complete supported advanced naval economy in both SEA builder modes",
+  "runner": "tools/playtest/run_sea.py",
+  "maps": ["Glacial Gap v1.1"],
+  "fixture": "conversion",
+  "factions": ["armada", "cortex", "legion"],
+  "modes": ["compact (--legacy)", "experimental"],
+  "checks": "sea/economy/conversion-supplied.json",
+  "assets": "120 tidals, four T1 ships, two T2 construction subs and storage once at minute 2; no converters/fusions, recurring resources or building orders supplied",
+  "acceptance": [
+    "Physically complete a naval fusion and advanced converter by 20 minutes",
+    "No AngelScript exceptions or invariant failures",
+    "Existing mex priority, rear economy blocks and supporting turrets remain active",
+    "Separate natural 8v8 zero-bonus baseline/candidate captures actual conversion capacity and surplus at 30 minutes"
+  ],
+  "limits": "Supplied assets isolate a mature economy decision, not natural opening time or victory. Keep failed full-game verdicts and faction-specific results."
+}

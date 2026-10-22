@@ -60,6 +60,8 @@ class CPathFinder;
 class CTerrainManager;
 class CBattleAnalysis;
 class CBuilderManager;
+class CCommanderControl;
+class CWidgetState;
 class CFactoryManager;
 class CEconomyManager;
 class CMilitaryManager;
@@ -158,6 +160,7 @@ public:
 	void Garbage(CCircuitUnit* unit, const char* reason);
 	CCircuitUnit* GetTeamUnit(ICoreUnit::Id unitId) const;
 	const Units& GetTeamUnits() const { return teamUnits; }
+    unsigned int GetOwnedUnitRevision() const { return ownedUnitRevision; }
 
 	void UpdateFriendlyUnits() { allyTeam->UpdateFriendlyUnits(); }
 	CAllyUnit* GetFriendlyUnit(springai::Unit* u) const;
@@ -187,6 +190,7 @@ private:
 	void UpdateActions();
 
 	Units teamUnits;  // owner
+    unsigned int ownedUnitRevision = 0;
 	EnemyInfos enemyInfos;  // owner
 	CAllyTeam* allyTeam;
 	bool isAllyTeamInit;
@@ -333,6 +337,8 @@ public:
 	CTerrainManager*  GetTerrainManager()  const { return terrainManager.get(); }
 	CBattleAnalysis*  GetBattle()          const { return battle.get(); }  // D-126
 	CBuilderManager*  GetBuilderManager()  const { return builderManager.get(); }
+    CCommanderControl* GetCommanderControl() const { return commanderControl.get(); }
+    CWidgetState* GetWidgetState() const { return widgetState.get(); }  // D-300
 	CFactoryManager*  GetFactoryManager()  const { return factoryManager.get(); }
 	CEconomyManager*  GetEconomyManager()  const { return economyManager.get(); }
 	CMilitaryManager* GetMilitaryManager() const { return militaryManager.get(); }
@@ -389,6 +395,8 @@ private:
 	std::shared_ptr<CTerrainManager> terrainManager;
 	std::shared_ptr<CBattleAnalysis> battle;  // D-126: TECH's weapon clusters
 	std::shared_ptr<CBuilderManager> builderManager;
+    std::unique_ptr<CCommanderControl> commanderControl;
+    std::unique_ptr<CWidgetState> widgetState;  // D-300: AI -> widget state file
 	std::shared_ptr<CFactoryManager> factoryManager;
 	std::shared_ptr<CEconomyManager> economyManager;
 	std::shared_ptr<CMilitaryManager> militaryManager;

@@ -1,0 +1,46 @@
+{
+  "stop_minute": 3,
+  "expect": [
+    {
+      "key": "detection fallback",
+      "pattern": "\\[CommanderT3\\] unit=(?P<unit>\\d+) target=(?P<target>\\d+) (?=[^\\r\\n]*\\baction=done\\b)(?=[^\\r\\n]*\\breason=detected\\b)",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "intercept",
+      "pattern": "\\[CommanderT3\\] unit=(?P<unit>\\d+) target=(?P<target>\\d+) (?=[^\\r\\n]*\\baction=fire\\b)(?=[^\\r\\n]*\\bconcealed=1\\b)",
+      "after_key": "detection fallback",
+      "same_as": "detection fallback",
+      "scope": "any",
+      "by_minute": 2.5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "commander_death",
+      "pattern": "\\[RangedArena\\].*death id=\\d+ team=0 unit=armcom",
+      "scope": "any"
+    }
+  ]
+}

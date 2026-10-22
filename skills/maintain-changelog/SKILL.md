@@ -27,7 +27,7 @@ other repository files changed. Changelog creation is opt-in.
 3. Determine the local completion timestamp, including seconds and numeric UTC
    offset. Prefer the conversation's current datetime when supplied; otherwise
    obtain it from the local system.
-4. Create the entry under this hierarchy:
+4. Create the entry under `../rjm.bar.docs/projects/circuitai/` using this hierarchy:
 
    ```text
    changelog/

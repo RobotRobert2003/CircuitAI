@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 
 ROOT = Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser(description=__doc__)
@@ -23,8 +24,8 @@ if a.map != "tundra" and (not a.land_attack or a.beachhead or a.allied_guards):
 if a.allied_guards and (not a.beachhead or a.owner_role != 'TECH'):
     p.error('--allied-guards requires --beachhead and --owner-role TECH')
 base = a.dir.resolve()
-if not base.is_relative_to(ROOT / 'build-theatres'):
-    p.error('Use repository build-theatres')
+if not base.is_relative_to(RAW_ROOT):
+    p.error('Use benchmark-repository build-theatres')
 subprocess.run([sys.executable, str(ROOT / 'tools/playtest/prepare_amphibious_check.py'),
     '--map', a.map, '--dir', str(base), '--dll', a.dll,
     '--profile', a.profile, '--windowed', '--speed', '8', '--minutes', str(a.minutes)], check=True)

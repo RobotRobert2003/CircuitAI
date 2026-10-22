@@ -1,0 +1,51 @@
+{
+  "stop_minute": 5,
+  "complete_on": {
+    "key": "complete",
+    "pattern": "\\[RangedArena\\].* scenario_complete",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 10,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "plan",
+      "pattern": "\\[CommanderT3\\] unit=\\d+ target=\\d+ def=\\w+ plan",
+      "scope": "any",
+      "by_minute": 4
+    },
+    {
+      "key": "dead_t3",
+      "pattern": "\\[RangedArena\\].* death id=\\d+ team=1 unit=",
+      "scope": "any",
+      "by_minute": 5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

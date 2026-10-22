@@ -1,0 +1,85 @@
+{
+  "stop_minute": 4,
+  "_doc": "D-294 blind fire at slow dots. Pass: a shot_census line on a corllt by minute 2 (the LLTs are radar dots outside the Fatboys' 510 sight), summary scouts=0 throughout, no shot_census on armflea, no INVARIANT. A blind shot is evidenced when the first corllt shot precedes any LOS identification (the LLTs stay 600 elmos away unless the Fatboys advance).",
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "spawn",
+      "pattern": "\\[RangedArena\\].* spawn",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "damage",
+      "pattern": "\\[RangedArena\\].* damage.*attackerTeam=0",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "orders",
+      "pattern": "\\[RangedArena\\].* orders team=0",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "census",
+      "pattern": "\\[RangedArena\\].* shots scouts=\\d+ other=",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "blind shot at dot",
+      "pattern": "\\[RangedArena\\].* shot_census .*shooter=armfboy target=corllt category=other",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "ticks passed",
+      "pattern": "\\[RangedArena\\].* spawn id=\\d+ team=1 unit=armflea",
+      "scope": "any",
+      "by_minute": 1
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena|Removed widget: Ranged combat arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "policy",
+      "pattern": "has invalid ranged policy",
+      "scope": "any"
+    },
+    {
+      "key": "tick shot",
+      "pattern": "\\[RangedArena\\].* shot_census .*target=armflea",
+      "scope": "any"
+    },
+    {
+      "key": "tick tally",
+      "pattern": "\\[RangedArena\\].* shots scouts=[1-9]",
+      "scope": "any"
+    }
+  ]
+}

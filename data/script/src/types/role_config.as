@@ -1,7 +1,7 @@
 #include "ai_role.as"
 #include "../define.as"
-#include "../helpers/generic_helpers.as"
-#include "../helpers/unit_helpers.as" // for FactoryIsLand/Water
+#include "../helpers/common/generic_helpers.as"
+#include "../helpers/units/unit_helpers.as" // for FactoryIsLand/Water
 #include "profile_controller.as" // for MainUpdateDelegate
 
 // Role-based factory switching delegates

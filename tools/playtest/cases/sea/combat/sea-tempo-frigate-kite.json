@@ -1,0 +1,76 @@
+{
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      7492,
+      1220
+    ],
+    [
+      4814,
+      11077
+    ]
+  ],
+  "checks": "sea-arena",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "shots": "0.8@4400@6000:2000,2@4400@6000:2000,4@4400@6000:2000",
+  "name": "sea-tempo-kite",
+  "acceptance": {"minimum_survivors":{"armpship":2},"destroyed_units":{"corroy":1}},
+  "groups": [
+    {
+      "unit": "armpship",
+      "team": 0,
+      "count": 3,
+      "position": [
+        5700,
+        1400
+      ],
+      "columns": 3,
+      "spacing": 160
+    },
+    {
+      "unit": "armfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        5600,
+        1400
+      ]
+    },
+    {
+      "unit": "corroy",
+      "team": 1,
+      "count": 2,
+      "position": [
+        5700,
+        2100
+      ],
+      "columns": 2,
+      "spacing": 200
+    }
+  ],
+  "enemy_routes": [
+    {
+      "unit": "corroy",
+      "points": [
+        [
+          5700,
+          2100
+        ],
+        [
+          7900,
+          2500
+        ],
+        [
+          7900,
+          1200
+        ],
+        [
+          5700,
+          1200
+        ]
+      ]
+    }
+  ]
+}

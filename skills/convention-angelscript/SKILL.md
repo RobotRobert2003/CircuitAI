@@ -1,9 +1,9 @@
 ---
 name: convention-angelscript
 description: 'Apply AngelScript 2.39.0 WIP-compatible best practices when writing or reviewing scripts. Use for AngelScript APIs, handles, arrays, dictionaries, callbacks, functional-style policy code, memory safety, and performance-sensitive game logic. Targets CircuitAI commit-compatible behavior while distinguishing host APIs from language features.'
-compatibility: 'AngelScript 2.39.0 WIP as pinned by CircuitAI at upstream commit 365b8fb; Windows or cross-platform source editing. Host-registered APIs must be verified separately.'
 metadata:
-  version: '1.0.0'
+  compatibility: 'AngelScript 2.39.0 WIP as pinned by CircuitAI at upstream commit 365b8fb; Windows or cross-platform source editing. Host-registered APIs must be verified separately.'
+  version: '1.2.0'
   angelscript-baseline: '2.39.0-wip-365b8fb'
 ---
 
@@ -25,11 +25,11 @@ Target CircuitAI's vendored **AngelScript 2.39.0 WIP**, version integer
 
 Do not treat the text `2.39.0 WIP` as a stable release boundary. Upstream WIP
 continued changing after CircuitAI's snapshot. Read
-[version compatibility](./references/version-compatibility.md) before using
+[version compatibility](../../../rjm.bar.docs/projects/circuitai/skills/convention-angelscript/references/version-compatibility.md) before using
 new or unusual syntax.
 
 For CircuitAI-specific callbacks, native types, and ownership rules, also read
-`doc/angelscript-references.md`.
+`../rjm.bar.docs/projects/circuitai/angelscript-references.md`.
 
 ## Guiding Style
 
@@ -125,6 +125,9 @@ that the language does not provide.
      host registers it.
 
 8. **Perform a performance pass.**
+   - Read the [CircuitAI performance contracts](../../../rjm.bar.docs/projects/circuitai/performance/engineering-guide.md).
+     Document complexity, lifetime, invalidation and an equivalence test near
+     optimized code; distinguish native calls, CPU time and synchronized orders.
    - Identify callback frequency and collection sizes.
    - Remove repeated native lookups and avoid temporary strings/containers in
      hot loops.
@@ -205,11 +208,17 @@ array<int> CollectPositive(const array<int>& in values)
 
 Returning a fresh array is appropriate for setup, configuration, and small
 collections. In hot updates, prefer an output buffer or in-place compaction;
-see [performance and safety](./references/performance-and-safety.md).
+see [performance and safety](../../../rjm.bar.docs/projects/circuitai/skills/convention-angelscript/references/performance-and-safety.md).
 When receiving a returned reference container without another copy, bind it to
 a handle: `array<int>@ positive = CollectPositive(values);`.
 
 ### Dictionaries
+
+Check the boolean result of `dictionary.get`. A missing entry or failed
+conversion can overwrite an initialized scalar via its `out` temporary. Set
+the fallback **after** failure, or use CircuitAI's `DictIntOr`. D-201's SEA
+coverage regression produced millions of nonexistent counter metal when it
+ignored this result. See `tests/collection_helpers_tests.as`.
 
 ```angelscript
 bool TryReadWeight(
@@ -217,8 +226,9 @@ bool TryReadWeight(
     const string& in key,
     float& out weight)
 {
+    if (values.get(key, weight)) return true;
     weight = 0.0f;
-    return values.get(key, weight);
+    return false;
 }
 ```
 
@@ -306,6 +316,16 @@ host-specific effects.
 
 ## Review Checklist
 
+For local power queries (D-243), retain the original census publication cadence.
+A per-frame spatial index must also invalidate on `ai.GetOwnedUnitRevision()`:
+transfers/destruction can occur between asks in the same frame. Index candidates,
+not mutable eligibility or final floating totals. Sort candidates into the old
+ID order before summation, reread task/retirement flags, and retain pending-task
+traversal order. This is O(N) once per used frame plus local candidates per query,
+not an O(1) economy. `Sea::VerifyPowerIndex` repeats the old scan for correctness;
+disable it when measuring performance. Immutable UnitDef names may be classified
+once, but mutable role/attribute policy must not inherit that cache lifetime.
+
 - [ ] Exact engine pin and host registration were checked.
 - [ ] Every optional handle and downcast is null-checked.
 - [ ] Handle assignment and object assignment are not confused.
@@ -320,11 +340,15 @@ host-specific effects.
 - [ ] No destructor is relied on for prompt cleanup.
 - [ ] No shared mutable state is accessed from parallel script execution.
 - [ ] Hot callbacks avoid unnecessary allocations, copies, and logging.
+- [ ] Boolean queries stop the outer search only when predicates have no effects.
+- [ ] Cache freshness covers same-frame enqueues, transfers and callback re-entry.
+- [ ] Ordered decisions and RNG draws match the original; equal sets are insufficient.
+- [ ] New nested timers are compared using equivalent inclusive/exclusive scopes.
 - [ ] Code remains correct without JIT optimization.
 - [ ] CircuitAI code compiles with warnings treated as errors.
 
 ## References
 
-- [Popular idioms and examples](./references/idioms.md)
-- [Performance, memory, and safety](./references/performance-and-safety.md)
-- [Version compatibility and sources](./references/version-compatibility.md)
+- [Popular idioms and examples](../../../rjm.bar.docs/projects/circuitai/skills/convention-angelscript/references/idioms.md)
+- [Performance, memory, and safety](../../../rjm.bar.docs/projects/circuitai/skills/convention-angelscript/references/performance-and-safety.md)
+- [Version compatibility and sources](../../../rjm.bar.docs/projects/circuitai/skills/convention-angelscript/references/version-compatibility.md)

@@ -1,0 +1,99 @@
+{
+  "stop_minute": 6,
+  "expect": [
+    {
+      "key": "AIR-TECH-factory",
+      "pattern": "PASS AIR->TECH factory excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "AIR-TECH-economy",
+      "pattern": "PASS AIR->TECH economy excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "AIR-SEA-factory",
+      "pattern": "PASS AIR->SEA factory excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "AIR-SEA-economy",
+      "pattern": "PASS AIR->SEA economy excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "TECH-AIR-factory",
+      "pattern": "PASS TECH->AIR factory excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "TECH-AIR-economy",
+      "pattern": "PASS TECH->AIR economy excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "TECH-SEA-factory",
+      "pattern": "PASS TECH->SEA factory excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "TECH-SEA-economy",
+      "pattern": "PASS TECH->SEA economy excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "SEA-AIR-factory",
+      "pattern": "PASS SEA->AIR factory excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "SEA-AIR-economy",
+      "pattern": "PASS SEA->AIR economy excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "SEA-TECH-factory",
+      "pattern": "PASS SEA->TECH factory excluded",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "SEA-TECH-economy",
+      "pattern": "PASS SEA->TECH economy excluded",
+      "scope": "any",
+      "by_minute": 6
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception|Error in.*sea_allied_base",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT",
+      "scope": "any"
+    },
+    {
+      "key": "probe",
+      "pattern": "\\[Base(?:Probe|Watch)\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

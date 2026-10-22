@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+from benchmark_store import RAW_ROOT
 import subprocess
 import sys
 
@@ -12,8 +13,8 @@ p.add_argument('--dll', required=True)
 p.add_argument('--scenario', choices=['constructor', 'capacity'], required=True)
 a = p.parse_args()
 base = a.dir.resolve()
-if not base.is_relative_to(ROOT / 'build-theatres'):
-    p.error('Use repository build-theatres')
+if not base.is_relative_to(RAW_ROOT):
+    p.error('Use benchmark-repository build-theatres')
 base.mkdir(parents=True, exist_ok=True)
 starts = base / 'starts.as'
 starts.write_text('StartSpot(AIFloat3(2155,0,11747), AiRole::AIR, false),\n'

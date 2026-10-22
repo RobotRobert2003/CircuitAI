@@ -30,6 +30,7 @@
 #include <string>
 #include <chrono>
 #include <memory>
+#include "terrain/RangedGeometry.h"
 
 namespace circuit {
 
@@ -91,9 +92,35 @@ public:
 	float AirHeat(const springai::AIFloat3& pos, float radius) const;
 	springai::AIFloat3 AirCentre(const springai::AIFloat3& pos, float radius) const;   // -1 x when none
 	float EnemyCost(int kind) const;
+	// Explicitly requested local, visible naval composition. No role policy here.
+	void SampleNavalThreat(const springai::AIFloat3& origin, float radius);
+	float GetNavalThreatCost(int kind) const { return kind >= 0 && kind < 4 ? navalThreatCost[kind] : 0.f; }
 	int EnemyCount(int kind) const;
 	float SurfThreat(const springai::AIFloat3& pos) const;
 	float AirThreat(const springai::AIFloat3& pos) const;
+    float AirThreatAlong(const springai::AIFloat3& from, const springai::AIFloat3& to, float padding) const;
+    bool InLos(const springai::AIFloat3& pos) const;
+    std::vector<springai::AIFloat3> SafeAirRoute(const springai::AIFloat3& from,
+        const springai::AIFloat3& to, float maxThreat, float padding);
+    // Opt-in completed combat navy/factory snapshot. Flags: allied=1,
+    // submerged=2, anti-sub weapon=4, factory=8. No role decisions here.
+    int GetNavalForceCount();
+    int GetNavalForceId(int index) const;
+    int GetNavalForceDefId(int index) const;
+    int GetNavalForceFlags(int index) const;
+    int GetNavalForceBody(int index) const;
+    float GetNavalForceCost(int index) const;
+    springai::AIFloat3 GetNavalForcePos(int index) const;
+    // SEA-only extension: legal unidentified sonar contacts (flags 16|2) and
+    // visible water statics. AIR retains its original snapshot and cadence.
+    int GetSeaForceCount();
+    bool OutsideStaticWaterWeapons(const springai::AIFloat3& position, float padding, float formationRadius);
+    int GetSeaForceId(int i) const { return i>=0 && i<int(seaForces.size()) ? seaForces[i].id : -1; }
+    int GetSeaForceDefId(int i) const { return i>=0 && i<int(seaForces.size()) ? seaForces[i].defId : -1; }
+    int GetSeaForceFlags(int i) const { return i>=0 && i<int(seaForces.size()) ? seaForces[i].flags : 0; }
+    int GetSeaForceBody(int i) const { return i>=0 && i<int(seaForces.size()) ? seaForces[i].body : -1; }
+    float GetSeaForceCost(int i) const { return i>=0 && i<int(seaForces.size()) ? seaForces[i].cost : 0.f; }
+    springai::AIFloat3 GetSeaForcePos(int i) const { return i>=0 && i<int(seaForces.size()) ? seaForces[i].pos : springai::AIFloat3(-1.f,0.f,-1.f); }
 	int GetAirContactCount() const { return static_cast<int>(airContacts.size()); }
     int GetAirContactId(int index) const { return index >= 0 && static_cast<size_t>(index) < airContacts.size() ? airContacts[index].id : -1; }
 	springai::AIFloat3 GetAirContactPos(int index) const;
@@ -102,9 +129,27 @@ public:
     float GetArmedAirCost() const;
     float AmphThreat(const springai::AIFloat3& pos) const;
     int GetGroundContactCount() const { return static_cast<int>(groundContacts.size()); }
+    int GetGroundContactId(int index) const;
+    int GetGroundContactDefId(int index) const;
     springai::AIFloat3 GetGroundContactPos(int index) const;
     float GetGroundContactCost(int index) const;
     bool IsGroundContactEconomy(int index) const;
+    // D-296: economy kind flags of a ground contact (static only), O(1).
+    enum ContactKind: int {K_MEX = 1, K_WIND = 2, K_NANO = 4, K_OTHER_ECO = 8};
+    int GetGroundContactKind(int index) const;
+    // D-296: observed armed-ground-weapon coverage dilated by margin, from the
+    // current ground snapshot; independent of profile threat multipliers.
+    // Lazily rebuilt at most once per Update publication (and per margin).
+    float GroundHazard(const springai::AIFloat3& pos, float margin);
+    // D-296: a route for the unit's movement class on the shared lane grid
+    // (bots L_BOT, vehicles L_LAND, hovers L_HOVER) with that hazard layer as an
+    // cell penalty floor (hazardWeight per covered cell). Optional hard
+    // avoidance blocks covered cells; callers use soft escape from a covered
+    // starting region. The per-definition fine grid was rejected: it found no connection
+    // across glitters for a Tick the engine walks, and cost ~255 ms per build.
+    std::vector<springai::AIFloat3> GetUnitRaidRoute(const CCircuitDef* def,
+        const springai::AIFloat3& from, const springai::AIFloat3& to, float hazardMargin, float hazardWeight,
+        bool avoidHazards = false);
     int GetNavalContactCount() const { return static_cast<int>(navalContacts.size()); }
     springai::AIFloat3 GetNavalContactPos(int index) const;
     // Completed allied extractors, geothermal plants and factories. Lazy value
@@ -120,6 +165,10 @@ public:
         float landCost, float waterCost, float threatWeight, float maxWaterThreat);
 
 	// --- water
+	void PrepareWater() { BuildWater(); }  // idempotent, without lane/beach policy side effects
+	float GetWaterSurveyCoverage(int body, int maxAgeFrames);
+	springai::AIFloat3 GetWaterScoutGoal(int body, int maxAgeFrames, const springai::AIFloat3& from, int seed);
+	int GetWaterEnemyCount(int body);
 	int WaterBody(const springai::AIFloat3& pos, bool subDepth) const;   // -1 when none
 	bool IsHostileWater(int body, bool subDepth) const;
 	void MarkHostileWater(const springai::AIFloat3& pos, float radius);
@@ -168,6 +217,25 @@ public:
 	std::vector<springai::AIFloat3> GetLaneRoute(int lane, const springai::AIFloat3& from, int cls) const;
 
 private:
+	float navalThreatCost[4] = {}; // surface mobile, submerged, strike aircraft, water static
+    struct NavalForce { springai::AIFloat3 pos; float cost; int id, defId, flags, body; };
+    std::vector<NavalForce> navalForces;
+    std::vector<NavalForce> seaForces;
+    int seaForceFrame = -100000;
+    unsigned int groundPublication = 0, waterWeaponPublication = ~0u;
+    int waterWeaponFrame = -100000;
+    struct WaterWeapon { springai::AIFloat3 position; float range; };
+    std::vector<WaterWeapon> staticWaterWeapons;
+    ranged::SpatialIndex staticWaterWeaponIndex;
+    bool staticWaterWeaponIndexValid = true;
+    float maximumWaterWeaponRange = 0.f;
+    int navalForceFrame = -100000;
+    // Lazily requested by the AIR safety query only. Real weapon envelopes
+    // remain hazardous when a role profile intentionally assigns zero threat.
+    struct AirWeapon { springai::AIFloat3 pos; float range; };
+    mutable std::vector<AirWeapon> airWeapons;
+    mutable int airWeaponFrame = -100000;
+    void RefreshAirWeapons() const;
 	// Value snapshots, refreshed each second from current ally-visible contacts.
 	struct AirContact {
 		springai::AIFloat3 pos;
@@ -176,7 +244,8 @@ private:
         int id = -1;
 	};
 	std::vector<AirContact> airContacts;
-    struct GroundContact { springai::AIFloat3 pos; float cost; bool economy; };
+    struct GroundContact { springai::AIFloat3 pos; float cost; bool economy; int id; int defId;
+        int kind = 0; float hazardRange = 0.f; }; // D-296: ContactKind flags; LAND reach when armed
     std::vector<GroundContact> groundContacts;
     std::vector<springai::AIFloat3> navalContacts;
     std::vector<AirContact> allyAssets;
@@ -193,8 +262,45 @@ private:
 	};
 	using Grid = std::vector<float>;
     Grid observedWaterWeapons; // current weapon coverage, independent of profile threat multipliers
+    // D-296 lazy observed ground-weapon coverage (callback thread only).
+    // Owner: EnsureGroundHazard; invalidated by groundPublication or margin.
+    Grid observedGroundHazard;
+    unsigned int groundHazardPublication = ~0u;
+    float groundHazardMargin = -1.f;
+    void EnsureGroundHazard(float margin);
+    std::vector<springai::AIFloat3> UnitTerrainRoute(const CCircuitDef* def,
+        const springai::AIFloat3& from, const springai::AIFloat3& to, bool dry,
+        float landCost, float waterCost, float threatWeight, float maxWaterThreat,
+        const Grid* hazard, float hazardValue);
+    // D-296: unidentified radar dots are painted into the ground hazard with
+    // this conservative radius (default 700, about a T1 turret's range).
+    void SetUnknownHazardRange(float range);
+    std::vector<springai::AIFloat3> radarDots; // observed unidentified land contacts, per Update
+    float unknownHazardRange = 700.f;
+    // Raid routes solve on the shared per-class lane grid (no per-definition
+    // terrain build). Base surface threat is cached by ThreatMap publication;
+    // the hazard overlay is applied per solve, so a new dot is seen at once.
+    Grid raidBaseThreat, raidRouteThreat;
+    std::vector<char> raidRouteBlocked; // rebuilt with the hazard overlay, retained per AI
+    Grid ferryAirThreat;
+    std::vector<char> ferryAirBlocked;
+    lane::PointWorkspace ferryAirWorkspace;
+    std::uint64_t raidBaseVersion = 0;
+    lane::PointWorkspace raidRouteWorkspace;
     lane::Settings laneSettings;
     std::shared_ptr<const lane::Terrain> laneTerrain;
+    // Synchronous callback-only scratch, never shared with lane workers.
+    // Keep terrain alive to prevent pointer ABA; threat publication versions
+    // prevent double-buffer ABA. Amphibious observed-weapon overlays remain
+    // uncached until all of their mutations have a separate version.
+    std::shared_ptr<const lane::Terrain> routeSnapshotTerrain;
+    struct RouteSnapshot { Grid threat; std::uint64_t version = 0; lane::PointWorkspace workspace; };
+    std::array<RouteSnapshot, 2> routeSnapshots; // surface and air
+    Grid amphRouteThreat;
+    lane::PointWorkspace amphRouteWorkspace;
+    // Const lane joining is owner-thread-only; uniform costs need no threat
+    // version. Retain scratch but never cache the mutable route result.
+    mutable lane::PointWorkspace laneJoinWorkspace;
     lane::JobGate laneJobs;
     std::shared_ptr<std::atomic<bool>> laneCancel;
     int laneRevision = 0;
@@ -226,8 +332,18 @@ private:
 	int gw, gh;
 	Grid height, maxHeight;   // per cell: mean and highest point
 	Grid surfaceSlope;   // mean engine slope: catches sideways travel along a cliff
-    struct UnitTerrain { lane::Terrain grid; Grid slope; int frame = -100000; };
+    struct UnitTerrain {
+        lane::Terrain grid;
+        Grid slope;
+        std::uint64_t heightRevision = 0;
+        int frame = -100000;
+    };
     std::unordered_map<int, UnitTerrain> unitTerrain;
+    // One callback-thread scratch set per AI, shared across definition/dry keys.
+    // Retain allocations, never route results or live obstacle observations.
+    Grid unitRouteSlope, unitRouteThreat;
+    std::vector<char> unitRouteObstacles;
+    lane::PointWorkspace unitRouteWorkspace;
 	std::vector<springai::AIFloat3> sources;
 	Grid routeHeat, routeShare;
 	std::vector<char> lane;
@@ -245,6 +361,11 @@ private:
 	std::vector<int> body8, body15;
 	std::vector<char> hostile8, hostile15;
 	bool waterBuilt;
+	// Lazily sampled legal ally sensor maps. Reset on load/reconstruction: a
+	// saved claim of control must never substitute for renewed reconnaissance.
+	void UpdateWaterSurvey(int body);
+	std::vector<std::vector<int>> surveyCells;
+	std::vector<int> surveySeen, surveyFrame;
 	std::vector<SBeach> beaches;
 
 	std::vector<char> pass[_LANE_CLASSES_];

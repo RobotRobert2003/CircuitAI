@@ -1,0 +1,18 @@
+{
+  "name": "sea-tempo-coast",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [[7492,1220],[4814,11077]],
+  "checks": "sea-arena",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "verified_water_fixture": [6000,1200],
+  "acceptance": {"destroyed_units": {"armwin":1}, "coastal_mission":true},
+  "shots": "1@4400@6800:1600,2@4400@6800:1600,3@4400@6800:1600",
+  "groups": [
+    {"unit":"armroy","team":0,"count":28,"position":[5700,1200],"columns":7,"spacing":110},
+    {"unit":"armfrad","team":0,"count":1,"position":[6300,1200]},
+    {"unit":"armpeep","team":0,"count":1,"position":[6750,1300],"after_seconds":90},
+    {"unit":"armwin","team":1,"count":1,"position":[6750,1200],"land":true,"after_seconds":90}
+  ]
+}

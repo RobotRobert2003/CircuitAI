@@ -8,10 +8,15 @@
 #include "task/builder/GuardTask.h"
 #include "module/BuilderManager.h"
 #include "terrain/TerrainManager.h"  // Only for CorrectPosition
+#include "spring/SpringUnit.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 
 #include "AISCommands.h"
+#include "Command.h"
+#include "Log.h"
+#include "Sim/Units/CommandAI/Command.h"
+#include <cstdlib>
 
 namespace circuit {
 
@@ -87,6 +92,7 @@ void CBGuardTask::Stop(bool done)
 
 bool CBGuardTask::Execute(CCircuitUnit* unit)
 {
+	if (IsDead() || unit->GetTask() != this) return false;
 	executors.insert(unit);
 
 	CCircuitAI* circuit = manager->GetCircuit();
@@ -97,6 +103,9 @@ bool CBGuardTask::Execute(CCircuitUnit* unit)
 		const AIFloat3& unitPos = unit->GetPos(frame);
 		TRY_UNIT(circuit, unit,
 			unit->CmdPriority(ClampPriority());
+			// Keep both assistance and the pending clearance MOVE intact. Priority
+			// still updates; only an equivalent live GUARD is suppressed (D-223).
+			if (KeepGuard(unit, "execute")) return true;
 			short options = UNIT_CMD_OPTION;
 			// FIXME: it's not "Smooth area" and is broken when waterlevel is changed
 //			if (unit->GetCircuitDef()->IsAbleToRestore()) {
@@ -120,10 +129,12 @@ bool CBGuardTask::Execute(CCircuitUnit* unit)
 
 void CBGuardTask::OnUnitIdle(CCircuitUnit* unit)
 {
+	if (IsDead() || unit->GetTask() != this) return;
 	CCircuitAI* circuit = manager->GetCircuit();
 	CCircuitUnit* vip = circuit->GetTeamUnit(vipId);
 	if (vip != nullptr) {
 		TRY_UNIT(circuit, unit,
+			if (KeepGuard(unit, "idle")) return;
 			unit->GetUnit()->Guard(vip->GetUnit());
 		)
 	} else {
@@ -131,11 +142,45 @@ void CBGuardTask::OnUnitIdle(CCircuitUnit* unit)
 	}
 }
 
+bool CBGuardTask::KeepGuard(CCircuitUnit* unit, const char* source) const
+{
+	CCircuitAI* circuit = manager->GetCircuit();
+	const int frame = circuit->GetLastFrame();
+	const bool keep = circuit->GetUnitAPI()->HasGuardIntent(unit->GetId(), vipId, frame);
+	// Optional fixture diagnostics only. Normal games allocate no wrappers and
+	// emit no per-order logs. The independent wrapper check audits every skip;
+	// it deliberately does not replace the stricter prefix/options admission.
+	static const bool verify = std::getenv("CIRCUIT_VERIFY_GUARD") != nullptr;
+	if (verify) {
+		if (keep) {
+			bool found = false;
+			struct Commands {
+				std::vector<springai::Command*> values;
+				~Commands() { utils::free_clear(values); }
+			} commands{unit->GetUnit()->GetCurrentCommands()};
+			for (auto* cmd : commands.values) {
+				if (cmd->GetId() != CMD_GUARD || cmd->GetTimeOut() < frame) continue;
+				const auto params = cmd->GetParams();
+				found |= params.size() == 1 && params[0] == vipId;
+			}
+			if (!found) circuit->LOG("[INVARIANT] INV-163 suppressed guard absent: unit=%i target=%i", unit->GetId(), vipId);
+		}
+		circuit->LOG("GUARD: unit=%i target=%i source=%s action=%s", unit->GetId(), vipId, source, keep ? "keep" : "send");
+	}
+	return keep;
+}
+
 bool CBGuardTask::Reevaluate(CCircuitUnit* unit)
 {
 	if (!isInterrupt) {
 		return true;
 	}
+	struct EvaluationScope {
+		int& worker;
+		int previous;
+		~EvaluationScope() { worker = previous; }
+	} scope{reevaluatingWorker, reevaluatingWorker};
+	reevaluatingWorker = unit->GetId();
 	return IBuilderTask::Reevaluate(unit);
 }
 

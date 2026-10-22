@@ -686,16 +686,22 @@
 				"role": ["heavy"]
 			},
 			"legamcluster": {
-				"role": ["artillery"]
+				"role": ["artillery"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 			},
 			"legavroc": {
 				"role": ["artillery"]
 			},
 			"legmed": {
-				"role":	["assault"]
+				"role":	["assault"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 			},
 			"legvcarry": {
-				"role":	["riot"]
+				"role":	["riot"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "carrier", "range_fraction": 0.94, "spacing": 160, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
 			},
 			"leginf": {
 				"role": ["artillery"]
@@ -748,6 +754,7 @@
 				"role": ["assault", "air"]
 			},
 			"legfort": {
+				"target_min_cost": 300,
 				"role": ["heavy", "air"]
 			},
 			"legatorpbomber": {

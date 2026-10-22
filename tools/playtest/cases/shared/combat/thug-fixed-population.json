@@ -1,0 +1,103 @@
+{
+  "command_breakdown": true,
+  "name": "thug-fixed-population",
+  "unit": "corthud",
+  "description": "Serial CPU/order control: 120 living Thugs stage against 32 overlapping heavy turrets. Neither side should lose units; equal force/contact counts are required before comparing performance.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "cortex",
+  "camera": [
+    4000,
+    4700,
+    1900
+  ],
+  "photos": [],
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 3,
+      "team": 0,
+      "position": [
+        3000,
+        4800
+      ],
+      "spacing": 750
+    },
+    {
+      "unit": "armseer",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3000,
+        4000
+      ],
+      "spacing": 400
+    },
+    {
+      "unit": "corthud",
+      "count": 48,
+      "team": 0,
+      "position": [
+        3000,
+        3400
+      ],
+      "spacing": 150,
+      "columns": 16
+    },
+    {
+      "unit": "corthud",
+      "count": 48,
+      "team": 0,
+      "position": [
+        3000,
+        3900
+      ],
+      "spacing": 150,
+      "columns": 16
+    },
+    {
+      "unit": "corthud",
+      "count": 24,
+      "team": 0,
+      "position": [
+        3000,
+        3000
+      ],
+      "spacing": 260,
+      "columns": 12
+    },
+    {
+      "unit": "armhlt",
+      "count": 32,
+      "team": 1,
+      "position": [
+        3000,
+        5500
+      ],
+      "spacing": 150,
+      "columns": 16,
+      "after_seconds": 10
+    }
+  ],
+  "units": [
+    "corthud"
+  ],
+  "assertions": {
+    "min_kills": 0,
+    "min_shooters": 0,
+    "max_losses": 0,
+    "min_types_assigned": 1
+  },
+  "trace_orders": false,
+  "checks": "thug-safe-stage"
+}

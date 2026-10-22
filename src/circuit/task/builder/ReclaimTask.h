@@ -25,6 +25,7 @@ public:
 
 	virtual bool CanAssignTo(CCircuitUnit* unit) const override;
 	virtual void AssignTo(CCircuitUnit* unit) override;
+	virtual void RemoveAssignee(CCircuitUnit* unit) override;
 
 private:
 	virtual bool Reevaluate(CCircuitUnit* unit) override;

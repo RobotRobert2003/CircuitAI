@@ -19,6 +19,7 @@ public:
 				SResource cost, float shake, int timeout);
 	CBRadarTask(ITaskModule* mgr);  // Load
 	virtual ~CBRadarTask();
+	virtual bool CanAssignTo(CCircuitUnit* unit) const override;
 };
 
 } // namespace circuit

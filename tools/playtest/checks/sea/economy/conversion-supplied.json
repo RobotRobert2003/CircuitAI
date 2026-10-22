@@ -1,0 +1,41 @@
+{
+  "description": "Supplied tidal surplus must become completed naval fusion and advanced conversion; no injected construction orders",
+  "stop_minute": 20,
+  "expect": [
+    {
+      "key": "supplied",
+      "pattern": "\\[SeaConversionFixture\\] supplied",
+      "by_minute": 3,
+      "scope": "any"
+    },
+    {
+      "key": "fusion",
+      "pattern": "\\[SeaConversionFixture\\] completed fusion",
+      "by_minute": 20,
+      "scope": "any"
+    },
+    {
+      "key": "advanced",
+      "pattern": "\\[SeaConversionFixture\\] completed advanced converter",
+      "by_minute": 20,
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": "(ERR :|Execution of script failed|Exception.*script)",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[SeaConversionFixture\\] FAIL",
+      "scope": "any"
+    }
+  ]
+}

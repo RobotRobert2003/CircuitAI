@@ -1,0 +1,51 @@
+{
+  "stop_minute": 15,
+  "expect": [
+    {
+      "key": "yard-0",
+      "pattern": "PASS forward yard team=0 ",
+      "scope": "any",
+      "by_minute": 15
+    },
+    {
+      "key": "yard-1",
+      "pattern": "PASS forward yard team=1 ",
+      "scope": "any",
+      "by_minute": 15
+    },
+    {
+      "key": "yard-2",
+      "pattern": "PASS forward yard team=2 ",
+      "scope": "any",
+      "by_minute": 15
+    },
+    {
+      "key": "clusters",
+      "pattern": "PASS cluster observation complete count=[1-9]",
+      "scope": "any",
+      "by_minute": 15
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception|Error in.*sea_allied_base",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "INVARIANT",
+      "scope": "any"
+    },
+    {
+      "key": "probe",
+      "pattern": "\\[Base(?:Probe|Watch)\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

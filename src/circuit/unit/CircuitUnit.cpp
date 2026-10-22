@@ -13,16 +13,19 @@
 #include "setup/SetupManager.h"
 #include "terrain/TerrainManager.h"  // Only for CorrectPosition
 #include "spring/SpringMap.h"
+#include "spring/SpringUnit.h"
+#include "spring/CustomCommand.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
-#ifdef DEBUG_VIS
 #include "task/UnitTask.h"
-#endif
+#include "task/fighter/FighterTask.h"
+#include <cstdlib>
 
 #include "AISCommands.h"
 #include "Sim/Units/CommandAI/Command.h"
 #include "WrappCurrentCommand.h"
 #include "Weapon.h"
+#include "Log.h"
 #include "WrappWeaponMount.h"
 
 namespace circuit {
@@ -98,6 +101,9 @@ CCircuitUnit::CCircuitUnit(CCircuitAI* circuit, Id unitId, Unit* unit, CCircuitD
 
 CCircuitUnit::~CCircuitUnit()
 {
+	// The script-visible task property must remain valid for the full unit
+	// lifetime, including after its manager removes a dead task from its list.
+	AssignOwnedReference(task, static_cast<IUnitTask*>(nullptr));
 	delete command;
 	delete dgun;
 	delete weapon;
@@ -106,13 +112,16 @@ CCircuitUnit::~CCircuitUnit()
 
 void CCircuitUnit::SetTask(IUnitTask* task)
 {
-	this->task = task;
+	// Acquire before releasing: assignment to the same task is legal. Task
+	// assignee sets borrow units, so this strong edge introduces no cycle.
+	AssignOwnedReference(this->task, task);
 	SetTaskFrame(manager->GetCircuit()->GetLastFrame());
 	taskState = ETaskState::NONE;
 }
 
 void CCircuitUnit::ClearAct()
 {
+	ClearPriorityTarget(); // ClearAct covers reassignment, retreat, player control and task stop.
 	CActionList::Clear();
 	dgunAct = nullptr;
 	travelAct = nullptr;
@@ -207,9 +216,11 @@ bool CCircuitUnit::IsWeaponReady(int frame)
 	return isWeaponReady;
 }
 
+int CCircuitUnit::GetDGunReloadFrame() const { return dgun ? dgun->GetReloadFrame() : INT_MAX; }
+
 bool CCircuitUnit::IsDGunReady(int frame, float energy)
 {
-	return (dgun->GetReloadFrame() <= frame) && (dgunDef->GetCostE() < energy)
+	return dgun && (dgun->GetReloadFrame() <= frame) && (dgunDef->GetCostE() <= energy)
 		&& (!dgunDef->IsStockpile() || (unit->GetStockpile() > 0));
 }
 
@@ -281,12 +292,30 @@ float CCircuitUnit::GetHealthPercent()
  */
 void CCircuitUnit::CmdRemove(std::vector<float>&& params, short options)
 {
-	unit->ExecuteCustomCommand(CMD_REMOVE, params, options);
+	SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_REMOVE, params, options);
 }
 
 void CCircuitUnit::CmdMoveTo(const AIFloat3& pos, short options, int timeout)
 {
 	assert(geom::is_in_map(pos));
+    // Optional provenance for command storms outside RouteTask too. IDs only,
+    // bounded by AI/unit IDs for this process; no allocation/query in normal
+    // play. Sampling limits logs, never commands or threat response.
+    static const bool trace=std::getenv("CIRCUIT_TRACE_MOVE")!=nullptr;
+    if(trace && manager && task) {
+        struct Sample { int frame=-1, count=0, logged=-30; };
+        static std::map<std::pair<int,int>,Sample> samples;
+        auto* circuit=manager->GetCircuit(); const int now=circuit->GetLastFrame();
+        auto& sample=samples[{unit->GetSkirmishAIId(),id}];
+        if(sample.frame<0 || now-sample.frame>=FRAMES_PER_SEC) {sample.frame=now;sample.count=0;}
+        if(++sample.count>=6 && now-sample.logged>=FRAMES_PER_SEC) {
+            sample.logged=now;
+            const auto here=GetPos(now);
+            const int fighter=task->GetType()==IUnitTask::Type::FIGHTER ? int(static_cast<IFighterTask*>(task)->GetFightType()) : -1;
+            circuit->LOG("[MoveBurst] frame=%d unit=%d def=%s type=%d fighter=%d count=%d pos=%.1f,%.1f goal=%.1f,%.1f options=%d timeout=%d",
+                now,id,circuitDef->GetDef()->GetName(),int(task->GetType()),fighter,sample.count,here.x,here.z,pos.x,pos.z,int(options),timeout);
+        }
+    }
 	unit->MoveTo(pos, options, timeout);
 //	unit->ExecuteCustomCommand(CMD_RAW_MOVE, {pos.x, pos.y, pos.z}, options, timeout);
 }
@@ -312,7 +341,8 @@ void CCircuitUnit::CmdPatrolTo(const AIFloat3& pos, short options, int timeout)
 void CCircuitUnit::CmdAttackGround(const AIFloat3& pos, short options, int timeout)
 {
 	assert(geom::is_in_map(pos));
-	unit->ExecuteCustomCommand(CMD_ATTACK_GROUND, {pos.x, pos.y, pos.z}, options, timeout);
+	float params[] = {pos.x, pos.y, pos.z};
+	SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_ATTACK_GROUND, params, options, timeout);
 }
 
 void CCircuitUnit::CmdWantedSpeed(float speed)
@@ -325,16 +355,40 @@ void CCircuitUnit::CmdWantedSpeed(float speed)
 void CCircuitUnit::CmdStop(short options, int timeout)
 {
 	unit->Stop(options, timeout);
+	priorityTarget = -1; // BAR STOP cancels the priority list; allow a new intent.
 }
 
 void CCircuitUnit::CmdSetTarget(CEnemyInfo* enemy)
 {
-//	unit->ExecuteCustomCommand(CMD_UNIT_SET_TARGET, {(float)target->GetId()});
+    if (circuitDef->GetTargetMinCost() <= 0.f) return;
+    const int next = enemy != nullptr && !enemy->IsHidden() && enemy->IsInRadarOrLOS() ? enemy->GetId() : -1;
+    if (next == priorityTarget) return;
+    ClearPriorityTarget();
+    if (next < 0) return;
+    // Unlike queued ATTACK, BAR priority fire also applies during the preceding
+    // MOVE. OPEN fire is retained so incompatible mounts (dedicated AA) keep
+    // choosing their own targets. Never enable the old global stub for all units.
+    float params[] = {float(next)};
+    SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_SET_TARGET, params);
+    priorityTarget = next;
+}
+
+void CCircuitUnit::ClearPriorityTarget()
+{
+    if (priorityTarget < 0) return;
+    if (!isDead && manager != nullptr) {
+        TRY_UNIT(manager->GetCircuit(), this,
+            float params[] = {float(priorityTarget)};
+            SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_UNIT_CANCEL_TARGET, params);
+        )
+    }
+    priorityTarget = -1;
 }
 
 void CCircuitUnit::CmdCloak(bool state)
 {
-	unit->ExecuteCustomCommand(CMD_WANT_CLOAK, {state ? 1.f : 0.f});  // personal
+	float params[] = {state ? 1.f : 0.f};
+	SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_WANT_CLOAK, params);  // personal
 //	unit->ExecuteCustomCommand(CMD_CLOAK_SHIELD, {state ? 1.f : 0.f});  // area
 //	unit->Cloak(state);
 }
@@ -347,7 +401,7 @@ void CCircuitUnit::CmdFireAtRadar(bool state)
 void CCircuitUnit::CmdFindPad(int timeout)
 {
 //	unit->ExecuteCustomCommand(CMD_FIND_PAD, {}, 0, timeout);
-	unit->ExecuteCustomCommand(CMD_LAND_AT_AIRBASE, {}, 0, timeout);
+	SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_LAND_AT_AIRBASE, {}, 0, timeout);
 }
 
 void CCircuitUnit::CmdManualFire(short options, int timeout)
@@ -377,11 +431,33 @@ void CCircuitUnit::CmdAirStrafe(float value)
 
 void CCircuitUnit::CmdBARPriority(float value)
 {
+	requestedPriority = value;
+	if (buildPriorityOverride >= 0) value = float(buildPriorityOverride);
 	if (priority == value) {
 		return;
 	}
 	priority = value;
-	unit->ExecuteCustomCommand(CMD_BAR_PRIORITY, {value});
+	float params[] = {value};
+	SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_BAR_PRIORITY, params);
+}
+
+void CCircuitUnit::SetBuildPriorityOverride(int value)
+{
+	// Opt-in script policy, -1 restores native task decisions. Keep the last
+	// native request so ending an override restores it immediately. The existing
+	// effective-value cache suppresses duplicate synchronized commands, including
+	// native re-evaluation while an override holds. Default units are unchanged.
+	if (value < -1 || value > 1 || value == buildPriorityOverride) return;
+	buildPriorityOverride = value;
+	IUnitTask* currentTask = GetTask();
+	if (value < 0 && currentTask != nullptr && (currentTask->IsExternalControlled()
+	    || currentTask->GetType() == IUnitTask::Type::PLAYER)) {
+		// Manual ownership may already have changed the game's priority. Drop
+		// our cached belief without overwriting the player's setting on release.
+		priority = -1.f;
+		return;
+	}
+	CmdBARPriority(requestedPriority >= 0 ? requestedPriority : 1.f);
 }
 
 void CCircuitUnit::CmdTerraform(std::vector<float>&& params)
@@ -406,7 +482,8 @@ void CCircuitUnit::CmdWait(bool state)
 
 void CCircuitUnit::RemoveWait()
 {
-	CmdRemove({CMD_WAIT}, UNIT_COMMAND_OPTION_ALT_KEY | UNIT_COMMAND_OPTION_CONTROL_KEY);
+    if (manager->GetCircuit()->GetUnitAPI()->HasQueuedCommand(id, CMD_WAIT))
+        CmdRemove({CMD_WAIT}, UNIT_COMMAND_OPTION_ALT_KEY | UNIT_COMMAND_OPTION_CONTROL_KEY);
 }
 
 bool CCircuitUnit::IsWaiting() const
@@ -459,6 +536,9 @@ void CCircuitUnit::CmdRepair(CAllyUnit* target, short options, int timeout)
 
 void CCircuitUnit::CmdBuild(CCircuitDef* buildDef, const AIFloat3& buildPos, int facing, short options, int timeout)
 {
+	// Role policy closes this gate before stopping a retired factory. A task
+	// selected before that transition must not restart it on a later idle event.
+	if (!productionEnabled) return;
 	unit->Build(buildDef->GetDef(), buildPos, facing, options, timeout);
 	taskState = ETaskState::EXECUTE;
 }
@@ -487,6 +567,7 @@ void CCircuitUnit::CmdResurrectInArea(const AIFloat3& pos, float radius, short o
 void CCircuitUnit::CmdSetFireState(CCircuitDef::FireT state)
 {
 	unit->SetFireState(state);
+    requestedFire=state;
 }
 
 void CCircuitUnit::TrySetFireState(CCircuitDef::FireT state)
@@ -500,6 +581,7 @@ void CCircuitUnit::TrySetFireState(CCircuitDef::FireT state)
 void CCircuitUnit::CmdSetMoveState(CCircuitDef::MoveT state)
 {
 	unit->SetMoveState(state);
+    requestedMove=state;
 }
 
 void CCircuitUnit::TrySetMoveState(CCircuitDef::MoveT state)
@@ -587,7 +669,7 @@ void CCircuitUnit::Attack(CEnemyInfo* enemy, bool isGround, int timeout, bool qu
 		// redundant follow-up order when they request a persistent target only.
 		if (queueFight) CmdFightTo(pos, UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY | UNIT_COMMAND_OPTION_SHIFT_KEY, timeout);
 		CmdWantedSpeed(NO_SPEED_LIMIT);
-		CmdSetTarget(target);
+		CmdSetTarget(enemy);
 	)
 }
 
@@ -612,7 +694,7 @@ void CCircuitUnit::Attack(const AIFloat3& pos, CEnemyInfo* enemy, bool isGround,
 		}
 		CmdFightTo(enemy->GetPos(), UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY | UNIT_COMMAND_OPTION_SHIFT_KEY, timeout);  // los-cheat related
 		CmdWantedSpeed(NO_SPEED_LIMIT);
-		CmdSetTarget(target);
+		CmdSetTarget(enemy);
 		if (circuitDef->IsAttrOnOff()) {
 			unit->SetOn(isStatic == circuitDef->IsOnSlow());
 		}

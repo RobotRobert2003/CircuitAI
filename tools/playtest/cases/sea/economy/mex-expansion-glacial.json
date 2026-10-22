@@ -1,0 +1,12 @@
+{
+  "description": "Natural three-versus-three SEA frontier expansion and constructor survival on Glacial Gap",
+  "runner": "run_sea.py",
+  "arguments": ["--map", "glacial", "--legacy", "--minutes", "15", "--speed", "12", "--profile", "experimental_balanced", "--expansion-observer", "--checks", "sea/economy/mex-expansion.json", "--scenario", "mex-safe-default"],
+  "seed": 1881001,
+  "supplied_assets": false,
+  "checks": "sea/economy/mex-expansion.json",
+  "scorecard": "analyze_sea_expansion.py",
+  "acceptance": ["clean runtime", "completed mexes beyond 2400 elmos by ten minutes", "forward torpedo defense completed", "observed withdrawals move homeward"],
+  "controls": ["old data snapshot with identical map and seed", "full experimental economy path", "Supreme Isthmus"],
+  "limitation": "Compare constructor losses and territory together. This does not guarantee survival against hidden enemies or establish whole-game win rate."
+}

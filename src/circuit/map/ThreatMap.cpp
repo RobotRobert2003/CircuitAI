@@ -85,6 +85,7 @@ void CThreatMap::InitRanges()
 
 void CThreatMap::Init(const int roleSize, std::set<CCircuitDef::RoleT>&& modRoles)
 {
+    ++publicationVersion;
 	defRole = 0;
 	if ((int)modRoles.size() < roleSize) {
 		for (CCircuitDef::RoleT role : modRoles) {
@@ -740,6 +741,7 @@ void CThreatMap::SwapBuffers()
 	cloakThreat = threatData.cloakThreat.data();
 	shieldArray = threatData.shield.data();
 	threatArray = threatData.defThreat->surfThreat.data();
+    ++publicationVersion;
 }
 
 #ifdef DEBUG_VIS

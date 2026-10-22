@@ -1,0 +1,217 @@
+{
+  "name": "ranged-starlight-assist",
+  "unit": "armmanni",
+  "checks": "ranged-starlight-assist",
+  "description": "D-295: four AI-owned Starlights (z=4400) with no legal shot while AI-owned Bulldogs/Maulers (z=6900-7000) fight Cortex raid waves (4 Raiders every 20 s from 12 s, 2 Reapers every ~22 s from 22 s, until 92 s) spawned in contact at z=7300, about 2500 elmos away (outside the 1950-elmo local search). Sixteen Targeting Facilities behind the Starlights (z=2900, outside their 950 range) are seen once by two cameras removed at 25 s and then stay radar-only, filling the 16-entry objective shortlist to reproduce the late-game truncate-then-filter stall. Pass: an assist is logged, the Starlights move toward the fight and damage the raid.",
+  "map": "All That Glitters v2.2.3",
+  "map_key": "glitters",
+  "starts": [
+    [
+      4000,
+      2400
+    ],
+    [
+      4000,
+      9800
+    ]
+  ],
+  "side": "armada",
+  "camera": [
+    3700,
+    5800,
+    3000
+  ],
+  "photos": [
+    60,
+    110,
+    170
+  ],
+  "centroid_distance": true,
+  "remove_units_after_seconds": 25,
+  "remove_unit_name": "armeyes",
+  "groups": [
+    {
+      "unit": "armarad",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3600,
+        4750
+      ]
+    },
+    {
+      "unit": "armeyes",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3300,
+        2700
+      ],
+      "spacing": 400,
+      "columns": 2
+    },
+    {
+      "unit": "cortarg",
+      "count": 16,
+      "team": 1,
+      "position": [
+        2800,
+        2900
+      ],
+      "spacing": 160,
+      "columns": 8
+    },
+    {
+      "unit": "armbull",
+      "count": 10,
+      "team": 0,
+      "position": [
+        3200,
+        6900
+      ],
+      "spacing": 140,
+      "columns": 5,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmart",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3600,
+        7000
+      ],
+      "spacing": 160,
+      "columns": 4,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmanni",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3400,
+        4400
+      ],
+      "spacing": 220,
+      "columns": 4,
+      "after_seconds": 12
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 12
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 32
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 52
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 72
+    },
+    {
+      "unit": "corraid",
+      "count": 4,
+      "team": 1,
+      "position": [
+        3200,
+        7300
+      ],
+      "spacing": 140,
+      "columns": 4,
+      "after_seconds": 92
+    },
+    {
+      "unit": "correap",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        7300
+      ],
+      "spacing": 160,
+      "columns": 2,
+      "after_seconds": 22
+    },
+    {
+      "unit": "correap",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        7300
+      ],
+      "spacing": 160,
+      "columns": 2,
+      "after_seconds": 45
+    },
+    {
+      "unit": "correap",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        7300
+      ],
+      "spacing": 160,
+      "columns": 2,
+      "after_seconds": 68
+    },
+    {
+      "unit": "correap",
+      "count": 2,
+      "team": 1,
+      "position": [
+        4000,
+        7300
+      ],
+      "spacing": 160,
+      "columns": 2,
+      "after_seconds": 90
+    }
+  ],
+  "enemy_destination": [
+    3500,
+    6950
+  ],
+  "assertions": {
+    "min_shooters": 2,
+    "min_damage": 2500
+  }
+}

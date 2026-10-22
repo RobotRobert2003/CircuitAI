@@ -1,0 +1,286 @@
+{
+  "name": "naval-roster-cortex-t2",
+  "map": "Glacial Gap v1.1",
+  "map_key": "glacial",
+  "starts": [
+    [
+      2100,
+      4400
+    ],
+    [
+      5200,
+      4400
+    ]
+  ],
+  "groups": [
+    {
+      "unit": "coracsub",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2500,
+        4200
+      ]
+    },
+    {
+      "unit": "cormls",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2710,
+        4200
+      ]
+    },
+    {
+      "unit": "corcrus",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2920,
+        4200
+      ]
+    },
+    {
+      "unit": "corshark",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2500,
+        4410
+      ]
+    },
+    {
+      "unit": "corssub",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2710,
+        4410
+      ]
+    },
+    {
+      "unit": "corarch",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2920,
+        4410
+      ]
+    },
+    {
+      "unit": "corsjam",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2500,
+        4620
+      ]
+    },
+    {
+      "unit": "corantiship",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2710,
+        4620
+      ]
+    },
+    {
+      "unit": "corbats",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2920,
+        4620
+      ]
+    },
+    {
+      "unit": "cormship",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2500,
+        4830
+      ]
+    },
+    {
+      "unit": "corblackhy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2710,
+        4830
+      ]
+    },
+    {
+      "unit": "corfship",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2920,
+        4830
+      ]
+    },
+    {
+      "unit": "armfrad",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2200,
+        4200
+      ]
+    },
+    {
+      "unit": "armason",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2200,
+        4500
+      ]
+    },
+    {
+      "unit": "coracsub",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4600,
+        4200
+      ]
+    },
+    {
+      "unit": "cormls",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4390,
+        4200
+      ]
+    },
+    {
+      "unit": "corcrus",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4180,
+        4200
+      ]
+    },
+    {
+      "unit": "corshark",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4600,
+        4410
+      ]
+    },
+    {
+      "unit": "corssub",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4390,
+        4410
+      ]
+    },
+    {
+      "unit": "corarch",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4180,
+        4410
+      ]
+    },
+    {
+      "unit": "corsjam",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4600,
+        4620
+      ]
+    },
+    {
+      "unit": "corantiship",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4390,
+        4620
+      ]
+    },
+    {
+      "unit": "corbats",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4180,
+        4620
+      ]
+    },
+    {
+      "unit": "cormship",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4600,
+        4830
+      ]
+    },
+    {
+      "unit": "corblackhy",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4390,
+        4830
+      ]
+    },
+    {
+      "unit": "corfship",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4180,
+        4830
+      ]
+    },
+    {
+      "unit": "armfrad",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4900,
+        4200
+      ]
+    },
+    {
+      "unit": "armason",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4900,
+        4500
+      ]
+    }
+  ],
+  "shots": "1@4200@3500:4650,3@4200@3500:4650",
+  "description": "Supplied mixed-roster coverage, one hull per factory option; not a cost-balanced effectiveness tournament. Support utilities require purpose-specific fixtures.",
+  "roster_source": "C:\\bardev\\bar-Beyond-All-Reason\\units\\CorBuildings\\SeaFactories\\corasy.lua",
+  "roster": [
+    "coracsub",
+    "cormls",
+    "corcrus",
+    "corshark",
+    "corssub",
+    "corarch",
+    "corsjam",
+    "corantiship",
+    "corbats",
+    "cormship",
+    "corblackhy",
+    "corfship"
+  ]
+}

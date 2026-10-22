@@ -125,7 +125,8 @@ void CSetupManager::CloseConfig()
 	if (config != nullptr) {  // D-126: the script-read sections outlive the config
 		delete scriptConfig;
 		scriptConfig = new Json::Value(Json::objectValue);
-		for (const char* key : {"weapons", "lanes"}) {
+		// Commander policy and the scout-raid switch are read after init too.
+		for (const char* key : {"weapons", "lanes", "commander", "scout_raid", "field"}) {
 			if (config->isMember(key)) {
 				(*scriptConfig)[key] = (*config)[key];
 			}
@@ -143,6 +144,15 @@ const CSetupData::ModOptions& CSetupManager::GetModOptions() const
 bool CSetupManager::HasStartBoxes() const
 {
 	return setupData->IsInitialized();
+}
+
+int CSetupManager::FriendlyStartBoxAt(const AIFloat3& pos) const
+{
+	if (!setupData->IsInitialized()) {
+		return -1;
+	}
+	const CAllyTeam* ally = setupData->GetAllyTeam(circuit->GetAllyTeamId());
+	return (ally != nullptr) ? int(ally->GetStartBox().ContainsPoint(pos)) : -1;
 }
 
 int CSetupManager::EnemyStartBoxAt(const AIFloat3& pos) const
@@ -182,7 +192,7 @@ void CSetupManager::ParseScriptStarts()
 		const size_t e = s.find_last_not_of(" \t\r\n");
 		return (b == std::string::npos) ? std::string() : s.substr(b, e - b + 1);
 	};
-	std::map<int, SScriptStart> teams;
+	std::map<int, SScriptStart> teams, unplaced;
 	std::set<int> playing;
 	size_t pos = 0;
 	while ((pos = script.find('[', pos)) != std::string::npos) {
@@ -236,6 +246,13 @@ void CSetupManager::ParseScriptStarts()
 			st.pos = AIFloat3(std::atof(vals["startposx"].c_str()), 0.f, std::atof(vals["startposz"].c_str()));
 			st.allyTeam = vals.count("allyteam") ? std::atoi(vals["allyteam"].c_str()) : -1;
 			teams[id] = st;
+		} else if ((name.rfind("team", 0) == 0) && vals.count("allyteam")) {
+			// Part B1: a team placed in game (no start in the script) still counts
+			const int id = std::atoi(name.c_str() + 4);
+			SScriptStart st;
+			st.pos = AIFloat3(-1.f, 0.f, -1.f);
+			st.allyTeam = std::atoi(vals["allyteam"].c_str());
+			unplaced[id] = st;
 		} else if ((name.rfind("ai", 0) == 0) && vals.count("team")) {
 			playing.insert(std::atoi(vals["team"].c_str()));
 		} else if ((name.rfind("player", 0) == 0) && vals.count("team")
@@ -249,6 +266,11 @@ void CSetupManager::ParseScriptStarts()
 			scriptStarts.push_back(kv2.second);
 		}
 	}
+	// teams in id order, placed or not; the map keys keep it deterministic
+	std::map<int, SScriptTeam> all;
+	for (const auto& kv2 : unplaced) if (playing.count(kv2.first)) all[kv2.first] = {kv2.first, kv2.second.allyTeam, false, kv2.second.pos};
+	for (const auto& kv2 : teams) if (playing.count(kv2.first)) all[kv2.first] = {kv2.first, kv2.second.allyTeam, true, kv2.second.pos};
+	for (const auto& kv2 : all) scriptTeams.push_back(kv2.second);
 	circuit->LOG("LANES: %i playing team start(s) in the start script", (int)scriptStarts.size());
 }
 
@@ -262,6 +284,12 @@ AIFloat3 CSetupManager::GetScriptStart(int i)
 {
 	ParseScriptStarts();
 	return ((i >= 0) && (i < (int)scriptStarts.size())) ? scriptStarts[i].pos : AIFloat3(-1.f, 0.f, 0.f);
+}
+
+const std::vector<CSetupManager::SScriptTeam>& CSetupManager::GetScriptTeams()
+{
+	ParseScriptStarts();
+	return scriptTeams;
 }
 
 bool CSetupManager::IsScriptStartEnemy(int i)
