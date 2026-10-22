@@ -20,6 +20,7 @@
 #include "../../systems/construction/front_reclaim.as"
 #include "../../systems/construction/front_eco_ladder.as"
 #include "../../systems/construction/front_recovery.as"
+#include "../../systems/construction/front_mex_upgrade.as"
 #include "../../systems/construction/commander_front.as"
 #include "../../systems/construction/front_spawn_factory.as"
 // Builder state and helpers for enqueueing structures like nanos
@@ -235,6 +236,7 @@ namespace RoleFront {
         float energyIncome = Economy::GetMinEnergyIncomeLast10s();
         Front_IncomeLimits(metalIncome, energyIncome);
         FrontRecovery::Update(metalIncome);
+        FrontMexUp::Update(); // owner, 2026-10-22: T2 helpers move to open mex upgrades
 
         // One-time switch for T1 combat units to 'raider' role when metal income > 250
         if (!g_frontT1CombatRoleSwitchDone && metalIncome > 250.0f) {
@@ -636,6 +638,9 @@ namespace RoleFront {
         if (ladderGantry !is null) return ladderGantry;
         IUnitTask@ ladder=FrontEcoLadder::Work(builder);
         if (ladder !is null) return ladder;
+        // Owner (2026-10-22): T2 constructors upgrade our T1 mexes before native assist/help work
+        IUnitTask@ mexUp=FrontMexUp::Work(builder);
+        if (mexUp !is null) return mexUp;
         // Pre-create and cache a single default task instance; never recreate.
         IUnitTask@ defaultTask = Builder::MakeDefaultTaskWithLog(builder.id, "FRONT");
 

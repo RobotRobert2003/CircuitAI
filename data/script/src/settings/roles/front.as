@@ -244,6 +244,15 @@ namespace Front {
             float MinimumMetalIncomeForFUS = 40.0f; 
             float MinimumEnergyIncomeForFUS = 1200.0f;
             float MaxEnergyIncomeForFUS = 4000.0f;
+
+            // T2 mex upgrades first (owner, 2026-10-22; systems/construction/front_mex_upgrade.as):
+            // a FRONT T2 constructor upgrades our T1 mexes before assisting factories or other
+            // constructors' non-mex work, after the eco ladder's own reactor orders. Helpers already on
+            // a shared assist/build are pulled to an open upgrade (never a task's last builder).
+            bool MexUpgradeFirst = true;
+            float MexUpgradeRadius = 100000.0f;   // from the start position; every mex we hold
+            int MexUpgradeMaxConcurrent = 3;      // MEXUP tasks of ours at once
+            int MexUpgradeScanSeconds = 3;        // how often busy helpers are reconsidered
         }
 }
 }
