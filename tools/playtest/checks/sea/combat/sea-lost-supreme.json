@@ -1,0 +1,14 @@
+{
+  "stop_minute": 9,
+  "expect": [
+    {"key": "loaded", "pattern": "\\[SeaArena\\].* loaded case=sea-lost-supreme", "scope": "any", "by_minute": 1},
+    {"key": "navy-removed", "pattern": "\\[SeaArena\\].*fixture_removed team=0 unit=armsy", "scope": "any", "by_minute": 3},
+    {"key": "hostile-fleet", "pattern": "\\[SeaArena\\].*spawn id=\\d+ team=1 unit=corroy", "scope": "any", "by_minute": 4}
+  ],
+  "forbid": [
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "invariant", "pattern": "INVARIANT", "scope": "any"},
+    {"key": "fixture", "pattern": "\\[SeaArena\\].*ERROR|Error in.*sea_arena|Removed widget: SEA combat arena", "scope": "any"},
+    {"key": "crash", "pattern": "Access violation|has crashed|Fatal:", "scope": "any"}
+  ]
+}

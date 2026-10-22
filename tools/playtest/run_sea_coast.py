@@ -18,7 +18,7 @@ def main():
     p.add_argument('--mode',choices=['lost','held','retake'],default='lost')
     p.add_argument('--profile',default='experimental_balanced')
     p.add_argument('--minutes',type=float,default=14)
-    p.add_argument('--game',default='Beyond All Reason test-31479-433a460')
+    p.add_argument('--game',default=None)
     p.add_argument('--stage-only',action='store_true')
     a=p.parse_args()
     d=storage.allocate('sea','strategy','coast-'+a.mode+'-'+a.side,a.map,'supplied',seed=219001)
@@ -26,7 +26,7 @@ def main():
     (RAW_ROOT / 'coast-current.txt').write_text(str(d))
     cli=[sys.executable,str(playtest.HERE/'playtest.py')]
     cmd=cli+['stage','--dir',str(d),'--dll',str(a.dll),'--map',MAPS[a.map],
-        '--game',a.game,'--engine','recoil_2026.07.04',
+        *(['--game',a.game] if a.game else []),'--engine','recoil_2026.07.04',
         '--role','SEA','--roles','SEA','--side',a.side,'--bonus','0','--speed','15',
         '--minutes',str(a.minutes),'--shots','3,6,10,13','--width','1280','--height','720',
         '--lean-render','--modoption','deathmode=neverend','--ai-option','profile='+a.profile,

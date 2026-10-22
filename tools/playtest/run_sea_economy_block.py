@@ -14,7 +14,7 @@ def main():
     print('SEA_BLOCK_DIRECTORY='+str(d),flush=True)
     call=[sys.executable,str(playtest.HERE/'playtest.py')]
     subprocess.run(call+['stage','--dir',str(d),'--dll',str(a.dll),'--data',str(playtest.REPO/'data'),
-        '--map','Supreme Isthmus v1.7','--game','Beyond All Reason test-31479-433a460','--engine','recoil_2026.07.04',
+        '--map','Supreme Isthmus v1.7','--engine','recoil_2026.07.04',
         '--role','SEA','--roles','SEA','--side','armada','--bonus','0','--ai-option','profile=experimental_hard',
         '--ai-option','random_seed=1911','--speed','15','--minutes','12','--shots','3@2200@6200:11000,6@2200@6200:11000,11@2200@6200:11000',
         '--width','1280','--height','720','--lean-render','--modoption','deathmode=neverend',

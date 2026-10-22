@@ -1,0 +1,32 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {
+      "key": "station",
+      "pattern": "\\[SEA\\]\\[SubPerimeter\\]",
+      "scope": "any",
+      "by_minute": 3.9
+    },
+    {
+      "key": "handoff",
+      "pattern": "\\[SEA\\]\\[GuardReleased\\]",
+      "scope": "any",
+      "after_minute": 4,
+      "by_minute": 5
+    },
+    {
+      "key": "sub-damage",
+      "pattern": "SeaArena.*damage.*team=0.*attackerUnit=arm(?:sub|serp).*victimUnit=corroy",
+      "scope": "any",
+      "after_minute": 4,
+      "by_minute": 6
+    }
+  ],
+  "forbid": [
+    {
+      "key": "runtime",
+      "pattern": "INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaArena.*ERROR",
+      "scope": "any"
+    }
+  ]
+}

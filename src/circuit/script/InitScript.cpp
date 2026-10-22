@@ -462,6 +462,15 @@ static float CCircuitAI_Tidal(CCircuitAI* circuit) { return circuit->GetMap()->G
 static float CCircuitAI_IncomeMultiplier(CCircuitAI* circuit) { return circuit->GetGame()->GetTeamIncomeMultiplier(circuit->GetTeamId()); }
 static int CCircuitAI_MetalSpots(CCircuitAI* circuit) { return (int)circuit->GetMetalManager()->GetSpots().size(); }
 // Read-only strategic survey; reuse the resource manager's engine feature scan.
+// D-352: spot enumeration for the roles' value-ordered expansion and the territory overlay.
+static AIFloat3 CCircuitAI_MetalSpot(CCircuitAI* circuit, int index) {
+	const auto& spots = circuit->GetMetalManager()->GetSpots();
+	return (index >= 0 && std::size_t(index) < spots.size()) ? spots[index].position : AIFloat3(-1.f, 0.f, -1.f);
+}
+static float CCircuitAI_MetalSpotIncome(CCircuitAI* circuit, int index) {
+	const auto& spots = circuit->GetMetalManager()->GetSpots();
+	return (index >= 0 && std::size_t(index) < spots.size()) ? spots[index].income : 0.f;
+}
 static int CCircuitAI_GeoSpots(CCircuitAI* circuit) { return (int)circuit->GetEnergyManager()->GetSpots().size(); }
 static AIFloat3 CCircuitAI_GeoSpot(CCircuitAI* circuit, int index) {
 	const auto& spots = circuit->GetEnergyManager()->GetSpots();
@@ -1272,6 +1281,8 @@ void CInitScript::RegisterCore()
 	r = engine->RegisterObjectMethod("CCircuitUnit", "float GetHealthPercent()", asMETHOD(CCircuitUnit, GetHealthPercent), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitUnit", "float GetBuildProgress()", asFUNCTION(CCircuitUnit_GetBuildProgress), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-105
     r = engine->RegisterObjectMethod("CCircuitUnit", "void SetRetreatWaypoint(const AIFloat3& in, int, int)", asMETHOD(CCircuitUnit, SetRetreatWaypoint), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CCircuitUnit", "void SetRetreatHold(const AIFloat3& in, int)", asMETHOD(CCircuitUnit, SetRetreatHold), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CCircuitUnit", "void ClearRetreatHold()", asMETHOD(CCircuitUnit, ClearRetreatHold), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitUnit", "int GetStockpile()", asFUNCTION(CCircuitUnit_GetStockpile), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-229
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void DelAttribute(Type)", asMETHOD(CCircuitUnit, DelAttribute), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void TglAttribute(Type)", asMETHOD(CCircuitUnit, TglAttribute), asCALL_THISCALL); ASSERT(r >= 0);
@@ -1344,6 +1355,10 @@ void CInitScript::RegisterMgr()
 	r = engine->RegisterObjectMethod("CTerrainManager", "int PlanNavalSupport(const string& in, CCircuitDef@, CCircuitDef@, const AIFloat3& in, int, int, int, float)", asMETHOD(CTerrainManager, PlanNavalSupport), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool IsAreaVisible(const AIFloat3& in, float) const", asMETHOD(CTerrainManager, IsAreaVisible), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool CanNavalRoute(CCircuitDef@, const AIFloat3& in, const AIFloat3& in)", asMETHOD(CTerrainManager, CanNavalRoute), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CTerrainManager", "bool IsNavalPathClear(CCircuitDef@, const AIFloat3& in, const AIFloat3& in) const", asMETHOD(CTerrainManager, IsNavalPathClear), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CTerrainManager", "int NavalYardBlockMask(CCircuitDef@, const AIFloat3& in, float, float, float, float)", asMETHOD(CTerrainManager, NavalYardBlockMask), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CTerrainManager", "bool IsNavalPathReservationBlocked(CCircuitDef@, const AIFloat3& in, const AIFloat3& in) const", asMETHOD(CTerrainManager, IsNavalPathReservationBlocked), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CTerrainManager", "AIFloat3 NearestFriendlyNavalYard(const AIFloat3& in, float)", asMETHOD(CTerrainManager, NearestFriendlyNavalYard), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool CanUpgradeTerrain(CCircuitDef@, const AIFloat3& in)", asFUNCTION(CTerrainManager_CanUpgradeTerrain), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool PlanFactoryPair(const string& in, const CCircuitDef@, const CCircuitDef@, const CCircuitDef@, const AIFloat3& in, int facing, int sideOffsetCells, int forwardOffsetCells)", asFUNCTION(CTerrainManager_PlanFactoryPair), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool PlanAirFactoryCluster(const string& in, const CCircuitDef@, const CCircuitDef@, const CCircuitDef@, const AIFloat3& in, int, int, int, int)", asFUNCTION(CTerrainManager_PlanAirFactoryCluster), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
@@ -1357,6 +1372,7 @@ void CInitScript::RegisterMgr()
 	r = engine->RegisterObjectMethod("CTerrainManager", "int GetLayoutInt(const string& in, int fallback = 0) const", asMETHOD(CTerrainManager, GetLayoutInt), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "AIFloat3 GetLayoutGroupCenter(const string& in) const", asMETHOD(CTerrainManager, GetLayoutGroupCenter), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "int ReserveZone(const AIFloat3& in centre, int facing, float halfAcross, float halfAlong, bool corridor)", asMETHOD(CTerrainManager, ReserveZone), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CTerrainManager", "int ReserveZoneAroundAllies(const AIFloat3& in centre, int facing, float halfAcross, float halfAlong)", asMETHOD(CTerrainManager, ReserveZoneAroundAllies), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "void ReleaseZone(int)", asMETHOD(CTerrainManager, ReleaseZone), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CTerrainManager", "AIFloat3 GetZoneCorner(int, bool) const", asMETHOD(CTerrainManager, GetZoneCorner), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "int ReserveExitCone(CCircuitUnit@ factory, float length, float margin)", asMETHOD(CTerrainManager, ReserveExitCone), asCALL_THISCALL); ASSERT(r >= 0);
@@ -1408,6 +1424,8 @@ void CInitScript::RegisterMgr()
 	r = engine->RegisterObjectMethod("CCircuitAI", "float GetWindCur() const", asFUNCTION(CCircuitAI_WindCur), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "float GetTidalStrength() const", asFUNCTION(CCircuitAI_Tidal), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "int GetMetalSpotCount() const", asFUNCTION(CCircuitAI_MetalSpots), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CCircuitAI", "AIFloat3 GetMetalSpot(int) const", asFUNCTION(CCircuitAI_MetalSpot), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-352
+	r = engine->RegisterObjectMethod("CCircuitAI", "float GetMetalSpotIncome(int) const", asFUNCTION(CCircuitAI_MetalSpotIncome), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-352
 	r = engine->RegisterObjectMethod("CCircuitAI", "int GetGeoSpotCount() const", asFUNCTION(CCircuitAI_GeoSpots), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "AIFloat3 GetGeoSpot(int) const", asFUNCTION(CCircuitAI_GeoSpot), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "float GetIncomeMultiplier() const", asFUNCTION(CCircuitAI_IncomeMultiplier), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
@@ -1420,6 +1438,7 @@ void CInitScript::RegisterMgr()
 	r = engine->RegisterObjectMethod("CSetupManager", "AIFloat3 GetLanePos() const", asFUNCTION(CSetupManager_GetLanePos), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	// D-126: settings from JSON (data/config/weapons.json and its profile overrides)
 	r = engine->RegisterObjectMethod("CSetupManager", "int EnemyStartBoxAt(const AIFloat3& in) const", asMETHOD(CSetupManager, EnemyStartBoxAt), asCALL_THISCALL); ASSERT(r >= 0);  // D-127
+	r = engine->RegisterObjectMethod("CSetupManager", "int FriendlyStartBoxAt(const AIFloat3& in) const", asMETHOD(CSetupManager, FriendlyStartBoxAt), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CSetupManager", "int GetScriptStartCount()", asMETHOD(CSetupManager, GetScriptStartCount), asCALL_THISCALL); ASSERT(r >= 0);  // D-127
 	r = engine->RegisterObjectMethod("CSetupManager", "AIFloat3 GetScriptStart(int)", asMETHOD(CSetupManager, GetScriptStart), asCALL_THISCALL); ASSERT(r >= 0);  // D-127
 	r = engine->RegisterObjectMethod("CSetupManager", "bool IsScriptStartEnemy(int)", asMETHOD(CSetupManager, IsScriptStartEnemy), asCALL_THISCALL); ASSERT(r >= 0);  // D-127

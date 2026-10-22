@@ -11,6 +11,7 @@
 #include "module/Module.h"
 #include "util/AvailList.h"
 #include "resource/MetalField.h"
+#include "resource/MexTerritory.h"
 
 #include "AIFloat3.h"
 
@@ -19,6 +20,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <string>
 
 namespace springai {
 	class Resource;
@@ -131,6 +133,38 @@ public:
 	bool IsMexExpansionAllowed(const springai::AIFloat3& pos, bool allyAware);
 	bool IsMexNavigationEnabled() const { return mexNavigationEnabled; }
 	bool IsMexOwnershipActive() const;
+	// D-352: mex ownership by theatre (home, sea, lanes, the reach-and-secure
+	// race), policy announced per ally by script from the roster. See
+	// resource/MexTerritory.h for the rules and MexOwnership.cpp for the fields.
+	void SetMexTheatres(bool enabled, float theatreSeconds, float homeRadius);
+	void SetMexLaneSettings(float mergeRadius, float mergeShare, float bandRadius);
+	void SetMexAllyClaim(int team, const springai::AIFloat3& start, const springai::AIFloat3& anchor,
+			const char* groundDef, const char* classDef, int readyFrame, float secureSeconds,
+			const char* combatDef, int combatReadyFrame, bool laneSpots);
+	void RemoveMexAllyClaim(int team);
+	void SetMexEnemyClass(const char* classDef, float readySeconds);
+	bool IsMexTheatresEnabled() const { return mexTheatresEnabled; }
+	int MexTheatre(const springai::AIFloat3& pos);
+	int MexSpotOwner(const springai::AIFloat3& pos);
+	int MexSpotRule(const springai::AIFloat3& pos);
+	float MexSpotEnemySeconds(const springai::AIFloat3& pos);
+	float MexSpotValue(const springai::AIFloat3& pos, int team);
+	// Why EnqueueMexWithin would admit or refuse this builder on this spot: a mask
+	// (1 a spot, 2 open in MetalManager, 4 open here, 8 reachable, 16 allowed by
+	// ownership, 32 a mex def of this builder fits the terrain; 64 a live MEX task
+	// of ours is parked on it, 128 that task has an assignee, 256 its target
+	// exists, 512 an assignee flies). Diagnostic; one spot per call, the same
+	// checks the admission runs.
+	int MexSpotAdmission(CCircuitUnit* builder, const springai::AIFloat3& pos);
+	int MexLaneCount();
+	int MexLane(const springai::AIFloat3& pos);
+	springai::AIFloat3 MexLaneChoke(int lane);
+	springai::AIFloat3 MexLaneMidpoint(int lane);
+	float MexLaneWidth(int lane);
+	bool MexLaneMember(int lane, int team);
+	std::vector<springai::AIFloat3> MexLaneSpine(int lane, int step);
+	std::string DescribeMexTerritory();
+	void DumpMexTerritory(const char* why);
 	// Live mex tasks (assigned or queued) whose spot lies within radius of center (D-063).
 	int GetMexTaskCountWithin(const springai::AIFloat3& center, float radius) const;
 	CCircuitDef* GetLowEnergy(const springai::AIFloat3& pos, float& outMake, const CCircuitUnit* builder = nullptr) const;
@@ -412,6 +446,61 @@ private:
 	std::uint64_t mexOwnerRevision = 0;
 	bool mexOwnersDirty = true;
 	float MexStartDistance(SMexStart& start, const springai::AIFloat3& pos);
+
+	// D-352 theatres. One terrain field per (class, seed set), rebuilt on a
+	// terrain publication; every number the rules read is broadcast roster
+	// data or the grid, so allies agree (resource/MexTerritory.h).
+	struct SMexField {
+		int definition = -1;
+		int seed = -1;                 // connector sector, -1 none
+		float initial = 0.f;
+		std::uint64_t revision = 0;
+		std::vector<float> distance;
+	};
+	struct SMexClaim {
+		springai::AIFloat3 start, anchor;
+		int groundDef = -1, classDef = -1, combatDef = -1;
+		int readyFrame = 0, combatReadyFrame = 0;
+		float secureSeconds = 0.f;
+		bool laneSpots = false;
+		SMexField ground, cls, combat;
+		int lane = -1;
+	};
+	struct SMexEnemy {
+		int definition = -1;
+		float readySeconds = 0.f;
+		SMexField field;
+	};
+	struct SMexResolved {
+		int mask = 8, rule = 0, owner = -1, lane = -1;
+		float arrive = 0.f, secure = 0.f, enemy = 0.f;
+	};
+	std::map<int, SMexClaim> mexClaims;
+	std::vector<SMexEnemy> mexEnemies;
+	std::vector<std::pair<int, float>> mexEnemySeeds;
+	std::uint64_t mexEnemySeedRevision = 0;
+	std::size_t mexEnemySeedClaims = 0;
+	std::vector<SMexResolved> mexResolved;
+	std::vector<int> mexSpotCluster;
+	std::vector<int> mexLaneTeams;        // claim team per lane-partition start index
+	mex_lanes::Partition mexLanes;
+	mex_lanes::Settings mexLaneSettings;
+	bool mexTheatresEnabled = false;
+	bool mexTerritoryDirty = true;
+	bool mexResolvedLandWindow = false, mexResolvedTheatreWindow = false;
+	std::uint64_t mexResolvedRevision = 0;
+	std::size_t mexResolvedClusters = 0;
+	int mexTheatreUntil = -1;             // -1: the land window; 0: the whole game
+	float mexHomeRadius = 900.f;
+	bool IsMexTheatreWindow() const;
+	int MexTheatreKind(int definition) const;
+	void BuildMexField(SMexField& field, int definition, const std::vector<std::pair<int, float>>& seeds);
+	int MexConnector(int definition, const springai::AIFloat3& pos, const SMexField* walk, float walkLimit, float& initial);
+	float MexStance(const SMexField& field, int definition, const springai::AIFloat3& pos, float range);
+	void EnsureMexEnemySeeds();
+	void RebuildMexTerritory();
+	int MexSpotIndex(const springai::AIFloat3& pos) const;
+	const SMexResolved* MexResolvedAt(const springai::AIFloat3& pos);
 };
 
 } // namespace circuit

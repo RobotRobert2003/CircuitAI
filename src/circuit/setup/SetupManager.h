@@ -61,6 +61,7 @@ public:
 	bool HasStartBoxes() const;
 	// D-127: 1 inside an enemy ally team's start box, 0 not, -1 when no boxes are known
 	int EnemyStartBoxAt(const springai::AIFloat3& pos) const;
+	int FriendlyStartBoxAt(const springai::AIFloat3& pos) const;
 	// D-127: the playing teams' start positions from the start script (fixed or chosen
 	// before the game); a team counts when an AI or a non-spectator player is on it
 	int GetScriptStartCount();

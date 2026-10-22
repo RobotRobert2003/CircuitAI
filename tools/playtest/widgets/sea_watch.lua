@@ -4,16 +4,35 @@ end
 local born, pendingExit = {}, {}
 local function log(s) Spring.Echo("[SeaWatch] "..s) end
 local function yard(d) return d.isFactory and (d.minWaterDepth or 0)>0 and not d.canFly end
+local function advanced(d) return d.name=="armasy" or d.name=="corasy" or d.name=="legadvshipyard" end
 function widget:Initialize() log("loaded") end
 function widget:UnitCreated(id,def,team,builder)
     if team~=0 then return end
     born[id]={frame=Spring.GetGameFrame(),builder=builder}
+    if advanced(UnitDefs[def]) and builder then
+        local x,_,z=Spring.GetUnitPosition(id)
+        if not x then return end
+        local count=0
+        -- Test-only event census, not a recurring gameplay poll.
+        for _,unit in ipairs(Spring.GetTeamUnits(team)) do
+            local d=UnitDefs[Spring.GetUnitDefID(unit)]
+            if d and d.isBuilder and d.isImmobile and not d.isFactory and (d.buildSpeed or 0)>0 then
+                local _,_,_,_,progress=Spring.GetUnitHealth(unit)
+                local nx,_,nz=Spring.GetUnitPosition(unit)
+                if progress and progress>=1 and nx and (nx-x)^2+(nz-z)^2<=(d.buildDistance or 0)^2 then count=count+1 end
+            end
+        end
+        log(string.format("t2-start frame=%d id=%d support=%d",Spring.GetGameFrame(),id,count))
+    end
 end
 function widget:UnitFinished(id,def,team)
     if team~=0 then return end
     local d=UnitDefs[def]
     local b=born[id]
     log(string.format("finished frame=%d id=%d def=%s builder=%s",Spring.GetGameFrame(),id,d.name,tostring(b and b.builder)))
+    if advanced(d) and b and b.builder then
+        log(string.format("t2-complete id=%d seconds=%.1f",id,(Spring.GetGameFrame()-b.frame)/30))
+    end
     if b and b.builder then
         local bd=Spring.GetUnitDefID(b.builder)
         if bd and yard(UnitDefs[bd]) and not d.canFly and not d.isImmobile then

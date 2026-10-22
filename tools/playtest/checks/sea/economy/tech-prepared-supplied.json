@@ -1,0 +1,60 @@
+{
+  "description": "Supplied economy must prepare completed support before constructing T2, then complete fusion and advanced conversion",
+  "stop_minute": 20,
+  "expect": [
+    {
+      "key": "supplied",
+      "pattern": "\\[SeaConversionFixture\\] supplied",
+      "by_minute": 3,
+      "scope": "any"
+    },
+    {
+      "key": "fusion",
+      "pattern": "\\[SeaConversionFixture\\] completed fusion",
+      "by_minute": 20,
+      "scope": "any"
+    },
+    {
+      "key": "advanced",
+      "pattern": "\\[SeaConversionFixture\\] completed advanced converter",
+      "by_minute": 20,
+      "scope": "any"
+    },
+    {
+      "key": "prepared-yard",
+      "pattern": "\\[SeaWatch\\] t2-start frame=\\d+ id=(?P<yard>\\d+) support=(?:[2-9]|[1-9]\\d+)\\b",
+      "by_minute": 18,
+      "scope": "any"
+    },
+    {
+      "key": "completed-yard",
+      "pattern": "\\[SeaWatch\\] t2-complete id=(?P<yard>\\d+) seconds=",
+      "by_minute": 20,
+      "scope": "any",
+      "after_key": "prepared-yard",
+      "same_as": "prepared-yard"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": "(ERR :|Execution of script failed|Exception.*script)",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[SeaConversionFixture\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "unprepared-yard",
+      "pattern": "\\[SeaWatch\\] t2-start .* support=[01]\\b",
+      "scope": "any"
+    }
+  ]
+}

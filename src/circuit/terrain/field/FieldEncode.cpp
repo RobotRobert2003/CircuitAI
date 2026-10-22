@@ -177,6 +177,54 @@ std::string Encode(const SModel& m, const SSettings& st, std::uint64_t seq, int 
 	out += "cells|" + RunLength(m.regionOf) + "\n";
 	// D-326: ground class per cell, same run-length form as the region ids
 	out += "ground|" + RunLength(std::vector<int>(m.groundOf.begin(), m.groundOf.end())) + "\n";
+	// Additive capability: old readers ignore these records. New readers never
+	// mistake legacy heuristic ramps or choke bars for qualified physical data.
+	out += "experience|2|initial-map\n";
+	out += "access|" + RunLength(m.accessOf) + "\n";
+	out += "class|7|deep-draft|0|" + std::to_string(st.standoffDepths[2]) + "|-1|4\n";
+	for (const SLanding& l : m.landings) {
+		out += "landingdir|"; Num(out,l.id); out += '|'; Num(out,l.mid.x); out += '|'; Num(out,l.mid.z); out += '|';
+		Num(out,l.inlandDir.x); out += '|'; Num(out,l.inlandDir.z); out += '\n';
+	}
+	for (const SChoke& c : m.passages) if (c.qualified) {
+		out += "passage|"; Num(out, c.id); out += '|'; Num(out, c.classMask); out += '|';
+		Num(out, c.width); out += '|'; Poly(out, {c.endA, c.endB}); out += '\n';
+	}
+	int featureId = 0;
+	auto feature = [&](const char* category, const std::string& name, SPoint p, int mask, int ally, const std::string& reason, const char* basis) {
+		out += "site|"; Num(out, featureId++); out += '|'; out += category; out += '|'; out += Clean(name); out += '|';
+		Num(out, p.x); out += '|'; Num(out, p.z); out += '|'; Num(out, mask); out += '|'; Num(out, ally); out += '|';
+		out += Clean(reason); out += '|'; out += basis; out += '\n';
+	};
+	auto accessAt = [&](SPoint p) {
+		const int x = (int)(p.x / m.cell), z = (int)(p.z / m.cell);
+		return x >= 0 && z >= 0 && x < m.gw && z < m.gh ? m.accessOf[z * m.gw + x] : 0;
+	};
+	for (const SKey& k : m.keys) if (k.kind == K_METAL || k.kind == K_GEO)
+		feature("resources", k.kind == K_GEO ? "Geothermal vent" : "Metal cluster", k.pos, accessAt(k.pos), -1,
+			"Resource location; access is terrain-derived, occupancy is unknown", "Terrain-derived");
+	for (const SChoke& c : m.passages) if (c.qualified)
+		feature("defensive", "Passage defence candidate", c.pos, c.classMask, -1,
+			"Measured constriction with wider approaches; firing coverage is not assessed", "Tactical candidate");
+	for (const SLanding& l : m.landings)
+		feature("coastal_access", "Beach access", l.mid, l.classMask,
+			l.side >= 0 && l.side < (int)m.sides.size() ? m.sides[l.side].allyTeam : -1,
+			"Sea " + std::to_string(l.sea) + " to land region " + std::to_string(l.region) + "; initial terrain transition", "Terrain-derived");
+	for (const SPosition& p : m.positions)
+		feature("starts", p.name, p.pos, accessAt(p.pos), p.allyTeam,
+			p.predicted ? "Predicted start from setup geography; not a current unit position" : "Recorded setup start; not current control",
+			p.predicted ? "Tactical candidate" : "Recorded setup");
+	// Staging is conservative: a connected 9x9 vehicle-access patch with all
+	// four edge midpoints accessible. Bounded 81-cell check per region, once.
+	for (const SRegion& r : m.regions) {
+		const int x = (int)(r.label.x / m.cell), z = (int)(r.label.z / m.cell);
+		bool usable = x >= 4 && z >= 4 && x + 4 < m.gw && z + 4 < m.gh;
+		int mask = 31;
+		for (int dz = -4; dz <= 4 && usable; ++dz) for (int dx = -4; dx <= 4 && usable; ++dx)
+			{ mask &= m.accessOf[(z + dz) * m.gw + x + dx]; usable = (mask & (1 << C_VEH)) != 0; }
+		if (usable) feature("staging", "Open staging candidate", r.label, mask, -1,
+			"Connected " + std::to_string(9 * m.cell) + " elmo ground patch with open edges; exits beyond this patch and enemy coverage are not assessed", "Tactical candidate");
+	}
 	out += "end|" + std::to_string(seq) + "\n";
 	return out;
 }

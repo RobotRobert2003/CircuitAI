@@ -1,0 +1,22 @@
+{
+  "name": "sea-lost-supreme",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [[7492, 1220], [4814, 11077]],
+  "checks": "sea/combat/sea-lost-supreme",
+  "production": true,
+  "shots": "2@5000@5500:1200,4@5000@5500:1200,7@5000@5500:1200",
+  "groups": [
+    {"unit": "armsy", "team": 0, "count": 1, "position": [5600, 900]},
+    {"unit": "armcs", "team": 0, "count": 4, "position": [5900, 1350], "columns": 2, "spacing": 96},
+    {"unit": "armroy", "team": 0, "count": 8, "position": [6000, 1150], "columns": 2, "spacing": 180},
+    {"unit": "corroy", "team": 1, "count": 14, "position": [4700, 800], "columns": 2, "spacing": 180, "after_seconds": 150}
+  ],
+  "remove_units": [
+    {"second": 150, "team": 0, "unit": "armsy", "include_untracked": true},
+    {"second": 150, "team": 0, "unit": "armcs", "include_untracked": true},
+    {"second": 150, "team": 0, "unit": "armroy", "include_untracked": true},
+    {"second": 150, "team": 0, "unit": "armpt", "include_untracked": true},
+    {"second": 150, "team": 0, "unit": "armdecade", "include_untracked": true}
+  ]
+}

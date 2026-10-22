@@ -65,6 +65,14 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
     auto found=commanders.find(unit->GetId()); if(found==commanders.end()) return nullptr;
     auto& s=found->second; const int frame=ai->GetLastFrame();
     const auto record=[&](IUnitTask* task) {
+        // Native placement may move a site (shake, blocked cells). While a
+        // fallback holds, an offer that ends outside the perimeter is dropped
+        // here, and aborted when no one else took it (INV-218 at the source).
+        if(auto* build=dynamic_cast<IBuilderTask*>(task); build && FallbackActive(s,frame)
+            && !s.fallbackBoundary.Contains({build->GetPosition().x,build->GetPosition().z},unit->GetCircuitDef()->GetBuildDistance()+32.f)) {
+            if(build->GetAssignees().empty()) ai->GetBuilderManager()->AbortTask(build);
+            task=nullptr;
+        }
         s.workTask=task; s.workHeld=FallbackActive(s,frame); s.workBoundary=s.fallbackBoundary;
         if(task) ai->LOG("[CommanderWork] unit=%i work=%i task=%i",unit->GetId(),kind,
             task->GetType()==IUnitTask::Type::BUILDER?int(static_cast<IBuilderTask*>(task)->GetBuildType()):-1);

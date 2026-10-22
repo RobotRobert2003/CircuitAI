@@ -547,7 +547,13 @@ void CRouteTask::CompactNavalPolyline(CCircuitUnit* unit, std::vector<AIFloat3>&
     const AIFloat3 first=points.front(), last=points.back();
     const auto* terrain = manager->GetCircuit()->GetTerrainManager();
     const auto* movement = terrain->GetMobileType(unit->GetCircuitDef()->GetId());
-    if (movement == nullptr || !movement->canFloat || movement->maxElevation >= 0) return;
+    if (movement == nullptr || !movement->canFloat) return;
+    // D-340: a ship's limit is its negative draft (-minWaterDepth). A hover's
+    // maxElevation is positive (it can also cross land), which used to skip
+    // compaction entirely: every hover route kept all its 64-elmo cells. For
+    // hovers accept only an all-water corridor (elevation below 0), which a
+    // hover can always cross; legs touching land keep their original points.
+    const float elevationLimit = std::min(movement->maxElevation, 0.0f);
     const auto* area = terrain->GetAreaData();
     const int extent = std::max(unit->GetCircuitDef()->GetMoveXSize(),unit->GetCircuitDef()->GetMoveZSize())/2 + 1;
     const float width=CTerrainManager::GetTerrainWidth(), height=CTerrainManager::GetTerrainHeight();
@@ -564,7 +570,7 @@ void CRouteTask::CompactNavalPolyline(CCircuitUnit* unit, std::vector<AIFloat3>&
             const float x=a.x+(b.x-a.x)*i/steps+dx*SQUARE_SIZE, z=a.z+(b.z-a.z)*i/steps+dz*SQUARE_SIZE;
             if (x<0 || z<0 || x>=width || z>=height) return false;
             const float elevation=area->GetElevationAt(x,z);
-            if (!std::isfinite(elevation) || elevation>movement->maxElevation) return false;
+            if (!std::isfinite(elevation) || elevation>elevationLimit) return false;
         }
         return true;
     }, roundingHalfCorridor);

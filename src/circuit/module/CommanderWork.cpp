@@ -48,15 +48,11 @@ bool CCommanderControl::LineWorking(CCircuitUnit* unit,const State& s,IUnitTask*
     if(build==nullptr || build->IsDead() || build->IsExternalControlled() || build->IsEnemyReclaim()
         || build->GetManager()!=ai->GetBuilderManager()) return false;
     const float slack=unit->GetCircuitDef()->GetBuildDistance()+32.f;
-    if(s.fallbackBoundary.Contains(P(build->GetPosition()),slack)) return true;
-    // INV-218: ladder offers made while it holds are filtered to the
-    // perimeter in force at the offer. A task offered before the fallback
-    // began, or outside a perimeter that has since shrunk (porc lost), is
-    // simply seized.
-    if(build==s.workTask && s.workHeld && !s.workBoundary.Contains(P(build->GetPosition()),slack))
-        ai->LOG("[INVARIANT] INV-218 commander line work outside fallback perimeter unit=%i task=%i x=%.0f z=%.0f perimeter=%.0f",
-            unit->GetId(),int(build->GetBuildType()),build->GetPosition().x,build->GetPosition().z,s.fallbackBoundary.radius);
-    return false;
+    // A site outside (offered earlier, moved by native placement, or a
+    // perimeter that shrank when its porc died) is not line work: the
+    // controller takes the commander back. INV-218 is checked by Fallback on
+    // the commander's own position while it works.
+    return s.fallbackBoundary.Contains(P(build->GetPosition()),slack);
 }
 
 IUnitTask* CCommanderControl::LadderWork(CCircuitUnit* unit,State& s,int kind,CCircuitDef* buildDef,float radius,int frame) {
@@ -101,7 +97,9 @@ IUnitTask* CCommanderControl::LadderWork(CCircuitUnit* unit,State& s,int kind,CC
             return task;
         }
         case WORK_FACTORY: {
-            if(holding) return AssistWork(unit,s,pos,WorkRadius(unit),true,frame);
+            // A plant guard drifts with the plant's output, too far for the
+            // fallback perimeter (INV-218, played): construction only there.
+            if(holding) return nullptr;
             const auto anchor=FrontPosition(unit,s,frame);
             if(anchor.x<0 || pos.SqDistance2D(anchor)>options.frontRadius*options.frontRadius*.25f) return nullptr;
             return AssistWork(unit,s,anchor,std::clamp(work,64.f,options.frontRadius),true,frame);
@@ -114,7 +112,7 @@ IUnitTask* CCommanderControl::LadderWork(CCircuitUnit* unit,State& s,int kind,CC
             if(!fellBack || pos.SqDistance2D(base)>options.baseRadius*options.baseRadius) return nullptr;
             const float area=radius>0?std::min(radius,options.baseRadius):options.baseRadius;
             IUnitTask* task=AssistWork(unit,s,base,area,false,frame);
-            return task?task:AssistWork(unit,s,base,area,true,frame);
+            return task||holding?task:AssistWork(unit,s,base,area,true,frame);
         }
         default: return nullptr;
     }
@@ -201,6 +199,9 @@ IUnitTask* CCommanderControl::ReclaimWork(CCircuitUnit* unit,const State& s,floa
 IUnitTask* CCommanderControl::LineWork(CCircuitUnit* unit,State& s,CCircuitDef* buildDef,int frame) {
     if(buildDef==nullptr || !unit->GetCircuitDef()->CanBuild(buildDef) || s.lineAnchor.x<0
         || (!FallbackActive(s,frame) && frame>=s.lineUntil)) return nullptr;
+    // The planned line can flip between a porc and a distant rear station
+    // from one second to the next; build only at a line the commander holds.
+    if(unit->GetPos(frame).SqDistance2D(s.lineAnchor)>4.f*options.lineRadius*options.lineRadius) return nullptr;
     auto* builder=ai->GetBuilderManager();
     // One line = every turret of buildDef within line_radius of the line's
     // porc (or rear station). Counting what stands there, rather than what
@@ -281,13 +282,32 @@ IUnitTask* CCommanderControl::RadarWork(CCircuitUnit* unit,State& s,CCircuitDef*
     const float range=DefinitionFor(buildDef).radar*options.radarCoverage;
     if(range<=0 || RadarCovered(unit,s,frame)) return nullptr;
     auto* builder=ai->GetBuilderManager();
+    // A planned radar that will cover us suppresses a second one; join it only
+    // when it lies inside a held perimeter (INV-218: never walk out to it).
+    const float reach=unit->GetCircuitDef()->GetBuildDistance();
     for(IBuilderTask* task:builder->GetTasks(BT::RADAR))
         if(!task->IsDead() && task->GetBuildDef()==buildDef && task->GetPosition().SqDistance2D(pos)<=range*range)
-            return task->CanAssignTo(unit)?task:nullptr;
+            return task->CanAssignTo(unit) && InsideLine(s,task->GetPosition(),frame,reach)?task:nullptr;
     if((!holding && ai->GetThreatMap()->GetThreatAt(unit,pos)>options.frontThreat)
         || ai->GetEconomyManager()->GetMetalCur()<buildDef->GetCostM()*.5f) return nullptr;
     auto* task=builder->Enqueue(TaskB::Common(BT::RADAR,IBuilderTask::Priority::NORMAL,buildDef,pos,96.f,true,30*FRAMES_PER_SEC));
-    if(task) s.radarFrame=-10000; // the new frame covers us on the next check
+    if(task) {
+        s.radarFrame=-10000; // the new frame covers us on the next check
+        // INV-220 (D-304): no new commander radar where an existing friendly
+        // radar at least as strong already covers. Independent of the
+        // snapshot: one engine area query per radar enqueue (rare). Restored
+        // after the 0bcf08e4 merge dropped it.
+        auto* clb=ai->GetCallback();
+        for(int id:clb->GetFriendlyUnitIdsIn(pos,range,false)) {
+            const int defId=clb->Unit_GetDefId(id);
+            CCircuitDef* def=defId>0?ai->GetCircuitDefSafe(defId):nullptr;
+            if(def && !def->IsRoleComm() && !def->IsMobile() && DefinitionFor(def).radar*options.radarCoverage>=range) {
+                ai->LOG("[INVARIANT] INV-220 commander radar inside existing coverage unit=%i radar=%i x=%.0f z=%.0f",
+                    unit->GetId(),id,pos.x,pos.z);
+                break;
+            }
+        }
+    }
     return task;
 }
 

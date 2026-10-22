@@ -32,7 +32,7 @@ def main():
     call = [sys.executable, str(playtest.HERE/'playtest.py')]
     cmd = call + ['stage', '--dir', str(d), '--dll', str(a.dll), '--data', str(playtest.REPO/'data'),
         '--map', 'Supreme Isthmus v1.7' if a.fixture else 'Shore_to_Shore_V3', '--map-file', str(start_file),
-        '--game', 'Beyond All Reason test-31479-433a460', '--engine', 'recoil_2026.07.04',
+        '--engine', 'recoil_2026.07.04',
         '--role', 'SEA', '--roles', 'all', '--side', 'armada', '--bonus', '0', '--speed', '20',
         '--minutes', str(minutes), '--shots', '0.8@2200@6200:10700,2@2200@6200:10700,5@2800@6500:10800,7@3500@6500:10800' if a.fixture else '1@6000@5000:1550,3@6000@6500:1550,5@6000@7500:1550,10@6000@5500:1550' if a.capacity else '5@4200@2200:1550,10@6000@5500:1550,20@7000@7500:1550,29@5000@2800:1550',
         '--width', '1280', '--height', '720', '--lean-render', '--ai-option', 'profile='+a.profile,

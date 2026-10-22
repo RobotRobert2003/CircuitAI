@@ -24,6 +24,7 @@
 #include "scheduler/Scheduler.h"
 #include "setup/SetupManager.h"
 #include "unit/CircuitUnit.h"
+#include "unit/ally/AllyUnit.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 #include "util/Profiler.h"
@@ -1247,6 +1248,10 @@ void CTerrainManager::ShareZone(int id)
     if (IsAllyLayoutRectBlocked(z.c1, z.c2)) circuit->LOG("[INVARIANT] INV-088: zone %i overlaps an allied plan", id);
     circuit->GetAllyTeam()->GetLayoutReservations().Put(circuit->GetTeamId(), allied_layout::Reservations::ZONE,
         id, {z.c1.x, z.c1.y, z.c2.x, z.c2.y});
+    if (z.corridor) {
+        circuit->GetAllyTeam()->GetLayoutReservations().Put(circuit->GetTeamId(), allied_layout::Reservations::EXIT,
+            id, {z.c1.x, z.c1.y, z.c2.x, z.c2.y});
+    }
 }
 
 bool CTerrainManager::IsAllyLayoutRectBlocked(const int2& c1, const int2& c2) const
@@ -2180,8 +2185,13 @@ bool CTerrainManager::CanNavalRoute(CCircuitDef* cdef, const AIFloat3& from, con
 	if (mt == nullptr) return false;
 	// Strict membership: GetCurrentMapArea deliberately snaps impossible spawns,
 	// which is inappropriate evidence for a new production berth.
-	const auto* a = mt->sector[GetSectorIndex(from)].area;
-	return a != nullptr && a == mt->sector[GetSectorIndex(to)].area;
+	// is_in_map admits the far map edge, whose sector index can lie past the
+	// table (Shore to Shore crashed here from SeaLayout::Search); bound both.
+	const int iFrom = GetSectorIndex(from), iTo = GetSectorIndex(to);
+	const int sectors = static_cast<int>(mt->sector.size());
+	if (iFrom < 0 || iFrom >= sectors || iTo < 0 || iTo >= sectors) return false;
+	const auto* a = mt->sector[iFrom].area;
+	return a != nullptr && a == mt->sector[iTo].area;
 }
 
 bool CTerrainManager::PlanNavalBerth(const std::string& key, CCircuitDef* cdef,
@@ -3130,8 +3140,14 @@ int CTerrainManager::ReserveZone(const AIFloat3& centre, int facing, float halfA
 	return ReserveZoneMasked(centre,facing,halfAcross,halfAlong,corridor,static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL));
 }
 
+int CTerrainManager::ReserveZoneAroundAllies(const AIFloat3& centre, int facing, float halfAcross, float halfAlong)
+{
+	return ReserveZoneMasked(centre, facing, halfAcross, halfAlong, false,
+		static_cast<SBlockingMap::SM>(SBlockingMap::StructMask::ALL), true);
+}
+
 int CTerrainManager::ReserveZoneMasked(const AIFloat3& centre, int facing, float halfAcross, float halfAlong,
-	bool corridor, SBlockingMap::SM blockingMask)
+	bool corridor, SBlockingMap::SM blockingMask, bool allyHoles)
 {
 	SSlowCall slow("ReserveZone", circuit);
 	if (!layoutEnabled) {
@@ -3147,6 +3163,27 @@ int CTerrainManager::ReserveZoneMasked(const AIFloat3& centre, int facing, float
 	if (!RectCells(centre, facing, halfAcross, halfAlong, c1, c2)) {
 		circuit->LOG("RESERVE: %s refused at (%.0f, %.0f): off map", corridor ? "corridor" : "zone", centre.x, centre.z);
 		return 0;
+	}
+	// A rectangle touching any teammate's reservation is refused whole. With
+	// allyHoles (D-343, SEA on shared coasts) it is first shrunk, edge by edge,
+	// until it touches none: the zone is shared with allies as one rectangle,
+	// so it must never cover their ground (INV-088). Each step moves every
+	// edge whose strip holds allied cells inward by one cell, or all four when
+	// only the interior does. At most min(w, h) / 2 steps; each step costs one
+	// page-indexed overlap test per edge.
+	if (allyHoles && (circuit->GetAllyTeam() != nullptr)) {
+		while ((c1.x < c2.x) && (c1.y < c2.y) && IsAllyLayoutRectBlocked(c1, c2)) {
+			const bool west = IsAllyLayoutRectBlocked(c1, int2(c1.x + 1, c2.y));
+			const bool east = IsAllyLayoutRectBlocked(int2(c2.x - 1, c1.y), c2);
+			const bool north = IsAllyLayoutRectBlocked(c1, int2(c2.x, c1.y + 1));
+			const bool south = IsAllyLayoutRectBlocked(int2(c1.x, c2.y - 1), c2);
+			const bool any = west || east || north || south;
+			if (west || !any) ++c1.x;
+			if (east || !any) --c2.x;
+			if (north || !any) ++c1.y;
+			if (south || !any) --c2.y;
+		}
+		if ((c1.x >= c2.x) || (c1.y >= c2.y)) return 0;
 	}
 	if (IsAllyLayoutRectBlocked(c1, c2)) return 0;
     // Keep immutable resource sites as holes, even when their surrounding
@@ -3233,6 +3270,7 @@ void CTerrainManager::ReleaseZone(int id)
 	}
 	circuit->LOG("RESERVE: %s %i released", zn.corridor ? "corridor" : "zone", id);
 	circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::ZONE, id);
+	circuit->GetAllyTeam()->GetLayoutReservations().Erase(circuit->GetTeamId(), allied_layout::Reservations::EXIT, id);
 	localReservations.EraseZone(it->first);
 	zones.erase(it);
 }
@@ -3796,6 +3834,223 @@ bool CTerrainManager::LeavesPocket(int zone, CCircuitDef* cdef, const AIFloat3& 
 		}
 	}
 	return layout_rank::LeavesPocket(open, w, h);  // D-072/D-090 via D-094
+}
+
+bool CTerrainManager::IsNavalPathClear(CCircuitDef* hull, const AIFloat3& from, const AIFloat3& to) const
+{
+	return NavalPath(hull, from, to, true);
+}
+
+bool CTerrainManager::IsNavalPathReservationBlocked(CCircuitDef* hull, const AIFloat3& from, const AIFloat3& to) const
+{
+	// D-343: only a path that terrain allows can be blamed on reservations.
+	// Land between the points, or a dry probe, is never a placement failure.
+	return NavalPath(hull, from, to, false) && !NavalPath(hull, from, to, true);
+}
+
+bool CTerrainManager::NavalPath(CCircuitDef* hull, const AIFloat3& from, const AIFloat3& to, bool withReservations) const
+{
+	performance::Scope measured(circuit, performance::POCKET);
+	SSlowCall slow("IsNavalPathClear", circuit);
+	// D-343: SEA reserves turrets and economy anywhere on flat water, so a new
+	// footprint must not cut the flagship off between its yard mouth and the
+	// sea lane (or the rear repair area). CanNavalRoute only compares terrain
+	// areas; this also counts structures, own reserved slots and allied slots.
+	// Zone envelopes and exit corridors are open water: ships sail through them.
+	if ((hull == nullptr) || (hull->GetDef() == nullptr) || (areaData == nullptr)) {
+		return false;
+	}
+	const auto* mobile = GetMobileType(hull->GetId());
+	if ((mobile == nullptr) || !mobile->canFloat) {
+		return false;
+	}
+	// Ships: their negative draft. Hovers: water only (D-340's rule).
+	const float elevationLimit = std::min(mobile->maxElevation, 0.f);
+	constexpr float CELL = float(base_layout::CELL_ELMOS);
+	const int fromX = int(from.x / CELL), fromZ = int(from.z / CELL);
+	const int toX = int(to.x / CELL), toZ = int(to.z / CELL);
+	const int clearance = (std::max(hull->GetDef()->GetXSize(), hull->GetDef()->GetZSize()) + 3) / 4;
+	const int snap = clearance + 4;
+	const int pad = 2 * clearance + 24;  // 384+ elmos of water beside the straight line
+	const int x1 = std::max(0, std::min(fromX, toX) - pad), z1 = std::max(0, std::min(fromZ, toZ) - pad);
+	const int x2 = std::min(blockingMap.columns, std::max(fromX, toX) + pad + 1);
+	const int z2 = std::min(blockingMap.rows, std::max(fromZ, toZ) + pad + 1);
+	const int w = x2 - x1, h = z2 - z1;
+	// A planning query spans one harbor (a few thousand elmos). Refuse a
+	// map-sized window rather than spend tens of milliseconds on it.
+	constexpr int MAX_CELLS = 384 * 384;
+	if ((w <= 0) || (h <= 0) || (w * h > MAX_CELLS)) {
+		return false;
+	}
+	std::vector<char> open(std::size_t(w) * h, 0);
+	for (int z = 0; z < h; ++z) {
+		for (int x = 0; x < w; ++x) {
+			const int cx = x1 + x, cz = z1 + z;
+			const float elevation = areaData->GetElevationAt((cx + .5f) * CELL, (cz + .5f) * CELL);
+			const bool structure = withReservations && blockingMap.IsStruct(cx, cz) && !blockingMap.IsReserved(cx, cz);
+			open[z * w + x] = (std::isfinite(elevation) && (elevation <= elevationLimit) && !structure) ? 1 : 0;
+		}
+	}
+	const auto close = [&](int ax1, int az1, int ax2, int az2) {
+		for (int z = std::max(az1, z1); z < std::min(az2, z2); ++z) {
+			for (int x = std::max(ax1, x1); x < std::min(ax2, x2); ++x) {
+				open[(z - z1) * w + (x - x1)] = 0;
+			}
+		}
+	};
+	if (!withReservations) {
+		return layout_rank::HullPathClear(open, w, h, fromX - x1, fromZ - z1, toX - x1, toZ - z1, clearance, snap);
+	}
+	// Own slots, planned or served: each becomes a footprint. O(reservations).
+	for (const auto& kv : reservations) {
+		const SReservation& r = kv.second;
+		int2 c1, c2;
+		if ((r.def != nullptr) && ReservationCells(r.def, r.pos, r.facing, c1, c2)) {
+			close(c1.x, c1.y, c2.x, c2.y);
+		}
+	}
+	// Teammates' slots (never their zone envelopes). O(allied entries).
+	if (circuit->GetAllyTeam() != nullptr) {
+		circuit->GetAllyTeam()->GetLayoutReservations().ForEachOther(circuit->GetTeamId(),
+			allied_layout::Reservations::SLOT, {x1, z1, x2, z2},
+			[&](const allied_layout::Rect& r) { close(r.x1, r.z1, r.x2, r.z2); });
+	}
+	return layout_rank::HullPathClear(open, w, h, fromX - x1, fromZ - z1, toX - x1, toZ - z1, clearance, snap);
+}
+
+bool CTerrainManager::IsNavalFactoryDef(CCircuitDef* def) const
+{
+	// A static builder of floating or submarine units (PlanNavalBerth's rule).
+	if ((def == nullptr) || def->IsMobile() || def->GetBuildOptions().empty()) {
+		return false;
+	}
+	for (const auto id : def->GetBuildOptions()) {
+		const CCircuitDef* product = circuit->GetCircuitDef(id);
+		if ((product != nullptr) && product->IsMobile() && !product->IsAbleToFly()
+			&& (product->IsFloater() || product->IsSubmarine())) {
+			return true;
+		}
+	}
+	return false;
+}
+
+AIFloat3 CTerrainManager::NearestFriendlyNavalYard(const AIFloat3& pos, float radius)
+{
+	// D-343: a teammate's finished harbor counts as home for admitting a
+	// first T2 yard beside it. O(friendly units); planning-time only.
+	const int frame = circuit->GetLastFrame();
+	float best = SQUARE(radius);
+	AIFloat3 result(-1.f, 0.f, -1.f);
+	for (const auto& kv : circuit->GetFriendlyUnits()) {
+		CAllyUnit* unit = kv.second;
+		CCircuitDef* def = (unit != nullptr) ? unit->GetCircuitDef() : nullptr;
+		if (!IsNavalFactoryDef(def) || (unit->GetUnit() == nullptr) || (unit->GetUnit()->GetBuildProgress() < 1.f)) {
+			continue;
+		}
+		const AIFloat3 p = unit->GetPos(frame);
+		const float sq = p.SqDistance2D(pos);
+		if (sq <= best) { best = sq; result = p; }
+	}
+	return result;
+}
+
+int CTerrainManager::NavalYardBlockMask(CCircuitDef* hull, const AIFloat3& centre, float radius,
+	float exitLength, float lane, float rear)
+{
+	// D-343: two bits per finished naval yard (own or allied, in unit-id
+	// order) within `radius` of `centre`: bit 2k the forward lane probe, bit
+	// 2k+1 the rear probe, set when terrain lets the flagship through but
+	// reservations do not. The caller compares the mask before and after a
+	// new reservation, so only newly cut paths refuse it; land and paths
+	// already blocked by earlier layouts never veto every later placement.
+	// O(friendly units) to find yards; at most four bounded flood fills each.
+	if ((hull == nullptr) || (areaData == nullptr)) {
+		return 0;
+	}
+	const auto* mobile = GetMobileType(hull->GetId());
+	if ((mobile == nullptr) || !mobile->canFloat) {
+		return 0;
+	}
+	const float limit = std::min(mobile->maxElevation, 0.f);
+	const auto wet = [&](const AIFloat3& p) {
+		if (!geom::is_in_map(p)) return false;
+		const float e = areaData->GetElevationAt(p.x, p.z);
+		return std::isfinite(e) && (e <= limit);
+	};
+	const int frame = circuit->GetLastFrame();
+	const float radiusSq = SQUARE(radius);
+	int mask = 0, yard = 0;
+	for (const auto& kv : circuit->GetFriendlyUnits()) {
+		if (yard >= 8) break;  // bits 0-15; a harbor never has more nearby yards
+		CAllyUnit* unit = kv.second;
+		CCircuitDef* def = (unit != nullptr) ? unit->GetCircuitDef() : nullptr;
+		if (!IsNavalFactoryDef(def) || (def->GetDef() == nullptr) || (unit->GetUnit() == nullptr)) {
+			continue;
+		}
+		const AIFloat3 pos = unit->GetPos(frame);
+		if (pos.SqDistance2D(centre) > radiusSq) {
+			continue;
+		}
+		const int bit = 2 * yard++;
+		const int facing = unit->GetUnit()->GetBuildingFacing();
+		const AIFloat3 forward(facing == 1 ? 1.f : facing == 3 ? -1.f : 0.f, 0.f,
+		                       facing == 0 ? 1.f : facing == 2 ? -1.f : 0.f);
+		const AIFloat3 side(forward.z, 0.f, -forward.x);
+		const float halfDepth = def->GetDef()->GetZSize() * SQUARE_SIZE * .5f;
+		const AIFloat3 mouth = pos + forward * (halfDepth + exitLength);
+		if (!wet(mouth)) {
+			continue;  // a dry mouth is the yard's own exit problem
+		}
+		for (float d = lane; d >= 128.f; d -= 128.f) {
+			const AIFloat3 out = mouth + forward * d;
+			if (wet(out)) {
+				if (IsNavalPathReservationBlocked(hull, mouth, out)) mask |= 1 << bit;
+				break;
+			}
+		}
+		const float across[3] = {0.f, 400.f, -400.f};
+		for (const float a : across) {
+			const AIFloat3 back = pos - forward * rear + side * a;
+			if (wet(back) && NavalPath(hull, mouth, back, false)) {
+				if (!NavalPath(hull, mouth, back, true)) mask |= 1 << (bit + 1);
+				break;
+			}
+		}
+	}
+	// Exit corridors, own and allied, including those of yards not built yet
+	// (a teammate's planned berth was walled in by our dynamic block, D-343).
+	// One end of a corridor is the yard; the bit is set when terrain lets the
+	// hull past either end but reservations let it past neither. Bits 16-29.
+	int exitBit = 16;
+	const auto corridor = [&](int x1, int z1, int x2, int z2) {
+		if (exitBit >= 30) return;
+		const float cx = (x1 + x2) * .5f * SQUARE_SIZE * 2, cz = (z1 + z2) * .5f * SQUARE_SIZE * 2;
+		const AIFloat3 mid(cx, 0.f, cz);
+		if ((mid.SqDistance2D(centre) > radiusSq) || !wet(mid)) return;
+		const bool alongX = (x2 - x1) > (z2 - z1);
+		const float half = (alongX ? (x2 - x1) : (z2 - z1)) * SQUARE_SIZE;  // cells are 16 elmos
+		const AIFloat3 axis(alongX ? 1.f : 0.f, 0.f, alongX ? 0.f : 1.f);
+		bool terrain = false, open = false;
+		for (const float sign : {1.f, -1.f}) {
+			const AIFloat3 end = mid + axis * (sign * (half + lane));
+			if (!wet(end) || !NavalPath(hull, mid, end, false)) continue;
+			terrain = true;
+			if (NavalPath(hull, mid, end, true)) { open = true; break; }
+		}
+		if (terrain && !open) mask |= 1 << exitBit;
+		++exitBit;
+	};
+	for (const auto& kv : zones) {
+		if (kv.second.corridor) corridor(kv.second.c1.x, kv.second.c1.y, kv.second.c2.x, kv.second.c2.y);
+	}
+	if (circuit->GetAllyTeam() != nullptr) {
+		const int r = int(radius / (SQUARE_SIZE * 2)) + 1;
+		const int cx = int(centre.x / (SQUARE_SIZE * 2)), cz = int(centre.z / (SQUARE_SIZE * 2));
+		circuit->GetAllyTeam()->GetLayoutReservations().ForEachOther(circuit->GetTeamId(),
+			allied_layout::Reservations::EXIT, {std::max(0, cx - r), std::max(0, cz - r), cx + r, cz + r},
+			[&](const allied_layout::Rect& e) { corridor(e.x1, e.z1, e.x2, e.z2); });
+	}
+	return mask;
 }
 
 int CTerrainManager::CountGroupSlotsWithin(int group, const AIFloat3& pos, float radius) const
@@ -5756,6 +6011,11 @@ bool CTerrainManager::CanReachAt(CCircuitUnit* unit, const AIFloat3& destination
 		return true;
 	}
 	const int iS = GetSectorIndex(destination);
+	// KI-612: an off-map destination (SEA replacement-line candidates) has no
+	// sector; GetClosestSector indexed past the table and crashed the engine.
+	if (!terrainData->IsSectorValid(iS)) {
+		return false;
+	}
 	if (area->sector.find(iS) != area->sector.end()) {
 		return true;
 	}
@@ -5789,6 +6049,11 @@ bool CTerrainManager::CanMobileReachAt(SArea* area, const AIFloat3& destination,
 		return true;
 	}
 	const int iS = GetSectorIndex(destination);
+	// KI-612: an off-map destination (SEA replacement-line candidates) has no
+	// sector; GetClosestSector indexed past the table and crashed the engine.
+	if (!terrainData->IsSectorValid(iS)) {
+		return false;
+	}
 	if (area->sector.find(iS) != area->sector.end()) {
 		return true;
 	}

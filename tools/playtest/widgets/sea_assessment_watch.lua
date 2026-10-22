@@ -19,10 +19,12 @@ local function damage(id,def,team,amount,paralyzer,weapon,projectile,attacker,at
   row(attackerTeam,attackerDef).damage=row(attackerTeam,attackerDef).damage+amount
  end
 end
+-- The BAR widget sandbox drops widgetHandler.X= hooks; only a real callin
+-- is delivered (that is why damageEvents read 0 for whole games, KI-604).
+function widget:UnitDamaged(id,def,team,amount,paralyzer,weapon,projectile,attacker,attackerDef,attackerTeam)
+ damage(id,def,team,amount,paralyzer,weapon,projectile,attacker,attackerDef,attackerTeam)
+end
 function widget:Initialize()
- priorDamage=widgetHandler.UnitDamaged
- damageHook=function(self,...) damage(...);if priorDamage then return priorDamage(self,...) end end
- widgetHandler.UnitDamaged=damageHook;widgetHandler:UpdateCallIn("UnitDamaged")
  for _,name in ipairs({"armsy","armasy","corsy","corasy","legsy","legadvshipyard"}) do
   local factory=UnitDefNames[name]
   if factory then for _,definition in ipairs(UnitDefs[factory.id].buildOptions or {}) do

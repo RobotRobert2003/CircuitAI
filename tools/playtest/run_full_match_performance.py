@@ -30,7 +30,7 @@ def wrap(path,name,result,args,call,label):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--map',choices=['metal-plate','glacial','serene','glitters','supreme','shore'],required=True)
+    p.add_argument('--map',choices=['metal-plate','glacial','serene','glitters','supreme','supreme21','shore','carrot','pinch','sulphur','redriver'],required=True)
     p.add_argument('--dll',type=Path,required=True)
     p.add_argument('--data',type=Path,help='Matching pinned data tree; defaults to current repository data')
     # D-298: default to the lobby's last game; a pinned archive dies on the next BAR update.
@@ -47,8 +47,13 @@ def main():
     p.add_argument('--detail-sea',action='store_true',help='Additional staged SEA subphase labels; use in a separate attribution run')
     p.add_argument('--detail-air',action='store_true',help='Additional staged AIR subphase labels; attribution overhead is recorded')
     p.add_argument('--command-detail',action='store_true',help='Read-only unit/command/origin counts; adds observer overhead, not gameplay orders')
+    p.add_argument('--extra-widget',action='append',help='Stage another widget under test (e.g. tools/widgets/gui_barb_team_link.lua)')
+    p.add_argument('--shots',help='Visual mode: override screenshots, comma list of minute@height@x:z')
     p.add_argument('--verify-indexes',action='store_true',help='Correctness only: duplicate live route/economy scans; timings are invalid')
     a=p.parse_args()
+    # KI-655: SEA subphase labels ([PerfLabel]) are emitted only with native
+    # phases on; without them --detail-sea silently recorded nothing.
+    if a.detail_sea:a.native_phases=True
     profiles=a.profiles.split(',') if a.profiles else None
     if profiles:
         if a.mode=='performance':p.error('Mixed-profile compatibility requires --mode fast or visual')
@@ -70,7 +75,9 @@ def main():
     print('FULL_MATCH_DIRECTORY='+str(d),flush=True)
     (RAW_ROOT / 'perf-current.txt').write_text(str(d))
     name={'metal-plate':'Full Metal Plate 1.7','glacial':'Glacial Gap v1.1','serene':'Serene Caldera v1.3',
-          'glitters':'All That Glitters v2.2.3','supreme':'Supreme Isthmus v1.7','shore':'Shore_to_Shore_V3'}[a.map]
+          'glitters':'All That Glitters v2.2.3','supreme':'Supreme Isthmus v1.7','supreme21':'Supreme Isthmus v2.1',
+          'shore':'Shore_to_Shore_V3','carrot':'Carrot Mountains v2.0','pinch':'Pinch Point 1.03',
+          'sulphur':'Sulphur Springs v1.1','redriver':'Red River Remake v1.2'}[a.map]
     role='SEA' if a.map=='serene' else 'AIR'
     extra=[]
     if a.map=='metal-plate':
@@ -102,7 +109,9 @@ def main():
     if a.map=='serene':focus={'x':7680,'z':6500,'height':10500}
     if a.map=='glitters':focus={'x':3072,'z':5120,'height':10000}
     if a.map=='shore':focus={'x':7680,'z':1536,'height':15500}
-    if a.map=='supreme':focus={'x':6144,'z':6144,'height':12000}
+    if a.map in ('supreme','supreme21','carrot'):focus={'x':6144,'z':6144,'height':12000}
+    if a.map=='pinch':focus={'x':8192,'z':5120,'height':14000}
+    if a.map in ('sulphur','redriver'):focus={'x':6144,'z':6144,'height':13000}
     # The screenshot callback captures the current speed before queued speed
     # commands apply. Resume after the screenshot, never in the same frame.
     shot_minutes=[5,10,15,20,30,40,50,60,70,80,89]
@@ -115,8 +124,10 @@ def main():
     if a.mode!='visual' or a.headless:
         shot_minutes=[]
         changes=[(0,a.speed)]
+    if a.shots and a.mode=='visual' and not a.headless:changes=[(0,a.speed)]  # custom shots: no profiler slowdowns
     plan=','.join(f'{m}:{speed}' for m,speed in sorted(changes))
     shots=','.join(f'{m}@{focus["height"]}@{focus["x"]}:{focus["z"]}' for m in shot_minutes)
+    if a.shots and a.mode=='visual' and not a.headless:shots=a.shots
     cli=[sys.executable,str(playtest.HERE/'playtest.py')]
     cmd=cli+['stage','--dir',str(d),'--dll',str(a.dll),'--map',name,*extra,
        *(['--game',a.game] if a.game else []),'--engine','recoil_2026.07.04',
@@ -128,6 +139,7 @@ def main():
     if a.data:cmd+=['--data',str(a.data)]
     for widget in ['skirmish_perf_watch.lua','air_command_watch.lua','perf_spectator_cleanup.lua','full_match_perf.lua']:
         cmd+=['--extra-widget',str(playtest.HERE/'widgets'/widget)]
+    for widget in a.extra_widget or []:cmd+=['--extra-widget',widget]
     subprocess.run(cmd,check=True)
     scripts=d/'AI/Skirmish/BARbTest/test/script'
     if a.verify_indexes:

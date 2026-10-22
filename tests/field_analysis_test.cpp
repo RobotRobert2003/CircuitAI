@@ -139,6 +139,15 @@ static void TestStructure()
 	Require(m->sides.size() == 2, "two sides");
 	Require(m->regions.size() >= 3, "the land is cut into regions");
 	Require(!m->chokes.empty(), "the isthmus gives at least one choke");
+	Require(m->accessOf.size() == m->groundOf.size(), "access mask covers exactly the terrain grid");
+	Require(CountBoundary(*m, B_RAMP) == 0, "flat watershed contacts are not ramps");
+	bool qualifiedPassage = false;
+	for (const SChoke& c : m->passages) if (c.qualified && (c.classMask & (1 << C_VEH))) {
+		qualifiedPassage = true;
+		Require(std::abs(std::hypot(c.endA.x-c.endB.x,c.endA.z-c.endB.z)-c.width)<1.f, "width matches fitted endpoints");
+		Require(c.width > 350.f && c.width < 700.f, "known isthmus width is locally measured");
+	}
+	Require(qualifiedPassage, "real isthmus constriction remains qualified");
 	bool isthmusChoke = false;
 	for (const SChoke& c : m->chokes) {
 		if (c.pos.x >= 1700.f && c.pos.x <= 2400.f && c.pos.z >= 1250.f && c.pos.z <= 1850.f) isthmusChoke = true;
@@ -453,6 +462,29 @@ static int Replay(const char* dumpPath, const char* outPath, bool predict, const
 	return m->checkFailures.empty() ? 0 : 1;
 }
 
+static void TestExperienceSemantics()
+{
+	auto in = Synthetic();
+	for (int z=0;z<in.heightRows;++z) for (int x=0;x<in.heightStride;++x) {
+		float& height=in.height[z*in.heightStride+x];
+		if (height>0.f) height+=std::clamp((x*8.f-2050.f)*0.5f,0.f,128.f);
+	}
+	for (int z=0;z<in.slopeRows;++z) for (int x=0;x<in.slopeStride;++x)
+		if (x*16>=2050 && x*16<=2500 && z*16>=1300 && z*16<1800)
+			in.slope[z*in.slopeStride+x]=SlopeValue(10.f);
+	auto m=Analyse(in,SSettings{},nullptr);
+	Require(CountBoundary(*m,B_RAMP)>0,"a real local elevation transition remains a ramp");
+	for (int mask:m->accessOf) if (mask & (1<<7))
+		Require((mask & (1<<C_SHIP)) && (mask & (1<<C_SUB)),"deep draft is a subset of shallower naval access");
+	const std::string file=Encode(*m,SSettings{},1,0);
+	Require(file.find("experience|2|initial-map")!=std::string::npos,"experience capability exported");
+	Require(file.find("access|")!=std::string::npos && file.find("site|")!=std::string::npos,"access surfaces and evidence sites exported");
+	std::fill(in.height.begin(),in.height.end(),40.f);
+	std::fill(in.slope.begin(),in.slope.end(),0.f);
+	m=Analyse(in,SSettings{},nullptr);
+	Require(CountBoundary(*m,B_RAMP)==0 && m->passages.empty(),"an open plain has no physical ramps or constrictions");
+}
+
 int main(int argc, char** argv)
 {
 	if (argc > 1) {
@@ -470,6 +502,7 @@ int main(int argc, char** argv)
 	}
 	try {
 		TestStructure();
+		TestExperienceSemantics();
 		TestDeterminismAndFile();
 		TestCancel();
 		TestNoBoxes();

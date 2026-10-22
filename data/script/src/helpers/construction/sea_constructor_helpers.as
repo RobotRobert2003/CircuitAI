@@ -114,10 +114,19 @@ namespace SeaConstructor {
         {
             const int t2ShipyardCount = UnitDefHelpers::SumUnitDefCounts(UnitHelpers::GetAllT2Shipyards());
             const bool hasPrimaryT1Shipyard = (Factory::primaryT1Shipyard !is null);
-            if (EconomyHelpers::ShouldBuildT2Shipyard(mi, ei, aiEconomyMgr.metal.current,
+            // D-300: SEA's first T2 yard has one owner, SeaBuild::TechYard
+            // (tech save). Two order paths produced duplicate, never-started
+            // orders. TACTICAL keeps the ladder gate (40 M/s) unchanged (D-042).
+            bool t2Ready = false;
+            if (Global::AISettings::Role == AiRole::SEA) {
+                t2Ready = false;
+            } else {
+                t2Ready = EconomyHelpers::ShouldBuildT2Shipyard(mi, ei, aiEconomyMgr.metal.current,
                     s.MinimumMetalIncomeForT2Shipyard, s.RequiredMetalCurrentForT2Shipyard,
                     s.MinimumEnergyIncomeForT2Shipyard, t2ShipyardCount, s.MaxT2Shipyards,
-                    hasPrimaryT1Shipyard)) {
+                    hasPrimaryT1Shipyard);
+            }
+            if (t2Ready) {
                 IUnitTask@ t = Builder::EnqueueT2Shipyard(unitSide, Factory::GetT1ShipyardPos(), SQUARE_SIZE * 60, 600 * SECOND);
                 if (t !is null) return t;
             }

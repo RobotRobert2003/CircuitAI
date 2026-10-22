@@ -264,6 +264,48 @@ namespace RoleTactical {
 		return (t !is null) ? t : defaultTask;
 	}
 
+	// D-352: the race-won spots the team owns (a summit, an island; owner this
+	// team, no LAND bit) lie beyond native expansion's reach from the start, so
+	// an idle hover constructor orders the best-valued one once income allows,
+	// one remote job at a time. A spot whose enemy clock has passed is skipped
+	// while surface threat stands there (the live half of "reliably"). Mirrors
+	// AirBuild::TheatreMex; native admission (IsOwnSpot) stays the judge.
+	int tacticalTheatreTraceFrame = -30 * SECOND;
+	IUnitTask@ Tactical_TheatreMex(CCircuitUnit@ builder) {
+		if (builder is null || !Team::MexClaim::Enabled() || UnitHelpers::IsCommander(builder.circuitDef)) return null;
+		if (aiEconomyMgr.metal.income < Global::RoleSettings::Tactical::TheatreMexMetal) return null;
+		const float radius = Global::RoleSettings::Tactical::TheatreMexRadius;
+		AIFloat3 best(-1.0f, 0.0f, -1.0f);
+		float bestValue = 0.0f;
+		int owned = 0, hot = 0, closed = 0, parked = 0;
+		const int count = ai.GetMetalSpotCount();
+		for (int i = 0; i < count; ++i) {
+			const AIFloat3 p = ai.GetMetalSpot(i);
+			if (p.x < 0.0f || MapHelpers::SqDist(p, Global::Map::StartPos) > radius * radius) continue;
+			if (aiEconomyMgr.MexSpotOwner(p) != ai.teamId || (aiEconomyMgr.MexTheatre(p) & 1) != 0) continue;
+			++owned;
+			const int adm = aiEconomyMgr.MexSpotAdmission(builder, p);
+			// One theatre job at a time: a mex task of ours parked on an owned race-won
+			// spot (native's own far expansion jobs do not count, there are always some).
+			if ((adm & 64) != 0) { ++parked; continue; }
+			if (aiEconomyMgr.MexSpotEnemySeconds(p) * SECOND < float(ai.frame)
+				&& aiBattle.SurfThreat(p) > Global::RoleSettings::Tactical::TheatreMexThreat) { ++hot; continue; }
+			// A spot native would refuse must not pin the best choice (see AirBuild::TheatreMex).
+			if ((adm & 62) != 62) { ++closed; continue; }
+			const float v = aiEconomyMgr.MexSpotValue(p, ai.teamId);
+			if (v > bestValue) { bestValue = v; best = p; }
+		}
+		array<AIFloat3> none;
+		IUnitTask@ t = (parked > 0 || best.x < 0.0f) ? null : aiEconomyMgr.EnqueueMexAvoiding(builder, best, SQUARE_SIZE * 8, true, none);
+		if (t !is null || ai.frame - tacticalTheatreTraceFrame >= 30 * SECOND) {
+			tacticalTheatreTraceFrame = ai.frame;
+			GenericHelpers::LogUtil("[TACTICAL][TheatreMex] builder " + builder.id + " owned=" + owned + " parked=" + parked + " hot=" + hot + " closed=" + closed
+				+ " best=" + int(best.x) + ":" + int(best.z) + (t !is null ? " ordered" : " none")
+				+ (best.x < 0.0f ? "" : " adm=" + aiEconomyMgr.MexSpotAdmission(builder, best)), 1);
+		}
+		return t;
+	}
+
 	IUnitTask@ Tactical_BuilderAiMakeTask(CCircuitUnit@ builder) {
 		GenericHelpers::LogUtil("[Tactical_BuilderAiMakeTask] called for builder", 3);
 		// Create default task only at return sites via Builder helper (no pre-creation)
@@ -333,6 +375,10 @@ namespace RoleTactical {
 		if (SeaConstructor::IsT1(udef) || SeaConstructor::IsT2(udef)) {
 			return Tactical_SeaConstructor_AiMakeTask(builder, defaultTask);
 		}
+		// D-352: a race-won summit or island the team owns, ahead of the objective chain.
+		IUnitTask@ theatre = Tactical_TheatreMex(builder);
+		if (theatre !is null) return theatre;
+
 		CCircuitUnit@ tactical = Builder::GetTacticalConstructor();
 		if (tactical !is null && builder is tactical) {
 			IUnitTask@ t = Tactical_TryHandleObjective(builder, Objectives::BuilderGroup::TACTICAL);

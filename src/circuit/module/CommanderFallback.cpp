@@ -56,7 +56,8 @@ void CCommanderControl::PlanFallback(CCircuitUnit* unit,State& s,int frame) {
         if(!d || d->IsMobile() || !d->IsAttacker() || d->GetMaxRange()>options.fallbackPorcRange) continue;
         const AIFloat3& p=ally->GetLastPos();
         const float distance=p.distance2D(pos);
-        if(distance>options.fallbackSearch) continue;
+        const bool held=id==s.heldPorc && frame<s.heldPorcUntil;
+        if(distance>options.fallbackSearch && !held) continue;
         // Outer edge of allied territory: furthest along base -> threat, but
         // not overrun (the group is not past it) and not ahead of the
         // commander by more than the stand-off it keeps behind the line.
@@ -65,7 +66,14 @@ void CCommanderControl::PlanFallback(CCircuitUnit* unit,State& s,int frame) {
         const float edge=commander::Dot(P(p)-P(home),axis);
         // +64: the stand-off point is offset away from the group, not exactly
         // along the axis, so a held line must not fall out by rounding.
-        if(edge>=threatEdge || edge>commanderEdge+options.fallbackOffset+64.f) continue;
+        // KI-609 hysteresis: the porc already held stays a candidate while
+        // the group is not past it, even when the commander's own stand-off
+        // moves it out of the ahead-window; otherwise the plan flipped every
+        // second between this line and the home rear station (perimeter 120).
+        // A held porc also tolerates the group's centroid jitter: it is
+        // overrun only once the group is a full group radius past it.
+        if(held ? edge>=threatEdge+options.fallbackGroupRadius
+            : (edge>=threatEdge || edge>commanderEdge+options.fallbackOffset+64.f)) continue;
         porcs.push_back({p,edge,distance,id});
     }
     const auto order=[](const PorcCandidate& a,const PorcCandidate& b) {
@@ -145,6 +153,7 @@ void CCommanderControl::PlanFallback(CCircuitUnit* unit,State& s,int frame) {
         s.fallbackMoveUntil=frame+int((goal.distance2D(pos)/speed+options.sensorMemory)*FRAMES_PER_SEC);
     }
     s.fallbackPorc=chosen; s.fallbackGoal=goal; s.fallbackBoundary={P(home),perimeter};
+    if(chosen>=0) { s.heldPorc=chosen; s.heldPorcUntil=frame+5*FRAMES_PER_SEC; }
     // D-299: the line the commander's turrets join is the porc, or the rear
     // station when no porc survives; it outlives the fallback by line_hold.
     if(chosen<0) line=goal;
@@ -314,7 +323,18 @@ bool CCommanderControl::Fallback(CCircuitUnit* unit,State& s,IUnitTask* current,
             }
         }
     }
-    if(working) return true;
+    if(working) {
+        // INV-218: line work never keeps the commander outside the perimeter.
+        // Walking back in after the perimeter shrank is allowed 10 s.
+        if(s.fallbackBoundary.Contains(P(pos),std::max(400.f,def->GetBuildDistance()+96.f))) s.lineOutside=-1; // guard/assist drift
+        else if(s.lineOutside<0) s.lineOutside=frame;
+        else if(frame-s.lineOutside>10*FRAMES_PER_SEC) {
+            ai->LOG("[INVARIANT] INV-218 commander line work outside fallback perimeter unit=%i x=%.0f z=%.0f perimeter=%.0f",
+                unit->GetId(),pos.x,pos.z,s.fallbackBoundary.radius);
+            s.lineOutside=frame;
+        }
+        return true;
+    }
     if(s.fallbackGoal.SqDistance2D(pos)>64.f*64.f) { Move(unit,s,s.fallbackGoal,frame); return true; }
     if(LadderActive() && inside && s.pending<0 && frame>=s.lineRetry) {
         // Bounded hand-over: if the ladder offers nothing inside the

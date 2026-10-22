@@ -218,10 +218,30 @@ public:
 	// halfAlong forward and back. Free cells are marked, blocked ones are
 	// holes. Returns the zone id, 0 when nothing could be marked.
 	int ReserveZone(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong, bool corridor);
+	// D-343 (SEA): as ReserveZone, but a rectangle touching a teammate's
+	// reservation is shrunk until it touches none instead of being refused.
+	// The zone never covers allied ground (INV-088).
+	int ReserveZoneAroundAllies(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong);
     // Read-only world-space bounds; upper corner is exclusive, -1 if absent.
     springai::AIFloat3 GetZoneCorner(int id, bool upper) const;
 	// D-072: would this footprint cut the zone's free cells into a pocket no unit could leave?
 	bool LeavesPocket(int zone, CCircuitDef* cdef, const springai::AIFloat3& pos, int facing) const;
+	// D-343: can `hull` still sail between two points past every structure and
+	// every reserved footprint (own slots, allied slots)? Zone envelopes and
+	// exit corridors are open water. Bounded local window; planning-time only.
+	bool IsNavalPathClear(CCircuitDef* hull, const springai::AIFloat3& from, const springai::AIFloat3& to) const;
+	// D-343: true when terrain lets `hull` through but reservations do not.
+	bool IsNavalPathReservationBlocked(CCircuitDef* hull, const springai::AIFloat3& from, const springai::AIFloat3& to) const;
+	// D-343: two bits per finished own/allied naval yard near `centre` (forward
+	// lane, rear) set when reservations, not terrain, cut the flagship's path
+	// from its exit mouth. Compare before/after a new reservation.
+	int NavalYardBlockMask(CCircuitDef* hull, const springai::AIFloat3& centre, float radius,
+		float exitLength, float lane, float rear);
+	bool NavalPath(CCircuitDef* hull, const springai::AIFloat3& from, const springai::AIFloat3& to, bool withReservations) const;
+	// D-343: the nearest finished naval factory (own or allied) within radius,
+	// or (-1, 0, -1).
+	springai::AIFloat3 NearestFriendlyNavalYard(const springai::AIFloat3& pos, float radius);
+	bool IsNavalFactoryDef(CCircuitDef* def) const;
 	// A corridor in front of a standing factory: its width plus `margin` each
 	// side, `length` forward from its front edge (the engine sends new units
 	// out through the front). Returns the corridor's zone id, 0 if none.
@@ -521,7 +541,7 @@ private:
 	int factoryFront = -1;                            // D-104: the facing the labs face (Layout::LabFacing)
 	void RemarkZoneCells(int2 c1, int2 c2);
 	int ReserveZoneMasked(const springai::AIFloat3& centre, int facing, float halfAcross, float halfAlong,
-		bool corridor, SBlockingMap::SM blockingMask);
+		bool corridor, SBlockingMap::SM blockingMask, bool allyHoles = false);
 	void OnStructureGone(CCircuitDef* cdef, const springai::AIFloat3& pos);
 	int ReserveBuildingEx(CCircuitDef* cdef, const springai::AIFloat3& pos, int facing, int ttlFrames, int group,
 			bool armed, bool anyReach, bool tenant, int zone, bool quiet, bool exitsPreflighted = false);

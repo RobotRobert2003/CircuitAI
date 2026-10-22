@@ -999,7 +999,9 @@ int CBattleAnalysis::GetSeaForceCount() {
         if (e->IsIgnore() && (d==nullptr || !d->IsIgnore() || (observed
             && e->GetUnit()->GetRulesParamFloat("ignoredByAI",0.f)>0.f))) continue;
         const auto& p=e->GetPos(); // only the last legal observation
-        if (Height(p)>=-8.f || (d!=nullptr && (d->IsAbleToFly() || d->IsSurfer()))) continue;
+        // D-301: hovers on water are SEA contacts too (flag 512). Only surface
+        // guns can hit them; script filters torpedo-only cohorts (KI-611).
+        if (Height(p)>=-8.f || (d!=nullptr && d->IsAbleToFly())) continue;
         const int body=WaterBody(p,false);
         if (body<0) continue;
         if (d==nullptr) {
@@ -1008,12 +1010,13 @@ int CBattleAnalysis::GetSeaForceCount() {
         }
         const bool submerged=d->IsInWater(Height(p),p.y);
         const bool antiSub=submerged ? d->HasSubToWater() : d->HasSurfToWater();
-        if (d->IsMobile() && !(d->IsFloater() || d->IsSubmarine() || (d->IsAmphibious() && submerged))) continue;
+        if (d->IsMobile() && !(d->IsFloater() || d->IsSubmarine() || d->IsSurfer() || (d->IsAmphibious() && submerged))) continue;
         // Unfinished yards and mobile constructors are denial targets too.
         const int flags=(submerged?2:0)|(antiSub?4:0)|(!d->IsMobile()?8:0)
             |(!d->IsMobile() && !d->GetBuildOptions().empty()?32:0)
             |(d->IsMex()?64:0)|(!observed?128:0)
-            |(d->IsMobile() && d->IsAmphibious() && submerged?256:0);
+            |(d->IsMobile() && d->IsAmphibious() && submerged?256:0)
+            |(d->IsMobile() && d->IsSurfer()?512:0);
         seaForces.push_back({p,d->GetCostM(),e->GetId(),d->GetId(),flags,body});
     }
     std::sort(seaForces.begin(),seaForces.end(),[](const NavalForce& a,const NavalForce& b){return a.id<b.id;});

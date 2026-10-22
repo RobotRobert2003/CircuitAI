@@ -146,6 +146,15 @@ bool CSetupManager::HasStartBoxes() const
 	return setupData->IsInitialized();
 }
 
+int CSetupManager::FriendlyStartBoxAt(const AIFloat3& pos) const
+{
+	if (!setupData->IsInitialized()) {
+		return -1;
+	}
+	const CAllyTeam* ally = setupData->GetAllyTeam(circuit->GetAllyTeamId());
+	return (ally != nullptr) ? int(ally->GetStartBox().ContainsPoint(pos)) : -1;
+}
+
 int CSetupManager::EnemyStartBoxAt(const AIFloat3& pos) const
 {
 	if (!setupData->IsInitialized()) {

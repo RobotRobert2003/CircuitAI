@@ -199,9 +199,21 @@ GAME_DIR=$(python tools/playtest/storage.py allocate --domain tech --area econom
 Cases and checks are organized by domain and area. Legacy short check names
 still work. Keep the printed `runs/<UTC-id>/` archive path, publish compact
 evidence with `storage.py publish <archive> --screenshot <filename.png>`, and
-rebuild discovery with `storage.py index`. Never delete old raw evidence or
-rewrite an old verdict to make the benchmark pass. The explicit legacy paths
-below remain supported for reproducing old commands.
+rebuild discovery with `storage.py index`. Never rewrite an old verdict to make
+the benchmark pass. The explicit legacy paths below remain supported for
+reproducing old commands.
+
+**Prune after every game (D-339).** The benchmark checkout must stay under
+5 GB. When the verdict is read and the comparison evidence published, run
+`python tools/playtest/prune_benchmarks.py --apply --path <game dir>`. It keeps
+every result output (reports, verdicts, metric JSON, manifests, the game setup,
+`telemetry.jsonl`, `system.json`) and deletes the raw inputs: infolog,
+screenshots, replay, staged DLL/symbols/scripts and caches. Copy anything else
+you still need (a log excerpt, a screenshot) into the published bundle first.
+Pass `--keep <pin>` to protect a pin still in use. A dry run (no `--apply`)
+shows what would go. Each run records its machine in `system.json` and
+`result.json`'s `system`; compare timings only on matching hosts, since several
+devices run tests.
 
 ```bash
 python tools/playtest/playtest.py stop --dir C:/bardev/barb-playtest-simN   # always, first

@@ -126,6 +126,69 @@ def capture_inputs(directory, executable):
     return value
 
 
+_SYSTEM_PS = r'''$ErrorActionPreference='SilentlyContinue'
+$cs=Get-CimInstance Win32_ComputerSystem; $os=Get-CimInstance Win32_OperatingSystem
+$cpu=@(Get-CimInstance Win32_Processor); $p=Get-CimInstance Win32_Process
+[ordered]@{
+ host=$env:COMPUTERNAME; manufacturer=$cs.Manufacturer; model=$cs.Model
+ os=[ordered]@{caption=$os.Caption; version=$os.Version; build=$os.BuildNumber}
+ cpu=@($cpu | ForEach-Object { [ordered]@{name=$_.Name.Trim(); cores=$_.NumberOfCores; threads=$_.NumberOfLogicalProcessors; max_mhz=$_.MaxClockSpeed} })
+ cpu_load_percent=($cpu | Measure-Object LoadPercentage -Average).Average
+ memory_gib=[math]::Round($cs.TotalPhysicalMemory/1GB,1); memory_free_gib=[math]::Round($os.FreePhysicalMemory/1MB,1)
+ gpu=@(Get-CimInstance Win32_VideoController | ForEach-Object { $name=$_.Name
+   # AdapterRAM is a 32-bit field (caps at 4 GiB); the driver key holds the real size.
+   $q=(Get-ItemProperty 'HKLM:\SYSTEM\ControlSet001\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0*' | Where-Object { $_.DriverDesc -eq $name } | Select-Object -First 1).'HardwareInformation.qwMemorySize'
+   [ordered]@{name=$name; driver=$_.DriverVersion; vram_mib=$(if ($q) { [math]::Round($q/1MB) } else { [math]::Round($_.AdapterRAM/1MB) }); mode="$($_.CurrentHorizontalResolution)x$($_.CurrentVerticalResolution)@$($_.CurrentRefreshRate)"} })
+ power_plan=(powercfg /getactivescheme) -replace '.*\((.*)\).*','$1'
+ other_engines=@($p | Where-Object { $_.Name -match '^spring(-headless)?\.exe$' } | ForEach-Object { $_.CommandLine })
+ builds=@($p | Where-Object { $_.Name -match '^(cl|c\+\+|g\+\+|ld|lld-link|ninja|cmake)\.exe$' -or ($_.Name -match 'python|bash' -and $_.CommandLine -match 'build_native_snapshot.py|run_native_tests.sh') -or ($_.Name -eq 'docker.exe' -and $_.CommandLine -match '\b(run|build|compose)\b') } | ForEach-Object { $_.Name })
+} | ConvertTo-Json -Depth 4
+'''
+
+
+def capture_system(directory, executable=None):
+    """Record which machine produced a run, so results from different devices
+    are never compared as if they were one host. Written as system.json in the
+    game folder; archive_metadata copies it into runs/<id>/ and publish into the
+    tracked bundle. Captured just before launch, so other_engines/builds show
+    contention at that moment (not over the whole game). Never fails a launch:
+    an inventory error is recorded instead."""
+    import platform, subprocess
+    value = {'schema': 1, 'captured_at_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+             'platform': platform.platform(), 'python': platform.python_version()}
+    try:
+        out = subprocess.run(['powershell', '-NoProfile', '-Command', _SYSTEM_PS],
+                             capture_output=True, text=True, timeout=30)
+        value.update(json.loads(out.stdout))
+    except Exception as error:  # inventory is evidence, not a launch gate
+        value['error'] = repr(error)
+    usage = shutil.disk_usage(directory)
+    value['write_drive_free_gib'] = round(usage.free / 2**30, 1)
+    if executable is not None:
+        value['engine'] = str(executable)
+    write_json(Path(directory)/'system.json', value)
+    return value
+
+
+# D-339: the infolog is pruned after every game, so its measurements must
+# survive separately. Keep every tagged observer/widget line ("[f=N] [Tag]"),
+# AI timing/invariant lines and engine speed/end lines; drop the bulk AI policy
+# log (:::AI LOG text), which is diagnosis, not a metric. One pass, streamed.
+_TELEMETRY_TAG = re.compile(r'\[f=\d+\] \[(?!(?:Sound|Font|VFS|Texture|Shader|GL|Model|Bitmap)\])[A-Z][A-Za-z0-9]+\]')
+_TELEMETRY_ANY = re.compile(r'\[(?:Perf[A-Za-z]*|INVARIANT)\]|SLOW:|Speed set to|GameOver|TeamDied|game over', re.I)
+
+
+def extract_telemetry(infolog, out):
+    """Write the metric lines of an infolog as JSON strings, one per line."""
+    kept = 0
+    with open(infolog, encoding='utf-8', errors='replace') as src, open(out, 'w', encoding='utf-8') as dst:
+        for line in src:
+            ai = ':::AI LOG' in line
+            if _TELEMETRY_ANY.search(line) or (not ai and _TELEMETRY_TAG.search(line)):
+                dst.write(json.dumps(line.rstrip('\n')) + '\n'); kept += 1
+    return kept
+
+
 def archive_metadata(directory, archive, checks_bytes, verdict, reason, frame, complete):
     """Keep raw reports untouched and add a machine-readable, self-contained index."""
     directory, archive = Path(directory), Path(archive)
@@ -137,14 +200,33 @@ def archive_metadata(directory, archive, checks_bytes, verdict, reason, frame, c
             if source.name not in excluded and not source.name.endswith(('-audit.json','-results.json')):
                 shutil.copy2(source, archive/source.name)
     (archive/'checks.json').write_bytes(checks_bytes)
-    plan = read_json(archive/'run-plan.json') if (archive/'run-plan.json').exists() else {}
+    log = archive/'infolog.txt' if (archive/'infolog.txt').is_file() else directory/'infolog.txt'
+    if log.is_file():
+        extract_telemetry(log, archive/'telemetry.jsonl')
+    # KI-655: command metrics come from the replay (the widget callin is
+    # unavailable on current BAR). The replay is pruned afterwards, so the
+    # summary is the lasting record. Never fail the archive over it.
+    replays = sorted((directory/'demos').glob('*.sdfz'), key=lambda p: p.stat().st_mtime) if (directory/'demos').is_dir() else []
+    if replays:
+        try:
+            from replay_command_summary import summarise
+            write_json(archive/'commands-summary.json', summarise(replays[-1]))
+        except Exception as error:
+            write_json(archive/'commands-summary.json', {'schema': 1, 'error': repr(error), 'replay': replays[-1].name})
+    plan =read_json(archive/'run-plan.json') if (archive/'run-plan.json').exists() else {}
     teams = read_json(archive/'teams.json') if (archive/'teams.json').exists() else {}
-    artifacts = {p.name:{'sha256':file_hash(p), 'bytes':p.stat().st_size}
+    system = read_json(archive/'system.json') if (archive/'system.json').exists() else {}
+    host = {'host':system.get('host'), 'cpu':[c.get('name') for c in system.get('cpu') or []],
+            'gpu':[g.get('name') for g in system.get('gpu') or []], 'memory_gib':system.get('memory_gib'),
+            'os_build':(system.get('os') or {}).get('build'),
+            'contended':bool(system.get('other_engines') or system.get('builds'))} if system else None
+    artifacts ={p.name:{'sha256':file_hash(p), 'bytes':p.stat().st_size}
                  for p in sorted(archive.iterdir()) if p.is_file() and p.name != 'result.json'}
     value = {'schema':1, 'id':archive.name, 'recorded_at_utc':dt.datetime.now(dt.timezone.utc).isoformat(),
              'category':plan.get('category'), 'requested':plan.get('requested',{}),
              'verdict':verdict, 'reason':reason, 'last_frame':frame, 'complete':complete,
              'map':teams.get('map'), 'game':teams.get('game'), 'teams':teams.get('teams',[]),
+             'system':host,
              'raw_archive':str(archive.resolve()), 'artifacts':artifacts,
              'comparison':'Use scorecard cohorts for strength comparisons; categories are discovery metadata only.'}
     write_json(archive/'result.json', value)

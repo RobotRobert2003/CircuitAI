@@ -1,0 +1,90 @@
+{
+  "name": "supreme-box-perimeter",
+  "coast_audit": {"minimum_observed": 36, "minimum_aligned": 24, "range_fraction": 0.95, "maximum_error": 128},
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      7492,
+      1220
+    ],
+    [
+      4814,
+      11077
+    ]
+  ],
+  "checks": "sea/combat/supreme-shore-control",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "shots": "1@5200@6100:2200,3@5200@6100:2200,6@5200@6100:2200",
+  "groups": [
+    {
+      "unit": "armpt",
+      "team": 0,
+      "count": 8,
+      "position": [
+        5800,
+        2100
+      ],
+      "columns": 4,
+      "spacing": 100
+    },
+    {
+      "unit": "armsub",
+      "team": 0,
+      "count": 24,
+      "position": [
+        6000,
+        1800
+      ],
+      "columns": 6,
+      "spacing": 100
+    },
+    {
+      "unit": "armserp",
+      "team": 0,
+      "count": 12,
+      "position": [
+        5200,
+        1800
+      ],
+      "columns": 4,
+      "spacing": 100
+    }
+  ],
+  "station_audit": {
+    "units": [
+      "armsub",
+      "armserp"
+    ],
+    "minimum_stationed": 28,
+    "minimum_stations": 7
+  },
+  "acceptance": {
+    "minimum_survivors": {
+      "armsub": 24,
+      "armserp": 12
+    }
+  },
+  "follow_shots": [
+    60,
+    180,
+    350
+  ],
+  "scout_diagnostics": true,
+  "start_boxes": [
+    [
+      0,
+      0,
+      1,
+      0.5
+    ],
+    [
+      0,
+      0.5,
+      1,
+      1
+    ]
+  ],
+  "coast_observer": true
+}

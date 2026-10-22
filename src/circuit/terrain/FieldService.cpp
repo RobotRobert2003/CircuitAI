@@ -117,6 +117,9 @@ bool CFieldService::ReadSettings(CCircuitAI* circuit)
 	settings.waterMinCells = f.get("water_min_cells", settings.waterMinCells).asInt();
 	settings.chokeFraction = f.get("choke_fraction", settings.chokeFraction).asFloat();
 	settings.highGroundRise = f.get("high_ground_rise", settings.highGroundRise).asFloat();
+	settings.rampMinRise = std::max(1.f, f.get("ramp_min_rise", settings.rampMinRise).asFloat());
+	settings.passageExpansion = std::max(1.05f, f.get("passage_expansion", settings.passageExpansion).asFloat());
+	settings.passageProbeCells = std::clamp(f.get("passage_probe_cells", settings.passageProbeCells).asInt(), 8, 256);
 	settings.beachDepth = f.get("beach_depth", settings.beachDepth).asFloat();
 	settings.crossingMinLength = f.get("crossing_min_length", settings.crossingMinLength).asInt();
 	settings.landingMerge = f.get("landing_merge", settings.landingMerge).asInt();

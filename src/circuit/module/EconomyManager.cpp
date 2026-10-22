@@ -988,6 +988,23 @@ int CEconomyManager::GetClaimedMexCountWithin(
 
 bool CEconomyManager::IsOwnSpot(const springai::AIFloat3& pos)
 {
+	// D-352: with theatres enabled every spot has a resolved owner (home, sea,
+	// lane, walk, race; the openings after the windows). Ours or nobody's is
+	// ours. After the windows our own queued order on a spot keeps precedence
+	// over a newcomer (the proposal's in-flight rule); allies see it as free
+	// and the physical frame decides, as for any two allies today.
+	if (mexTheatresEnabled) {
+		const SMexResolved* r = MexResolvedAt(pos);
+		if (r == nullptr) return true;
+		const int ownTeam = circuit->GetTeamId();
+		if (r->owner < 0 || r->owner == ownTeam) return true;
+		if (!mexResolvedLandWindow || !mexResolvedTheatreWindow) {
+			for (IBuilderTask* task : circuit->GetBuilderManager()->GetTasks(IBuilderTask::BuildType::MEX)) {
+				if (task != nullptr && !task->IsDead() && task->GetPosition().SqDistance2D(pos) < SQUARE(64.f)) return true;
+			}
+		}
+		return false;
+	}
 	// D-322 ownership by walking distance holds for the opening window only;
 	// once it ends the D-072 Voronoi split below is the rule again (D-327).
 	if (mexNavigationEnabled && IsMexOwnershipActive()) {
@@ -1124,6 +1141,15 @@ IBuilderTask* CEconomyManager::EnqueueMexWithin(
 				if (IsMexOwnershipActive() && !IsOwnSpot(pos))
 					circuit->LOG("[INVARIANT] INV-227 mex admitted outside protected ownership team=%i x=%.0f z=%.0f",
 						circuit->GetTeamId(), pos.x, pos.z);
+				// D-352: a sea or race-won spot of another ally must never be ordered.
+				if (mexTheatresEnabled) {
+					const int owner = MexSpotOwner(pos), rule = MexSpotRule(pos);
+					if (owner >= 0 && owner != circuit->GetTeamId()
+						&& (rule == int(mex_territory::Rule::SEA) || rule == int(mex_territory::Rule::RACE_SECURED)
+							|| rule == int(mex_territory::Rule::RACE_CONTESTED) || rule == int(mex_territory::Rule::RACE_AIR)))
+						circuit->LOG("[INVARIANT] INV-232 mex admitted on another ally's theatre spot team=%i x=%.0f z=%.0f theatre=%i owner=%i",
+							circuit->GetTeamId(), pos.x, pos.z, MexTheatre(pos), owner);
+				}
 			}
 			return task;
 		}
@@ -1584,6 +1610,14 @@ IBuilderTask* CEconomyManager::UpdateMetalTasks(const AIFloat3& position, CCircu
 				const AIFloat3& pos = spots[index].position;
 				task = builderMgr->Enqueue(TaskB::Spot(IBuilderTask::BuildType::MEX,
 						IBuilderTask::Priority::HIGH, mexDef, pos, index));
+				if (mexTheatresEnabled) {  // D-352 audit, warm cached lookups
+					const int owner = MexSpotOwner(pos), rule = MexSpotRule(pos);
+					if (owner >= 0 && owner != circuit->GetTeamId()
+						&& (rule == int(mex_territory::Rule::SEA) || rule == int(mex_territory::Rule::RACE_SECURED)
+							|| rule == int(mex_territory::Rule::RACE_CONTESTED) || rule == int(mex_territory::Rule::RACE_AIR)))
+						circuit->LOG("[INVARIANT] INV-232 mex admitted on another ally's theatre spot team=%i x=%.0f z=%.0f theatre=%i owner=%i",
+							circuit->GetTeamId(), pos.x, pos.z, MexTheatre(pos), owner);
+				}
 				return task;
 			}
 		}

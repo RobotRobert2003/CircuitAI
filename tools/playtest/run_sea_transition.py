@@ -16,7 +16,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--dll', type=Path, required=True)
     p.add_argument('--data', type=Path, default=playtest.REPO / 'data', help='Pinned script/profile baseline')
-    p.add_argument('--game', default='Beyond All Reason test-31536-188afa8')
+    p.add_argument('--game', default=None)
     p.add_argument('--side', choices=['armada', 'cortex', 'legion'], default='armada')
     p.add_argument('--experimental', action='store_true')
     p.add_argument('--natural', action='store_true', help='Ordinary resources, no supplied units, active opponent')
@@ -28,7 +28,7 @@ def main():
     print('SEA_TRANSITION_DIRECTORY=' + str(d), flush=True)
     call = [sys.executable, str(playtest.HERE / 'playtest.py')]
     stage = call + ['stage', '--dir', str(d), '--dll', str(a.dll), '--data', str(a.data),
-        '--map', 'Supreme Isthmus v1.7', '--game', a.game,
+        '--map', 'Supreme Isthmus v1.7', *(['--game',a.game] if a.game else []),
         '--engine', 'recoil_2026.07.04', '--role', 'SEA', '--roles', 'SEA', '--side', a.side,
         '--bonus', '0', '--ai-option', 'profile=experimental_balanced', '--ai-option', 'random_seed=2091',
         '--speed', '10', '--minutes', str(a.minutes), '--shots', '1@3200@6200:11000,3@3800@6200:11000,8@4000@6200:11000',

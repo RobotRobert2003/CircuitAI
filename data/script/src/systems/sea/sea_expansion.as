@@ -7,6 +7,7 @@ namespace SeaExpansion {
     dictionary retryAt;
     dictionary blocked;
     dictionary withdrawing;
+    dictionary fortAfterMex;
     array<IUnitTask@> forts;
     array<AIFloat3> enemyStarts;
     array<int> ships;
@@ -16,16 +17,29 @@ namespace SeaExpansion {
         return Global::AISettings::Role==AiRole::SEA && Global::RoleSettings::Sea::ExpandMexClusters
             && !aiEconomyMgr.IsMetalMap();
     }
+    // Stable jobs are owned by the constructor lifecycle, not unit-ID order.
+    // O(1) asks; O(B) assignment/removal for the small constructor roster only.
+    dictionary jobs;
+    array<int> jobCounts(3,0);
+    int Job(CCircuitUnit@ u) {
+        int job=-1;
+        if (u is null || !jobs.get(""+u.id,job)) return -1;
+        return job;
+    }
     bool Worker(CCircuitUnit@ u) {
-        if (u is null || !SeaConstructor::IsT1(u.circuitDef)) return false;
-        if (u is Builder::primaryT1SeaConstructor) return true;
-        // Leave at least one ship growing home energy/build power. Existing
-        // Builder identities are promoted on loss; no second ownership census.
-        return u is Builder::secondaryT1SeaConstructor
-            && UnitDefHelpers::SumUnitDefCounts(UnitHelpers::GetAllT1SeaConstructors())>=3;
+        return u !is null && SeaConstructor::IsT1(u.circuitDef) && Job(u)==0;
     }
     void Added(CCircuitUnit@ u) {
-        if (u !is null && SeaConstructor::IsT1(u.circuitDef) && ships.find(u.id)<0) ships.insertLast(u.id);
+        if (u is null || !SeaConstructor::IsT1(u.circuitDef) || u.GetBuildProgress()<1 || ships.find(u.id)>=0) return;
+        ships.insertLast(u.id);
+        const string key="sea.worker."+u.id;
+        int job=aiTerrainMgr.GetLayoutInt(key,-1);
+        if (job<0 || job>2) {
+            job=SeaMath::WorkerGroup(jobCounts[0],jobCounts[1],jobCounts[2]);
+        }
+        jobs.set(""+u.id,job); ++jobCounts[job];
+        aiTerrainMgr.SetLayoutInt(key,job);
+        GenericHelpers::LogUtil("[SEA][Worker] ship="+u.id+" job="+job,1);
     }
     bool SafeApproach(const AIFloat3 &in from, const AIFloat3 &in to) {
         if (!ClearOfEnemies(to)) return false;
@@ -112,11 +126,14 @@ namespace SeaExpansion {
             GenericHelpers::LogUtil("[SEA][Expansion] withdraw ship="+u.id+" x="+int(safe.x)+" z="+int(safe.z),1);
         }
     }
-    void Reset() { retryAt.deleteAll(); blocked.deleteAll(); withdrawing.deleteAll(); forts.resize(0); enemyStarts.resize(0); ships.resize(0); seeded=false; tickFrame=-100000; }
+    void Reset() { retryAt.deleteAll(); blocked.deleteAll(); withdrawing.deleteAll(); fortAfterMex.deleteAll(); forts.resize(0); enemyStarts.resize(0); ships.resize(0); jobs.deleteAll(); for (uint j=0;j<3;++j) jobCounts[j]=0; seeded=false; tickFrame=-100000; }
     void Removed(CCircuitUnit@ u) {
         if (u is null) return;
         const string key=""+u.id;
+        const int job=Job(u); if (job>=0) --jobCounts[job];
+        jobs.delete(key); aiTerrainMgr.SetLayoutInt("sea.worker."+u.id,-1);
         retryAt.delete(key); blocked.delete(key); withdrawing.delete(key);
+        fortAfterMex.delete(key);
         const int index=ships.find(u.id); if (index>=0) ships.removeAt(index);
     }
     IUnitTask@ Fortify(CCircuitUnit@ u) {
@@ -131,24 +148,23 @@ namespace SeaExpansion {
         for (uint i=0;i<Economy::MexTracker::myMexes.length();++i) {
             const AIFloat3 p=Economy::MexTracker::myMexes[i].pos;
             const float sq=MapHelpers::SqDist(from,p);
-            if (sq>=best || aiBattle.Height(p)>=0
-                || MapHelpers::SqDist(p,Global::Map::StartPos)<900.0f*900.0f) continue;
+            if (sq>=best || aiBattle.Height(p)>=0) continue;
             centre=p; best=sq;
         }
         if (centre.x<0 || !SafeApproach(from,centre) || !Escorted(centre)) return null;
         int mexes=0;
         for (uint i=0;i<Economy::MexTracker::myMexes.length();++i)
             if (MapHelpers::SqDist(centre,Economy::MexTracker::myMexes[i].pos)<=clusterRadius*clusterRadius) ++mexes;
-        if (mexes<2) return null;
+        if (mexes<1) return null;
         const string side=UnitHelpers::GetSideForUnitName(u.circuitDef.GetName());
-        const array<string> names={side=="armada" ? "armtl" : side=="cortex" ? "cortl" : "legtl",
-            UnitHelpers::GetFloatingHeavyLaserNameForSide(side),UnitHelpers::GetFloatingAALightNameForSide(side)};
+        const array<string> names={side=="armada" ? "armfrad" : side=="cortex" ? "corfrad" : "legfrad",
+            side=="armada" ? "armtl" : side=="cortex" ? "cortl" : "legtl",
+            UnitHelpers::GetFloatingAALightNameForSide(side),UnitHelpers::GetFloatingHeavyLaserNameForSide(side)};
         for (uint i=0;i<names.length();++i) {
-            if (i==1 && aiEconomyMgr.metal.income<Global::RoleSettings::Sea::ExpansionSurfaceIncome) continue;
-            if (i==2 && SeaCombat::air<=0) continue;
+            if (i==3 && aiEconomyMgr.metal.income<Global::RoleSettings::Sea::ExpansionSurfaceIncome) continue;
             CCircuitDef@ d=ai.GetCircuitDef(names[i]);
             if (d is null || !d.IsAvailable(ai.frame) || !u.circuitDef.CanBuild(d)) continue;
-            const float radius=AiMin(clusterRadius,d.GetMaxRange()*.85f);
+            const float radius=i==0 ? Global::RoleSettings::Sea::ExpansionRadarSpacing : AiMin(clusterRadius,d.GetMaxRange()*.85f);
             if (aiBuilderMgr.FindOwnNear(centre,radius,d) !is null || aiBuilderMgr.FindUnfinishedNear(centre,radius,d) !is null) continue;
             bool pending=false;
             for (uint j=0;j<forts.length();++j) {
@@ -158,7 +174,7 @@ namespace SeaExpansion {
             if (pending) continue;
             if (!SeaMath::ExpansionFortFunded(aiEconomyMgr.metal.current,aiEconomyMgr.metal.income,
                 aiEconomyMgr.energy.current,aiEconomyMgr.energy.income,d.costM,d.costE)) continue;
-            IUnitTask@ task=aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::DEFENCE,Task::Priority::NORMAL,
+            IUnitTask@ task=aiBuilderMgr.Enqueue(TaskB::Common(i==0 ? Task::BuildType::RADAR : Task::BuildType::DEFENCE,Task::Priority::NORMAL,
                 d,centre,128.0f,true,90*SECOND));
             if (task !is null) {
                 forts.insertLast(task);
@@ -182,6 +198,13 @@ namespace SeaExpansion {
         if (retryAt.get(key,next) && ai.frame<next)
             return null; // blocked expansion may use home work throughout the retry window
         blocked.delete(key);
+        // Alternate one funded local defense with expansion, rather than
+        // waiting until every reachable mex has been exhausted. Current tasks
+        // above retain ownership; construction never interrupts a live mex.
+        if (fortAfterMex.exists(key)) {
+            fortAfterMex.delete(key);
+            IUnitTask@ fort=Fortify(u); if (fort !is null) return fort;
+        }
         // Failed searches get a short per-worker backoff, not an order limiter.
         // Completion immediately permits the next mex in a cluster.
         retryAt.set(key,int64(ai.frame+Global::RoleSettings::Sea::ExpansionRetrySeconds*SECOND));
@@ -195,10 +218,42 @@ namespace SeaExpansion {
         IBuilderTask@ mex=null;
         array<AIFloat3> excluded;
         const float nearby=Global::RoleSettings::Sea::NearbyMexRadius;
+        // D-352: the owned-spot list in value-per-second order is the candidate
+        // set first (section 3.6 of the proposal): the yard's own shelf before
+        // the far middle of the sea, whatever radius the ship happens to be in.
+        // A spot whose enemy clock is earlier than our arrival is still taken,
+        // under the same escort and safe-approach admission, after the rest.
+        if (Team::MexClaim::Enabled()) {
+            array<AIFloat3> owned; array<float> value;
+            const int spotCount=ai.GetMetalSpotCount();
+            for (int i=0;i<spotCount;++i) {
+                const AIFloat3 p=ai.GetMetalSpot(i);
+                if (p.x<0 || aiEconomyMgr.MexSpotOwner(p)!=ai.teamId || (aiEconomyMgr.MexTheatre(p)&2)==0) continue;
+                float v=aiEconomyMgr.MexSpotValue(p,ai.teamId);
+                if (aiEconomyMgr.MexSpotEnemySeconds(p)*SECOND<float(ai.frame)) v*=0.5f;  // contested water after the home shelf
+                owned.insertLast(p); value.insertLast(v);
+            }
+            // insertion sort, descending value; a few dozen spots at most
+            for (uint a=1;a<owned.length();++a) { uint b=a; while (b>0 && value[b-1]<value[b]) { const float tv=value[b]; value[b]=value[b-1]; value[b-1]=tv; const AIFloat3 tp=owned[b]; owned[b]=owned[b-1]; owned[b-1]=tp; --b; } }
+            int tried=0;
+            for (uint i=0;i<owned.length() && tried<Global::RoleSettings::Sea::ExpansionCandidates;++i) {
+                @task=aiEconomyMgr.EnqueueMexAvoiding(u,owned[i],SQUARE_SIZE*8,true,excluded);
+                @mex=cast<IBuilderTask>(task);
+                if (mex is null) continue;
+                ++tried;
+                const AIFloat3 candidate=mex.GetBuildPos();
+                const bool usable=aiEconomyMgr.IsMexTaskUsable(task);
+                if (usable && aiTerrainMgr.CanReachAt(u,candidate,u.circuitDef.GetBuildDistance())
+                    && SafeApproach(from,candidate) && Escorted(candidate)) break;
+                excluded.insertLast(candidate);
+                if (mex.target is null && mex.GetUnits().length()==0) aiBuilderMgr.AbortTask(task);
+                @mex=null; @task=null;
+            }
+        }
         // Bounded candidate attempts. Exclusion applies to adoption as well as
         // new spot claims, so an unsafe unfinished mex cannot mask another site.
         // Rejected unassigned tasks are released; another worker's task is not.
-        for (int attempt=0;attempt<Global::RoleSettings::Sea::ExpansionCandidates;++attempt) {
+        for (int attempt=0;mex is null && attempt<Global::RoleSettings::Sea::ExpansionCandidates;++attempt) {
             if (MapHelpers::SqDist(from,home)<=nearby*nearby)
                 @task=aiEconomyMgr.EnqueueMexAvoiding(u,home,nearby,true,excluded);
             if (task is null) @task=aiEconomyMgr.EnqueueMexAvoiding(u,from,Global::RoleSettings::Sea::ExpansionMexRadius,true,excluded);
@@ -223,6 +278,7 @@ namespace SeaExpansion {
         if (mex.GetBuildType()!=int(Task::BuildType::MEX))
             Invariants::Violation("INV-158",""+u.id,"SEA frontier claim is not a mex task");
         retryAt.delete(key);
+        fortAfterMex.set(key,true);
         GenericHelpers::LogUtil("[SEA][Expansion] mex ship="+u.id+" x="+int(mex.GetBuildPos().x)+" z="+int(mex.GetBuildPos().z)
             +" distance="+int(sqrt(MapHelpers::SqDist(from,mex.GetBuildPos()))),1);
         return task;

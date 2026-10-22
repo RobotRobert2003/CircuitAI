@@ -1,0 +1,85 @@
+{
+  "name": "post-t2-substream",
+  "production": true,
+  "production_audit": {"scout": "armpt", "submarine": "armsub", "minimum_submarines": 8},
+  "groups": [
+    {
+      "unit": "armsy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2450,
+        4400
+      ]
+    },
+    {
+      "unit": "armcs",
+      "team": 0,
+      "count": 6,
+      "position": [
+        2300,
+        4800
+      ]
+    },
+    {
+      "unit": "armuwfus",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        4200
+      ]
+    },
+    {
+      "unit": "armuwmmm",
+      "team": 0,
+      "count": 8,
+      "position": [
+        1850,
+        4850
+      ]
+    },
+    {
+      "unit": "armuwms",
+      "team": 0,
+      "count": 4,
+      "position": [
+        1900,
+        3900
+      ]
+    },
+    {
+      "unit": "armnanotcplat",
+      "team": 0,
+      "count": 6,
+      "position": [
+        2180,
+        4520
+      ],
+      "columns": 3,
+      "spacing": 64
+    },
+    {
+      "unit": "armasy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3000,
+        4800
+      ]
+    },
+    {
+      "unit": "armacsub",
+      "team": 0,
+      "count": 3,
+      "position": [
+        2600,
+        4250
+      ],
+      "spacing": 80,
+      "columns": 3
+    }
+  ],
+  "support_turrets": true,
+  "checks": "sea/combat/post-t2-substream"
+}

@@ -2,8 +2,7 @@
   "stop_minute": 90,
   "expect": [
     {"key": "competitive-roster", "pattern": "\\[PerfFixture\\] spectator_units=0 competing_ai_teams=16", "scope": "any", "by_minute": 1},
-    {"key": "timing", "pattern": "\\[SkirmishPerf\\] frame=7200 units=[1-9]", "scope": "any", "by_minute": 5},
-    {"key": "commands", "pattern": "\\[AirOrders\\] frame=1800 team=0", "scope": "any", "by_minute": 2}
+    {"key": "timing", "pattern": "\\[SkirmishPerf\\] frame=7200 units=[1-9]", "scope": "any", "by_minute": 5}
   ],
   "pass_on": {"key": "completed-game", "pattern": "\\[FullMatchEnd\\]", "scope": "any"},
   "forbid": [

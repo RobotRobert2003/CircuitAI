@@ -12,6 +12,9 @@
 	"water_min_cells": 16,        // smaller ship-water components are ignored (D-128 value)
 	"choke_fraction": 0.8,        // BWEM rule: two areas stay apart when their contact is under this share of the narrower seed clearance
 	"high_ground_rise": 128,      // plateau / valley prominence against the neighbours, elmos (D-127 value)
+	"ramp_min_rise": 32,          // minimum elevation difference for a physical ramp (never a flat watershed seam)
+	"passage_expansion": 1.25,    // both approach sections must be this much wider than a measured constriction
+	"passage_probe_cells": 96,    // bounded local obstacle cross-section search radius
 	"beach_depth": 160,           // inland run a shore's climbing slope is measured over, elmos
 	"crossing_min_length": 2,     // cells; reserved for run merging
 	"landing_merge": 2,           // cells; reserved for landing grouping

@@ -131,6 +131,8 @@ struct SSettings {
 	int waterMinCells = 16;
 	float chokeFraction = 0.8f;   // BWEM: keep two areas apart when their contact is under 80% of the narrower seed clearance
 	float highGroundRise = 128.f;
+	float rampMinRise = 32.f, passageExpansion = 1.25f;
+	int passageProbeCells = 96;
 	float beachDepth = 160.f;
 	int crossingMinLength = 2;
 	int landingMerge = 2;
@@ -172,6 +174,9 @@ struct SChoke {
 	int id = 0, a = -1, b = -1, cell = -1;
 	SPoint pos, dir;
 	float width = 0.f;
+	bool qualified = false;
+	int classMask = 0;
+	SPoint endA, endB;
 };
 
 struct SAvenue {
@@ -189,6 +194,7 @@ struct SLanding {
 	float width = 0.f, inland = 0.f;
 	float standoff[3] = {-1.f, -1.f, -1.f};
 	SPoint mid;
+	SPoint inlandDir;
 	Polyline line;
 };
 
@@ -264,6 +270,7 @@ struct SModel {
 	std::vector<SRegion> regions;
 	std::vector<SBoundary> boundaries;
 	std::vector<SChoke> chokes;
+	std::vector<SChoke> passages;        // qualified per-profile sections; topology chokes stay unchanged
 	std::vector<SAvenue> avenues;
 	std::vector<SLanding> landings;
 	std::vector<SStandoff> standoffs;
@@ -273,6 +280,9 @@ struct SModel {
 	std::vector<int> regionOf;          // per cell
 	std::vector<int> sideOf;            // per cell, side index
 	std::vector<unsigned char> groundOf;   // per cell, Ground (D-326)
+	// Eight representative access bits; bit 7 is deep-draft (30 elmos).
+	// Owned once by the immutable model, exported as runs, never queried per unit.
+	std::vector<int> accessOf;
 	std::uint64_t fingerprint = 0;
 	std::vector<std::string> checkFailures;
 	// Part B1 (landmarks.txt); empty when field.json disables it

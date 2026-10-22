@@ -73,7 +73,8 @@ namespace SeaLayout {
             for (uint i=0;i<enemyStarts.length();++i) enemy=enemy+enemyStarts[i];
             enemy=enemy/float(enemyStarts.length());
         }
-        facing=LayoutHelpers::FacingToward(Global::Map::StartPos,enemy);
+        facing=aiTerrainMgr.GetLayoutInt("sea.localFacing",0)!=0
+            ? aiTerrainMgr.GetLayoutInt("sea.eco.facing",0) : LayoutHelpers::FacingToward(Global::Map::StartPos,enemy);
         hadFactory=aiTerrainMgr.GetLayoutInt("sea.hadFactory",0)!=0;
         geometryFrame=-1;
         if (aiTerrainMgr.GetLayoutInt("sea.captured",0)==0) {
@@ -142,12 +143,41 @@ namespace SeaLayout {
         return name==UnitHelpers::GetTidalNameForSide(side) || name==UnitHelpers::GetNavalFusionNameForSide(side)
             || name==UnitHelpers::GetNavalEnergyConverterNameForSide(side) || name==UnitHelpers::GetAdvNavalEnergyConverterNameForSide(side);
     }
+    void OrientHarbor(const AIFloat3 &in harbor) {
+        if (aiTerrainMgr.GetLayoutInt("sea.localFacing",0)!=0) return;
+        // Do not rotate an adopted, already populated layout. For a fresh
+        // harbor sample public enemy shores in its water component once:
+        // O(64*S) grid reads for S starts, no engine paths or unit callbacks.
+        if (patches.length()>0 || SeaEcoLayout::blocks.length()>0) {
+            aiTerrainMgr.SetLayoutInt("sea.localFacing",1); return;
+        }
+        const int body=aiBattle.WaterBody(harbor,false);
+        if (body<0) return;
+        array<AIFloat3> starts=Lanes::EnemyStarts();
+        AIFloat3 approach; float nearest=1e30f;
+        for (uint i=0;i<starts.length();++i) {
+            for (int ring=0;ring<8;++ring) for (int spoke=0;spoke<8;++spoke) {
+                const float angle=float(spoke)*.785398163f;
+                const AIFloat3 sample(starts[i].x+cos(angle)*float(ring)*160.0f,0,
+                    starts[i].z+sin(angle)*float(ring)*160.0f);
+                if (sample.x<0 || sample.z<0 || sample.x>=AiTerrainWidth() || sample.z>=AiTerrainHeight()
+                    || aiBattle.WaterBody(sample,false)!=body) continue;
+                const float distance=MapHelpers::SqDist(harbor,sample);
+                if (distance<nearest) { nearest=distance; approach=sample; }
+            }
+        }
+        if (nearest<1e30f) facing=LayoutHelpers::FacingToward(harbor,approach);
+        aiTerrainMgr.SetLayoutInt("sea.localFacing",1);
+        aiTerrainMgr.SetLayoutInt("sea.eco.facing",facing);
+        SeaEcoLayout::direction=facing;
+    }
     void RefreshGeometry() {
         if (ai.frame-geometryFrame<SECOND && geometryFrame>=0) return;
         geometryFrame=ai.frame; economyFront=-100000.0f; factoryFront=-100000.0f; survivingYards=0;
         for (uint i=0;i<SeaEconomy::owned.length();++i) {
             CCircuitUnit@ u=ai.GetTeamUnit(SeaEconomy::owned[i]); if (u is null) continue;
             if (SeaEconomy::Yard(u.circuitDef)) {
+                if (!hadFactory) OrientHarbor(u.GetPos(ai.frame));
                 hadFactory=true; ++survivingYards;
                 factoryFront=AiMax(factoryFront,Along(u.GetPos(ai.frame)));
             }
@@ -189,10 +219,39 @@ namespace SeaLayout {
         const float buffer=Global::RoleSettings::Sea::HarborFogBuffer;
         return aiTerrainMgr.IsAreaVisible(SurveyPoint(d,p,f),buffer);
     }
+    bool HomeTechNearby(CCircuitDef@ d,const AIFloat3 &in p) {
+        // D-335: a first home T2 is not a new forward harbor. Requiring the
+        // distant nose survey before support can be built deadlocked the
+        // prepared-T2 fixture. Keep threat and connected-harbor bounds;
+        // native footprint/product exits and completed support still gate it.
+        if (!UnitHelpers::IsT2Shipyard(d.GetName()) || SeaEconomy::Have(d)>0) return false;
+        const float radius=Global::RoleSettings::Sea::TechHomeHarborRadius;
+        AIFloat3 home(-1,0,-1);
+        if (Factory::primaryT1Shipyard !is null) home=Factory::primaryT1Shipyard.GetPos(ai.frame);
+        // D-343: on a coast shared with SEA teammates our own home water can be
+        // taken, pushing the first T2 site forward beside a teammate's harbor.
+        // That finished allied yard is home too (same threat/water bounds);
+        // otherwise the site waits for vision for ever and no T2 is built.
+        if ((home.x<0 || MapHelpers::SqDist(home,p)>radius*radius) && Global::RoleSettings::Sea::AlliedHarborIsHome)
+            home=aiTerrainMgr.NearestFriendlyNavalYard(p,radius);
+        if (home.x<0) return false;
+        if (MapHelpers::SqDist(home,p)>radius*radius || aiBattle.WaterBody(home,false)!=aiBattle.WaterBody(p,false)
+            || aiBattle.SurfThreat(p)>Global::RoleSettings::Sea::HarborMaxThreat
+            || aiBattle.AirThreat(p)>Global::RoleSettings::Sea::HarborMaxThreat) return false;
+        return true;
+    }
     void Blocked(Berth@ b,const string &in reason) {
         if (ai.frame<b.reasonNext) return;
         b.reasonNext=ai.frame+30*SECOND;
         GenericHelpers::LogUtil("[SEA][HarborBlocked] berth="+b.key+" reason="+reason+" site="+int(b.centre.x)+","+int(b.centre.z),1);
+        CCircuitDef@ d=ai.GetCircuitDef(b.name);
+        if (d !is null && UnitHelpers::IsT2Shipyard(b.name)) {
+            const AIFloat3 home=Factory::GetT1ShipyardPos();
+            GenericHelpers::LogUtil("[SEA][TechSite] forward="+ForwardSite(d,b.centre,b.facing)
+                +" homeEligible="+HomeTechNearby(d,b.centre)+" footprintVisible="+aiTerrainMgr.IsAreaVisible(b.centre,AiMax(d.GetFootprintX(),d.GetFootprintZ())*4.0f)
+                +" primary="+(Factory::primaryT1Shipyard !is null)+" home="+int(home.x)+","+int(home.z)
+                +" distance="+sqrt(MapHelpers::SqDist(home,b.centre))+" have="+SeaEconomy::Have(d),1);
+        }
     }
     void ReleaseSupport(const string &in owner) {
         for (uint i=0;i<patches.length();++i) {
@@ -204,6 +263,10 @@ namespace SeaLayout {
             p.owner=""; SavePatch(i); // never release a claimed or built pad
         }
     }
+    bool PaidSupport(const string &in owner) {
+        for (uint i=0;i<patches.length();++i) if (patches[i].owner==owner && patches[i].active) return true;
+        return false;
+    }
     bool ForwardSite(CCircuitDef@ d, const AIFloat3 &in p, int f) {
         return f==facing && Along(p)>=factoryFront && SeaMath::ForwardFootprint(Along(p),float(d.GetFootprintZ())*8.0f,economyFront,
             Global::RoleSettings::Sea::FactoryEconomyClearance);
@@ -211,6 +274,77 @@ namespace SeaLayout {
     bool RearEconomy(const AIFloat3 &in p, float halfDepth) {
         const AIFloat3 harbor=SeaEcoLayout::Harbor();
         return harbor.x<0 || Along(p)+halfDepth<=Along(harbor)-Global::RoleSettings::Sea::FactoryEconomyClearance;
+    }
+    // D-343: the biggest hull this side can float. Its width is the clearance
+    // every SEA reservation must leave between a yard and open water.
+    CCircuitDef@ PathHull() {
+        const string side=Global::AISettings::Side;
+        return ai.GetCircuitDef(side=="armada" ? "armepoch" : side=="cortex" ? "corblackhy" : "leganavyflagship");
+    }
+    // Nearest water point at most `along` from p in direction f, stepping back.
+    AIFloat3 WaterAlong(const AIFloat3 &in p, int f, float along) {
+        for (float d=along; d>=128.0f; d-=128.0f) {
+            const AIFloat3 q=LayoutHelpers::Offset(p,f,0,d);
+            if (aiBattle.Height(q)<-8.0f) return q;
+        }
+        return AIFloat3(-1,0,-1);
+    }
+    // D-343: the flagship's paths around a harbor, as bit masks: for each of
+    // this AI's planned berths (two bits each: forward lane, rear water) and,
+    // natively, each finished own or teammate yard near `near` (a first yard
+    // has no berth; a teammate's layout must not wall in ours, nor ours
+    // theirs). A bit is set when terrain lets the hull through but
+    // reservations do not. Callers take the masks once before planning and
+    // refuse a candidate only when it sets a new bit, so land and paths that
+    // earlier layouts already cut never veto every later placement.
+    // Planning-time only: a few bounded native flood fills per yard.
+    class PathState { int berths=0, yards=0; }
+    int BerthBlockMask(CCircuitDef@ hull) {
+        int mask=0;
+        for (uint i=0;i<berths.length() && i<15;++i) {
+            Berth@ b=berths[i];
+            if (b.slot<0 || b.retired) continue;
+            CCircuitDef@ yard=ai.GetCircuitDef(b.name); if (yard is null) continue;
+            const float halfDepth=float(yard.GetFootprintZ())*4.0f;
+            const AIFloat3 mouth=LayoutHelpers::Offset(b.centre,b.facing,0,halfDepth+Global::RoleSettings::Sea::ExitLength);
+            if (aiBattle.Height(mouth)>=0) continue;
+            const AIFloat3 lane=WaterAlong(mouth,b.facing,Global::RoleSettings::Sea::LanePathDistance);
+            if (lane.x>=0 && aiTerrainMgr.IsNavalPathReservationBlocked(hull,mouth,lane)) mask|=1<<(2*i);
+            for (int k=0;k<3;++k) {
+                const AIFloat3 q=LayoutHelpers::Offset(b.centre,b.facing,k==0 ? 0.0f : (k==1 ? 400.0f : -400.0f),-Global::RoleSettings::Sea::RearPathDistance);
+                if (aiBattle.Height(q)>=-8.0f) continue;
+                if (aiTerrainMgr.IsNavalPathReservationBlocked(hull,mouth,q)) mask|=1<<(2*i+1);
+                break;
+            }
+        }
+        return mask;
+    }
+    PathState@ Paths(const AIFloat3 &in near) {
+        PathState state;
+        if (!Global::RoleSettings::Sea::FlagshipPathCheck) return state;
+        CCircuitDef@ hull=PathHull(); if (hull is null) return state;
+        state.berths=BerthBlockMask(hull);
+        state.yards=aiTerrainMgr.NavalYardBlockMask(hull,near,Global::RoleSettings::Sea::YardPathRadius,
+            Global::RoleSettings::Sea::ExitLength,Global::RoleSettings::Sea::LanePathDistance,Global::RoleSettings::Sea::RearPathDistance);
+        return state;
+    }
+    // The baseline for this frame, measured on first use. Failed candidates
+    // release their reservations, so it stays valid until one is accepted;
+    // an accepted reservation ends that planning call. Costs nothing on the
+    // many seconds no candidate reaches the path test.
+    PathState@ framePaths; int framePathsAt=-1; AIFloat3 framePathsNear;
+    PathState@ Baseline(const AIFloat3 &in near) {
+        if (framePaths is null || framePathsAt!=ai.frame || MapHelpers::SqDist(framePathsNear,near)>1.0f) {
+            @framePaths=Paths(near); framePathsAt=ai.frame; framePathsNear=near;
+        }
+        return framePaths;
+    }
+    void Invalidate() { @framePaths=null; framePathsAt=-1; }
+    // True when reservations made since `before` cut a flagship path that was open.
+    bool NewlyBlocked(PathState@ before, const AIFloat3 &in near) {
+        if (before is null || !Global::RoleSettings::Sea::FlagshipPathCheck || PathHull() is null) return false;
+        PathState@ after=Paths(near);
+        return ((after.berths & ~before.berths) | (after.yards & ~before.yards))!=0;
     }
     AIFloat3 Candidate(const AIFloat3 &in anchor, int cursor, float step) {
         if (cursor==0) return anchor;
@@ -317,7 +451,7 @@ namespace SeaLayout {
         // a future multi-yard berth. Both SEA builder modes share the native
         // enemy-facing-first preference; actual yard/exit adoption follows in
         // RefreshGeometry. Later factories keep the strict berth rules below.
-        if (SeaEconomy::Yard(d) && !hadFactory && oldUnit<0) {
+        if (UnitHelpers::IsT1Shipyard(name) && !hadFactory && oldUnit<0) {
             if (aiBuilderMgr.GetQueuedBuildCount(int(Task::BuildType::FACTORY),d)>0) return null;
             AIFloat3 openingAnchor=u.GetPos(ai.frame);
             // On Supreme the commander starts on shore, more than the packed
@@ -359,12 +493,12 @@ namespace SeaLayout {
         if (!aiTerrainMgr.CanReachAt(u,b.centre,u.circuitDef.GetBuildDistance())) { Blocked(b,"builder-reach"); return null; }
         const bool opening=Opening(b);
         if ((SeaEconomy::Yard(d) || capacityExpansion) && !SeaMath::HarborAdmission(opening,ForwardSite(d,b.centre,b.facing),
-            opening || VisibleBuffer(d,b.centre,b.facing))) {
+            opening || VisibleBuffer(d,b.centre,b.facing) || HomeTechNearby(d,b.centre))) {
             Blocked(b,"forward-or-visibility");
             // Preserve a preplan briefly for the scouts; if vision does not
             // arrive, continue bounded site search instead of buying in fog.
             if (b.supportSince<0) b.supportSince=ai.frame;
-            if (ai.frame-b.supportSince>=Global::RoleSettings::Sea::HarborSurveySeconds*SECOND && aiTerrainMgr.GetReservationState(b.slot)==0) {
+            if (ai.frame-b.supportSince>=Global::RoleSettings::Sea::HarborSurveySeconds*SECOND && aiTerrainMgr.GetReservationState(b.slot)==0 && !PaidSupport(b.key)) {
                 ReleaseSupport(b.key); aiTerrainMgr.ReleasePersistentBuilding(b.slot); aiTerrainMgr.ReleaseZone(b.exitZone);
                 b.slot=-1; b.exitZone=0; b.supportSince=-1; Save(b);
             }
@@ -397,7 +531,14 @@ namespace SeaLayout {
         if (gatedPlatform && !SeaEconomy::SeaplaneReady(d)) {
             Invariants::Violation("INV-152",b.key,"SEA platform admission lost its economic eligibility"); return null;
         }
-        return Pinned(d,b.slot,Task::BuildType::FACTORY,Task::Priority::HIGH);
+        if (UnitHelpers::IsT2Shipyard(name)) {
+            bool prepared=false;
+            IUnitTask@ preparation=SeaBuild::PrepareTech(u,d,b,prepared);
+            if (preparation !is null || !prepared) return preparation;
+        }
+        IUnitTask@ built=Pinned(d,b.slot,Task::BuildType::FACTORY,Task::Priority::HIGH);
+        if (built !is null && UnitHelpers::IsT2Shipyard(name)) SeaEconomy::Admit(d,false,true);
+        return built;
     }
     void Discard(Patch@ p) {
         for (uint j=0; j<p.slots.length(); ++j) aiTerrainMgr.ReleasePersistentBuilding(p.slots[j]);
@@ -451,6 +592,7 @@ namespace SeaLayout {
             if (MapHelpers::SqDist(p,anchor)>maxRadius*maxRadius) { if (extension) continue; cursor=0; break; }
             if (aiBattle.SurfThreat(p)>Global::RoleSettings::Sea::HarborMaxThreat) continue;
             if (assist.x<0 && !RearEconomy(p,depth*float(rows)*.5f)) continue;
+            PathState@ paths=Baseline(anchor); // D-343: before this candidate reserves
             Patch plan; plan.name=key; plan.facing=facing; plan.centre=p;
             bool ok=true;
             for (int j=0; j<count; ++j) {
@@ -478,8 +620,11 @@ namespace SeaLayout {
             }
             // Dense patches are already entirely owned by their slot zones.
             // ReserveZone correctly returns 0 for an empty extra envelope.
+            // D-343: a patch that walls a yard off from open water or the
+            // rear is refused; the next candidate is tried instead.
+            if (ok && NewlyBlocked(paths,anchor)) ok=false;
             if (!ok) { Discard(plan); continue; }
-            patches.insertLast(plan); geometryFrame=-1; SavePatch(patches.length()-1); patchCursor.set(searchKey,cursor);
+            patches.insertLast(plan); geometryFrame=-1; Invalidate(); SavePatch(patches.length()-1); patchCursor.set(searchKey,cursor);
             return true;
         }
         patchCursor.set(searchKey,cursor); return false;

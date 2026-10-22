@@ -188,6 +188,34 @@ def seed_archive_cache(source, directory):
     return receipt
 
 
+OPPONENT_SHORT = "BARbBase"
+OPPONENT_VERSION = "base"
+
+
+def stage_opponent(d, dll, data):
+    """A second, pinned build of this AI for head-to-head runs: 'prod' teams
+    play it. Staged in the write directory only, never the BAR install."""
+    dst = d / "AI" / "Skirmish" / OPPONENT_SHORT / OPPONENT_VERSION
+    dst.mkdir(parents=True, exist_ok=True)
+    if not dll.exists():
+        die("no opponent DLL at %s" % dll)
+    shutil.copy2(dll, dst / "SkirmishAI.dll")
+    for sub in ("config", "script"):
+        if (dst / sub).exists():
+            shutil.rmtree(dst / sub)
+        shutil.copytree(data / sub, dst / sub, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy2(data / "AIOptions.lua", dst / "AIOptions.lua")
+    info = (data / "AIInfo.lua").read_text(encoding="utf-8")
+    info, n1 = re.subn(r"value\s*=\s*'[^']*',(\s*-- AI name - !This comment is used for parsing!)",
+                       "value  = '%s',\\1" % OPPONENT_SHORT, info)
+    info, n2 = re.subn(r"value\s*=\s*'[^']*',(\s*-- AI version - !This comment is used for parsing!)",
+                       "value  = '%s',\\1" % OPPONENT_VERSION, info)
+    if n1 != 1 or n2 != 1:
+        die("opponent AIInfo.lua markers not found")
+    (dst / "AIInfo.lua").write_text(info, encoding="utf-8")
+    log("staged opponent %s/%s from %s" % (OPPONENT_SHORT, OPPONENT_VERSION, dll))
+
+
 def stage(args):
     stage_started = time.monotonic()
     if not str(args.dir).strip():
@@ -236,6 +264,8 @@ def stage(args):
         die("AIInfo.lua markers not found (shortName %d, version %d)" % (n1, n2))
     info = info.replace("value  = 'BARbarIAn'", "value  = 'BARb playtest'")
     (ai_dst / "AIInfo.lua").write_text(info, encoding="utf-8")
+    if getattr(args, "opponent_dll", None):
+        stage_opponent(d, Path(args.opponent_dll), Path(args.opponent_data or (REPO / "data")))
 
     # settings: the user's, read once, with the playtest overrides on top
     prod_cfg = BAR_DATA / "springsettings.cfg"
@@ -443,10 +473,19 @@ def write_script(args, d):
         L += ["\t[TEAM%d]" % t, "\t{", "\t\tAllyTeam=%d;" % ally, "\t\tTeamLeader=0;",
               "\t\tSide=%s;" % side, "\t\tRgbColor=%s;" % COLOURS[t % len(COLOURS)],
               "\t\tStartPosX=%d;" % int(x), "\t\tStartPosZ=%d;" % int(z), "\t\tHandicap=%d;" % (int(args.bonus) if (t == 0 and args.bonus) else 0), "\t}"]
-        short, ver = (AI_SHORT, AI_VERSION) if kind == "test" else (PROD_AI_SHORT, PROD_AI_VERSION)
+        # --prod-ai names an installed opponent (e.g. stock BARb) that keeps its
+        # own default options: the test build's AI options are not passed to it.
+        prod_ai = getattr(args, "prod_ai", None)
+        opponent = getattr(args, "opponent_dll", None)
+        if kind == "test":
+            short, ver = AI_SHORT, AI_VERSION
+        elif opponent:
+            short, ver = OPPONENT_SHORT, OPPONENT_VERSION
+        else:
+            short, ver = prod_ai or PROD_AI_SHORT, getattr(args, "prod_version", None) or PROD_AI_VERSION
         L += ["\t[AI%d]" % t, "\t{", "\t\tShortName=%s;" % short, "\t\tVersion=%s;" % ver,
               "\t\tName=%s-%s-%d;" % (short, role.lower(), t), "\t\tTeam=%d;" % t, "\t\tHost=0;", "\t\tIsFromDemo=0;"]
-        if ai_opts:
+        if ai_opts and (kind == "test" or opponent or not prod_ai):
             L.append("\t\t[OPTIONS] { %s }" % " ".join("%s=%s;" % kv for kv in ai_opts.items()))
         L += ["\t}"]
     L += ["}", ""]
@@ -481,6 +520,7 @@ def launch(args):
     eng = engine_dir(args.engine)
     exe = eng / ("spring-headless.exe" if getattr(args, "headless", False) else "spring.exe")
     storage.capture_inputs(d, exe)
+    storage.capture_system(d, exe)  # host specs: results from different devices are not one cohort
     # a fresh infolog per run; the previous one is kept with its run
     info = d / "infolog.txt"
     if info.exists():
@@ -929,6 +969,10 @@ def add_script_args(p):
     p.add_argument("--roles", default="all", help="roles to field on both sides, e.g. TECH,FRONT; 'all' = every spot")
     p.add_argument("--others", default="test", choices=["test", "prod", "none"],
                    help="the other AIs: this build (test), the deployed SMRTBARb (prod), or enemies only (none)")
+    p.add_argument("--prod-ai", help="ShortName of the installed AI used for 'prod' teams (e.g. BARb for stock); it gets no test AI options")
+    p.add_argument("--prod-version", help="version of --prod-ai (default stable)")
+    p.add_argument("--opponent-dll", help="head-to-head: 'prod' teams play this pinned build of the AI (staged as BARbBase/base)")
+    p.add_argument("--opponent-data", help="data/ for --opponent-dll (default: the repo's data/)")
     p.add_argument("--side", default="cortex", choices=SIDES, help="the side of the AI under test")
     p.add_argument("--ally-spots", help="1-based spot numbers of the ally side, e.g. '1,2,3,4,5,6,7,8' (default: first half)")
     p.add_argument("--modoption", action="append", help="key=value override in [MODOPTIONS]")

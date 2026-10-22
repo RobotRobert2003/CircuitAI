@@ -25,8 +25,7 @@ def main():
     starts.write_text('StartSpot(AIFloat3(5800,0,10500), AiRole::SEA, false),\nStartSpot(AIFloat3(11456,0,1901), AiRole::SEA, false)')
     call=[sys.executable,str(playtest.HERE/'playtest.py')]
     subprocess.run(call+['stage','--dir',str(d),'--dll',str(a.dll),'--data',str(playtest.REPO/'data'),
-        '--map','Supreme Isthmus v1.7','--map-file',str(starts),'--game','Beyond All Reason test-31479-433a460',
-        '--engine','recoil_2026.07.04','--role','SEA','--roles','all','--ally-spots','1','--side',a.side,
+        '--map','Supreme Isthmus v1.7','--map-file',str(starts),'--engine','recoil_2026.07.04','--role','SEA','--roles','all','--ally-spots','1','--side',a.side,
         '--speed','20','--minutes',str(a.minutes),'--shots','2@8500@8500:6500,5@6500@10800:4000,10@5500@10800:4000,16@5500@11000:2800',
         '--width','1280','--height','720','--lean-render','--bonus','0','--ai-option','profile='+a.profile,
         '--ai-option','random_seed=2121','--modoption','deathmode=neverend',

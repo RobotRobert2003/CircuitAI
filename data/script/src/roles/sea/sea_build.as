@@ -1,9 +1,13 @@
 #include "sea_factories.as"
 #include "../../systems/sea/sea_eco_layout.as"
+#include "../../systems/sea/sea_lanes.as"
 #include "../../systems/sea/sea_expansion.as"
 
 namespace SeaBuild {
     int lastTick=-1;
+    // D-342 / INV-231: first frame this AI had a harbor, and whether the
+    // economy-progress invariant already reported (once per game).
+    int firstHarborFrame=-1; bool economyStallReported=false;
     dictionary supportRetry, siteRetry;
     class SiteProgress { string key; AIFloat3 pos; int since=0; }
     dictionary siteProgress;
@@ -37,6 +41,26 @@ namespace SeaBuild {
         GenericHelpers::LogUtil("[SEA][Economy] blocked geo released worker="+u.id,1);
     }
     int placementLog=-100000;
+    // D-342: true when the last Place call passed every economic gate and only
+    // the water layout had no site. Funding/need refusals are not site
+    // failures and never fall back.
+    bool placeNoSite=false;
+    // D-342: first frame each economy building found no layout site, keyed by
+    // name; cleared when the layout places it again. Bounded by the handful
+    // of SEA economy definitions.
+    dictionary layoutDeferredSince;
+    int fallbackLog=-100000;
+    bool LayoutFallback(const string &in name, bool placed) {
+        // D-344: only a placement resets the clock. A funding or need refusal
+        // between asks (converters, often) is no evidence a site exists.
+        if (placed) { layoutDeferredSince.delete(name); return false; }
+        if (!placeNoSite) return false;
+        int since=ai.frame;
+        if (!layoutDeferredSince.get(name,since)) { layoutDeferredSince.set(name,ai.frame); since=ai.frame; }
+        const int limit=Global::RoleSettings::Sea::LayoutFallbackSeconds;
+        return limit>0 && ai.frame-since>=limit*SECOND;
+    }
+    int techQueueLog=-100000;
     IUnitTask@ Wait() { return aiBuilderMgr.Enqueue(TaskB::Wait(SECOND)); }
     IUnitTask@ OpeningMex(CCircuitUnit@ u) {
         if (SeaExpansion::Active()) return SeaExpansion::Make(u);
@@ -111,6 +135,7 @@ namespace SeaBuild {
             || name==UnitHelpers::GetT1NavalNanoNameForSide(side);
     }
     void Leave() {
+        @techOrder=null;
         for (uint i=0;i<SeaEconomy::owned.length();++i) {
             CCircuitUnit@ u=ai.GetTeamUnit(SeaEconomy::owned[i]);
             if (u !is null && u.circuitDef.GetBuildSpeed()>0) u.SetBuildPriorityOverride(-1);
@@ -126,6 +151,7 @@ namespace SeaBuild {
         SeaEconomy::lastProducts.deleteAll(); SeaEconomy::capacityBanks.resize(0);
         SeaEconomy::capacityFrame=-1; SeaEconomy::capacityFull=0; SeaEconomy::capacityPressure=false;
         supportRetry.deleteAll();
+        SeaTech::Release();
         SeaEcoLayout::Reset();
         SeaLayout::Leave();
     }
@@ -157,9 +183,41 @@ namespace SeaBuild {
     }
     void Tick() {
         if (!SeaLayout::Enabled() || ai.frame-lastTick<SECOND) return;
-        lastTick=ai.frame; SeaEconomy::Tick(); SeaLayout::RefreshGeometry();
+        lastTick=ai.frame; SeaEconomy::Tick();
+        SeaLanes::Tick(); // D-345: widget visualisation only; no unit reads the lanes
+        CCircuitDef@ techYard=ai.GetCircuitDef(UnitHelpers::GetT2ShipyardForSide(Global::AISettings::Side));
+        if (techYard !is null && techYard.count>0) {
+            if (techYard.count>aiBuilderMgr.GetUnfinishedCount(techYard)
+                && SeaEconomy::Number(SeaEconomy::Constructor(Global::AISettings::Side,true),true)>0) SeaTech::Release();
+            else {
+                const AIFloat3 harbor=SeaEcoLayout::Harbor();
+                if (harbor.x>=0) SeaTech::Permit(aiBattle.WaterBody(harbor,false),2);
+            }
+        }
+        SeaLayout::RefreshGeometry();
         if (SeaLayout::Active()) { SeaCombat::Tick(); SeaFactories::Tick(); }
         const string side=Global::AISettings::Side;
+        // INV-231: a SEA AI with a harbor and a construction ship gets some
+        // naval energy within the layout fallback plus a generous grace. O(1).
+        if (!economyStallReported && SeaEcoLayout::Harbor().x>=0) {
+            if (firstHarborFrame<0) firstHarborFrame=ai.frame;
+            const int limit=Global::RoleSettings::Sea::LayoutFallbackSeconds;
+            // Only while energy is actually short: cheat/supplied economies and
+            // a full bank legitimately need no naval energy yet.
+            // D-351: only inside a window after the harbor (the fallback limit
+            // plus 5 to 15 minutes). A late dip in a healthy land-energy economy
+            // is not a stalled naval economy (Glacial team 4, 1,000 E/s, minute 34).
+            if (limit>0 && ai.frame-firstHarborFrame>(limit+300)*SECOND && ai.frame-firstHarborFrame<(limit+900)*SECOND
+                && aiEconomyMgr.energy.current<aiEconomyMgr.energy.storage*.5f
+                && SeaEconomy::Number(SeaEconomy::Constructor(side,false),true)>0) {
+                CCircuitDef@ tidal=ai.GetCircuitDef(UnitHelpers::GetTidalNameForSide(side));
+                CCircuitDef@ converter=ai.GetCircuitDef(UnitHelpers::GetNavalEnergyConverterNameForSide(side));
+                if ((tidal is null || tidal.count==0) && (converter is null || converter.count==0)) {
+                    economyStallReported=true;
+                    Invariants::Violation("INV-231",side,"SEA harbor and construction ship but no tidal or naval converter after the layout fallback window");
+                }
+            }
+        }
         for (uint p=0;p<SeaLayout::patches.length();++p) {
             const string owner=SeaLayout::patches[p].owner;
             if (owner.findFirst("unit.")==0 && ai.GetTeamUnit(int(parseInt(owner.substr(5)))) is null) {
@@ -366,28 +424,34 @@ namespace SeaBuild {
         return null;
     }
     IUnitTask@ Place(CCircuitUnit@ u, const string &in name, Task::BuildType kind, int size=6) {
+        placeNoSite=false;
         CCircuitDef@ d=ai.GetCircuitDef(name);
         if (d is null || SeaEconomy::Pending(d)>=2) return null;
         // All new converter paths, including a native/legacy fallback, use
         // the same live budget. Existing frames/owned tasks return before
         // Place and are never cancelled merely because spending changed.
-        if (kind==Task::BuildType::CONVERT && !SeaEconomy::NeedsConverter(d)) return null;
+        if (kind==Task::BuildType::CONVERT) {
+            if (!SeaEconomy::NeedsConverter(d)) return null;
+            if (!SeaEconomy::Fund(d,u.circuitDef.GetBuildSpeed())) { SeaEconomy::ConversionRefused("unfunded"); return null; }
+        }
         if (SeaEcoLayout::Managed(d)) {
             IUnitTask@ packed=SeaEcoLayout::Place(u,d,kind);
+            placeNoSite=packed is null;
             IBuilderTask@ order=cast<IBuilderTask>(packed);
             if (order !is null && order.buildDef is d) SeaEconomy::Admit(d,false,true);
             return packed;
         }
-        AIFloat3 anchor=LayoutHelpers::Offset(Global::Map::StartPos,SeaLayout::facing,0,-350.0f);
+        AIFloat3 anchor=LayoutHelpers::Offset(Global::Map::StartPos,SeaLayout::facing,0,-Global::RoleSettings::Sea::RearEconomyDistance);
         const AIFloat3 harbor=SeaEcoLayout::Harbor();
-        if (harbor.x>=0) anchor=LayoutHelpers::Offset(harbor,SeaEcoLayout::direction,0,-350.0f);
+        if (harbor.x>=0) anchor=LayoutHelpers::Offset(harbor,SeaEcoLayout::direction,0,-Global::RoleSettings::Sea::RearEconomyDistance);
         // A coastal commander can start far inland. Anchor naval economy to
         // the first usable harbor so construction ships can reach its modules.
         for (uint i=0; i<SeaLayout::berths.length(); ++i) {
             SeaLayout::Berth@ b=SeaLayout::berths[i];
-            if (b.slot>=0 && !b.retired) { anchor=LayoutHelpers::Offset(b.centre,b.facing,0,-350.0f); break; }
+            if (b.slot>=0 && !b.retired) { anchor=LayoutHelpers::Offset(b.centre,b.facing,0,-Global::RoleSettings::Sea::RearEconomyDistance); break; }
         }
         IUnitTask@ t=SeaLayout::Place(u,d,kind,anchor,size);
+        placeNoSite=t is null;
         if (t !is null) SeaEconomy::Admit(d,false,true);
         return t;
     }
@@ -647,10 +711,42 @@ namespace SeaBuild {
         return Place(u,def.GetName(),kind,6);
     }
     IUnitTask@ Resume(CCircuitUnit@ u) {
-        const array<int> kinds={int(Task::BuildType::FACTORY),int(Task::BuildType::ENERGY),int(Task::BuildType::NANO),int(Task::BuildType::CONVERT)};
+        const int job=SeaExpansion::Job(u);
+        // Recover an admitted factory before admitting more repeatable economy.
+        // Native only offers unassigned reachable work; current productive tasks
+        // are preserved by the caller. This does not forcibly re-staff a frame.
+        array<int> kinds={int(Task::BuildType::FACTORY),int(Task::BuildType::ENERGY),int(Task::BuildType::NANO),int(Task::BuildType::CONVERT)};
+        if (job==2) { kinds[1]=int(Task::BuildType::CONVERT); kinds[3]=int(Task::BuildType::ENERGY); }
         for (uint i=0; i<kinds.length(); ++i) {
             IUnitTask@ task=aiBuilderMgr.FindQueuedTask(u,kinds[i]);
-            if (task !is null && SeaEconomy::OwnsTask(task)) return task;
+            if (task is null) continue;
+            IBuilderTask@ build=cast<IBuilderTask>(task);
+            if (!SeaEconomy::OwnsTask(task)) {
+                if (build !is null && build.target is null && build.buildDef !is null
+                    && UnitHelpers::IsT2Shipyard(build.buildDef.GetName())) {
+                    // Native fallback can leave an unassigned yard outside our
+                    // ledger, permanently blocking TechYard's duplicate guard.
+                    // FindQueuedTask proved it unassigned/reachable. Re-admit
+                    // through the common lease, completed-support and funding
+                    // path; never take over a frame or another worker's task.
+                    const string name=build.buildDef.GetName();
+                    aiBuilderMgr.AbortTask(task);
+                    if (ai.frame-techQueueLog>=30*SECOND) {
+                        techQueueLog=ai.frame;
+                        GenericHelpers::LogUtil("[SEA][TechSave] reconcile native queued "+name,1);
+                    }
+                    if (SeaEconomy::TechCommitted()) {
+                        @task=SeaLayout::Factory(u,name); if (task !is null) return task;
+                    }
+                }
+                continue;
+            }
+            if (build !is null && build.buildDef !is null && UnitHelpers::IsT2Shipyard(build.buildDef.GetName())) {
+                // Framed work retains CapitalAssist/D-301's funding and recovery
+                // policy; only unstarted orders belong to this queue recovery.
+                if (build.target !is null || !SeaTech::Permit(aiBattle.WaterBody(build.GetBuildPos(),false),1)) continue;
+            }
+            return task;
         }
         return null;
     }
@@ -660,9 +756,34 @@ namespace SeaBuild {
         // energy itself. Following the mex ship leaves both ships offshore
         // and allows factory assistance to consume the entire opening economy.
         const float target=SeaEconomy::HomeEnergyTarget();
-        if (aiEconomyMgr.energy.income>=target) return null;
+        if (aiEconomyMgr.energy.income+SeaEconomy::FundedEnergySoon(30.0f)>=target) return null;
         const string side=UnitHelpers::GetSideForUnitName(u.circuitDef.GetName());
         return Place(u,UnitHelpers::GetTidalNameForSide(side),Task::BuildType::ENERGY);
+    }
+    IUnitTask@ ConversionWork(CCircuitUnit@ u) {
+        const string side=UnitHelpers::GetSideForUnitName(u.circuitDef.GetName());
+        CCircuitDef@ d=ai.GetCircuitDef(SeaConstructor::IsT2(u.circuitDef)
+            ? UnitHelpers::GetAdvNavalEnergyConverterNameForSide(side) : UnitHelpers::GetNavalEnergyConverterNameForSide(side));
+        if (d is null || !u.circuitDef.CanBuild(d) || !SeaEconomy::NeedsConverter(d)) return null;
+        IUnitTask@ task=Place(u,d.GetName(),Task::BuildType::CONVERT);
+        if (task is null) SeaEconomy::ConversionRefused("no-reachable-slot-or-native-rejection");
+        return task;
+    }
+    IUnitTask@ GroupWork(CCircuitUnit@ u) {
+        const int job=SeaExpansion::Job(u);
+        if (job<0) return null;
+        // Useful conversion gets a dedicated ask before optional support/T2.
+        // Preserve productive frames in the caller; no repeated guard orders.
+        IUnitTask@ task=null;
+        if (job==2) { @task=ConversionWork(u); if (task !is null) return task; }
+        if (job==1 || job==2) {
+            if (SeaEconomy::TechSaving()) {
+                @task=TechYard(u); if (task !is null) return task;
+                if (techFundingWait && aiEconomyMgr.energy.income>=Global::RoleSettings::Sea::TechMinimumEnergyIncome) return Wait();
+            }
+            @task=HomeEnergy(u); if (task !is null) return task;
+        }
+        return null;
     }
     // Shared only by SEA's compact and experimental builders. Keep the old
     // helper ladder unchanged for TACTICAL and explicit layout opt-outs.
@@ -673,7 +794,7 @@ namespace SeaBuild {
         CCircuitDef@ yard=ai.GetCircuitDef(UnitHelpers::GetT2ShipyardForSide(side));
         if (yard !is null && u.circuitDef.CanBuild(yard) && SeaEconomy::Have(yard)==0 && SeaEconomy::TechReady(yard)) {
             @task=SeaLayout::Factory(u,yard.GetName());
-            if (task !is null) { SeaEconomy::Admit(yard,false,true); return task; }
+            if (task !is null) return task;
         }
         int pending=0;
         const float gap=SeaEconomy::ConversionGap(pending);
@@ -713,14 +834,163 @@ namespace SeaBuild {
         // yard and checks both resource budgets; expansion and other
         // home workers remain free to grow energy. Existing work is retained by
         // the caller. This reorders one existing query, adding no periodic scan.
-        IUnitTask@ task=null;
-        if (SeaConstructor::IsT1(u.circuitDef) && u.id!=SeaEconomy::mexWorker) {
+        IUnitTask@ task=GroupWork(u); if (task !is null) return task;
+        if (SeaConstructor::IsT1(u.circuitDef) && !SeaExpansion::Worker(u)) {
             @task=Support(u); if (task !is null) return task;
         }
         @task=CapacityFactory(u); if (task !is null) return task;
         @task=EconomyGrowth(u); if (task !is null) return task;
         @task=SeaEcoLayout::Support(u); if (task !is null) return task;
         return HomeEnergy(u);
+    }
+    // D-300: once the tech save commits, the first idle T1 construction ship
+    // orders the first advanced yard where the legacy ladder would (beside the
+    // primary T1 yard). One order: a queued yard task blocks a second.
+    int techYardLog=-100000;
+    // The one live T2 yard order (D-300). Held across frames like the economy
+    // project ledger; an assigned order that is not yet a frame is neither
+    // "queued" nor counted, so without this handle a second order went out.
+    IUnitTask@ techOrder=null;
+    bool techFundingWait=false;
+    IUnitTask@ PrepareTech(CCircuitUnit@ u,CCircuitDef@ yard,SeaLayout::Berth@ berth,bool &out ready) {
+        ready=false; techFundingWait=false;
+        if (berth is null || berth.slot<0) return null;
+        const int body=aiBattle.WaterBody(berth.centre,false);
+        if (!SeaTech::Permit(body,1)) { TechYardRefused("waiting for shared-sea lease"); return null; }
+        CCircuitDef@ nano=ai.GetCircuitDef(UnitHelpers::GetT1NavalNanoNameForSide(UnitHelpers::GetSideForUnitName(yard.GetName())));
+        if (nano is null) return null;
+        ReserveSupport(nano,berth.centre,berth.facing,yard,berth.key);
+        const int wanted=SeaMath::TechSupportCount(yard.GetBuildTime(),Global::RoleSettings::Sea::TechYardTargetSeconds,
+            u.circuitDef.GetBuildSpeed(),nano.GetBuildSpeed(),Global::RoleSettings::Sea::TechMinimumTurrets);
+        int complete=0, pending=0, available=-1;
+        for (uint p=0;p<SeaLayout::patches.length();++p) {
+            SeaLayout::Patch@ patch=SeaLayout::patches[p];
+            if (patch.name!=nano.GetName() || patch.owner!=berth.key) continue;
+            for (uint i=0;i<patch.slots.length();++i) {
+                const int slot=patch.slots[i];
+                const AIFloat3 at=aiTerrainMgr.GetReservationPos(slot);
+                if (MapHelpers::SqDist(at,berth.centre)>nano.GetBuildDistance()*nano.GetBuildDistance()) continue;
+                CCircuitUnit@ built=aiTerrainMgr.GetReservationUnit(slot);
+                if (built !is null && ai.GetTeamUnit(built.id) !is null && built.GetBuildProgress()>=1) ++complete;
+                else if (aiTerrainMgr.GetReservationState(slot)>0 && aiTerrainMgr.GetReservationState(slot)<4) ++pending;
+                else if (available<0 && aiTerrainMgr.IsReservationBuildable(slot)
+                    && aiTerrainMgr.CanReachAt(u,at,u.circuitDef.GetBuildDistance())) available=slot;
+            }
+        }
+        if (complete<wanted) {
+            if (complete+pending<wanted && available>=0 && u.circuitDef.CanBuild(nano)
+                && SeaEconomy::Fund(nano,u.circuitDef.GetBuildSpeed())) {
+                IUnitTask@ task=SeaLayout::Pinned(nano,available,Task::BuildType::NANO,Task::Priority::HIGH);
+                if (task !is null) {
+                    SeaEconomy::Admit(nano,false,true);
+                    for (uint p=0;p<SeaLayout::patches.length();++p) {
+                        if (SeaLayout::patches[p].owner==berth.key) {
+                            SeaLayout::patches[p].active=true; SeaLayout::SavePatch(p);
+                        }
+                    }
+                    GenericHelpers::LogUtil("[SEA][TechPrepare] turret completed="+complete+" required="+wanted,1);
+                }
+                return task;
+            }
+            TechYardRefused("waiting for completed support "+complete+"/"+wanted); return null;
+        }
+        CCircuitDef@ constructor=ai.GetCircuitDef(SeaEconomy::Constructor(UnitHelpers::GetSideForUnitName(yard.GetName()),true));
+        if (constructor is null) return null;
+        // Reserve the first advanced constructor and fund at the target build
+        // rate. Reclaim receipts are bank, never promised income.
+        float queuedM=0,queuedE=0; SeaEconomy::UnframedCosts(queuedM,queuedE);
+        const float horizon=AiMax(1.0f,Global::RoleSettings::Sea::TechYardTargetSeconds);
+        const float conversion=AiMax(0.0f,ai.GetTeamRulesParam("mmUse",0.0f));
+        float redirect=SeaMath::TechConversionRedirect(aiEconomyMgr.energy.current,0,
+            queuedE+SeaEconomy::recruitAdmittedE,aiEconomyMgr.energy.income,TeamEconomy::OwnEnergy(TeamEconomy::USAGE),
+            yard.costE+constructor.costE,horizon,conversion);
+        if (redirect>0) redirect=AiMin(conversion,redirect+1.0f); // rounding margin at the funding boundary
+        // Price only the conversion needed by this yard, including its lost
+        // metal. Turning ALL conversion off in the forecast deadlocked a full
+        // bank in the prepared-T2 fixture despite ample combined resources.
+        const float lostMetal=redirect*AiMax(0.0f,ai.GetTeamRulesParam("mmAvgEffi",0.0f));
+        const float metalUsage=TeamEconomy::OwnMetal(TeamEconomy::USAGE)+lostMetal;
+        const float metalQueued=queuedM+SeaEconomy::recruitAdmittedM;
+        // Pay the whole package within the target window. An up-front cash
+        // reserve for the constructor's entire energy cost can exceed natural
+        // storage capacity, even when income readily funds it after the yard.
+        const bool metalFunded=BuildPowerMath::Funded(aiEconomyMgr.metal.current,0,aiEconomyMgr.metal.income,
+            metalUsage,metalQueued,yard.costM+constructor.costM,horizon,0,horizon);
+        const bool energyFunded=BuildPowerMath::Funded(aiEconomyMgr.energy.current,0,aiEconomyMgr.energy.income,
+            SeaMath::GrowthUsage(TeamEconomy::OwnEnergy(TeamEconomy::USAGE),redirect),queuedE+SeaEconomy::recruitAdmittedE,
+            yard.costE+constructor.costE,horizon,0,horizon);
+        ready=metalFunded && energyFunded;
+        if (ready) return null;
+        CCircuitUnit@ old=Factory::primaryT1Shipyard;
+        CCircuitDef@ oldDef=old is null ? null : ai.GetCircuitDef(old.circuitDef.id);
+        const bool metalShort=!metalFunded;
+        const bool queueIdle=old !is null && (old.task is null || old.task.GetType()==int(Task::Type::WAIT)
+            || old.task.GetType()==int(Task::Type::IDLE));
+        // Reclaim cannot repair an energy deficit or an unaffordable package.
+        // The predicted refund admits reclaim only; actual receipts still fund
+        // the yard via the same package checks on the next ask.
+        const bool reclaimFunds=oldDef !is null && energyFunded
+            && BuildPowerMath::Funded(aiEconomyMgr.metal.current+oldDef.costM,0,aiEconomyMgr.metal.income,
+                metalUsage,metalQueued,yard.costM+constructor.costM,horizon,0,horizon);
+        // Conservative coverage proof: another completed owned T1 yard in this
+        // body. Allied production alone is not an enforceable availability promise.
+        bool coverage=false;
+        for (uint i=0;i<SeaEconomy::productionFactories.length();++i) {
+            CCircuitUnit@ other=ai.GetTeamUnit(SeaEconomy::productionFactories[i]);
+            if (other !is null && other !is old && UnitHelpers::IsT1Shipyard(other.circuitDef.GetName())
+                && aiBattle.WaterBody(other.GetPos(ai.frame),false)==body && !SeaFactories::Hold(other)) coverage=true;
+        }
+        if (Global::RoleSettings::Sea::TechReclaimT1 && metalShort && coverage && reclaimFunds && queueIdle && oldDef !is null
+            && !SeaEconomy::Busy(old.id) && !SeaEconomy::SeaContested()
+            && SeaEconomy::Number(SeaEconomy::Constructor(Global::AISettings::Side,false),true)>=3
+            && aiTerrainMgr.CanReachAt(u,old.GetPos(ai.frame),u.circuitDef.GetBuildDistance())) {
+            if (!Lifecycle::IsRetiring(old)) Lifecycle::Retire(old,"SEA prepared T2 funding with alternate yard");
+            GenericHelpers::LogUtil("[SEA][TechReclaim] yard="+old.id+" bank="+aiEconomyMgr.metal.current,1);
+            return aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::HIGH,old,120*SECOND));
+        }
+        techFundingWait=true;
+        TechYardRefused("support ready; package lacks funding"); return null;
+    }
+    void TechYardRefused(const string &in reason) {
+        if (ai.frame-techYardLog<30*SECOND) return;
+        techYardLog=ai.frame; GenericHelpers::LogUtil("[SEA][TechSave] order refused: "+reason,1);
+    }
+    IUnitTask@ TechYard(CCircuitUnit@ u) {
+        if (!SeaConstructor::IsT1(u.circuitDef) || !SeaEconomy::TechCommitted()) return null;
+        const string side=UnitHelpers::GetSideForUnitName(u.circuitDef.GetName());
+        CCircuitDef@ yard=ai.GetCircuitDef(UnitHelpers::GetT2ShipyardForSide(side));
+        if (yard is null || !u.circuitDef.CanBuild(yard)) { TechYardRefused("builder cannot build it"); return null; }
+        // Never join or re-return a live order here: assignment re-enters
+        // role policy synchronously, and a refused assignment recursed until
+        // the engine crashed (played, Legion). Other ships assist the frame
+        // through CapitalAssist and native assist.
+        if (techOrder !is null && !techOrder.IsDead()) {
+            techFundingWait=false;
+            IBuilderTask@ live=cast<IBuilderTask>(techOrder);
+            // Head-to-head play: a started frame was abandoned (no builder on
+            // it) and the yard never finished. Re-staff the frame with a fresh
+            // repair task on the nanoframe (as CapitalAssist does); never
+            // re-return the order itself, which recursed to a crash.
+            if (Global::RoleSettings::Sea::TechRestaffFrame && live !is null && live.target !is null && live.GetUnits().length()==0) {
+                IUnitTask@ staff=aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH,live.target,60*SECOND));
+                if (staff !is null) { GenericHelpers::LogUtil("[SEA][TechSave] restaff frame builder="+u.id,1); return staff; }
+            }
+            TechYardRefused(live is null ? "ordered" : "ordered at "+int(live.GetBuildPos().x)+","+int(live.GetBuildPos().z)
+                +" units="+live.GetUnits().length()+" frame="+(live.target !is null)+" height="+int(aiBattle.Height(live.GetBuildPos())));
+            return null;
+        }
+        if (SeaEconomy::Have(yard)>0 || aiBuilderMgr.GetQueuedBuildCount(int(Task::BuildType::FACTORY),yard)>0) { TechYardRefused("framed or queued"); return null; }
+        if (Factory::primaryT1Shipyard is null) { TechYardRefused("no primary T1 yard"); return null; }
+        // Beside the T1 yard, as the shared ladder did; native placement
+        // honours SEA's reservations and exits. The harbor layout is the
+        // fallback: its forward/visibility admission is meant for later
+        // forward harbors and rejected home sites for minutes in played games.
+        IUnitTask@ task=SeaLayout::Factory(u,yard.GetName());
+        IBuilderTask@ ordered=cast<IBuilderTask>(task);
+        if (ordered is null || ordered.buildDef !is yard) return task; // preparation is a nano/reclaim task, not the yard order
+        if (task !is null) { @techOrder=task; GenericHelpers::LogUtil("[SEA][TechSave] order "+yard.GetName()+" builder="+u.id,1); }
+        else TechYardRefused("native (placement or 180 s T2 cooldown) and layout found no site allowed="+yard.IsBuildAllowed()+" available="+yard.IsAvailable(ai.frame)+" max="+yard.maxThisUnit+" count="+yard.count);
+        return task;
     }
     IUnitTask@ LegacyTask(CCircuitUnit@ u) {
         if (u is null) return null;
@@ -730,8 +1000,14 @@ namespace SeaBuild {
         if (current !is null && !current.IsDead() && current.GetBuildType()<int(Task::BuildType::REPAIR)
             && (current.target !is null || SeaEconomy::OwnsTask(current))) return current;
         if (!u.circuitDef.IsMobile()) { IUnitTask@ help=Assist(u); return help is null ? Wait() : help; }
+        // The compact mode must also adopt owned unframed orders. Otherwise
+        // pending converters consume capacity forever while workers fall back
+        // to guards. Job ordering gives the conversion group first claim.
+        IUnitTask@ resumed=Resume(u); if (resumed !is null) return resumed;
         IUnitTask@ task=null;
         @task=PriorityGrowth(u); if (task !is null) return task;
+        // Not wrapped by LayoutTask: its placement deferral aborted this order.
+        @task=TechYard(u); if (task !is null) return task;
         @task=CapitalAssist(u); if (task !is null) return task;
         @task=Seaplane(u); if (task !is null) return task;
         @task=CapacityFactory(u); if (task !is null) return task;
@@ -768,16 +1044,37 @@ namespace SeaBuild {
         // Only naval buildings belong to this water layout.
         const bool yard=SeaEconomy::Yard(build.buildDef) || UnitHelpers::IsSeaplanePlatform(build.buildDef.GetName());
         SeaLayout::RefreshGeometry();
-        if (SeaEconomy::Yard(build.buildDef) && !SeaLayout::hadFactory) {
+        if (UnitHelpers::IsT1Shipyard(build.buildDef.GetName()) && !SeaLayout::hadFactory) {
             AiPreferFactoryFacing(task,SeaLayout::facing);
             return task; // single-yard exception; prefer forward, opposite last
         }
         if (!ControlledEconomy(build.buildDef) && !yard) return task;
         const string name=build.buildDef.GetName();
+        // D-342: ask the layout before cancelling the native order. SEA's
+        // Pending counts only its own projects, so the native task does not
+        // block the layout. If the water layout has found no site for this
+        // economy building for LayoutFallbackSeconds (crowded allied coast,
+        // KI-657), keep the native order: tidals and converters must not
+        // stall for the whole game because the planned block cannot fit.
+        // Yards and nano pads keep their layout-only placement.
+        placeNoSite=false;
+        IUnitTask@ placed=yard ? SeaLayout::Factory(u,name) : kind==Task::BuildType::NANO ? Support(u) : Place(u,name,kind);
+        if (placed is null && !yard && kind!=Task::BuildType::NANO && LayoutFallback(name,false)) {
+            if (ai.frame-fallbackLog>30*SECOND) {
+                fallbackLog=ai.frame;
+                GenericHelpers::LogUtil("[SEA][Placement] fallback native "+name+" builder="+u.circuitDef.GetName()+" no layout site",1);
+            }
+            // D-351: SEA owns the admitted order, so Tick's economy filter no
+            // longer aborts it a second later (the ship stopped and was
+            // re-ordered every second and the tidal never started).
+            SeaEconomy::Added(task);
+            return task;
+        }
+        if (placed !is null) LayoutFallback(name,true);
         array<CCircuitUnit@>@ workers=build.GetUnits();
         for (uint i=0;i<workers.length();++i) if (workers[i] !is null) workers[i].CmdStop();
         aiBuilderMgr.AbortTask(task);
-        @task=yard ? SeaLayout::Factory(u,name) : kind==Task::BuildType::NANO ? Support(u) : Place(u,name,kind);
+        @task=placed;
         if (task is null && ai.frame-placementLog>30*SECOND) {
             placementLog=ai.frame;
             CCircuitDef@ definition=ai.GetCircuitDef(name);
@@ -860,7 +1157,7 @@ namespace SeaBuild {
             }
         }
         if (!empty && t2 !is null && SeaEconomy::Have(t2)==0 && SeaEconomy::TechReady(t2)) {
-            @t=SeaLayout::Factory(u,t2.GetName()); if (t !is null) { SeaEconomy::Admit(t2,false,true); return t; }
+            @t=SeaLayout::Factory(u,t2.GetName()); if (t !is null) return t;
         }
         if (u.id==SeaEconomy::mexWorker || UnitHelpers::IsCommander(u.circuitDef)) {
             @t=aiEconomyMgr.EnqueueMexWithin(u,u.id==SeaEconomy::mexWorker ? u.GetPos(ai.frame) : Global::Map::StartPos,

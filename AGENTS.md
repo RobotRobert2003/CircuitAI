@@ -22,7 +22,8 @@ test. Fail fast by default; `--keep-going` is a bounded diagnostic choice, not
 the standard compile-check mode. Preserve original failures and launcher logs.
 Always use the runner's identity-checked stop/cleanup, including on cancellation;
 never kill all Spring processes or trust a numeric PID alone. Leave no owned
-simulation idle after its result. See the playtest skill for watchdogs, observer
+simulation idle after its result, and prune its folder once the result is read
+(`tools/playtest/prune_benchmarks.py`, see "External benchmark storage"). See the playtest skill for watchdogs, observer
 compatibility, evidence storage and the harness regression command.
 
 ## Performance requirements for every change
@@ -162,7 +163,28 @@ Benchmark evidence, raw simulations and retained build validations belong to the
 test definitions and runners here; write new reports, ledgers and raw games to
 the external store via `tools/playtest/benchmark_store.py`. The old local
 `build-theatres` path may be an ignored compatibility junction; do not delete
-it recursively. Raw artifacts remain Git-ignored and require separate backup.
+it recursively. Raw artifacts remain Git-ignored.
+
+**Keep the whole benchmark checkout under 5 GB (D-339).** Raw game folders are
+working space, not an archive. After **every** game or batch, once its verdict
+is read and anything a comparison needs is published (`storage.py publish`),
+run `python tools/playtest/prune_benchmarks.py --apply --path <game dir>`
+(or with no `--path` for the whole store, `--keep <pin>` for a pin still in
+use). It retains Git-tracked files and every result output (`.json`, `.jsonl`,
+`.md`, `.csv`, `.tsv`, `script.txt`: reports, verdicts, metric summaries,
+manifests with DLL/data hashes, the game setup) and deletes the raw inputs:
+logs, screenshots, replays, staged DLL/symbol/script copies, engine caches and
+build caches. Copy a log or replay you still need into the published bundle
+first; nothing pruned can be recovered. Do not leave a finished game unpruned.
+
+Every run must stay comparable with later builds and other machines. The
+launcher writes `system.json` (host, CPU, memory, GPU and driver, OS build,
+power plan, display mode, competing engines/builds at launch) and
+`run-inputs.json` (engine, DLL and data hashes); archiving writes
+`telemetry.jsonl` (every observer/widget metric line, `[Perf*]`,
+`[INVARIANT]`, `SLOW:`, speed and game-end lines from the infolog) and puts a
+host summary in `result.json`. Compare timings only between runs whose
+`system` matches, and treat `contended: true` runs as qualified.
 
 Keep the source checkout focused on native code, active scripts/profiles, build
 support and reproducible tests. Tests, fixtures, benchmark source, reusable
@@ -183,6 +205,8 @@ OS temporary directory. Required engine-integration build outputs are unchanged.
 | --- | --- |
 | `../rjm.bar.docs/projects/circuitai/benchmark-repository.md` | Ownership, setup, migration counts, preservation checks and raw-archive compatibility. |
 | `tools/playtest/benchmark_store.py` | Configurable benchmark checkout, evidence and raw paths; historical reference resolution. |
+| `tools/playtest/replay_command_summary.py` | KI-655: per-team AI command metrics (packets, MOVE queue lengths, collinear share, per minute) decoded from a replay; `storage.archive_metadata` writes it as `commands-summary.json` for every run with a replay, because current BAR refuses `UnitCommand`/`UnitDamaged` to test widgets. |
+| `tools/playtest/prune_benchmarks.py` | D-339: after each game, deletes bulk raw files (logs, screenshots, replays, staged binaries/scripts, caches) and keeps small result files; dry run by default, refuses while an engine writes there. Keeps the checkout under 5 GB. |
 | `tools/playtest/migrate_benchmark_repository.py` | Non-destructive migration inventory and verification utility. |
 | `../CircuitAI.benchmarks/doc/images/` | Historical gameplay screenshots. |
 | `../CircuitAI.benchmarks/build-theatres/` | Raw archives, replays, pinned binaries and local build caches. |
@@ -234,6 +258,9 @@ This is the implementation target for every AngelScript and profile change.
 | `data/script/src/roles/` | Role-specific folders (air, front, sea, support, tactical, tech), each with its role entry and existing supporting files. Operational capabilities remain in systems/. |
 | `data/script/src/types/` | Script value types: `ai_role.as`, `building_type.as`, `map_config.as`, `profile_controller.as`, `role_config.as`, `start_spot.as`, `strategic_objectives.as`, `strategy.as`, `terrain.as`. |
 | `data/script/src/helpers/` | Helpers organized by responsibility: `math/` (pure calculations), `construction/` (builder/economy/factory/guard policy), `spatial/` (territory/layout/map/walls), `combat/` (defense chains), `units/` (rosters/classification), `roles/` (roles and limits), `objectives/` (state and execution), `common/` (collections/logging/task names). Keep pure math independent of managers and engine callbacks. |
+| `data/script/src/systems/team/sea_tech.as` | D-335: ally-leader T2 transition leases per connected sea, with bounded heartbeat expiry and coordinator reconciliation. |
+| `data/script/src/systems/sea/sea_control.as` | D-336: shared provisional basin control, recent scout observation, local allied shore occupation and physically occupied submarine stations; policy only, no unit orders. |
+| `data/script/src/systems/team/mex_claim.as` | D-352: this AI's mex territory claim (classes, readiness from the opening plan and the defs, securing seconds, anchor) broadcast in the roster and applied natively for every ally; the enemy's symmetric clock; the `[MexTerritory]` dumps and the widget's Territory payload. Rules and lane partition are native (`src/circuit/resource/MexTerritory.h`, `module/MexOwnership.cpp`; test `tests/mex_territory_test.cpp`). |
 | `data/script/src/systems/team/sea_assist.as` | SEA donates one T1 construction ship to a TACTICAL ally at +50 metal income, and TACTICAL lifts its zero shipyard caps once it owns a sea constructor. |
 | `data/script/src/systems/team/ferry.as` | Transport ferry policy: the AIR/TECH request protocol over `AiSendMessage`, and the donation hand-over. See `../rjm.bar.docs/projects/circuitai/transport-ferry.md`. |
 | `data/script/src/helpers/construction/sea_constructor_helpers.as` | The naval economy ladder a construction ship runs (T2 shipyard, mex upgrades, naval converter, nanos, tidals; advanced converter and naval fusion for a T2 sub), parameterised by a `Settings` object so SEA and TACTICAL share one policy. See `../rjm.bar.docs/projects/circuitai/roles/sea.md` and `../rjm.bar.docs/projects/circuitai/roles/tactical.md`. |

@@ -1,0 +1,15 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {"key": "loaded", "pattern": "\\[SeaArena\\].* loaded case=hover-superior-fleet", "scope": "any", "by_minute": 1},
+    {"key": "hover-killed", "pattern": "\\[SeaArena\\].*death id=\\d+ team=1 .*attackerTeam=0 unit=corsnap", "scope": "any", "by_minute": 4}
+  ],
+  "forbid": [
+    {"key": "hover-withdrawal", "pattern": "\\[SEA\\]\\[Screen\\] hold armroy|\\[SEA\\]\\[Screen\\] hold armpship", "scope": "tech"},
+    {"key": "hover-escape", "pattern": "\\[SEA\\]\\[Pursuit\\] break", "scope": "tech"},
+    {"key": "script", "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope": "any"},
+    {"key": "invariant", "pattern": "INVARIANT", "scope": "any"},
+    {"key": "fixture", "pattern": "\\[SeaArena\\].*ERROR|Error in.*sea_arena|Removed widget: SEA combat arena", "scope": "any"},
+    {"key": "crash", "pattern": "Access violation|has crashed|Fatal:", "scope": "any"}
+  ]
+}

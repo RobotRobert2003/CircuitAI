@@ -279,6 +279,9 @@ namespace RoleSea {
                 CCircuitDef@ counter=SeaCombat::Select(u,true);
                 if (counter !is null) return SeaFactories::Recruit(u,counter,Task::RecruitType::FIREPOWER,false,true);
             }
+            // D-300: bank for the first advanced yard; counters above still run.
+            if (isT1Shipyard && workers>=2 && SeaEconomy::TechHold())
+                return aiFactoryMgr.Enqueue(TaskS::Wait(false,3*SECOND));
             if (workers>=2) {
                 IUnitTask@ workforce=SeaFactories::Workforce(u);
                 if (workforce !is null) return workforce;
@@ -604,6 +607,14 @@ namespace RoleSea {
             return defaultTask;
         }
 
+        // D-352: the land spots inside the home radius are this seat's (rule 1);
+        // the commander takes them before it assists the yard. Native admission
+        // owns reach and occupancy, so a water start simply finds nothing.
+        if (Team::MexClaim::Enabled() && comm.task is null
+            && aiEconomyMgr.GetMexTaskCountWithin(Global::Map::StartPos, Team::MexClaim::HomeRadius()) < 1) {
+            IUnitTask@ home = aiEconomyMgr.EnqueueMexWithin(comm, Global::Map::StartPos, Team::MexClaim::HomeRadius(), 0, true);
+            if (home !is null) return home;
+        }
         // Prefer guarding the primary T1 shipyard only.
         CCircuitUnit@ target = null;
         if (Factory::primaryT1Shipyard !is null) {
@@ -707,8 +718,11 @@ namespace RoleSea {
             UnitHelpers::BatchApplyUnitCaps(UnitHelpers::GetAllT2Shipyards(), Global::RoleSettings::Sea::MaxProductionYards + 1);
             return;
         }
-        // Determine cap: 50 metal income per lab (e.g., 100 -> 2 labs)
-        int seaLabCap = int(metalIncome / 75.0f);
+        // One more advanced yard per 75 metal income. The first is always
+        // allowed: its timing belongs to SeaEconomy's tech gate and save. A
+        // cap of income/75 alone kept the legacy layout on T1 below 75 M/s,
+        // i.e. for whole natural games (D-300).
+        int seaLabCap = AiMax(1, int(metalIncome / 75.0f));
 
         // All three sides' T2 shipyards, legadvshipyard included (D-039).
         UnitHelpers::BatchApplyUnitCaps(UnitHelpers::GetAllT2Shipyards(), seaLabCap);

@@ -314,6 +314,31 @@ void TestRingOrderAndClearOf()
 
 }  // namespace
 
+// D-343: SEA turret and economy reservations may not cut the flagship off.
+void TestHullPathClear()
+{
+	const int w = 40, h = 20;
+	std::vector<char> water(w * h, 1);
+	Check(HullPathClear(water, w, h, 2, 10, 37, 10, 3, 1), "open water lets a wide hull through");
+	// A wall across the window with a 5-cell gap at rows 8..12.
+	std::vector<char> wall = water;
+	for (int z = 0; z < h; ++z) {
+		if (z < 8 || z > 12) wall[z * w + 20] = 0;
+	}
+	Check(HullPathClear(wall, w, h, 2, 10, 37, 10, 2, 1), "a 5-cell gap passes a hull of half-width 2");
+	Check(!HullPathClear(wall, w, h, 2, 10, 37, 10, 3, 1), "a 5-cell gap stops a hull of half-width 3");
+	// Sealing the gap blocks every hull, even one cell wide.
+	std::vector<char> sealed = wall;
+	for (int z = 8; z <= 12; ++z) sealed[z * w + 20] = 0;
+	Check(!HullPathClear(sealed, w, h, 2, 10, 37, 10, 0, 1), "a sealed wall blocks the narrowest hull");
+	// A start hugging a footprint snaps to clear water within `snap` cells.
+	std::vector<char> yard = water;
+	for (int z = 5; z < 15; ++z) for (int x = 0; x < 4; ++x) yard[z * w + x] = 0;
+	Check(!HullPathClear(yard, w, h, 4, 10, 37, 10, 3, 0), "the mouth cell itself is too close to the yard");
+	Check(HullPathClear(yard, w, h, 4, 10, 37, 10, 3, 4), "the mouth snaps to clear water beside the yard");
+	Check(!HullPathClear(water, w, h, -1, 10, 37, 10, 1, 1), "an endpoint outside the window is refused");
+}
+
 int main()
 {
     for (int requested=0;requested<4;++requested) for (int actual=0;actual<4;++actual) {
@@ -352,6 +377,7 @@ int main()
 	TestRingSkipsTheZone();
 	TestFlushAndSetStep();
 	TestLeavesPocket();
+	TestHullPathClear();
 	TestRingOrderAndClearOf();
 	if (failures > 0) {
 		std::cerr << failures << " of " << checks << " checks failed\n";

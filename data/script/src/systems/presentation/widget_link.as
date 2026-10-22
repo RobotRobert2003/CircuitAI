@@ -31,6 +31,8 @@ it to the same handler. Topics are split by how the widget uses them:
 Lanes ("barbtheatre", lanes.as) are deliberately NOT mirrored: their payload is
 large and recalculated often. They still use ai.CallUI and stay unavailable
 under the sandbox (KI-617).
+D-345: SEA lanes (sea_lanes.as) ARE published, as the state key "sealanes":
+one compact line per factory, rebuilt only when a lane is recomputed.
 
 tools/widgets/gui_barb_team_link.lua is the widget that displays them.
 

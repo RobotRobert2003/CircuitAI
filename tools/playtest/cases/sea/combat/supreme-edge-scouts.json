@@ -1,0 +1,17 @@
+{
+  "name": "supreme-edge-scouts",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [[4814, 11077], [11579, 5063]],
+  "checks": "sea/combat/supreme-shore-scouts.json",
+  "patrol_observer": true,
+  "objective_observer": true,
+  "scout_diagnostics": true,
+  "progression_audit": {"kind": "shores", "unit": "corsy", "count": 2, "by_seconds": 330},
+  "shots": "",
+  "groups": [
+    {"unit": "armpt", "team": 0, "count": 3, "position": [6200, 10500], "columns": 3, "spacing": 160},
+    {"unit": "corsy", "team": 1, "count": 1, "position": [8788, 5288]},
+    {"unit": "corsy", "team": 1, "count": 1, "position": [12032, 8088], "after_seconds": 240}
+  ]
+}

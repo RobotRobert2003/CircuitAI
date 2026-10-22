@@ -4,6 +4,9 @@
 namespace SeaEcoLayout {
     class Block {
         int zone=0, group=0, fusion=-1;
+        // D-344: converter annexes beside a full block (zone ids), within the
+        // block's nano reach. Bounded by ConverterAnnexes.
+        array<int> annex;
         bool active=false, wantsFusion=false;
         AIFloat3 centre, harbor;
         float half=320.0f;
@@ -20,12 +23,14 @@ namespace SeaEcoLayout {
         aiTerrainMgr.SetLayoutInt(key+".fusion",b.fusion);
         aiTerrainMgr.SetLayoutInt(key+".active",b.active ? 1 : 0);
         aiTerrainMgr.SetLayoutInt(key+".wantsFusion",b.wantsFusion ? 1 : 0);
+        aiTerrainMgr.SetLayoutInt(key+".annex",int(b.annex.length()));
+        for (uint a=0;a<b.annex.length();++a) aiTerrainMgr.SetLayoutInt(key+".annex."+a,b.annex[a]);
         aiTerrainMgr.SetLayoutInt(key+".x",int(b.centre.x)); aiTerrainMgr.SetLayoutInt(key+".z",int(b.centre.z));
         aiTerrainMgr.SetLayoutInt(key+".hx",int(b.harbor.x)); aiTerrainMgr.SetLayoutInt(key+".hz",int(b.harbor.z));
         aiTerrainMgr.SetLayoutInt("sea.eco.count",int(blocks.length()));
         aiTerrainMgr.SetLayoutInt("sea.eco.facing",direction);
     }
-    void Reset() { ready=false; blocks.resize(0); exits.deleteAll(); cursor=0; nextSearch=0; }
+    void Reset() { ready=false; blocks.resize(0); exits.deleteAll(); cursor=0; nextSearch=0; backoff=10; dynamic=false; dynamicCursor=0; }
     void Init() {
         if (ready) return;
         ready=true;
@@ -43,6 +48,9 @@ namespace SeaEcoLayout {
             b.half=float(aiTerrainMgr.GetLayoutInt(key+".half",320));
             b.fusion=aiTerrainMgr.GetLayoutInt(key+".fusion",-1); b.active=aiTerrainMgr.GetLayoutInt(key+".active",0)!=0;
             b.wantsFusion=aiTerrainMgr.GetLayoutInt(key+".wantsFusion",0)!=0;
+            for (int a=0;a<aiTerrainMgr.GetLayoutInt(key+".annex",0);++a) {
+                const int z=aiTerrainMgr.GetLayoutInt(key+".annex."+a,0); if (z>0) b.annex.insertLast(z);
+            }
             b.centre=AIFloat3(float(aiTerrainMgr.GetLayoutInt(key+".x",0)),0,float(aiTerrainMgr.GetLayoutInt(key+".z",0)));
             b.harbor=AIFloat3(float(aiTerrainMgr.GetLayoutInt(key+".hx",0)),0,float(aiTerrainMgr.GetLayoutInt(key+".hz",0)));
             blocks.insertLast(b);
@@ -77,6 +85,59 @@ namespace SeaEcoLayout {
         }
         return AIFloat3(-1,0,-1);
     }
+    int exhaustedLog=-100000;
+    // D-343: false = the planned block behind the harbor (D-062 geometry);
+    // true = rings around the shipyard with a shrinking block. Not saved: a
+    // load restarts from the planned geometry, which is the same search.
+    bool dynamic=false; int dynamicCursor=0;
+    int backoff=10; // KI-658: seconds before the next full sweep after one fails
+    // KI-657: why candidates failed in the current sweep, logged when a sweep
+    // is exhausted (once a minute). dry, threat, forward, zone, band, fusion,
+    // rear, reach, path. O(1) per candidate.
+    array<int> failures={0,0,0,0,0,0,0,0,0};
+    string FailureSummary() {
+        const array<string> names={"dry","threat","forward","zone","band","fusion","rear","reach","path"};
+        string text="";
+        for (uint i=0;i<names.length();++i) { text+=" "+names[i]+"="+failures[i]; failures[i]=0; }
+        return text;
+    }
+    // One candidate block: zone, n x n nano band, fusion behind the harbor,
+    // every nano inside the fusion's assist reach, and the flagship still able
+    // to leave every yard (no new SeaLayout::NewlyBlocked bit). Releases on any failure.
+    bool TryBlock(const AIFloat3 &in p, const AIFloat3 &in harbor, CCircuitDef@ nano, CCircuitDef@ fusion, int n, bool shrunk) {
+        if (aiBattle.Height(p)>=0) { ++failures[0]; return false; }
+        if (aiBattle.SurfThreat(p)>Global::RoleSettings::Sea::HarborMaxThreat) { ++failures[1]; return false; }
+        const float depth=float(nano.GetFootprintZ()*n)*16.0f;
+        const float half=AiMax(shrunk ? 240.0f : 320.0f,depth*.5f+192.0f);
+        // KI-658: the n x n turret band must stand on wholly free ground, so
+        // test that rectangle read-only first (O(band cells), no reservation,
+        // no log). Most failing candidates used to reserve a zone, lay a band
+        // and release both.
+        if (!aiTerrainMgr.CanReserveArea(p,direction,float(nano.GetFootprintX()*n)*8.0f,depth*.5f)) { ++failures[4]; return false; }
+        SeaLayout::PathState@ paths=SeaLayout::Baseline(harbor); // D-343: before this candidate reserves
+        Block b; b.centre=p; b.harbor=harbor; b.half=half;
+        // D-343: a zone touching a teammate's reservation shrinks until it no
+        // longer does, instead of being refused; it never covers allied ground.
+        b.zone=Global::RoleSettings::Sea::ZoneAroundAllies ? aiTerrainMgr.ReserveZoneAroundAllies(p,direction,half,half)
+            : aiTerrainMgr.ReserveZone(p,direction,half,half,false);
+        if (b.zone<=0) { ++failures[3]; return false; }
+        b.group=aiTerrainMgr.LayBand(b.zone,nano,LayoutHelpers::Offset(p,direction,0,depth*.5f),direction,n,n,0,false,true,false,0);
+        if (b.group>0 && aiTerrainMgr.GetGroupCount(b.group,false)==n*n)
+            b.fusion=aiTerrainMgr.PackNearGroup(b.zone,fusion,b.group,direction,
+                LayoutHelpers::Offset(p,direction,0,-half*.7f),nano.GetBuildDistance()*.8f,0,0);
+        int reason=-1;
+        if (b.group<=0 || aiTerrainMgr.GetGroupCount(b.group,false)!=n*n) reason=4;
+        else if (b.fusion<0) reason=5;
+        else if (!Rear(b,fusion)) reason=6;
+        else if (aiTerrainMgr.CountGroupSlotsWithin(b.group,aiTerrainMgr.GetReservationPos(b.fusion),nano.GetBuildDistance())<n*n) reason=7;
+        else if (SeaLayout::NewlyBlocked(paths,harbor)) reason=8;
+        if (reason>=0) { ++failures[reason]; aiTerrainMgr.ReleaseZone(b.zone); return false; }
+        blocks.insertLast(b); SeaLayout::geometryFrame=-1; SeaLayout::Invalidate(); Save(blocks.length()-1);
+        GenericHelpers::LogUtil("[SEA][EcoBlock] planned"+(shrunk || dynamic ? " dynamic" : "")+" centre="+int(p.x)+","+int(p.z)+" harbor="+int(harbor.x)+","+int(harbor.z)
+            +" facing="+direction+" turrets="+(n*n)+" fusion="+b.fusion,1);
+        dynamic=false; dynamicCursor=0; backoff=10;
+        return true;
+    }
     bool Plan() {
         Init();
         if (ai.frame<nextSearch) return false;
@@ -87,6 +148,35 @@ namespace SeaEcoLayout {
         CCircuitDef@ fusion=ai.GetCircuitDef(UnitHelpers::GetNavalFusionNameForSide(side));
         if (nano is null || fusion is null) return false;
         const int n=AiMax(2,AiMin(6,Global::RoleSettings::Sea::EconomyTurretSide));
+        const float radius=Global::RoleSettings::Sea::EconomyBlockRadius;
+        if (dynamic) {
+            // D-343: sea water is flat, so the block need not sit on the
+            // planned grid. Try rings around the shipyard (never forward of
+            // it: exits and the lane stay open), largest block first. At most
+            // eight candidates per second; each failure releases its zone.
+            for (int k=0;k<8;++k) {
+                const int perLevel=1+16*AiMax(1,int(radius/96.0f));
+                const int level=dynamicCursor/perLevel, c=dynamicCursor%perLevel;
+                const int size=n-level;
+                if (size<2) {
+                    // KI-658: a full failed sweep backs off 10, 20, 40, then 80 s;
+                    // a planned block resets it.
+                    dynamic=false; dynamicCursor=0; cursor=0; nextSearch=ai.frame+backoff*SECOND;
+                    backoff=AiMin(80,backoff*2);
+                    if (ai.frame-exhaustedLog>60*SECOND) {
+                        exhaustedLog=ai.frame;
+                        GenericHelpers::LogUtil("[SEA][EcoBlock] no site within radius harbor="+int(harbor.x)+","+int(harbor.z)+" facing="+direction+" (planned and dynamic)"+FailureSummary(),1);
+                    }
+                    return false;
+                }
+                ++dynamicCursor;
+                const AIFloat3 p=SeaLayout::Candidate(harbor,c,96.0f);
+                if (MapHelpers::SqDist(p,harbor)>radius*radius) { dynamicCursor=(level+1)*perLevel; continue; }
+                if (Along(p,harbor)>0) { ++failures[2]; continue; }
+                if (TryBlock(p,harbor,nano,fusion,size,size<n)) return true;
+            }
+            return false;
+        }
         const float depth=float(nano.GetFootprintZ()*n)*16.0f;
         const float half=AiMax(320.0f,depth*.5f+192.0f);
         for (int k=0;k<8;++k) {
@@ -96,26 +186,23 @@ namespace SeaEcoLayout {
             // The economy envelope must not consume the factory's assist disc
             // while a tight shoreline is still fitting its support bank.
             const AIFloat3 p=LayoutHelpers::Offset(harbor,direction,across,-half-nano.GetBuildDistance()-64.0f-float(row)*128.0f);
-            if (MapHelpers::SqDist(p,harbor)>Global::RoleSettings::Sea::EconomyBlockRadius*Global::RoleSettings::Sea::EconomyBlockRadius) {
-                if (column==0) { cursor=0; nextSearch=ai.frame+10*SECOND; break; }
+            if (MapHelpers::SqDist(p,harbor)>radius*radius) {
+                if (column==0) {
+                    cursor=0;
+                    if (Global::RoleSettings::Sea::DynamicTurrets) { dynamic=true; dynamicCursor=0; nextSearch=ai.frame+SECOND; }
+                    else {
+                        nextSearch=ai.frame+backoff*SECOND; backoff=AiMin(80,backoff*2);
+                        // KI-657: say when the whole grid failed. Once a minute at most.
+                        if (ai.frame-exhaustedLog>60*SECOND) {
+                            exhaustedLog=ai.frame;
+                            GenericHelpers::LogUtil("[SEA][EcoBlock] no site within radius harbor="+int(harbor.x)+","+int(harbor.z)+" facing="+direction+FailureSummary(),1);
+                        }
+                    }
+                    break;
+                }
                 continue;
             }
-            if (aiBattle.Height(p)>=0 || aiBattle.SurfThreat(p)>Global::RoleSettings::Sea::HarborMaxThreat) continue;
-            Block b; b.centre=p; b.harbor=harbor; b.half=half;
-            b.zone=aiTerrainMgr.ReserveZone(p,direction,half,half,false);
-            if (b.zone<=0) continue;
-            b.group=aiTerrainMgr.LayBand(b.zone,nano,LayoutHelpers::Offset(p,direction,0,depth*.5f),direction,n,n,0,false,true,false,0);
-            if (b.group>0 && aiTerrainMgr.GetGroupCount(b.group,false)==n*n)
-                b.fusion=aiTerrainMgr.PackNearGroup(b.zone,fusion,b.group,direction,
-                    LayoutHelpers::Offset(p,direction,0,-half*.7f),nano.GetBuildDistance()*.8f,0,0);
-            if (b.fusion<0 || !Rear(b,fusion)
-                || aiTerrainMgr.CountGroupSlotsWithin(b.group,aiTerrainMgr.GetReservationPos(b.fusion),nano.GetBuildDistance())<n*n) {
-                aiTerrainMgr.ReleaseZone(b.zone); continue;
-            }
-            blocks.insertLast(b); SeaLayout::geometryFrame=-1; Save(blocks.length()-1);
-            GenericHelpers::LogUtil("[SEA][EcoBlock] planned centre="+int(p.x)+","+int(p.z)+" harbor="+int(harbor.x)+","+int(harbor.z)
-                +" facing="+direction+" turrets="+(n*n)+" fusion="+b.fusion,1);
-            return true;
+            if (TryBlock(p,harbor,nano,fusion,n,false)) return true;
         }
         return false;
     }
@@ -134,6 +221,8 @@ namespace SeaEcoLayout {
         for (uint i=0;i<blocks.length();++i) {
             Block@ b=blocks[i]; if (b.zone==0) continue;
             if (!b.active && (aiTerrainMgr.GetGroupActivationState(b.group)==1 || !aiTerrainMgr.IsReservationBuildable(b.fusion))) {
+                for (uint a=0;a<b.annex.length();++a) aiTerrainMgr.ReleaseZone(b.annex[a]);
+                b.annex.resize(0);
                 aiTerrainMgr.ReleaseZone(b.zone); b.zone=0; Save(i); continue;
             }
             any=true;
@@ -173,6 +262,35 @@ namespace SeaEcoLayout {
         }
         return null;
     }
+    // D-344: reserve a small zone beside block b (ring around its centre at
+    // the block's edge, never forward of the harbor, teammates' cells shrunk
+    // out, flagship paths kept) and pack `count` of d against the block's
+    // nanos. At most AnnexCandidates rings per ask, ConverterAnnexes per block.
+    // Each failure releases its zone. Returns a reachable slot or -1.
+    int Annex(CCircuitUnit@ u, Block@ b, uint index, CCircuitDef@ d, int count) {
+        if (int(b.annex.length())>=Global::RoleSettings::Sea::ConverterAnnexes || ai.frame<nextAnnex) return -1;
+        nextAnnex=ai.frame+2*SECOND;
+        const float side=float(AiMax(d.GetFootprintX(),d.GetFootprintZ()))*8.0f;
+        const float half=side*float(count>2 ? 2 : 1)+32.0f;
+        for (int k=0;k<Global::RoleSettings::Sea::AnnexCandidates;++k) {
+            const int c=annexCursor++;
+            const float a=float(c%12)*6.2831853f/12.0f, r=b.half+half+float(c/12)*96.0f;
+            if (c/12>=3) { annexCursor=0; break; }
+            const AIFloat3 p(b.centre.x+cos(a)*r,0,b.centre.z+sin(a)*r);
+            if (aiBattle.Height(p)>=0 || Along(p,b.harbor)>0) continue;
+            SeaLayout::PathState@ paths=SeaLayout::Baseline(b.harbor);
+            const int zone=aiTerrainMgr.ReserveZoneAroundAllies(p,direction,half,half);
+            if (zone<=0) continue;
+            aiTerrainMgr.PackSet(zone,d,b.group,direction,p,count,false);
+            const int slot=aiTerrainMgr.NextReachableSlot(u,d,zone,0,8);
+            if (slot<0 || SeaLayout::NewlyBlocked(paths,b.harbor)) { aiTerrainMgr.ReleaseZone(zone); continue; }
+            b.annex.insertLast(zone); SeaLayout::Invalidate(); Save(index); annexCursor=0;
+            GenericHelpers::LogUtil("[SEA][EcoBlock] annex zone="+zone+" for="+d.GetName()+" at="+int(p.x)+","+int(p.z),1);
+            return slot;
+        }
+        return -1;
+    }
+    int nextAnnex=0, annexCursor=0;
     IUnitTask@ Place(CCircuitUnit@ u, CCircuitDef@ d, Task::BuildType kind) {
         if (d is null || !d.IsAvailable(ai.frame) || !u.circuitDef.CanBuild(d)) return null;
         // Native converter tasks cancel below 55% storage; do not keep issuing
@@ -196,11 +314,21 @@ namespace SeaEcoLayout {
                 slot=aiTerrainMgr.NextReachableSlot(u,d,b.zone,0,8);
                 // -2 preserves the cursor for a later ask; do not create new
                 // packs simply because the candidate budget was exhausted.
+                const int count=d.GetName()==UnitHelpers::GetNavalEnergyConverterNameForSide(side) ? 4 : 2;
                 if (slot==-1) {
-                    aiTerrainMgr.PackSet(b.zone,d,b.group,direction,b.centre,
-                        d.GetName()==UnitHelpers::GetNavalEnergyConverterNameForSide(side) ? 4 : 2,false);
+                    aiTerrainMgr.PackSet(b.zone,d,b.group,direction,b.centre,count,false);
                     slot=aiTerrainMgr.NextReachableSlot(u,d,b.zone,0,8);
                 }
+                // D-344: a full block grows converter annexes instead of
+                // leaving converters (T1 and advanced) without a layout slot.
+                for (uint a=0;a<b.annex.length() && slot==-1;++a) {
+                    slot=aiTerrainMgr.NextReachableSlot(u,d,b.annex[a],0,8);
+                    if (slot==-1) {
+                        aiTerrainMgr.PackSet(b.annex[a],d,b.group,direction,b.centre,count,false);
+                        slot=aiTerrainMgr.NextReachableSlot(u,d,b.annex[a],0,8);
+                    }
+                }
+                if (slot==-1 && kind==Task::BuildType::CONVERT) slot=Annex(u,b,i,d,count);
             }
             if (slot<0) continue;
             if (!aiTerrainMgr.IsReservationBuildable(slot)

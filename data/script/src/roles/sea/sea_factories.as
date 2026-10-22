@@ -19,14 +19,14 @@ namespace SeaFactories {
             && SeaEconomy::capacityPressure) {
             const string side=UnitHelpers::GetSideForUnitName(d.GetName());
             if (UnitHelpers::IsSeaplanePlatform(d.GetName())) return T2Finished(side) && SeaEconomy::SeaplaneReady(ai.GetCircuitDef(d.id));
-            if (UnitHelpers::IsT2Shipyard(d.GetName())) return T2Finished(side) || SeaEconomy::TechReady(ai.GetCircuitDef(d.id));
+            if (UnitHelpers::IsT2Shipyard(d.GetName())) return T2Finished(side) || SeaEconomy::TechCommitted() || SeaEconomy::TechReady(ai.GetCircuitDef(d.id));
             return UnitHelpers::IsT1Shipyard(d.GetName()) || (SeaInvasion::Active() && SeaInvasion::Factory(d) && T2Finished(side));
         }
         // Native switching must not bypass SEA's surveyed forward staging.
         if (SeaInvasion::Active() && SeaInvasion::Factory(d)) return false;
         if (d is null || !Global::RoleSettings::Sea::SeaplanesAfterT2) return true;
         const string side=UnitHelpers::GetSideForUnitName(d.GetName());
-        if (UnitHelpers::IsT2Shipyard(d.GetName()) && d.count==0 && !SeaEconomy::TechReady(ai.GetCircuitDef(d.id))) return false;
+        if (UnitHelpers::IsT2Shipyard(d.GetName()) && d.count==0 && !SeaEconomy::TechCommitted() && !SeaEconomy::TechReady(ai.GetCircuitDef(d.id))) return false;
         if (UnitHelpers::IsSeaplanePlatform(d.GetName())) return T2Finished(side) && SeaEconomy::SeaplaneReady(d);
         // A lost opening yard must remain recoverable. Other discretionary
         // factory purchases wait for the post-T2 platform commitment.
@@ -99,6 +99,11 @@ namespace SeaFactories {
         if (con is null || !yard.circuitDef.CanBuild(con)) return null;
         const int pending=aiFactoryMgr.GetPendingRecruitCount(con), have=con.count+pending;
         if (have<2) return Recruit(yard,con,Task::RecruitType::BUILDPOWER);
+        if (!advanced && have<3 && pending==0) {
+            CCircuitDef@ opening=ai.GetCircuitDef(UnitHelpers::GetTidalNameForSide(side));
+            if (opening !is null && aiEconomyMgr.energy.income>=Global::RoleSettings::Sea::BuildT1ConvertersMinimumEnergyIncome
+                && SeaEconomy::FundGrowth(yard,con,opening)) return Recruit(yard,con,Task::RecruitType::BUILDPOWER,true);
+        }
         const float energyGoal=advanced ? aiEconomyMgr.metal.income*Global::RoleSettings::Sea::EnergyPerMetal : SeaEconomy::HomeEnergyTarget();
         // Every extra worker must have growth work, not just an absent local
         // assistant. This prevents reclassifying factory guards from causing
@@ -125,8 +130,24 @@ namespace SeaFactories {
             CCircuitDef@ counter=SeaCombat::Select(yard,true);
             if (counter !is null) { SeaComposition::Pending(yard,true); IUnitTask@ response=Recruit(yard,counter,Task::RecruitType::FIREPOWER,false,true); if (response !is null) return response; }
         }
+        if (!advanced && SeaEconomy::TechHold()) {
+            // D-300: bank for the first advanced yard. Threat counters above
+            // still run; keep the two constructors that build and assist it.
+            if (con !is null && con.count+aiFactoryMgr.GetPendingRecruitCount(con)<2) {
+                IUnitTask@ worker=Recruit(yard,con,Task::RecruitType::BUILDPOWER); if (worker !is null) return worker;
+            }
+            return aiFactoryMgr.Enqueue(TaskS::Wait(false,3*SECOND));
+        }
         IUnitTask@ workforce=Workforce(yard); if (workforce !is null) { SeaComposition::Pending(yard,true); return workforce; }
         if (SeaCombat::Active()) {
+            // Single recruits keep scout replacement responsive and stop the
+            // stream when coverage is complete; do not hide it behind batches.
+            CCircuitDef@ priority=SeaCombat::T1Priority(yard);
+            if (priority !is null) {
+                SeaComposition::Pending(yard,true);
+                IUnitTask@ task=Recruit(yard,priority,Task::RecruitType::FIREPOWER);
+                if (task !is null) return task;
+            }
             // Shared by both economic implementations; counter emergencies
             // above retain precedence over discretionary utility hulls.
             IUnitTask@ utility=Utility(yard); if (utility !is null) return utility;

@@ -1,0 +1,24 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {
+      "key": "scout-completed",
+      "pattern": "SeaArena.*finished.*team=0 unit=armpt",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "sub-completed",
+      "pattern": "SeaArena.*finished.*team=0 unit=armsub",
+      "scope": "any",
+      "by_minute": 8
+    }
+  ],
+  "forbid": [
+    {
+      "key": "runtime",
+      "pattern": "INVARIANT|SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception|SeaArena.*ERROR",
+      "scope": "any"
+    }
+  ]
+}

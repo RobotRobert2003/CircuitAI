@@ -25,7 +25,9 @@ struct Rect {
 
 class Reservations {
 public:
-    enum Kind { SLOT, ZONE };
+    // EXIT (D-343): a factory exit corridor, shared in addition to its ZONE
+    // entry so teammates can keep the corridor's far end open for ships.
+    enum Kind { SLOT, ZONE, EXIT };
     using Key = std::tuple<int, int, int>; // owner team, kind, local ID
     uint64_t Revision() const { return revision; }
     void Put(int owner, Kind kind, int id, const Rect& rect) {
@@ -83,6 +85,15 @@ public:
         return false;
     }
     size_t Size() const { return entries.size(); }
+    // D-343: visit the rectangles of other owners' entries of one kind that
+    // overlap a window. O(entries); used only by bounded, planning-time naval
+    // path checks, never per frame.
+    template <class Visit> void ForEachOther(int owner, Kind kind, const Rect& window, Visit&& visit) const {
+        for (const auto& entry : entries) {
+            if (std::get<0>(entry.first) != owner && std::get<1>(entry.first) == kind && entry.second.Overlaps(window))
+                visit(entry.second);
+        }
+    }
 private:
     uint64_t revision = 0;
     static constexpr int pageCells = 32;

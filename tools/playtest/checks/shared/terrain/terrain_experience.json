@@ -1,0 +1,76 @@
+{
+  "_doc": "Terrain experience v2: all views, selection independence and screenshots. Stage team-link plus terrain_experience_watch.lua; visual mode, balanced profile.",
+  "stop_minute": 7,
+  "complete_on": {
+    "key": "experience complete",
+    "pattern": "\\[TerrainUX\\] PASS complete",
+    "scope": "any"
+  },
+  "completion_grace_seconds": 10,
+  "expect": [
+    {
+      "key": "analysis",
+      "pattern": "FIELD_PERF",
+      "by_minute": 2,
+      "scope": "any"
+    },
+    {
+      "key": "loaded",
+      "pattern": "\\[TerrainUX\\] PASS loaded",
+      "by_minute": 6,
+      "scope": "any"
+    },
+    {
+      "key": "selection",
+      "pattern": "\\[TerrainUX\\] PASS selection independent",
+      "by_minute": 6,
+      "scope": "any"
+    },
+    {
+      "key": "approaches",
+      "pattern": "\\[TerrainUX\\] PASS approaches comparison",
+      "by_minute": 6,
+      "scope": "any"
+    },
+    {
+      "key": "positions",
+      "pattern": "\\[TerrainUX\\] PASS positions",
+      "by_minute": 6,
+      "scope": "any"
+    },
+    {
+      "key": "zoom",
+      "pattern": "\\[TerrainUX\\] PASS zoom independent",
+      "by_minute": 6,
+      "scope": "any"
+    },
+    {
+      "key": "experience complete",
+      "pattern": "\\[TerrainUX\\] PASS complete",
+      "by_minute": 6,
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "terrain",
+      "pattern": "FIELD: worker failed|FIELD: check failed|\\[TerrainUX\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "widget",
+      "pattern": "Error in.*BARb|Failed to load.*gui_barb_team_link|Geometry preparation failed",
+      "scope": "any"
+    }
+  ]
+}

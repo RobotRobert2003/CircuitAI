@@ -15,6 +15,14 @@ namespace SeaSubmarines {
     dictionary focusCells;
     string FocusCell(int body,int x,int z) { return ""+body+":"+x+":"+z; }
     void BeginDecisions() { focusCells.deleteAll(); }
+    void ReleaseGuard(SeaOperations::Cohort@ group) {
+        if (group.coastTarget<0) return;
+        GenericHelpers::LogUtil("[SEA][GuardReleased] cohort="+group.serial+" shore="+group.coastTarget,1);
+        const string key=""+group.coastTarget; int owner=-1;
+        if (owners.get(key,owner) && owner==group.serial) { owners.delete(key); expiry.delete(key); }
+        group.coastTarget=-1; group.coastSearch=0;
+        group.perimeterAligned=false; group.perimeterAdvancing=false;
+    }
     void MergeSettled() {
         dictionary cells;
         const float radius=AiMax(1.0f,Global::RoleSettings::Sea::FleetCohortRadius);
@@ -133,7 +141,13 @@ namespace SeaSubmarines {
         for (uint i=0;i<replacementLines.length();++i) {
             ReplacementLine@ line=replacementLines[i];
             if (line.body!=g.body || g.replacementReleased>=line.created) continue;
-            if (SeaMath::ReplacementReady(line.count,line.readyMetal,line.enemyMetal,
+            // D-348: the line's enemyMetal only grows (AiMax over the fight),
+            // so in a large battle the ratio may never be met and the reserve
+            // sits behind the line for ever (owner: late-game T1 subs grouped
+            // at base). A reserve held SubmarineReplacementHoldSeconds goes in.
+            if (g.replacementSince<0 || g.replacementSince<line.created) g.replacementSince=ai.frame;
+            const bool heldTooLong=ai.frame-g.replacementSince>=Global::RoleSettings::Sea::SubmarineReplacementHoldSeconds*SECOND;
+            if (heldTooLong || SeaMath::ReplacementReady(line.count,line.readyMetal,line.enemyMetal,
                 Global::RoleSettings::Sea::SubmarineDepartureCount,Global::RoleSettings::Sea::SubmarineReplacementRatio)) {
                 g.replacementReleased=line.created; g.released=true;
                 GenericHelpers::LogUtil("[SEA][SubReplacement] advance cohort="+g.serial+" power="+line.readyMetal,1);
@@ -160,10 +174,19 @@ namespace SeaSubmarines {
         }
         g.holdingFireline=true; g.target=target; g.route.SetNavalTarget(target);
     }
-    int TargetRank(const CCircuitDef@ definition, int flags) {
+    // D-301: hunter subs (Barracuda, Predator, Architeuthis) are built to kill
+    // subs; their own BAR target categories prefer ships, so rank a submerged
+    // mobile contact with the anti-sub ships for them.
+    bool Hunter(const CCircuitDef@ d) {
+        if (d is null) return false;
+        const string name=d.GetName();
+        return name=="armsubk" || name=="corshark" || name=="leganavybattlesub";
+    }
+    int TargetRank(const CCircuitDef@ definition, int flags, const CCircuitDef@ own=null) {
+        const bool submerged=(flags&2)!=0 && (flags&StaticContactMask)==0;
         return SeaMath::SubmarineTargetRank(definition !is null && SeaProtection::Flagship(definition),
             (flags&StaticContactMask)!=0,(flags&UnknownContactMask)!=0,(flags&FactoryContactMask)!=0,
-            (flags&4)!=0);
+            (flags&4)!=0 || (Hunter(own) && submerged));
     }
     void Reset() { ready=false; shorelineSectors.resize(0); owners.deleteAll(); expiry.deleteAll(); replacementLines.resize(0); }
     void Init() {
@@ -174,20 +197,19 @@ namespace SeaSubmarines {
         for (uint index=0;index<SeaPatrol::sectors.length();++index)
             if (SeaPatrol::sectors[index].shore) shorelineSectors.insertLast(int(index));
     }
-    bool Safe(const AIFloat3 &in position, int body, float clearance) {
-        if (position.x<clearance || position.z<clearance
-            || position.x>AiTerrainWidth()-clearance || position.z>AiTerrainHeight()-clearance
-            || aiBattle.WaterBody(position,false)!=body
-            || aiBattle.AmphThreat(position)>Global::RoleSettings::Sea::SubmarinePerimeterMaximumThreat) return false;
-        // Eight bounded probes prevent the offset pointing into the opposite
-        // bank of a channel. Native routing still owns hull movement legality.
-        for (int direction=0;direction<DirectionCount;++direction) {
-            const float angle=float(direction)*FullCircle/float(DirectionCount);
-            const AIFloat3 probe(position.x+cos(angle)*clearance,0,position.z+sin(angle)*clearance);
-            if (aiBattle.Height(probe)>=MinimumWaterDepth) return false;
-        }
-        return true;
+    int SiteRejection(const AIFloat3 &in position, int body, float clearance) {
+        if (position.x<64 || position.z<64
+            || position.x>AiTerrainWidth()-64 || position.z>AiTerrainHeight()-64) return 1;
+        if (aiBattle.WaterBody(position,false)!=body) return 2;
+        if (aiBattle.AmphThreat(position)>Global::RoleSettings::Sea::SubmarinePerimeterMaximumThreat) return 4;
+        if (aiBattle.Height(position)>MinimumWaterDepth) return 5;
+        const AIFloat3 shore=SeaShorelines::NearestCoast(position,clearance+2*SeaPatrol::cell);
+        if (shore.x<0) return 5;
+        const float offset=sqrt(MapHelpers::SqDist(position,shore));
+        if (offset<clearance-64.0f || offset>clearance+64.0f) return 5;
+        return 0;
     }
+    bool Safe(const AIFloat3 &in position,int body,float clearance) { return SiteRejection(position,body,clearance)==0; }
     bool OutsideStaticTorpedoes(const AIFloat3 &in position, float formationRadius=0) {
         // Same published contact sets and strict radius test; native indexes
         // static weapon envelopes once per publication instead of per cohort.
@@ -209,7 +231,11 @@ namespace SeaSubmarines {
             const float lateral=(float(i)-float(group.ids.length()-1)*.5f)*Global::RoleSettings::Sea::SubmarineLineSpacing;
             AIFloat3 point=group.goal+tangent*lateral; bool found=false;
             for (int shift=0;shift<DirectionCount;++shift) {
-                const AIFloat3 candidate=point+away*(float(shift)*Global::RoleSettings::Sea::SubmarineLineSpacing);
+                const AIFloat3 candidate=SeaShorelines::Contour(point+tangent*(float(shift)*16.0f),distance);
+                bool occupied=false;
+                for (uint j=0;j<destinations.length();++j)
+                    if (MapHelpers::SqDist(candidate,destinations[j])<72.0f*72.0f) { occupied=true; break; }
+                if (occupied) continue;
                 if (!Safe(candidate,group.body,distance) || !OutsideStaticTorpedoes(candidate)
                     || !aiTerrainMgr.CanMoveTo(unit,candidate)) continue;
                 // Direct override is allowed only along a fully surveyed safe
@@ -231,7 +257,10 @@ namespace SeaSubmarines {
             CCircuitUnit@ unit=ai.GetTeamUnit(group.ids[i]);
             array<AIFloat3> route={destinations[i]};
             if (!group.route.SetUnitRoute(unit,route,48)) return false;
+            if (Global::RoleSettings::Sea::ScoutDiagnostics)
+                GenericHelpers::LogUtil("[SEA][ShoreSlot] id="+unit.id+" range="+distance+" goal="+int(destinations[i].x)+","+int(destinations[i].z),1);
         }
+        group.perimeterAligned=true;
         return true;
     }
     bool Perimeter(SeaOperations::Cohort@ group, const CCircuitDef@ definition) {
@@ -249,7 +278,25 @@ namespace SeaSubmarines {
         const float behind=float((int(group.ids.length())-1)/columns)*Global::RoleSettings::Sea::FleetRowSpacing;
         const float formationRadius=sqrt(across*across+behind*behind);
         const float shoreDistance=Global::RoleSettings::Sea::CoordinatedFleet ? distance : distance+formationRadius;
-        const float clearance=shoreDistance+Global::RoleSettings::Sea::SubmarineShoreSafetyMargin;
+        const float clearance=shoreDistance; // Weapon envelopes retain their separate safety margin.
+        if (group.coastTarget>=0 && !SeaControl::NeedsGuard(group.coastTarget)) {
+            // Occupation invalidates the station immediately at the next census.
+            int owner=-1;
+            if (owners.get(""+group.coastTarget,owner) && owner==group.serial) {
+                owners.delete(""+group.coastTarget); expiry.delete(""+group.coastTarget);
+            }
+            group.coastTarget=-1; group.coastSearch=0; group.perimeterAdvancing=false;
+        }
+        const bool settled=group.target==-7 && group.coastTarget>=0 && !group.perimeterAdvancing && group.perimeterAligned
+            && group.route !is null && !group.route.IsDead()
+            && MapHelpers::SqDist(group.centre,group.coastGoal)<=256.0f*256.0f
+            && Safe(group.coastGoal,group.body,shoreDistance) && OutsideStaticTorpedoes(group.coastGoal);
+        if (settled && ai.frame<group.coastSearch) {
+            // A physically held station remains held without another MOVE.
+            // Combat target selection runs before this method and preempts it.
+            owners.set(""+group.coastTarget,group.serial); expiry.set(""+group.coastTarget,group.coastSearch);
+            return true;
+        }
         if (group.perimeterAdvancing && group.coastTarget>=0 && group.coastTarget<int(SeaPatrol::sectors.length())
             && group.route !is null && !group.route.IsDead() && group.route.IsAtEnd(ai.GetTeamUnit(group.ids[0]))) {
             // Keep the assigned shore until arrival. Idle coverage uses the
@@ -264,23 +311,63 @@ namespace SeaSubmarines {
         }
         if (group.target==-7 && group.route !is null && !group.route.IsDead()
             && ai.frame<group.coastSearch
+            && (group.perimeterAdvancing || group.perimeterAligned)
             && (!group.perimeterAdvancing || !group.route.IsAtEnd(ai.GetTeamUnit(group.ids[0])))
             && (group.perimeterAdvancing ? aiBattle.AmphThreat(group.goal)<=Global::RoleSettings::Sea::SubmarinePerimeterMaximumThreat : Safe(group.goal,group.body,shoreDistance))
             && OutsideStaticTorpedoes(group.goal,group.perimeterAdvancing ? formationRadius : 0)) return true;
         CCircuitUnit@ lead=ai.GetTeamUnit(group.ids[0]);
         const int candidates=AiMin(int(shorelineSectors.length()),Global::RoleSettings::Sea::SubmarinePerimeterCandidates);
         int selected=-1; float nearest=1e30f; AIFloat3 selectedGoal;
+        if (settled) {
+            // Reconsider on the existing lease cadence as scouts discover enemy
+            // beaches. A one-cell improvement is required to move a held line.
+            selected=group.coastTarget; selectedGoal=group.coastGoal;
+            SeaPatrol::Sector@ current=SeaPatrol::sectors[selected];
+            nearest=current.enemyDistance-float(current.priority)*Global::RoleSettings::Sea::ShoreTravelScoreScale-320.0f;
+        }
+        int surveyedCandidates=0, geometryCandidates=0, safeCandidates=0, rejection=0;
         for (int attempt=0;attempt<candidates;++attempt) {
             const int sectorIndex=shorelineSectors[uint(group.search++ + group.serial)%shorelineSectors.length()];
             SeaPatrol::Sector@ sector=SeaPatrol::sectors[sectorIndex];
-            if (sector.body!=group.body) continue;
+            if (sector.body!=group.body || !SeaControl::NeedsGuard(sectorIndex)
+                || !SeaControl::Surveyed(sectorIndex)) continue; // scouts establish the approach first
+            ++surveyedCandidates;
+            bool covered=false;
+            const float spacing=Global::RoleSettings::Sea::ShoreStationCoverageRadius;
+            for (uint j=0;j<SeaOperations::groups.length();++j) {
+                SeaOperations::Cohort@ other=SeaOperations::groups[j];
+                if (other is group || other.body!=group.body || other.target!=-7 || other.ids.length()==0
+                    || other.coastTarget<0 || other.coastTarget>=int(SeaPatrol::sectors.length())
+                    || other.route is null || other.route.IsDead()) continue;
+                if (MapHelpers::SqDist(sector.pos,SeaPatrol::sectors[other.coastTarget].pos)<spacing*spacing) { covered=true; break; }
+            }
+            if (covered) continue;
             const string key=""+sectorIndex;
-            int owner=-1, until=-1; owners.get(key,owner); expiry.get(key,until);
+            // dictionary.get writes an out temporary even on a missing key;
+            // do not let an uninitialized expiry reserve an unclaimed shore.
+            int owner=-1, until=-1;
+            if (!owners.get(key,owner)) owner=-1;
+            if (!expiry.get(key,until)) until=-1;
             if (until>ai.frame && owner!=group.serial) continue;
+            const AIFloat3 coast=SeaShorelines::NearestCoast(sector.pos,clearance+2*SeaPatrol::cell);
+            if (coast.x<0) continue;
             for (int direction=0;direction<DirectionCount;++direction) {
                 const float angle=float(direction)*FullCircle/float(DirectionCount);
-                const AIFloat3 goal(sector.pos.x+cos(angle)*clearance,0,sector.pos.z+sin(angle)*clearance);
-                if (!Safe(goal,group.body,shoreDistance) || !aiTerrainMgr.CanReachAt(lead,goal,64)) continue;
+                const AIFloat3 goal=SeaShorelines::Contour(AIFloat3(coast.x+cos(angle)*clearance,0,coast.z+sin(angle)*clearance),clearance);
+                // Different shore anchors can project onto the same offshore
+                // position. Reserve physical goals too (bounded 8*32*G work).
+                bool occupied=false;
+                for (uint j=0;j<SeaOperations::groups.length();++j) {
+                    SeaOperations::Cohort@ other=SeaOperations::groups[j];
+                    if (other is group || other.body!=group.body || other.target!=-7 || other.ids.length()==0
+                        || other.coastTarget<0 || other.route is null || other.route.IsDead()) continue;
+                    if (MapHelpers::SqDist(goal,other.coastGoal)<spacing*spacing) { occupied=true; break; }
+                }
+                if (occupied) continue;
+                rejection=SiteRejection(goal,group.body,shoreDistance); if (rejection!=0) continue;
+                ++geometryCandidates;
+                if (!aiTerrainMgr.CanReachAt(lead,goal,64)) continue;
+                ++safeCandidates;
                 // Prefer viable enemy-facing construction shores, while still
                 // charging for transit. Geometry/threat rejection precedes score.
                 const float actualTravel=MapHelpers::SqDist(group.centre,goal);
@@ -290,7 +377,16 @@ namespace SeaSubmarines {
                 if (travel<nearest) { nearest=travel; selected=sectorIndex; selectedGoal=goal; }
             }
         }
+        if (Global::RoleSettings::Sea::ScoutDiagnostics && group.serial<=2)
+            GenericHelpers::LogUtil("[SEA][SubStationSearch] shores="+shorelineSectors.length()+" surveyed="+surveyedCandidates
+                +" geometry="+geometryCandidates+" safe="+safeCandidates+" selected="+selected
+                +" lead="+(lead is null ? -1 : lead.id)+" body="+group.body+" rejection="+rejection+" clearance="+shoreDistance,1);
         if (selected>=0) {
+            if (settled && selected==group.coastTarget) {
+                group.coastSearch=ai.frame+Global::RoleSettings::Sea::SubmarinePerimeterSeconds*SECOND;
+                owners.set(""+selected,group.serial); expiry.set(""+selected,group.coastSearch);
+                return true;
+            }
             // One path search after bounded scoring, not one for every cove.
             if (OutsideStaticTorpedoes(selectedGoal,Global::RoleSettings::Sea::CoordinatedFleet ? 0 : formationRadius)
                 && SeaOperations::Route(group,selectedGoal,false,true,true,true,false)) {

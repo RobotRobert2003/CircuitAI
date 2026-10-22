@@ -80,14 +80,26 @@ namespace SeaEconomy {
         return SeaMath::ConversionGap(aiEconomyMgr.energy.income,TeamEconomy::OwnEnergy(TeamEconomy::USAGE),
             ai.GetTeamRulesParam("mmUse",0.0f),ConversionCapacity(pending),Global::RoleSettings::Sea::ConverterEnergyReserve);
     }
+    int conversionLog=-100000;
+    void ConversionRefused(const string &in reason) {
+        if (ai.frame-conversionLog<30*SECOND) return;
+        conversionLog=ai.frame;
+        GenericHelpers::LogUtil("[SEA][ConversionWait] reason="+reason,1);
+    }
     bool NeedsConverter(CCircuitDef@ d) {
         if (d is null) return false;
         int pending=0;
-        const float gap=ConversionGap(pending);
-        return SeaMath::ConversionReady(aiEconomyMgr.IsMetalMap(),aiEconomyMgr.energy.current,aiEconomyMgr.energy.storage,
+        const float gap=ConversionGap(pending), draw=aiEconomyMgr.GetEnergyUse(d);
+        const bool ready=SeaMath::ConversionReady(aiEconomyMgr.IsMetalMap(),aiEconomyMgr.energy.current,aiEconomyMgr.energy.storage,
             ai.GetTeamRulesParam("mmLevel",.75f),aiEconomyMgr.energy.income,
-            Global::RoleSettings::Sea::BuildT1ConvertersMinimumEnergyIncome,gap,aiEconomyMgr.GetEnergyUse(d),pending,
+            Global::RoleSettings::Sea::BuildT1ConvertersMinimumEnergyIncome,gap,draw,pending,
             Global::RoleSettings::Sea::ConverterParallelProjects);
+        if (aiEconomyMgr.metal.storage>0 && aiEconomyMgr.metal.current>=aiEconomyMgr.metal.storage*.95f) {
+            ConversionRefused("metal-full"); return false;
+        }
+        if (!ready) ConversionRefused(aiEconomyMgr.IsMetalMap() ? "metal-map" : pending>=Global::RoleSettings::Sea::ConverterParallelProjects
+            ? "pending-capacity" : gap<draw*.75f ? "no-surplus" : "income-or-storage");
+        return ready;
     }
     bool FusionFunded(CCircuitDef@ d) {
         if (d is null || !Economy::IncomeWindowReady()) return false;
@@ -313,13 +325,63 @@ namespace SeaEconomy {
                     +" bank="+aiEconomyMgr.metal.current+" ready="+TechReady(yard)+" water="+HoldingWater(),1);
         }
     }
+    // D-300: the first advanced yard is wanted once the income gates pass and
+    // stays wanted until it is finished. O(1): two def counts and the shared
+    // income window, called from factory decisions only. Lifecycle: the save
+    // clock starts once, expires after TechSaveMaxSeconds, and resets only
+    // when a finished yard is later lost.
+    int techSaveSince=-1, techRetryAfter=-1;
+    bool techSaveExpired=false, techCommitted=false;
+    bool TechSaving() {
+        if (!Global::RoleSettings::Sea::TechSave) return false;
+        CCircuitDef@ yard=ai.GetCircuitDef(UnitHelpers::GetT2ShipyardForSide(Global::AISettings::Side));
+        if (yard is null) return false;
+        if (yard.count>aiBuilderMgr.GetUnfinishedCount(yard)) {
+            if (techSaveSince>=0) GenericHelpers::LogUtil("[SEA][TechSave] done seconds="+((ai.frame-techSaveSince)/SECOND),1);
+            techSaveSince=-1; techSaveExpired=false; techCommitted=false; return false;
+        }
+        // Wanting T2 needs only the income gates: a contested sea must not
+        // block the order (head-to-head: Armada never reached T2). Only the
+        // production pause (TechHold) needs held, uncontested water.
+        if (techSaveExpired && ai.frame>=techRetryAfter) { techSaveExpired=false; techSaveSince=-1; techCommitted=false; }
+        if (techSaveExpired || !Economy::IncomeWindowReady()) return false;
+        // A started frame keeps the save going whatever a dip in income does.
+        if (yard.count==0 && (Economy::GetMinMetalIncomeLast10s()<Global::RoleSettings::Sea::TechMinimumMetalIncome
+            || Economy::GetMinEnergyIncomeLast10s()<Global::RoleSettings::Sea::TechMinimumEnergyIncome)) return false;
+        const AIFloat3 harbor=SeaEcoLayout::Harbor();
+        if (harbor.x<0 || !SeaTech::Permit(aiBattle.WaterBody(harbor,false),yard.count>0 ? 2 : 1)) return false;
+        if (techSaveSince<0) {
+            techSaveSince=ai.frame;
+            GenericHelpers::LogUtil("[SEA][TechSave] start M="+aiEconomyMgr.metal.income+" E="+aiEconomyMgr.energy.income+" bank="+aiEconomyMgr.metal.current,1);
+        }
+        // Unframed: TechSaveMaxSeconds to get the yard placed. Framed: the
+        // same again to finish it. Either cap resumes ordinary production.
+        if (ai.frame-techSaveSince>int(Global::RoleSettings::Sea::TechSaveMaxSeconds*SECOND*(yard.count>0 ? 2 : 1))) {
+            techSaveExpired=true; techRetryAfter=ai.frame+60*SECOND; SeaTech::Release();
+            GenericHelpers::LogUtil("[SEA][TechSave] expired framed="+(yard.count>0)+" bank="+aiEconomyMgr.metal.current,1);
+            return false;
+        }
+        return true;
+    }
+    // A running save is the commitment: the frame is placed at once and the
+    // paused T1 production funds it from income, as a player would. The
+    // bank-based TechReady gate is momentary and constructors ask only when
+    // idle, so in natural games it never coincided with an ask (D-300).
+    bool TechCommitted() {
+        if (!TechSaving()) return false;
+        if (!techCommitted) {
+            techCommitted=true;
+            GenericHelpers::LogUtil("[SEA][TechSave] commit bank="+aiEconomyMgr.metal.current+" M="+Economy::GetMinMetalIncomeLast10s(),1);
+        }
+        return true;
+    }
     bool TechReady(CCircuitDef@ yard, bool saving=false) {
         if (yard is null || !Economy::IncomeWindowReady() || !HoldingWater()) return false;
         CCircuitDef@ con=ai.GetCircuitDef(Constructor(UnitHelpers::GetSideForUnitName(yard.GetName()),true));
         if (con is null) return false;
         return SeaMath::TechReady(Economy::GetMinMetalIncomeLast10s(),Economy::GetMinEnergyIncomeLast10s(),
             saving ? yard.costM+con.costM+800.0f : AiMax(0.0f,aiEconomyMgr.metal.current-admittedM),aiEconomyMgr.energy.current,
-            Global::RoleSettings::Sea::TechMinimumMetalIncome,Global::RoleSettings::Sea::MinimumEnergyIncomeForT2Shipyard,
+            Global::RoleSettings::Sea::TechMinimumMetalIncome,Global::RoleSettings::Sea::TechMinimumEnergyIncome,
             SeaMath::TechStartupBank(Economy::GetMinMetalIncomeLast10s(),Global::RoleSettings::Sea::FirstT2BankSeconds,
                 Global::RoleSettings::Sea::RequiredMetalCurrentForT2Shipyard,Have(yard)==0),yard.costM+con.costM+800.0f,yard.costE+con.costE+8000.0f,
             Global::RoleSettings::Sea::TechPackageSeconds,Global::RoleSettings::Sea::TechPackageIncomeShare);
@@ -390,6 +452,34 @@ namespace SeaEconomy {
         return Fund(worker,AiMin(bp,financed),worker.GetBuildSpeed()*project.costM/project.GetBuildTime(),
             worker.GetBuildSpeed()*project.costE/project.GetBuildTime(),0,0,0,rm,re);
     }
+    float FundedEnergySoon(float horizon) {
+        // Planning only: never credit this forecast to Fund or converter income.
+        // O(P+B) over owned projects and their assigned builders, on job asks.
+        // Requiring cash for all current commitments avoids promising the same
+        // future income to a reactor and its converters simultaneously.
+        float queuedM=0,queuedE=0; UnframedCosts(queuedM,queuedE);
+        if (aiEconomyMgr.metal.current<committedM+queuedM+recruitAdmittedM
+            || aiEconomyMgr.energy.current<committedE+queuedE+recruitAdmittedE) return 0;
+        float energy=0;
+        for (uint i=0;i<projects.length();++i) {
+            IBuilderTask@ work=cast<IBuilderTask>(projects[i]);
+            if (work is null || work.IsDead() || work.buildDef is null || work.GetBuildType()!=int(Task::BuildType::ENERGY)) continue;
+            const float make=aiEconomyMgr.GetEnergyMake(work.buildDef);
+            if (make<=0) continue;
+            const float progress=work.target is null ? 0 : work.target.GetBuildProgress();
+            if (progress>=1) continue;
+            float power=0;
+            array<CCircuitUnit@>@ builders=work.GetUnits();
+            for (uint b=0;b<builders.length();++b) {
+                CCircuitUnit@ unit=builders[b];
+                if (unit is null || ai.GetTeamUnit(unit.id) is null || unit.task !is work) continue;
+                if (MapHelpers::SqDist(unit.GetPos(ai.frame),work.GetBuildPos())
+                    <=unit.circuitDef.GetBuildDistance()*unit.circuitDef.GetBuildDistance()) power+=unit.circuitDef.GetBuildSpeed();
+            }
+            if (power>0 && work.buildDef.GetBuildTime()*(1-progress)<=power*horizon) energy+=make;
+        }
+        return energy;
+    }
     float HomeEnergyTarget() {
         // Product-aware floor plus growth and a recoverable energy buffer.
         // Preserve the growth floor even when cheap hulls use little energy;
@@ -397,7 +487,39 @@ namespace SeaEconomy {
         const float ratio=AiMax(Global::RoleSettings::Sea::EnergyPerMetal,productionEnergyPerMetal+4.0f);
         const float mi=aiEconomyMgr.metal.income;
         const float needed=mi*ratio+80.0f+AiMax(0.0f,aiEconomyMgr.energy.storage*.1f-aiEconomyMgr.energy.current)/AiMax(1.0f,Global::RoleSettings::Sea::EnergyBufferSeconds);
-        return AiMin(Global::RoleSettings::Sea::TidalEnergyIncomeMinimum,AiMax(250.0f,needed));
+        const float opening=AiMin(Global::RoleSettings::Sea::TidalEnergyIncomeMinimum,AiMax(250.0f,needed));
+        // Conversion is a continuing consumer. Grow one funded energy increment
+        // after existing capacity can absorb it, instead of stopping at 1200 E/s.
+        int pending=0;
+        const float capacity=ConversionCapacity(pending);
+        const float nonConversion=AiMax(0.0f,TeamEconomy::OwnEnergy(TeamEconomy::USAGE)-ai.GetTeamRulesParam("mmUse",0.0f));
+        const bool metalRoom=aiEconomyMgr.metal.current<aiEconomyMgr.metal.storage*.90f;
+        return metalRoom ? AiMax(opening,nonConversion+capacity+Global::RoleSettings::Sea::ConverterEnergyReserve
+            +Global::RoleSettings::Sea::ConversionGrowthStep) : opening;
+    }
+    // Head-to-head play: pausing T1 production while the enemy navy contests
+    // our water lost the sea. O(E) over the SEA snapshot, factory asks only.
+    bool SeaContested() {
+        const int body=aiBattle.WaterBody(Global::Map::StartPos,false);
+        const int count=aiBattle.GetSeaForceCount();
+        float enemy=0,cover=0;
+        for (int i=0;i<count;++i) {
+            if (body>=0 && aiBattle.GetSeaForceBody(i)!=body) continue;
+            const int flags=aiBattle.GetSeaForceFlags(i);
+            if ((flags&(8|128))!=0) continue;
+            const int contactDef=aiBattle.GetSeaForceDefId(i);
+            CCircuitDef@ d=contactDef>=0 ? ai.GetCircuitDef(contactDef) : null;
+            if (d is null || d.GetBuildSpeed()>0) continue;
+            if ((flags&1)!=0) cover+=aiBattle.GetSeaForceCost(i); else enemy+=aiBattle.GetSeaForceCost(i);
+        }
+        return enemy>cover*Global::RoleSettings::Sea::TechSaveContestRatio;
+    }
+    int techSaveAsks=0;
+    // Every TechSaveTrickle-th held ask still builds a T1 hull.
+    bool TechHold() {
+        if (!TechSaving() || !HoldingWater() || SeaContested()) return false;
+        const int trickle=Global::RoleSettings::Sea::TechSaveTrickle;
+        return trickle<=0 || (++techSaveAsks%trickle)!=0;
     }
     bool HoldingWater() {
         const int count=aiBattle.GetSeaForceCount();

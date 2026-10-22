@@ -7,6 +7,107 @@ local counts,last={},{}
 local camera,photos=nil,{}
 local priorDamage,damageHook,priorCommand,commandHook
 local function log(s) Spring.Echo("[SeaArena] frame="..Spring.GetGameFrame().." "..s) end
+local coastLand,coastWidth,coastHeight
+local function factoryCoast(component)
+    local members={};for _,key in ipairs(component) do members[key]=true end
+    local result={}
+    local definition=UnitDefNames.armlab.id
+    for _,key in ipairs(component) do
+        local gx,gz=key%coastWidth,math.floor(key/coastWidth)
+        if gx%2==0 and gz%2==0 then
+            local x,z=gx*64+32,gz*64+32
+            local low,high,valid=math.huge,-math.huge,true
+            local previous={}
+            for dz=-80,80,16 do
+                local left
+                for dx=-80,80,16 do
+                    local px,pz=x+dx,z+dz
+                    local h=Spring.GetGroundHeight(px,pz)
+                    local cell=math.floor(pz/64)*coastWidth+math.floor(px/64)
+                    low=math.min(low,h);high=math.max(high,h)
+                    if h<0 or not members[cell] or high-low>12 or (left and math.abs(h-left)>4) or (previous[dx] and math.abs(h-previous[dx])>4) then valid=false;break end
+                    previous[dx]=h;left=h
+                end
+                if not valid then break end
+            end
+            -- Independent engine build check in addition to the terrain pad.
+            if valid and Spring.TestBuildOrder(definition,x,Spring.GetGroundHeight(x,z),z,0)>0 then
+                for dz=-10,10 do for dx=-10,10 do
+                    local cell=(gz+dz)*coastWidth+gx+dx
+                    if dx*dx+dz*dz<=100 and members[cell] then result[cell]=true end
+                end end
+            end
+        end
+    end
+    return result
+end
+local function prepareCoastLand()
+    if coastLand then return end
+    coastLand={};coastWidth=math.ceil(Game.mapSizeX/64);coastHeight=math.ceil(Game.mapSizeZ/64)
+    local dry,visited,sizeEligible={},{},{}
+    for z=0,coastHeight-1 do for x=0,coastWidth-1 do
+        local key=z*coastWidth+x
+        dry[key]=Spring.GetGroundHeight(x*64+32,z*64+32)>=0
+    end end
+    for seed=0,coastWidth*coastHeight-1 do
+        if dry[seed] and not visited[seed] then
+            local queue,head,interior={seed},1,0;visited[seed]=true
+            while head<=#queue do
+                local key=queue[head];head=head+1
+                local x,z=key%coastWidth,math.floor(key/coastWidth)
+                local neighbors={x>0 and key-1 or -1,x<coastWidth-1 and key+1 or -1,z>0 and key-coastWidth or -1,z<coastHeight-1 and key+coastWidth or -1}
+                local count=0
+                for _,n in ipairs(neighbors) do
+                    if dry[n] then
+                        count=count+1
+                        if not visited[n] then visited[n]=true;queue[#queue+1]=n end
+                    end
+                end
+                if count==4 then interior=interior+1 end
+            end
+            if #queue>=64 and interior>=16 then
+                if cfg.factory_coast then for _,key in ipairs(queue) do sizeEligible[key]=true end end
+                if cfg.factory_coast then
+                    for key in pairs(factoryCoast(queue)) do coastLand[key]=true end
+                else
+                    for _,key in ipairs(queue) do coastLand[key]=true end
+                end
+            end
+        end
+    end
+    if cfg.factory_coast then
+        local accepted,rejected,narrowed=0,0,0
+        for key=0,coastWidth*coastHeight-1 do
+            local x,z=key%coastWidth,math.floor(key/coastWidth)
+            if dry[key] and ((x>0 and not dry[key-1]) or (x<coastWidth-1 and not dry[key+1])
+                or (z>0 and not dry[key-coastWidth]) or (z<coastHeight-1 and not dry[key+coastWidth])) then
+                if coastLand[key] then accepted=accepted+1 else
+                    rejected=rejected+1
+                    if sizeEligible[key] then narrowed=narrowed+1 end
+                end
+            end
+        end
+        log("factory_coast accepted="..accepted.." rejected="..rejected.." narrowed="..narrowed)
+    end
+end
+-- Test-only independent terrain measurement, not an AI contour/cache query.
+local function coastDistance(x,z,limit)
+    prepareCoastLand()
+    local best=limit
+    for direction=0,31 do
+        local angle=direction*math.pi/16
+        for distance=32,best,32 do
+            local px,pz=x+math.cos(angle)*distance,z+math.sin(angle)*distance
+            if px>=0 and pz>=0 and px<=Game.mapSizeX and pz<=Game.mapSizeZ and Spring.GetGroundHeight(px,pz)>=0 then
+                -- Match the declared strategic land-size threshold, not the
+                -- earlier two-neighbor heuristic which included metal crags.
+                local key=math.floor(pz/64)*coastWidth+math.floor(px/64)
+                if coastLand[key] then best=distance;break end
+            end
+        end
+    end
+    return best
+end
 local function child(id)
     if not id or tracked[id] then return end
     local host=Spring.GetUnitRulesParam(id,"carrier_host_unit_id")
@@ -116,14 +217,27 @@ function widget:GameFrame(f)
         if not event.done and f>=event.second*30 then
             event.done=true
             local ids={}
-            for id,u in pairs(tracked) do
-                if u.team==event.team and UnitDefs[u.def].name==event.unit then ids[#ids+1]=id end
+            if event.include_untracked then
+                -- Explicit fixture-only removal also covers starting commanders,
+                -- which are created before the supplied-asset observer hooks.
+                ids=Spring.GetTeamUnitsByDefs(event.team,UnitDefNames[event.unit].id) or {}
+            else
+                for id,u in pairs(tracked) do
+                    if u.team==event.team and UnitDefs[u.def].name==event.unit then ids[#ids+1]=id end
+                end
             end
             table.sort(ids)
             Spring.SelectUnitArray(ids,false)
-            Spring.SendCommands("destroy")
+            Spring.SendCommands(event.include_untracked and "remove" or "destroy")
             Spring.SelectUnitArray({},false)
+            if event.include_untracked then event.removed_ids=ids;event.verify_frame=f+90 end
             log("fixture_removed team="..event.team.." unit="..event.unit.." count="..#ids)
+        end
+        if event.verify_frame and f>=event.verify_frame then
+            for _,id in ipairs(event.removed_ids) do
+                if Spring.GetUnitDefID(id) then log("ERROR fixture_removal_failed id="..id) end
+            end
+            event.verify_frame=nil
         end
     end
     if cfg.objective_observer and f%150==0 then
@@ -173,6 +287,14 @@ function widget:GameFrame(f)
                         .." health="..math.floor(health or 0).." maxhealth="..math.floor(maximum or 0).." patrol="..tostring(patrol)
                         .." target="..tostring(Spring.GetUnitRulesParam(id,"unitTargetID") or -1)
                         .." queue="..tostring(Spring.GetUnitCommandCount(id) or 0))
+                    if cfg.coast_observer and f%900==0 and (UnitDefs[u.def].name=="armsub" or UnitDefs[u.def].name=="armserp") then
+                        local range=0
+                        for _,weapon in ipairs(UnitDefs[u.def].weapons or {}) do
+                            local w=WeaponDefs[weapon.weaponDef]
+                            if w.waterWeapon then range=math.max(range,w.range) end
+                        end
+                        log("coast id="..id.." range="..range.." distance="..coastDistance(x,z,range+256))
+                    end
                 end
             end
         end

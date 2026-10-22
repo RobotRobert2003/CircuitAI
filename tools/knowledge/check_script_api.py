@@ -74,10 +74,14 @@ def script_uses(script_dir=SCRIPT_DIR):
             if not name.endswith(".as"):
                 continue
             path = os.path.join(dirpath, name)
+            try:
+                shown = os.path.relpath(path, ROOT)
+            except ValueError:  # staged scripts on another drive (benchmark store on H:)
+                shown = path
             for lineno, line in enumerate(read(path).splitlines(), 1):
                 code = line.split("//", 1)[0]
                 for g, m in RE_USE.findall(code):
-                    uses.append((os.path.relpath(path, ROOT), lineno, g, m))
+                    uses.append((shown, lineno, g, m))
     return uses
 
 

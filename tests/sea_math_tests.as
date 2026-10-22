@@ -1,3 +1,15 @@
+void test_control_requires_positive_survey_and_fleet_evidence() {
+    Check(SeaMath::ControlState(0,1000,300,90,0,10,.6f,600)==0);
+    Check(SeaMath::ControlState(0,1000,300,90,6,10,.6f,600)==3);
+    Check(SeaMath::ControlState(0,100,300,90,10,10,.6f,600)==0);
+    Check(SeaMath::ControlState(0,1000,30,90,10,10,.6f,600)==0);
+    Check(SeaMath::ControlState(0,1000,300,90,0,0,.6f,600)==0);
+}
+void test_control_revokes_on_contact_and_distinguishes_advantage() {
+    Check(SeaMath::ControlState(1000,1000,300,90,10,10,.6f,600)==1);
+    Check(SeaMath::ControlState(1000,1600,300,90,10,10,.6f,600)==2);
+    Check(SeaMath::ControlState(0,1600,300,90,5,10,.6f,600)==0);
+}
 void test_scout_raids_reject_hidden_submerged_allied_and_outmatching_targets() {
     Check(SeaMath::ScoutRaidTarget(32,true,false,300,0,96));
     Check(SeaMath::ScoutRaidTarget(0,true,true,650,300,96));
@@ -294,6 +306,20 @@ void test_shore_deadlines_prioritize_access_without_starving_interior() {
     Check(SeaMath::SurveyPriority(0,false,1500,300,0,12000)>SeaMath::SurveyPriority(2,false,90,90,0,12000));
     Check(SeaMath::SurveyPriority(2,false,90,90,0,12000)>SeaMath::SurveyPriority(2,false,90,90,6000,12000));
 }
+void test_enemy_shore_revisit_beats_ordinary_first_survey() {
+    // The scout-only priority floor leaves the old submarine ranks unchanged.
+    Check(SeaMath::SurveyPriority(6,false,90,90,6000,12000)
+        >SeaMath::SurveyPriority(2,true,0,90,0,12000));
+    Check(SeaMath::SurveyPriority(6,true,0,90,6000,12000)
+        >SeaMath::SurveyPriority(6,false,90,90,0,12000));
+    // Age still grows for other waters; this is a preference, not a permanent
+    // ban on surveying them. Fresh coast cells are filtered by the controller.
+    Check(SeaMath::SurveyPriority(0,false,3000,300,0,12000)
+        >SeaMath::SurveyPriority(6,false,90,90,0,12000));
+    // A remote end should be inspected before polishing adjacent coast cells.
+    Check(SeaMath::SurveyPriority(7,true,0,90,9000,12000)
+        >SeaMath::SurveyPriority(6,true,0,90,4000,12000));
+}
 void test_fleet_ratio_counts_pending_and_disables_zero_weights() {
     Check(SeaMath::CompositionDeficit(3,1)>SeaMath::CompositionDeficit(6,1));
     Check(SeaMath::CompositionDeficit(6,2)==SeaMath::CompositionDeficit(3,1));
@@ -341,4 +367,60 @@ void test_replacement_line_requires_numbers_and_health_adjusted_power() {
     Check(!SeaMath::ReplacementReady(6,900,1000,3,1.15f));
     Check(SeaMath::ReplacementReady(3,1200,1000,3,1.15f));
     Check(SeaMath::ReplacementReady(4,1600,0,3,1.15f));
+}
+
+void test_engaged_fleet_outranks_distant_yard() {
+    // D-301: an armed warship 600 away beats a yard 3000 away once engaged.
+    const float yard=SeaMath::ObjectiveScore(8|32,true,650,3000,false,false);
+    const float warship=SeaMath::ObjectiveScore(0,false,880,600,false,false);
+    Check(yard>warship);
+    Check(SeaMath::EngagedObjectiveScore(warship,true,3.0f)>yard);
+    Check(SeaMath::EngagedObjectiveScore(warship,false,3.0f)==warship);
+    Check(SeaMath::EngagedObjectiveScore(warship,true,1.0f)==warship);
+}
+void test_capital_ships_follow_the_cruiser_core() {
+    Check(SeaMath::CapitalTarget(3,4,3,3)==0);
+    Check(SeaMath::CapitalTarget(4,4,3,3)==1);
+    Check(SeaMath::CapitalTarget(7,4,3,3)==2);
+    Check(SeaMath::CapitalTarget(40,4,3,3)==3);
+    Check(SeaMath::CapitalTarget(9,4,0,3)==0);
+}
+
+void test_worker_groups_rotate_and_replace_missing_lead() {
+    Check(SeaMath::WorkerGroup(0,0,0)==0);
+    Check(SeaMath::WorkerGroup(1,0,0)==1);
+    Check(SeaMath::WorkerGroup(1,1,0)==2);
+    Check(SeaMath::WorkerGroup(1,1,1)==0);
+    Check(SeaMath::WorkerGroup(2,1,1)==1);
+    Check(SeaMath::WorkerGroup(2,2,1)==2);
+    Check(SeaMath::WorkerGroup(0,2,2)==0);
+}
+void test_tech_support_uses_work_and_completion_time() {
+    Check(SeaMath::TechSupportCount(18000,90,100,100,2)==2);
+    Check(SeaMath::TechSupportCount(45000,90,100,100,2)==4);
+    Check(SeaMath::TechSupportCount(45100,90,100,100,2)==5);
+    Check(SeaMath::TechSupportCount(100,90,100,100,2)==2);
+    Check(SeaMath::TechSupportCount(100,0,100,0,2)==2);
+}
+
+void test_tech_conversion_redirect_keeps_unneeded_conversion() {
+ Check(SeaMath::TechConversionRedirect(1000,200,100,100,100,1150,45,300)==10);
+}
+void test_tech_conversion_redirect_is_zero_when_funded() {
+ Check(SeaMath::TechConversionRedirect(2000,200,100,100,100,1150,45,300)==0);
+}
+void test_tech_conversion_redirect_cannot_invent_capacity() {
+ Check(SeaMath::TechConversionRedirect(0,200,100,100,100,1150,45,20)==20);
+}
+
+void test_hover_superior_needs_a_gun_a_hover_and_the_ratio() {
+    // A strong destroyer group against one hover holds; an equal force does not.
+    Check(SeaMath::HoverSuperior(true,4800,160,160,2.0f));
+    Check(!SeaMath::HoverSuperior(true,4800,4800,4800,2.0f));
+    Check(SeaMath::HoverSuperior(true,4800,2400,2400,2.0f));
+    Check(!SeaMath::HoverSuperior(true,4799,2400,2400,2.0f));
+    // Hover-blind or torpedo-only hulls never stand; no hover, no decision.
+    Check(!SeaMath::HoverSuperior(false,4800,160,160,2.0f));
+    Check(!SeaMath::HoverSuperior(true,4800,160,0,2.0f));
+    Check(!SeaMath::HoverSuperior(true,4800,0,160,0.0f));
 }

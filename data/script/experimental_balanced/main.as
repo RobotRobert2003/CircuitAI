@@ -58,6 +58,10 @@ namespace Main {
 		Global::RoleSettings::MexOwnershipEnabled = true;
 		// Also initialize before setupMap (and when reconstructing a saved game).
 		aiEconomyMgr.SetMexOwnership(true, Global::RoleSettings::MexOwnershipSeconds);
+		// D-352: mex ownership by theatre (home, sea, lanes, the race); the claim
+		// numbers go out with the roster once the role and start are known.
+		Global::RoleSettings::MexClaim::TheatresEnabled = true;
+		Team::MexClaim::Setup();
 		Global::RoleSettings::Air::FundFirstLab = true;
         Global::Commander::AfusDefenceRadius = Global::Commander::BaseRadius;
         Global::Commander::FrontRecovery = true;

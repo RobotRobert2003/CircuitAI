@@ -2,6 +2,7 @@
 #include "../../helpers/units/unit_helpers.as"
 #include "../../helpers/common/generic_helpers.as"
 #include "roster.as"
+#include "sea_tech.as"
 #include "donation.as"
 #include "sea_assist.as"
 #include "builder_recovery.as"
@@ -25,7 +26,7 @@ namespace Team {
     }
 
     // Shared experimental-role recovery, replacing spare-only orphan donations.
-    void CheckOrphaned() { Recovery::Update(); }
+    void CheckOrphaned() { Recovery::Update(); SeaTech::Tick(); }
 
     // True when teamId is on our ally team (ai.GetTeamIds() lists our own ally team).
     bool IsAlly(int teamId) {
@@ -46,6 +47,7 @@ namespace Team {
             GenericHelpers::LogUtil("[Team] Ignored message from non-allied team " + fromTeamId + ": " + msg, 2);
             return;
         }
+        if (SeaTech::Handle(msg, fromTeamId)) return;
         if (Roster::HandleMessage(msg, fromTeamId)) return;
         if (CommanderEnergy::HandleMessage(msg, fromTeamId)) return;
         if (GeoRelease::HandleMessage(msg, fromTeamId)) return;

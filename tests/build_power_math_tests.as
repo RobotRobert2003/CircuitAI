@@ -108,3 +108,9 @@ void test_seaplane_reserve_blocks_a_deficit_that_old_funding_admitted() {
     Check(BuildPowerMath::Funded(1950,500,80,80,0,1450,60,0,45));
     Check(!BuildPowerMath::Funded(1950,500,80,80,1,1450,60,0,45));
 }
+
+void test_tech_package_uses_income_without_impossible_storage_reserve() {
+ Check(!BuildPowerMath::Funded(5000,8000,1500,1200,0,10000,90,0,90));
+ Check(BuildPowerMath::Funded(5000,0,1500,1200,0,18000,90,0,90));
+ Check(!BuildPowerMath::Funded(5000,0,1000,1200,0,18000,90,0,90));
+}

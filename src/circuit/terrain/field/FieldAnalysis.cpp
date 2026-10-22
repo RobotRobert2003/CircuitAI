@@ -252,7 +252,10 @@ void Context::BuildMobility()
 	// D-326: the per-cell ground class the terrain view draws, read straight off
 	// the masks above so the picture and the analysis cannot disagree. O(cells).
 	m.groundOf.assign(cells, G_FLAT);
+	m.accessOf.assign(cells, 0);
 	for (int c = 0; c < n; ++c) {
+		for (int k = 0; k < _CLASSES_; ++k) if (mob[k][c] != NO_GO) m.accessOf[c] |= 1 << k;
+		if (hMax[c] <= -st.standoffDepths[2]) m.accessOf[c] |= 1 << 7;
 		const float depth = -hMean[c];
 		unsigned char gnd;
 		if (depth > 0.f && in.waterHarmful) gnd = G_HARM;
@@ -790,6 +793,60 @@ void Context::BuildRegions()
 		const SPoint& pb = regionCentroid[ch.b];
 		const float dx = pb.x - pa.x, dz = pb.z - pa.z, len = std::hypot(dx, dz);
 		ch.dir = len > 1e-3f ? SPoint{dx / len, dz / len} : SPoint{1.f, 0.f};
+		// Clearance contacts are candidates only. Fit the shortest local obstacle
+		// section, then require wider traversable approaches on both sides.
+		// O(P * C * 16 * K), C=8 profiles, K=passageProbeCells; no engine callbacks.
+		const SChoke candidate = ch;
+		const std::size_t passageStart = m.passages.size();
+		for (int cls = 0; cls < 8; ++cls) {
+		ch = candidate;
+		auto open = [&](SPoint p) {
+			const int x = (int)std::floor(p.x / cell), z = (int)std::floor(p.z / cell);
+			return g.Inside(x, z) && (m.accessOf[g.Index(x, z)] & (1 << cls));
+		};
+		auto ray = [&](SPoint p, SPoint d, SPoint& end) {
+			if (!open(p)) return -1.f;
+			for (int j = 1; j <= st.passageProbeCells * 2; ++j) {
+				const float dist = j * cell * 0.5f;
+				end = {p.x + d.x * dist, p.z + d.z * dist};
+				if (!open(end)) return dist - cell * 0.25f;
+			}
+			return -1.f; // unbounded within the configured neighbourhood
+		};
+		float best = 1e30f;
+		for (int angle = 0; angle < 16; ++angle) {
+			const float a = angle * 3.14159265f / 16.f;
+			const SPoint cross{std::cos(a), std::sin(a)}, along{-cross.z, cross.x};
+			SPoint ea, eb, unused;
+			const float left = ray(ch.pos, cross, ea), right = ray(ch.pos, {-cross.x, -cross.z}, eb);
+			const float width = left + right;
+			if (left <= 0 || right <= 0 || width >= best) continue;
+			bool wider = true;
+			for (int sign : {-1, 1}) {
+				const SPoint p{ch.pos.x + sign * along.x * width, ch.pos.z + sign * along.z * width};
+				// Check the entire approach, not just its far end.
+				for (float d = 0; d <= width && wider; d += cell * 0.5f)
+					wider = open({ch.pos.x + sign * along.x * d, ch.pos.z + sign * along.z * d});
+				const float l = ray(p, cross, unused), r = ray(p, {-cross.x, -cross.z}, unused);
+				wider = wider && l > 0 && r > 0 && l + r >= width * st.passageExpansion;
+			}
+			if (!wider) continue;
+			best = width; ch.qualified = true; ch.width = width; ch.dir = along;
+			ch.endA = {ch.pos.x + cross.x * left, ch.pos.z + cross.z * left};
+			ch.endB = {ch.pos.x - cross.x * right, ch.pos.z - cross.z * right};
+			ch.classMask = 1 << cls;
+		}
+		if (ch.qualified) {
+			// Merge identical sections so comparison draws one shared glyph.
+			auto same = std::find_if(m.passages.begin() + passageStart, m.passages.end(), [&](const SChoke& p) {
+				return p.cell == ch.cell && std::hypot(p.endA.x-ch.endA.x,p.endA.z-ch.endA.z)<1.f
+					&& std::hypot(p.endB.x-ch.endB.x,p.endB.z-ch.endB.z)<1.f;
+			});
+			if (same != m.passages.end()) same->classMask |= ch.classMask;
+			else { ch.id = Count(m.passages); m.passages.push_back(ch); }
+		}
+		}
+		ch = candidate;
 		m.chokes.push_back(ch);
 		chokePairs.insert(kv.first);
 	}
@@ -912,6 +969,16 @@ void Context::BuildBoundaries()
 			for (int k = 0; k < kGroundClasses; ++k) if (mob[k][ca] != NO_GO && mob[k][cb] != NO_GO) passMask[i] |= (1 << k);
 			if (shore) band[i] = (!landOk[i] || slopeDeg[i] > 54.f) ? 2 : (slopeDeg[i] > 33.f ? 1 : 0);
 			else band[i] = slopeDeg[i] > 54.f ? 2 : (slopeDeg[i] > 27.f ? 1 : 0);
+			if (!shore && !waterA && band[i] == 0 && slopeDeg[i] >= 3.f) {
+				// A ramp is local to this edge. A distant high part of either
+				// watershed region must not promote a flat border into a ramp.
+				const int dx = g.X(cb)-g.X(ca), dz = g.Z(cb)-g.Z(ca);
+				const int ax = std::clamp(g.X(ca)-dx*beachCells,0,g.gw-1);
+				const int az = std::clamp(g.Z(ca)-dz*beachCells,0,g.gh-1);
+				const int bx = std::clamp(g.X(cb)+dx*beachCells,0,g.gw-1);
+				const int bz = std::clamp(g.Z(cb)+dz*beachCells,0,g.gh-1);
+				if (std::abs(hMean[g.Index(ax,az)]-hMean[g.Index(bx,bz)]) >= st.rampMinRise) band[i] = 3;
+			}
 		}
 		if (!waterA && !waterB) {
 			// a plateau is higher than every land neighbour, a valley lower than
@@ -920,7 +987,7 @@ void Context::BuildBoundaries()
 			neighbourH[b] = std::max(neighbourH[b], (double)m.regions[a].meanH); neighbourW[b] = std::min(neighbourW[b], (double)m.regions[a].meanH);
 			hasNeighbour[a] = hasNeighbour[b] = 1;
 		}
-		for (int bandId = 0; bandId < 3; ++bandId) {
+		for (int bandId = 0; bandId < 4; ++bandId) {
 			std::vector<int> members;
 			for (int i = 0; i < total; ++i) if (band[i] == bandId) members.push_back(i);
 			if (members.empty()) continue;
@@ -941,7 +1008,7 @@ void Context::BuildBoundaries()
 				if (bandId == 2) kind = B_CLIFF;
 				else if (botIn && !vehIn && (m.regions[a].vehFraction >= 0.5f || m.regions[b].vehFraction >= 0.5f)) kind = B_PASS;
 				else if (bandId == 1) kind = B_CLIMB;
-				else kind = choke ? B_RAMP : B_OPEN;
+				else kind = bandId == 3 ? B_RAMP : B_OPEN;
 			} else if (shore) {
 				const bool wd = wadeable * 2 >= n;
 				if (bandId == 2) { kind = B_SHEER; classMask = 0; }
@@ -1007,6 +1074,7 @@ void Context::BuildLandings()
 		ld.inland = (ld.side >= 0 && ld.side < Count(boxDist)) ? boxDist[ld.side][land] * cell : -1.f;
 		ld.line = bd.line;
 		ld.mid = bd.line[bd.line.size() / 2];
+		ld.inlandDir = {static_cast<float>(g.X(land)-g.X(water)), static_cast<float>(g.Z(land)-g.Z(water))};
 		const int wx = g.X(water), wz = g.Z(water);
 		for (int k = 0; k < 3; ++k) {
 			float best = -1.f;
@@ -1217,6 +1285,29 @@ void Context::Finish()
 	std::uint64_t h = 1469598103934665603ULL;
 	h = Fnv1a(h, regionOf.data(), regionOf.size() * sizeof(int));
 	h = Fnv1a(h, m.groundOf.data(), m.groundOf.size());
+	h = Fnv1a(h, m.accessOf.data(), m.accessOf.size() * sizeof(int));
+	h = Fnv1a(h, hMean.data(), hMean.size() * sizeof(float));
+	h = Fnv1a(h, in.mapName.data(), in.mapName.size());
+	for (const STeamInput& team : in.teams) {
+		h = Fnv1a(h, &team.team, sizeof(team.team)); h = Fnv1a(h, &team.allyTeam, sizeof(team.allyTeam));
+		h = Fnv1a(h, &team.known, sizeof(team.known));
+		h = Fnv1a(h, &team.x, sizeof(team.x)); h = Fnv1a(h, &team.z, sizeof(team.z));
+	}
+	for (const SClusterInput& cl : in.clusters) {
+		h = Fnv1a(h, &cl.x, sizeof(cl.x)); h = Fnv1a(h, &cl.z, sizeof(cl.z)); h = Fnv1a(h, &cl.income, sizeof(cl.income));
+	}
+	for (const SBoundary& bd : m.boundaries) {
+		h = Fnv1a(h, &bd.kind, sizeof(bd.kind));
+		h = Fnv1a(h, &bd.classMask, sizeof(bd.classMask));
+	}
+	for (const SChoke& ch : m.passages) {
+		h = Fnv1a(h, &ch.qualified, sizeof(ch.qualified));
+		h = Fnv1a(h, &ch.width, sizeof(ch.width));
+		h = Fnv1a(h, &ch.endA.x, sizeof(ch.endA.x));
+		h = Fnv1a(h, &ch.endA.z, sizeof(ch.endA.z));
+		h = Fnv1a(h, &ch.endB.x, sizeof(ch.endB.x));
+		h = Fnv1a(h, &ch.endB.z, sizeof(ch.endB.z));
+	}
 	const int counts[] = {Count(m.theatres), Count(m.regions), Count(m.boundaries), Count(m.chokes), Count(m.avenues), Count(m.landings)};
 	h = Fnv1a(h, counts, sizeof(counts));
 	m.fingerprint = h;

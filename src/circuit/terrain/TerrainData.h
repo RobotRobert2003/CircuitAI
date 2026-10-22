@@ -199,7 +199,15 @@ public:
 
 // >>> RAI's GlobalTerrainMap ---- BEGIN
 	int GetSectorIndex(const springai::AIFloat3& position) const {  // use IsSectorValid() to insure the index is valid
-		return sectorXSize * (int(position.z) / convertStoP) + int(position.x) / convertStoP;
+		// D-302/KI-612: geom::is_in_map admits x == maxxpos and z == maxzpos,
+		// whose division lands one past the last row/column (x wrapped into the
+		// next row; z read past the table: Shore to Shore crashes). Fold only
+		// that edge back; positions further off the map keep their old index.
+		int x = int(position.x) / convertStoP;
+		int z = int(position.z) / convertStoP;
+		if (x == sectorXSize) x = sectorXSize - 1;
+		if (z == sectorZSize) z = sectorZSize - 1;
+		return sectorXSize * z + x;
 	}
 	bool IsSectorValid(const int& sIndex) {
 		return (sIndex >= 0) && (sIndex < sectorXSize * sectorZSize);

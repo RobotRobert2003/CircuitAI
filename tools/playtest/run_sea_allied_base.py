@@ -17,7 +17,7 @@ def main():
     print('SEA_BASE_DIRECTORY='+str(d),flush=True)
     call=[sys.executable,str(playtest.HERE/'playtest.py')]
     cmd=call+['stage','--dir',str(d),'--dll',str(args.dll),'--data',str(playtest.REPO/'data'),
-        '--map',map_name,'--game','Beyond All Reason test-31479-433a460','--engine','recoil_2026.07.04',
+        '--map',map_name,'--engine','recoil_2026.07.04',
         '--role','SEA','--roles','SEA' if args.supplied else 'SEA,AIR,TECH','--side','armada','--bonus','0',
         '--ai-option','profile=experimental_hard','--ai-option','random_seed=1921','--speed','15','--minutes',str(minutes),
         '--shots',shots,
