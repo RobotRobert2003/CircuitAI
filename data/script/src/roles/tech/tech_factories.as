@@ -94,6 +94,10 @@ namespace TechFactories {
         bool earlyGantry = false; // budget/path checks apply only to this optional admission
         IUnitTask@ gantrySupportTask; // native owns its command/recovery lifecycle
         IUnitTask@ labTask;          // the factory's order while it lives (builders join it)
+        IUnitTask@ refillTask;       // a lost turret's order while it lives (builders join it)
+        int refillFrame = -100000;   // the last lost turret order
+        int refillTries = 0;         // lost turret orders since a turret last finished
+        int refillDone = 0;          // its turrets standing at that order
         Row@ row;                    // D-117: a T1 spam lab's row
         int rowK = 0;                // D-117: its place in the row (0 = the row's first lab)
         int invOpenLog = -100000;    // INV-046
@@ -824,12 +828,24 @@ namespace TechFactories {
     // A standing factory's lost turret is rebuilt (played: INV-038, a cluster 56%
     // toward the front lost both turrets and nothing rebuilt them while its lab
     // stood). `minTier`/`maxTier` pick the clusters.
+    // A cluster whose lost turret orders die without a turret finishing waits
+    // 30 s more per order, up to 5 min (played 2026-10-22: slots under fire
+    // were re-ordered 5,702 times in 10 minutes, about 10 build orders a
+    // second, and lagged the host's link)
+    bool RefillDue(Cluster@ c)
+    {
+        if (c.refillTask !is null && !c.refillTask.IsDead()) return c.refillTask.GetUnits().length() < 2;
+        if (c.refillTries == 0) return true;
+        if (FinishedTurrets(c) > c.refillDone) { c.refillTries = 0; return true; }
+        return ai.frame - c.refillFrame >= AiMin(300, 30 * c.refillTries) * SECOND;
+    }
     bool RefillWanted(int minTier, int maxTier)
     {
         for (uint i = 0; i < clusters.length(); ++i) {
             Cluster@ c = clusters[i];
             if (c.tier < minTier || c.tier > maxTier || LabAt(c) is null) continue;
-            if (aiTerrainMgr.NextSlotAny(c.nanoGroup, c.pos) >= 0) return true;
+            const int sid = aiTerrainMgr.NextSlotAny(c.nanoGroup, c.pos);
+            if (sid >= 0 && RefillDue(c)) return true;
         }
         return false;
     }
@@ -842,8 +858,13 @@ namespace TechFactories {
             Cluster@ c = clusters[i];
             if (c.tier < minTier || c.tier > maxTier || LabAt(c) is null) continue;
             const int sid = aiTerrainMgr.NextSlotAny(c.nanoGroup, c.pos);
-            if (sid < 0) continue;
-            return OrderPinned(u, Task::BuildType::NANO, nano, sid, "a lost turret of front cluster " + (i + 1) + " (" + c.defName + ")");
+            if (sid < 0 || !RefillDue(c)) continue;
+            // its order still lives: a builder joins it, never a second order
+            if (c.refillTask !is null && !c.refillTask.IsDead()) return c.refillTask;
+            @c.refillTask = null;
+            IUnitTask@ t = OrderPinned(u, Task::BuildType::NANO, nano, sid, "a lost turret of front cluster " + (i + 1) + " (" + c.defName + ")");
+            if (t !is null) { @c.refillTask = t; c.refillFrame = ai.frame; c.refillDone = FinishedTurrets(c); ++c.refillTries; }
+            return t;
         }
         return null;
     }
