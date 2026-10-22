@@ -2,7 +2,8 @@
 #include "../../helpers/common/generic_helpers.as"
 
 // Owner (2026-10-19): Thugs and Maces always fire at will; Legion Barrage and
-// Medusa too (owner 2026-10-20); Thanatos and Inferno (owner 2026-10-21).
+// Medusa too (owner 2026-10-20); Thanatos and Inferno (owner 2026-10-21);
+// Legion Satyr gets the same micro as Thugs and Maces (owner 2026-10-22).
 //
 // The C++ ranged controller puts every unit it takes over on hold fire and
 // shoots only its chosen priority target. That suits slow artillery, which
@@ -26,7 +27,7 @@ namespace ThugFireAtWill {
         if (unit is null || unit.circuitDef is null) return false;
         const string name = unit.circuitDef.GetName();
         return name == "corthud" || name == "armham" || name == "legbar" || name == "legmed"
-            || name == "leghrk" || name == "leginf";
+            || name == "leghrk" || name == "leginf" || name == "leglob";
     }
 
     final class Hull {

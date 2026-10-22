@@ -715,12 +715,31 @@
 			},
 			"legbal": {
 				"role": ["skirmish"],
+				"attribute": ["ranged"],
+				// Owner 2026-10-22: same micro as Rocketeer/Aggravator.
+				"ranged": {"coordinated": true,
+                "sustained_rush": true,
+                "sustained_rush_ratio": 2.0,
+                "sustained_rush_radius": 900.0,
+                "sustained_rush_min_front": 8,
+                "sustained_rush_remaining": 0.25,
+                "sustained_rush_cooldown": 20.0,
+                "sustained_rush_range": 0.8, "range_fraction": 0.95, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "move_min_seconds": 1, "target_min_seconds": 1, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "catch_seconds": 6, "engagement_seconds": 12, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.25, "static_loss_fraction": 0.08, "intent_gain": 0.20, "formation": {"family": "t1_bot_line", "position": "rear", "separation_minimum": 64, "separation_maximum": 96, "withdrawal_lead_seconds": 1.0}},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
 			"leglob": {
 				"role": ["skirmish", "spam"],
-				"attribute": ["raider"],
+				"attribute": ["raider", "ranged"],
+				// Owner 2026-10-22: same micro as Thug/Mace.
+				"ranged": {"coordinated": true,
+                "sustained_rush": true,
+                "sustained_rush_ratio": 2.0,
+                "sustained_rush_radius": 900.0,
+                "sustained_rush_min_front": 8,
+                "sustained_rush_remaining": 0.25,
+                "sustained_rush_cooldown": 20.0,
+                "sustained_rush_range": 0.8, "formation": {"family": "t1_bot_line", "position": "front"}, "range_fraction": 0.95, "poke_in": 0.95, "poke_in_dominant": 0.90, "poke_out": 1.05, "poke_ratio": 1.5, "poke_health": 0.8, "poke_press_health": 0.5, "poke_pause_seconds": 5, "fire_at_will": true, "spacing": 64, "safety_margin": 4, "range_hysteresis": 16, "reaction_seconds": 1.25, "move_min_seconds": 1, "target_min_seconds": 1, "cohort_size": 12, "cohort_radius": 900, "regroup_seconds": 8, "rush_ratio": 1.5, "catch_seconds": 6, "engagement_seconds": 12, "support_allies": true, "support_loss_fraction": 0.70, "intent_gain": 0.20, "advantage_enter": 1.4, "advantage_exit": 1.1, "loss_fraction": 0.4, "static_loss_fraction": 0.12},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
