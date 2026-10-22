@@ -45,6 +45,7 @@ namespace Air {
             float AntiNukeEnergyIncome = 1200.0f;
             int AntiNukeAfterSeconds = 15 * 60;
             int EnergyParallel = 6;
+            float AdvancedSolarMinimumBankEnergy = 500.0f; // Keep solar growth reachable on low-wind maps.
             float SmallProjectSeconds = 12.0f;
             float ReactorProjectSeconds = 120.0f;
             int ConstructorsPerFighter = 2;

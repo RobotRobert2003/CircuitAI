@@ -489,7 +489,7 @@
 			},
 			"legsolar" : {
 				"role": ["static"],
-				"limit": 4
+				"limit": 5
 			},
 			"legadvsol" : {
 				"role": ["static"],
@@ -802,6 +802,7 @@
 				"power": 1.0
 			},
 			"leghrk": {
+				"fire_state": 2,
 				"role": ["artillery"],
 				"attribute": ["siege"],
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
@@ -997,6 +998,7 @@
 				"power": 1.0
 			},
 			"leginf": {
+				"fire_state": 2,
 				"role": ["artillery"],
 				"attribute": ["siege"],
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},

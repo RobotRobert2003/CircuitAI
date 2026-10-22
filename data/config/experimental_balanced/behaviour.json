@@ -1049,7 +1049,7 @@
 			},
 			"armsolar" : {
 				"role": ["static"],
-				"limit": 4
+				"limit": 5
 			},
 			"armadvsol" : {
 				"role": ["static"],

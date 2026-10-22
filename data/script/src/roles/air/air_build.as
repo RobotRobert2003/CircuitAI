@@ -752,10 +752,10 @@ namespace AirBuild {
         if ((!emergency || bank) && t2 && (mexesReady || bank) && (AirEconomy::metal >= 30.0f || bank) && AirEconomy::bankM > 500.0f) names.insertLast(fusion);
         const float wind = (ai.GetWindMin() + ai.GetWindMax()) * 0.5f;
         const string advSolar = UnitHelpers::GetAdvSolarNameForSide(side);
-        if ((!emergency || bank) && (AirEconomy::metal >= 15.0f || bank) && AirEconomy::bankE >= 1800.0f && AirEconomy::Count(advSolar) < 6)
+        if ((!emergency || bank) && (AirEconomy::metal >= 15.0f || bank) && AirEconomy::bankE >= Global::RoleSettings::Air::AdvancedSolarMinimumBankEnergy && AirEconomy::Count(advSolar) < 6)
             names.insertLast(advSolar);
         if (wind > Global::RoleSettings::Air::GoodWindMinimumEnergy && (!emergency || ai.GetWindMin() > 4.0f)) names.insertLast(UnitHelpers::GetWindNameForSide(side));
-        if (!emergency && AirEconomy::metal > 15.0f && AirEconomy::bankE > 1500.0f) names.insertLast(UnitHelpers::GetAdvSolarNameForSide(side));
+        if (!emergency && AirEconomy::metal > 15.0f && AirEconomy::bankE >= Global::RoleSettings::Air::AdvancedSolarMinimumBankEnergy) names.insertLast(advSolar);
         names.insertLast(UnitHelpers::GetSolarNameForSide(side));
         names.insertLast(UnitHelpers::GetTidalNameForSide(side));
         for (uint i = 0; i < names.length(); ++i) {

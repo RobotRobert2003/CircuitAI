@@ -2,7 +2,7 @@
 #include "../../helpers/common/generic_helpers.as"
 
 // Owner (2026-10-19): Thugs and Maces always fire at will; Legion Barrage and
-// Medusa too (owner 2026-10-20).
+// Medusa too (owner 2026-10-20); Thanatos and Inferno (owner 2026-10-21).
 //
 // The C++ ranged controller puts every unit it takes over on hold fire and
 // shoots only its chosen priority target. That suits slow artillery, which
@@ -13,7 +13,7 @@
 // changed since we last did, and re-assert it every ResendSeconds anyway.
 // Every other unit keeps its fire state. Works with any DLL.
 //
-// Cost: O(T) per second for T Thugs and Maces; one fire-state command per
+// Cost: O(T) per second for T tracked hulls; one fire-state command per
 // unit per task change, plus one per ResendSeconds.
 namespace ThugFireAtWill {
     bool Enabled = false; // the profile that polls Tick owns the tracked hulls
@@ -25,7 +25,8 @@ namespace ThugFireAtWill {
     {
         if (unit is null || unit.circuitDef is null) return false;
         const string name = unit.circuitDef.GetName();
-        return name == "corthud" || name == "armham" || name == "legbar" || name == "legmed";
+        return name == "corthud" || name == "armham" || name == "legbar" || name == "legmed"
+            || name == "leghrk" || name == "leginf";
     }
 
     final class Hull {
