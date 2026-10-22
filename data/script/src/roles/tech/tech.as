@@ -299,6 +299,42 @@ namespace RoleTech
 			+ " adv solar limit " + (adv is null ? -1 : aiEconomyMgr.GetEnergyLimit(adv)), 1);
 	}
 
+	// T3 rush opening (owner, 2026-10-14; ported 2026-10-22): on the t3rush plan the
+	// gantries build the side's T3RushArmada / T3RushCortex / T3RushLegion units in
+	// turn, T3RushUnitCount in all. After that, or when neither unit can be built
+	// here (water gantry, cap, the D-287 late latch on Shiva), null: ordinary
+	// gantry production runs.
+	int g_t3RushNext = 0;
+	int g_t3RushOrdered = 0;   // rush units ordered so far, every gantry together
+	IUnitTask@ Tech_T3RushProduce(CCircuitUnit@ gantry, const string &in side)
+	{
+		if (TechPlan::plan != "t3rush" || gantry is null) return null;
+		if (g_t3RushOrdered >= Global::RoleSettings::Tech::T3RushUnitCount) return null;   // released
+		array<string> pair;
+		if (side == "armada") pair = Global::RoleSettings::Tech::T3RushArmada;
+		else if (side == "cortex") pair = Global::RoleSettings::Tech::T3RushCortex;
+		else pair = Global::RoleSettings::Tech::T3RushLegion;
+		for (uint k = 0; k < pair.length(); ++k)
+		{
+			const uint i = (uint(g_t3RushNext) + k) % pair.length();
+			if (TechHeavyChoice::IsMarauderClass(pair[i]) && !TechHeavyChoice::MarauderAllowed()) continue;
+			CCircuitDef@ d = ai.GetCircuitDef(pair[i]);
+			if (d is null || !gantry.circuitDef.CanBuild(d)) continue;
+			if (d.maxThisUnit <= d.count) d.maxThisUnit = d.count + 1;   // TECH's start caps may hold combat units at 0
+			if (!d.IsAvailable(ai.frame)) continue;
+			IUnitTask@ t = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::FIREPOWER, Task::Priority::HIGH, d, gantry.GetPos(ai.frame), 64.f));
+			if (t is null) continue;
+			g_t3RushNext = int((i + 1) % pair.length());
+			++g_t3RushOrdered;
+			GenericHelpers::LogUtil("[TECH][T3Rush] " + gantry.circuitDef.GetName() + " builds " + pair[i] + " (" + g_t3RushOrdered
+				+ " of " + Global::RoleSettings::Tech::T3RushUnitCount + ")", 1);
+			if (g_t3RushOrdered >= Global::RoleSettings::Tech::T3RushUnitCount)
+				GenericHelpers::LogUtil("[TECH][T3Rush] " + g_t3RushOrdered + " ordered: gantry production released to ordinary weighting", 1);
+			return t;
+		}
+		return null;
+	}
+
 	// D-068: the one income under which TECH's labs make no combat unit while the
 	// experimental build system is on. The legacy gates (the T2 rush's early gate,
 	// the bot-lab and vehicle-plant expansion gates) are raised to it, never
@@ -1030,6 +1066,9 @@ namespace RoleTech
             IUnitTask@ pending = aiFactoryMgr.GetPendingFactoryTask(u);
             if (pending !is null) return pending;
 			GenericHelpers::LogUtil("[TECH][Factory] Gantry detected ('" + facDef.GetName() + "')", 3);
+			// T3 rush opening (owner): the side's two units in turn, T3RushUnitCount in all
+			IUnitTask@ t3rush = Tech_T3RushProduce(u, side);
+			if (t3rush !is null) return t3rush;
             IUnitTask@ amphib = AmphibiousOps::Produce(u, botLabGate);
             if (amphib !is null) return amphib;
 			// If economy is very strong, queue a batch of signature experimentals.
