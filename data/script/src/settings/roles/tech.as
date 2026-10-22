@@ -275,6 +275,13 @@ namespace Tech {
             // T3RushTurretsRampTo, never past the block the layout reserved (0: it stays at the roll)
             int T3RushTurretsRampSeconds = 0;
             int T3RushTurretsRampTo = 0;
+            // T3 rush opening (owner, 2026-10-14, ported 2026-10-22): on the t3rush plan the gantries build the
+            // side's two units in turn, T3RushUnitCount in all, then ordinary gantry production (0: off)
+            // (roles/tech/tech.as Tech_T3RushProduce, [TECH][T3Rush])
+            array<string> T3RushArmada = { "armraz", "armvang" };                   // Razorback + Vanguard
+            array<string> T3RushCortex = { "corshiva", "corcat" };                  // Shiva + Catapult
+            array<string> T3RushLegion = { "legerailtank", "legeallterrainmech" };  // Daedalus + Myrmidon
+            int T3RushUnitCount = 10;
             int FrontReclaimAtCount = 3;                    // D-114: this many land factories on the map retire the base's land factories
             float FrontBaseRadius = 1200.0f;                // D-114: a land factory within this of the base centre is the base's
             int FrontBaseReclaimSeconds = 240;              // D-114: INV-044: a base land factory still standing this long after the count is reached
