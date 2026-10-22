@@ -224,7 +224,7 @@ namespace Tech {
             bool EarlyGantryEnabled = false; // experimental_balanced opts in
             int EarlyGantryIncomeWindowSeconds = 10;
             int EarlyGantryMaximumSampleGapSeconds = 2;
-            float EarlyGantryMetalIncome = 200.0f;
+            float EarlyGantryMetalIncome = 175.0f;  // owner, 2026-10-22: the t3rush first gantry at 175 metal per second
             int EarlyGantryAttemptSeconds = 180;
             float GantryFundingSeconds = 180.0f;
             float GantryFundingShare = 0.70f;
@@ -262,8 +262,9 @@ namespace Tech {
             // is a persisted high-water mark (a dip never lowers it); a new order also
             // needs income >= (have + 1) x step x GantryScaleDropShare right now.
             bool GantryScaleEnabled = true;
-            float GantryScaleMetalStep = 500.0f;
-            float GantryScaleFirstMetal = 400.0f;       // owner, 2026-10-19: the first gantry at this income (not the t3rush plan, which keeps GantryScaleMetalStep); 0 = the step
+            float GantryScaleMetalStep = 400.0f;        // owner, 2026-10-22: 400 (was 500)
+            float GantryScaleFirstMetal = 400.0f;       // owner, 2026-10-19: the first gantry at this income (not the t3rush plan, see below); 0 = the step
+            float GantryScaleFirstMetalT3Rush = 175.0f; // owner, 2026-10-22: the t3rush plan's first gantry at this 10 s minimum income; 0 = the step
             float GantryScaleDropShare = 0.80f;
             float GantryScaleEnergyFloor = 0.0f;        // optional absolute E/s floor (0 = metal only, the owner's rule)
             int GantryScaleMax = 6;
