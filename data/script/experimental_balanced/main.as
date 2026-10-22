@@ -75,6 +75,7 @@ namespace Main {
         Global::RoleSettings::Tech::NukeRushSecondCallLimit = 8;
         Global::RoleSettings::Tech::NukeRushSiloPerAfus = true;
         Global::RoleSettings::Tech::NukeLimit = 15;
+        Global::RoleSettings::Tech::HeavyAlternate = true; // owner 2026-10-22: late heavy batches alternate Thor / Titan (land and amphibious)
         Global::RoleSettings::Tech::NukeRushAfusSiloMetalIncome = 50.0f;
         Global::RoleSettings::Tech::NukeRushAfusSiloEnergyIncome = 2000.0f;
         Global::Military::NoTelchines = true;
