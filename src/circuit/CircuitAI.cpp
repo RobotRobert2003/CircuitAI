@@ -844,6 +844,7 @@ int CCircuitAI::Release(int reason)
 		delete kv.second;
 	}
 	teamUnits.clear();
+	ownedUnits.clear();
 	garbage.clear();
 	for (CCircuitUnit* unit : graveyard) {  // D-111
 		delete unit;
@@ -1371,6 +1372,7 @@ int CCircuitAI::UnitGiven(ICoreUnit::Id unitId, int oldTeamId, int newTeamId)
 		}
 	)
 	for (auto& module : modules) {
+		if (!IsOwnedUnit(unit)) break; // an earlier hook may donate it again
 		module->UnitGiven(unit, oldTeamId, newTeamId);
 	}
 
@@ -1637,6 +1639,7 @@ CCircuitUnit* CCircuitAI::RegisterTeamUnit(ICoreUnit::Id unitId, Unit* u)
 	unit->SetArea(area);
 
 	teamUnits[unitId] = unit;
+	ownedUnits.insert(unit);
     if (commanderControl) commanderControl->Join(unit);
     ++ownedUnitRevision;
 	cdef->Inc();
@@ -1651,6 +1654,7 @@ CCircuitUnit* CCircuitAI::RegisterTeamUnit(ICoreUnit::Id unitId, Unit* u)
 
 void CCircuitAI::UnregisterTeamUnit(CCircuitUnit* unit)
 {
+	if (ownedUnits.erase(unit) == 0) return; // duplicate/stale transfer cleanup
     if (commanderControl) commanderControl->Leave(unit->GetId());
     builderManager->ForgetUnfinishedCount(unit);
 	teamUnits.erase(unit->GetId());
@@ -1684,16 +1688,26 @@ void CCircuitAI::DeleteTeamUnit(CCircuitUnit* unit)
 
 void CCircuitAI::GiveUnits(std::vector<CCircuitUnit*>&& units, int newTeamId)
 {
-	// NOTE: See notes in MobileSlave or other economy->SendUnits places
+	if (newTeamId == teamId || newTeamId < 0) return;
 	std::vector<Unit*> migrants;
 	migrants.reserve(units.size());
 	for (CCircuitUnit* unit : units) {
-		migrants.push_back(unit->GetUnit());
-		// Units only marked for deletion, should be safe
+		if (!IsOwnedUnit(unit)) continue;
+		Unit* migrant = unit->GetUnit();
 		UnitDestroyed(unit, nullptr);
+		// Hooks can recursively donate another offered unit. Registration alone
+		// is checked here: this unit is intentionally marked destroying already.
+		if (ownedUnits.find(unit) == ownedUnits.end()) continue;
 		UnregisterTeamUnit(unit);
+		migrants.push_back(migrant);
 	}
-	economy->SendUnits(migrants, newTeamId);
+	if (!migrants.empty()) economy->SendUnits(migrants, newTeamId);
+}
+
+bool CCircuitAI::IsOwnedUnit(const CCircuitUnit* unit) const
+{
+	return ownedUnits.find(unit) != ownedUnits.end()
+		&& !unit->IsDead() && !unit->IsDestroying() && unit->GetCircuitDef() != nullptr;
 }
 
 void CCircuitAI::Garbage(CCircuitUnit* unit, const char* reason)

@@ -1,4 +1,5 @@
 #include "script/RefCounter.h"
+#include "util/LifetimeRegistry.h"
 #include <cassert>
 #include <cstdio>
 #include <initializer_list>
@@ -6,11 +7,16 @@
 namespace {
 struct Task : circuit::IRefCounter<Task> {
     static inline int live = 0;
-    Task() { ++live; }
-    ~Task() override { --live; }
+    static inline circuit::LifetimeRegistry<Task> registry;
+    Task() { ++live; registry.Insert(this); }
+    ~Task() override { registry.Erase(this); --live; }
+    static std::uint64_t Lookup(const Task* task) { return registry.Find(task); }
 };
 struct BuilderTask final : Task {};
 Task* unitTask = nullptr;
+std::uint64_t taskGeneration = 0;
+struct Unit {} unit;
+Unit* unitPointer = &unit;
 void AddRef(asIScriptGeneric* call) { static_cast<Task*>(call->GetObject())->AddRef(); }
 void Release(asIScriptGeneric* call) { static_cast<Task*>(call->GetObject())->Release(); }
 void CastBuilder(asIScriptGeneric* call) {
@@ -22,12 +28,19 @@ void GetTask(asIScriptGeneric* call) {
     if (unitTask) unitTask->AddRef();
     call->SetReturnAddress(unitTask);
 }
+void GetLiveTask(asIScriptGeneric* call) {
+    // Same borrowed auto-handle contract as CCircuitUnit.get_task.
+    call->SetReturnAddress(circuit::LiveReference(unitTask, taskGeneration, Task::Lookup));
+}
+void Invalidate(asIScriptGeneric*) {
+    delete unitTask; // simulate a legacy direct delete bypassing ownership
+}
 void Replace(asIScriptGeneric* call) {
     Task* managerTask = call->GetArgByte(0) ? static_cast<Task*>(new BuilderTask) : new Task;
-    circuit::AssignOwnedReference(unitTask, managerTask);
+    assert(circuit::ReplaceLiveReference(unitTask, taskGeneration, managerTask, Task::Lookup));
     managerTask->Release(); // Manager ownership ends before script casts/retains it.
 }
-void Clear(asIScriptGeneric*) { circuit::AssignOwnedReference(unitTask, static_cast<Task*>(nullptr)); }
+void Clear(asIScriptGeneric*) { assert(circuit::ReplaceLiveReference(unitTask, taskGeneration, static_cast<Task*>(nullptr), Task::Lookup)); }
 void Check(asIScriptGeneric* call) { assert(call->GetArgByte(0)); }
 void Message(const asSMessageInfo* message, void*) { std::fprintf(stderr, "%s:%d %s\n", message->section, message->row, message->message); }
 }
@@ -46,9 +59,23 @@ int main() {
     assert(engine->RegisterGlobalFunction("void Replace(bool)", asFUNCTION(Replace), asCALL_GENERIC) >= 0);
     assert(engine->RegisterGlobalFunction("void Clear()", asFUNCTION(Clear), asCALL_GENERIC) >= 0);
     assert(engine->RegisterGlobalFunction("void Check(bool)", asFUNCTION(Check), asCALL_GENERIC) >= 0);
+    assert(engine->RegisterObjectType("Unit", 0, asOBJ_REF | asOBJ_NOCOUNT) >= 0);
+    assert(engine->RegisterGlobalProperty("Unit@ unit", &unitPointer) >= 0);
+    assert(engine->RegisterObjectMethod("Unit", "Task@+ get_task() const property", asFUNCTION(GetLiveTask), asCALL_GENERIC) >= 0);
+    assert(engine->RegisterGlobalFunction("void Invalidate()", asFUNCTION(Invalidate), asCALL_GENERIC) >= 0);
     auto* module = engine->GetModule("lifetime", asGM_ALWAYS_CREATE);
     const char* script = R"(
         void Test() {
+            Check(unit.task is null);
+            Replace(true);
+            Task@ pinned = unit.task;
+            Clear();
+            Check(cast<BuilderTask>(pinned) !is null);
+            @pinned = null;
+            Replace(false);
+            Invalidate();
+            Check(unit.task is null); // getter must not AddRef the invalid field
+            Clear(); // must not Release its stale pointer either
             Task@ empty;
             Check(cast<BuilderTask>(empty) is null);
             Replace(false);

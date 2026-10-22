@@ -15,6 +15,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <set>
 #include <vector>
@@ -159,6 +160,7 @@ public:
 	void GiveUnits(std::vector<CCircuitUnit*>&& units, int newTeamId);
 	void Garbage(CCircuitUnit* unit, const char* reason);
 	CCircuitUnit* GetTeamUnit(ICoreUnit::Id unitId) const;
+	bool IsOwnedUnit(const CCircuitUnit* unit) const;
 	const Units& GetTeamUnits() const { return teamUnits; }
     unsigned int GetOwnedUnitRevision() const { return ownedUnitRevision; }
 
@@ -190,6 +192,9 @@ private:
 	void UpdateActions();
 
 	Units teamUnits;  // owner
+	// Simulation-thread pointer index: validate before dereferencing borrowed
+	// handles. Updated with teamUnits; O(U) memory and average O(1) checks.
+	std::unordered_set<const CCircuitUnit*> ownedUnits;
     unsigned int ownedUnitRevision = 0;
 	EnemyInfos enemyInfos;  // owner
 	CAllyTeam* allyTeam;

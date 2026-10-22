@@ -1024,6 +1024,8 @@ void CBuilderManager::ActivateTask(IBuilderTask* task)
 
 IBuilderTask* CBuilderManager::Enqueue(const TaskB::SBuildTask& ti)
 {
+	if (ti.type == IBuilderTask::BuildType::RECLAIM && ti.ref.target != nullptr
+		&& !circuit->IsOwnedUnit(ti.ref.target)) return nullptr;
 	// Positional requests from older role helpers still enter the field claim
 	// lifecycle. They may never fall back to nearest synthetic spot ownership.
 	if (circuit->GetEconomyManager()->IsMetalMap()
@@ -1114,7 +1116,7 @@ IBuilderTask* CBuilderManager::Enqueue(const TaskB::SBuildTask& ti)
 		case IBuilderTask::BuildType::RECLAIM: {
 			if (ti.ref.target != nullptr) {
 				auto it = reclaimUnits.find(ti.ref.target);
-				if ((it != reclaimUnits.end()) && (it->second != nullptr)) {  // TODO: Rework RegisterReclaim() that puts nullptr into reclaimUnits
+				if ((it != reclaimUnits.end()) && (IUnitTask::LiveGeneration(it->second) != 0) && !it->second->IsDead()) {  // TODO: Rework RegisterReclaim() that puts nullptr into reclaimUnits
 					return it->second;
 				}
 				CCircuitUnit* own = circuit->GetTeamUnit(ti.ref.target->GetId());
@@ -1361,22 +1363,28 @@ int CBuilderManager::TurretsOnReclaim(int targetId, float margin, bool apply, bo
 	const auto t0 = std::chrono::steady_clock::now();
 	struct SAtExit { CCircuitAI* c; std::chrono::steady_clock::time_point t0; ~SAtExit() { const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(); if (ms > 20.0) c->LOG("SLOW: TurretsOnReclaim took %.0f ms", ms); } } atExit{circuit, t0};
 	CCircuitUnit* target = circuit->GetTeamUnit(targetId);
-	if ((target == nullptr) || target->IsDead()) {
+	if (!circuit->IsOwnedUnit(target)) {
 		return -1;
 	}
 	if (IsReclaimProtected(target->GetCircuitDef())) {
 		return 0;  // D-290: never reclaimed, so no turret is pulled onto it
 	}
 	const int frame = circuit->GetLastFrame();
-	const AIFloat3& tpos = target->GetPos(frame);
+	const AIFloat3 tpos = target->GetPos(frame);
 	const auto requested = reclaimUnits.find(target);
-	const auto requestedPriority = (requested != reclaimUnits.end() && requested->second != nullptr)
+	const auto requestedPriority = (requested != reclaimUnits.end() && IUnitTask::LiveGeneration(requested->second) != 0 && !requested->second->IsDead())
 		? requested->second->GetPriority() : IUnitTask::Priority::HIGH;
 	IBuilderTask* join = nullptr;
+	auto retainedJoin = RetainReference(join);
+	// Script callbacks during task handoff can mutate teamUnits. Snapshot in
+	// existing traversal order; O(U) scratch only for this explicit local query.
+	std::vector<CCircuitUnit*> candidates;
+	candidates.reserve(circuit->GetTeamUnits().size());
+	for (const auto& kv : circuit->GetTeamUnits()) candidates.push_back(kv.second);
 	int off = 0;
-	for (const auto& kv : circuit->GetTeamUnits()) {
-		CCircuitUnit* u = kv.second;
-		if ((u == nullptr) || u->IsDead() || (u == target)) {
+	for (CCircuitUnit* u : candidates) {
+		if (!circuit->IsOwnedUnit(target)) break;
+		if (!circuit->IsOwnedUnit(u) || (u == target)) {
 			continue;
 		}
 		CCircuitDef* cdef = u->GetCircuitDef();
@@ -1388,7 +1396,9 @@ int CBuilderManager::TurretsOnReclaim(int targetId, float margin, bool apply, bo
 		if (u->GetPos(frame).SqDistance2D(tpos) > reach * reach) {
 			continue;
 		}
-		IUnitTask* t = u->GetTask();
+		auto retainedTask = RetainReference(u->GetLiveTask());
+		IUnitTask* t = retainedTask.get();
+		if (t == nullptr || t->IsDead()) continue;
 		if ((t != nullptr) && (t->GetType() == IUnitTask::Type::PLAYER)) {
 			continue;
 		}
@@ -1408,7 +1418,7 @@ int CBuilderManager::TurretsOnReclaim(int targetId, float margin, bool apply, bo
 			// This adds no scan or command and leaves legacy callers unchanged.
 			if (preserveReclaimPriority && !bt->IsDead()
 					&& bt->GetBuildType() == IBuilderTask::BuildType::RECLAIM
-					&& bt->GetTarget() != nullptr && !bt->GetTarget()->IsDead()
+					&& circuit->IsOwnedUnit(bt->GetTarget())
 					&& bt->GetPriority() >= requestedPriority) continue;
 		}
 		++off;
@@ -1419,11 +1429,14 @@ int CBuilderManager::TurretsOnReclaim(int targetId, float margin, bool apply, bo
 			// Enqueue before detaching the turret: a refused reclaim (D-290)
 			// must leave it on its current task, not stranded with none.
 			join = Enqueue(TaskB::Reclaim(IBuilderTask::Priority::HIGH, target, FRAMES_PER_SEC * 300));
-			if (join == nullptr) {
+			if (join == nullptr || IUnitTask::LiveGeneration(join) == 0 || join->IsDead()) {
 				--off;
 				break;
 			}
+			retainedJoin = RetainReference(join);
 		}
+		if (!circuit->IsOwnedUnit(target) || !circuit->IsOwnedUnit(u)
+			|| u->GetLiveTask() != t || join->IsDead()) { --off; continue; }
 		if (t != nullptr) {
 			ITaskModule* previousManager = t->GetManager();
 			t->RemoveAssignee(u);
@@ -1433,13 +1446,17 @@ int CBuilderManager::TurretsOnReclaim(int targetId, float margin, bool apply, bo
 			// next update overwrite this assignment and retain stale unit pointers.
 			// Match the existing enemy-reclaim ownership handoff, with O(1) owners
 			// and no extra engine commands.
+			if (!circuit->IsOwnedUnit(u) || !circuit->IsOwnedUnit(target) || join->IsDead()) { --off; continue; }
 			if (previousManager != this) previousManager->GetIdleTask()->RemoveAssignee(u);
 		}
 		join->AssignTo(u);
+		if (!circuit->IsOwnedUnit(u) || !circuit->IsOwnedUnit(target)
+			|| u->GetLiveTask() != join || join->IsDead()) { --off; continue; }
 		join->Start(u);
-		static_cast<CBuilderScript*>(script)->TaskAssigned(u);
+		if (circuit->IsOwnedUnit(u) && u->GetLiveTask() == join && !join->IsDead())
+			static_cast<CBuilderScript*>(script)->TaskAssigned(u);
 	}
-	if (apply && (off > 0)) {
+	if (apply && (off > 0) && circuit->IsOwnedUnit(target)) {
 		circuit->LOG("EXP: turrets: %i join the reclaim of %s(%i)", off, target->GetCircuitDef()->GetDef()->GetName(), targetId);
 	}
 	return off;

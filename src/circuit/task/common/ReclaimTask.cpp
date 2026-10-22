@@ -70,6 +70,13 @@ void IReclaimTask::Cancel()
 
 bool IReclaimTask::Execute(CCircuitUnit* unit)
 {
+	// Explicit friendly targets may have been donated/destroyed since selection.
+	// Validate pointer membership before any target read or command construction.
+	if (!manager->GetCircuit()->IsOwnedUnit(unit)) return false;
+	if (target != nullptr && !manager->GetCircuit()->IsOwnedUnit(target)) {
+		manager->AbortTask(this);
+		return false;
+	}
 	executors.insert(unit);
 
 	CCircuitAI* circuit = manager->GetCircuit();
@@ -107,7 +114,7 @@ void IReclaimTask::OnUnitIdle(CCircuitUnit* unit)
 	// sharing a live explicit reclaim target. Detach it for normal reassignment
 	// while the others continue. Area reclaim and the last worker retain their
 	// existing terminal behavior. No retry loop or extra commands are introduced.
-	if (target != nullptr && !target->IsDead() && units.size() > 1) {
+	if (target != nullptr && manager->GetCircuit()->IsOwnedUnit(target) && units.size() > 1) {
 		RemoveAssignee(unit);
 		return;
 	}

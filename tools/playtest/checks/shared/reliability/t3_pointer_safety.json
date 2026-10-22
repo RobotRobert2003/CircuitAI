@@ -1,0 +1,97 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "fixture",
+      "pattern": "\\[T3PointerFixture\\] loaded",
+      "scope": "any"
+    },
+    {
+      "key": "native reclaim handoff",
+      "pattern": "\\[T3PointerFixture\\] PASS donor turret on reclaim",
+      "scope": "any"
+    },
+    {
+      "key": "duplicates",
+      "pattern": "\\[T3PointerFixture\\] PASS duplicate donation removed once",
+      "scope": "any"
+    },
+    {
+      "key": "stale target",
+      "pattern": "\\[T3PointerFixture\\] PASS reject donated target",
+      "scope": "any"
+    },
+    {
+      "key": "nulls",
+      "pattern": "\\[T3PointerFixture\\] PASS null entry points",
+      "scope": "any"
+    },
+    {
+      "key": "active round",
+      "pattern": "\\[T3PointerFixture\\] PASS active blocker handoffs",
+      "scope": "any"
+    },
+    {
+      "key": "actual ally protocol",
+      "pattern": "\\[T3PointerFixture\\] PASS ally-clear transferred blocker",
+      "scope": "any"
+    },
+    {
+      "key": "late callback",
+      "pattern": "\\[T3PointerFixture\\] PASS late callback rejects old donor",
+      "scope": "any"
+    },
+    {
+      "key": "completion",
+      "pattern": "\\[T3PointerFixture\\] complete",
+      "scope": "any"
+    },
+    {
+      "key": "identity rejection",
+      "pattern": "\\[T3PointerFixture\\] PASS reject mismatched identity",
+      "scope": "any"
+    },
+    {
+      "key": "identity acceptance",
+      "pattern": "\\[T3PointerFixture\\] PASS accept matching identity",
+      "scope": "any"
+    },
+    {
+      "key": "offer expiry",
+      "pattern": "\\[T3PointerFixture\\] PASS reject expired offer",
+      "scope": "any"
+    },
+    {
+      "key": "grant message",
+      "pattern": "\\[AllyClear\\] team 2 gave 1 building\\(s\\) in t3\\.",
+      "scope": "any"
+    },
+    {
+      "key": "shared blocker",
+      "pattern": "\\[T3PointerFixture\\] PASS shared blocker survives other round",
+      "scope": "any"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "fixture failure",
+      "pattern": "\\[T3PointerFixture\\] FAIL",
+      "scope": "any"
+    },
+    {
+      "key": "script error",
+      "pattern": ": ERR\\s+:",
+      "scope": "any"
+    },
+    {
+      "key": "task lifetime",
+      "pattern": "\\[TaskLifetime\\]",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    }
+  ]
+}

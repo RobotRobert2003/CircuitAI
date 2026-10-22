@@ -68,6 +68,7 @@ void ITaskModule::Release()
 
 void ITaskModule::AssignTask(CCircuitUnit* unit, IUnitTask* task)
 {
+	if (!GetCircuit()->IsOwnedUnit(unit)) return;
 	auto current = RetainReference(unit->GetLiveTask());
 	auto next = RetainReference(IUnitTask::LiveGeneration(task) != 0 ? task : nullptr);
 	if (current == nullptr || next == nullptr || next->IsDead()) {
@@ -95,6 +96,7 @@ void ITaskModule::AssignTask(CCircuitUnit* unit, IUnitTask* task)
 
 void ITaskModule::AssignTask(CCircuitUnit* unit)
 {
+	if (!GetCircuit()->IsOwnedUnit(unit)) return;
 	auto current = RetainReference(unit->GetLiveTask());
 	if (current == nullptr) {
 		GetCircuit()->LOG("[TaskLifetime] event=make-task unit=%i invalid current task", unit->GetId());

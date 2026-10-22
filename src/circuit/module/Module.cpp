@@ -56,8 +56,9 @@ int IModule::UnitDestroyed(CCircuitUnit* unit, CEnemyInfo* attacker)
 
 int IModule::UnitGiven(CCircuitUnit* unit, int oldTeamId, int newTeamId)
 {
+	if (!circuit->IsOwnedUnit(unit)) return 0;
 	UnitCreated(unit, nullptr);
-	if (!unit->GetUnit()->IsBeingBuilt()) {
+	if (circuit->IsOwnedUnit(unit) && !unit->GetUnit()->IsBeingBuilt()) {
 		UnitFinished(unit);
 //		UnitIdle(unit);
 	}

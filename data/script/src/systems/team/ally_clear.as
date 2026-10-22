@@ -44,7 +44,8 @@ namespace AllyClear {
         string key;
         AIFloat3 centre;
         int sent = -1, replyUntil = 0, reclaimUntil = 0;
-        array<int> units;   // given to us, to reclaim
+        array<int> units;   // offered IDs; resolve after engine UnitGiven
+        dictionary received; // id -> first received identity; reject later ID reuse
     }
     dictionary reqs;          // key -> Req@
     dictionary allowed;       // def name -> true
@@ -71,6 +72,30 @@ namespace AllyClear {
     }
     bool IsEco(const string &in name) { return Global::Team::AllyClearEco.find(name) >= 0; }
 
+    // Handles are retained for identity, not authority. Native membership must
+    // still match before any engine-facing read or order. O(1) average per check.
+    bool LiveReclaim(IUnitTask@ task, CCircuitUnit@ target)
+    {
+        if (task is null || task.IsDead() || !ai.IsOwnedUnit(target)) return false;
+        IBuilderTask@ bt = cast<IBuilderTask>(task);
+        return bt !is null && Task::BuildType(bt.GetBuildType()) == Task::BuildType::RECLAIM && bt.target is target;
+    }
+
+    CCircuitUnit@ Received(Req@ r, int id)
+    {
+        if (r is null || ai.frame >= r.reclaimUntil) return null;
+        CCircuitUnit@ u = ai.GetTeamUnit(id);
+        if (!ai.IsOwnedUnit(u) || u.circuitDef.IsMobile()) return null;
+        CCircuitUnit@ original = null;
+        if (r.received.get("" + id, @original)) return original is u ? u : null;
+        // An offer can arrive before UnitGiven. Admit only an eligible blocker,
+        // and remember the first owned identity for the lifetime of this request.
+        const string name = u.circuitDef.GetName();
+        if (!(Allowed(name) || (IsT3Key(r.key) && T3Unstick::Clearable(name)))) return null;
+        r.received.set("" + id, @u);
+        return u;
+    }
+
     // ---------------------------------------------------------------- requester
 
     // True while the site should wait instead of relocating
@@ -88,7 +113,7 @@ namespace AllyClear {
         // only allied SMRTBARbs can answer; none known: nothing to wait for
         array<Team::Roster::Entry@>@ allies = Team::Roster::All();
         bool any = false;
-        for (uint i = 0; i < allies.length() && !any; ++i) any = allies[i].teamId != ai.teamId;
+        for (uint i = 0; i < allies.length() && !any; ++i) any = allies[i] !is null && allies[i].teamId != ai.teamId;
         if (!any) return false;
         @r = Req();
         r.key = key; r.centre = centre; r.sent = ai.frame;
@@ -109,14 +134,15 @@ namespace AllyClear {
     }
     bool Pending(Req@ r)
     {
-        for (uint i = 0; i < r.units.length(); ++i) if (ai.GetTeamUnit(r.units[i]) !is null) return true;
+        if (r is null) return false;
+        for (uint i = 0; i < r.units.length(); ++i) if (Received(r, r.units[i]) !is null) return true;
         return false;
     }
 
     // Builder::AiMakeTask asks here: reclaim the nearest unit an ally gave us
     IUnitTask@ BuilderTask(CCircuitUnit@ u)
     {
-        if (!IsRequester() || u is null || !u.circuitDef.IsMobile() || reqs.getSize() == 0) return null;
+        if (!IsRequester() || !ai.IsOwnedUnit(u) || !u.circuitDef.IsMobile() || reqs.getSize() == 0) return null;
         IBuilderTask@ current = u.task is null ? null : cast<IBuilderTask>(u.task);
         if (current !is null && Task::BuildType(current.GetBuildType()) < Task::BuildType::REPAIR) return null;
         CCircuitUnit@ best = null;
@@ -126,10 +152,10 @@ namespace AllyClear {
             Req@ r = null;
             if (!reqs.get(keys[k], @r) || r is null) continue;
             for (uint i = 0; i < r.units.length(); ++i) {
-                CCircuitUnit@ g = ai.GetTeamUnit(r.units[i]);
-                if (g is null) continue;
+                CCircuitUnit@ g = Received(r, r.units[i]);
+                if (g is null || g is u) continue;
                 IUnitTask@ live = null;
-                if (reclaimTask.get("" + g.id, @live) && live !is null && !live.IsDead()) {
+                if (reclaimTask.get("" + g.id, @live) && LiveReclaim(live, g)) {
                     if (live.GetUnits().length() < 2) return live;
                     continue;
                 }
@@ -140,7 +166,8 @@ namespace AllyClear {
         }
         if (best is null) return null;
         IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::HIGH, best, 60 * SECOND));
-        if (t !is null) reclaimTask.set("" + best.id, @t);
+        if (!ai.IsOwnedUnit(u) || !ai.IsOwnedUnit(best) || t is null || t.IsDead()) return null;
+        reclaimTask.set("" + best.id, @t);
         return t;
     }
 
@@ -164,7 +191,7 @@ namespace AllyClear {
             array<Id>@ own = ai.GetOwnedUnitIds();
             for (uint i = 0; i < own.length(); ++i) {
                 CCircuitUnit@ u = ai.GetTeamUnit(own[i]);
-                if (u is null || u.circuitDef is null || u.circuitDef.IsMobile()) continue;
+                if (!ai.IsOwnedUnit(u) || u.circuitDef.IsMobile()) continue;
                 const string name = u.circuitDef.GetName();
                 if (!(Allowed(name) || (t3 && T3Unstick::Clearable(name))) || (keepEnergy && IsEco(name))) continue;
                 const AIFloat3 p = u.GetPos(ai.frame);
@@ -183,6 +210,7 @@ namespace AllyClear {
             return true;
         }
         if (f[1] == "grant" && f.length() >= 4) {
+            if (sender == ai.teamId || Team::Roster::Get(sender) is null) return true;
             Req@ r = null;
             if (!reqs.get(f[2], @r) || r is null) return true;
             array<string>@ ids = f[3].split(",");

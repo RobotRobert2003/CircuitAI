@@ -48,6 +48,7 @@ namespace T3Unstick {
 
     final class Hull {
         int id = -1;
+        CCircuitUnit@ unit; // identity survives ID reuse; native graveyard owns lifetime
         int added = 0;
         AIFloat3 anchor;
         int anchorFrame = 0;
@@ -59,39 +60,75 @@ namespace T3Unstick {
         bool signalled = false;  // the engine tried to reclaim it
         string allyKey = "";
         array<int> blockers;
+        dictionary blockerUnits; // original identities belonging to this round
     }
 
     array<Hull@> hulls;
     array<IUnitTask@> pendingAbort;
     dictionary reclaimTask;      // blocker id -> IUnitTask@
+    dictionary blockerUnit;      // active blocker id -> current CCircuitUnit@
+    dictionary blockerUsers;     // matching active rounds per current identity
     array<int> activeBlockers;   // every blocker of every running round
     int lastTick = -100000;
 
     bool Enabled() { return Global::T3Unstick::Enabled; }
 
+    // Shared blockers can belong to several hulls. O(B) dictionary operations
+    // plus the existing active-array removal; ending one round never drops the
+    // other round's work or erases a new unit that reused the old blocker's ID.
+    void ReleaseBlockers(Hull@ h)
+    {
+        if (h is null) return;
+        for (uint i = 0; i < h.blockers.length(); ++i) {
+            const string key = "" + h.blockers[i];
+            CCircuitUnit@ original = null, current = null;
+            if (!h.blockerUnits.get(key, @original) || !blockerUnit.get(key, @current) || current !is original) continue;
+            int users = 0;
+            blockerUsers.get(key, users);
+            if (users > 1) { blockerUsers.set(key, users - 1); continue; }
+            const int index = activeBlockers.find(h.blockers[i]);
+            if (index >= 0) activeBlockers.removeAt(uint(index));
+            reclaimTask.delete(key);
+            blockerUnit.delete(key);
+            blockerUsers.delete(key);
+        }
+        h.blockers.resize(0);
+        h.blockerUnits.deleteAll();
+    }
+
     bool IsT3(CCircuitUnit@ u)
     {
-        if (u is null || u.circuitDef is null) return false;
+        if (!ai.IsOwnedUnit(u)) return false;
         const CCircuitDef@ d = u.circuitDef;
         if (!d.IsMobile() || d.IsAbleToFly() || d.IsRoleAny(Unit::Role::BUILDER.mask)) return false;
         if (d.costM >= Global::T3Unstick::MinMetal) return true;
         if (u.GetProducerId() < 0) return false;
         CCircuitUnit@ producer = ai.GetTeamUnit(u.GetProducerId());
-        return producer !is null && producer.circuitDef !is null && UnitHelpers::IsGantryLab(producer.circuitDef.GetName());
+        return ai.IsOwnedUnit(producer) && UnitHelpers::IsGantryLab(producer.circuitDef.GetName());
     }
 
     Hull@ Find(int id)
     {
-        for (uint i = 0; i < hulls.length(); ++i) if (hulls[i].id == id) return hulls[i];
+        for (uint i = 0; i < hulls.length(); ++i) if (hulls[i] !is null && hulls[i].id == id) return hulls[i];
         return null;
     }
 
     // Military::AiUnitAdded
     void UnitAdded(CCircuitUnit@ unit)
     {
-        if (!Enabled() || !IsT3(unit) || Find(unit.id) !is null) return;
+        if (!Enabled() || !IsT3(unit)) return;
+        Hull@ previous = Find(unit.id);
+        if (previous !is null) {
+            if (previous.unit is unit) return;
+            // A recycled engine ID is a fresh hull, not a continuation of the
+            // previous unit's stuck timer or pending blocker work.
+            ReleaseBlockers(previous);
+            const int index = hulls.findByRef(previous);
+            if (index >= 0) hulls.removeAt(uint(index));
+        }
         Hull h;
         h.id = unit.id;
+        @h.unit = unit;
         h.added = ai.frame;
         h.anchor = unit.GetPos(ai.frame);
         h.anchorFrame = ai.frame;
@@ -102,13 +139,13 @@ namespace T3Unstick {
     // Builder::AiTaskAdded: the engine's "stuck, reclaim it" order for a T3
     void TaskAdded(IUnitTask@ task)
     {
-        if (!Enabled() || !Global::T3Unstick::AbortSelfReclaim) return;
+        if (!Enabled() || !Global::T3Unstick::AbortSelfReclaim || task is null || task.IsDead()) return;
         IBuilderTask@ bt = cast<IBuilderTask>(task);
         if (bt is null || Task::BuildType(bt.GetBuildType()) != Task::BuildType::RECLAIM) return;
         CCircuitUnit@ target = bt.target;
-        if (target is null) return;
+        if (!ai.IsOwnedUnit(target)) return;
         Hull@ h = Find(target.id);
-        if (h is null) return;
+        if (h is null || h.unit !is target) return;
         pendingAbort.insertLast(task);
         h.signalled = true;
         GenericHelpers::LogUtil("[T3Unstick] engine ordered stuck " + target.circuitDef.GetName() + " " + target.id
@@ -124,20 +161,22 @@ namespace T3Unstick {
 
     float HalfSize(const CCircuitDef@ d)   // half the footprint, elmos (as WallHelpers)
     {
+        if (d is null) return 0.0f;
         return float(AiMax(d.GetFootprintX(), d.GetFootprintZ())) * SQUARE_SIZE * 0.5f;
     }
 
     void StartRound(Hull@ h, CCircuitUnit@ u, const AIFloat3 &in pos)
     {
+        if (h is null || !ai.IsOwnedUnit(u) || h.unit !is u) return;
         const float ring = Global::T3Unstick::PenGap * float(h.rounds + 1);
         const float self = HalfSize(u.circuitDef);
         const bool tech = Global::AISettings::Role == AiRole::TECH;
-        h.blockers.resize(0);
+        ReleaseBlockers(h);
         string kept = "", cleared = "";
         array<Id>@ own = ai.GetOwnedUnitIds();
         for (uint i = 0; i < own.length(); ++i) {
             CCircuitUnit@ b = ai.GetTeamUnit(own[i]);
-            if (b is null || b.circuitDef is null || b.circuitDef.IsMobile()) continue;
+            if (!ai.IsOwnedUnit(b) || b.circuitDef.IsMobile()) continue;
             const AIFloat3 p = b.GetPos(ai.frame);
             const float reach = self + HalfSize(b.circuitDef) + ring;
             if (abs(p.x - pos.x) > reach || abs(p.z - pos.z) > reach) continue;
@@ -147,9 +186,17 @@ namespace T3Unstick {
                 continue;
             }
             IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::HIGH, b, int(Global::T3Unstick::ReclaimSeconds) * SECOND));
-            if (t is null) { kept += " " + name; continue; }
+            if (!ai.IsOwnedUnit(u) || h.unit !is u) return;
+            if (t is null || t.IsDead() || !ai.IsOwnedUnit(b)) { kept += " " + name; continue; }
             if (tech) TechReclaim::Track(b, t, "t3unstick");
             reclaimTask.set("" + b.id, @t);
+            const string key = "" + b.id;
+            CCircuitUnit@ previousBlocker = null;
+            int users = 0;
+            if (blockerUnit.get(key, @previousBlocker) && previousBlocker is b) blockerUsers.get(key, users);
+            blockerUnit.set(key, @b);
+            blockerUsers.set(key, users + 1);
+            h.blockerUnits.set(key, @b);
             h.blockers.insertLast(b.id);
             if (activeBlockers.find(b.id) < 0) activeBlockers.insertLast(b.id);
             cleared += " " + name;
@@ -169,10 +216,12 @@ namespace T3Unstick {
 
     bool RoundBusy(Hull@ h)
     {
+        if (h is null || !ai.IsOwnedUnit(h.unit)) return false;
         if (ai.frame - h.roundStart >= int(Global::T3Unstick::ReclaimSeconds) * SECOND) return false;
         bool any = false;
         for (uint i = 0; i < h.blockers.length(); ++i) {
-            if (ai.GetTeamUnit(h.blockers[i]) is null) continue;
+            CCircuitUnit@ b = null;
+            if (!h.blockerUnits.get("" + h.blockers[i], @b) || !ai.IsOwnedUnit(b)) continue;
             any = true;
             if (ai.frame - h.lastPull >= 10 * SECOND)
                 aiBuilderMgr.TurretsOnReclaim(h.blockers[i], Global::T3Unstick::TurretMargin, true, false);
@@ -185,12 +234,8 @@ namespace T3Unstick {
 
     void EndRound(Hull@ h, CCircuitUnit@ u, const AIFloat3 &in pos)
     {
-        for (uint i = 0; i < h.blockers.length(); ++i) {
-            const int k = activeBlockers.find(h.blockers[i]);
-            if (k >= 0) activeBlockers.removeAt(uint(k));
-            reclaimTask.delete("" + h.blockers[i]);
-        }
-        h.blockers.resize(0);
+        if (h is null) return;
+        ReleaseBlockers(h);
         h.roundStart = -1;
         h.nextRound = ai.frame + int(Global::T3Unstick::RetrySeconds) * SECOND;
         h.anchor = pos;
@@ -200,6 +245,7 @@ namespace T3Unstick {
 
     void Nudge(CCircuitUnit@ u, const AIFloat3 &in pos)
     {
+        if (!ai.IsOwnedUnit(u)) return;
         array<AIFloat3> starts = Lanes::EnemyStarts();
         float best = 1.0e30f;
         int bi = -1;
@@ -222,22 +268,19 @@ namespace T3Unstick {
     void Tick()
     {
         if (!Enabled()) return;
-        for (uint i = 0; i < pendingAbort.length(); ++i)
-            if (pendingAbort[i] !is null && !pendingAbort[i].IsDead()) aiBuilderMgr.AbortTask(pendingAbort[i]);
-        pendingAbort.resize(0);
+        array<IUnitTask@> abortNow = pendingAbort;
+        pendingAbort.resize(0); // callbacks may enqueue next-tick work
+        for (uint i = 0; i < abortNow.length(); ++i)
+            if (abortNow[i] !is null && !abortNow[i].IsDead()) aiBuilderMgr.AbortTask(abortNow[i]);
         if (ai.frame < lastTick + 2 * SECOND) return;
         lastTick = ai.frame;
         const float stuckSq = Global::T3Unstick::StuckRadius * Global::T3Unstick::StuckRadius;
         for (int i = int(hulls.length()) - 1; i >= 0; --i) {
             Hull@ h = hulls[i];
-            CCircuitUnit@ u = ai.GetTeamUnit(h.id);
-            if (u is null) {
-                if (h.roundStart >= 0) {
-                    for (uint k = 0; k < h.blockers.length(); ++k) {
-                        const int j = activeBlockers.find(h.blockers[k]);
-                        if (j >= 0) activeBlockers.removeAt(uint(j));
-                    }
-                }
+            if (h is null) { hulls.removeAt(uint(i)); continue; }
+            CCircuitUnit@ u = h.unit;
+            if (!ai.IsOwnedUnit(u)) {
+                ReleaseBlockers(h);
                 hulls.removeAt(uint(i));
                 continue;
             }
@@ -266,7 +309,7 @@ namespace T3Unstick {
     // Builder::AiMakeTask: a mobile T1/T2 constructor near a blocker reclaims it
     IUnitTask@ BuilderTask(CCircuitUnit@ u)
     {
-        if (!Enabled() || activeBlockers.length() == 0 || u is null || u.circuitDef is null) return null;
+        if (!Enabled() || activeBlockers.length() == 0 || !ai.IsOwnedUnit(u)) return null;
         if (!u.circuitDef.IsMobile() || UnitHelpers::IsCommander(u.circuitDef)) return null;
         IBuilderTask@ current = u.task is null ? null : cast<IBuilderTask>(u.task);
         if (current !is null && Task::BuildType(current.GetBuildType()) < Task::BuildType::REPAIR) return null;
@@ -275,13 +318,13 @@ namespace T3Unstick {
         CCircuitUnit@ best = null;
         float bestSq = rangeSq;
         for (uint i = 0; i < activeBlockers.length(); ++i) {
-            CCircuitUnit@ b = ai.GetTeamUnit(activeBlockers[i]);
-            if (b is null) continue;
+            CCircuitUnit@ b = null;
+            if (!blockerUnit.get("" + activeBlockers[i], @b) || !ai.IsOwnedUnit(b) || b is u) continue;
             const AIFloat3 bpos = b.GetPos(ai.frame);
             const float sq = upos.SqDistance2D(bpos);
             if (sq > bestSq) continue;
             IUnitTask@ live = null;
-            if (reclaimTask.get("" + b.id, @live) && live !is null && !live.IsDead()
+            if (reclaimTask.get("" + b.id, @live) && Team::AllyClear::LiveReclaim(live, b)
                 && int(live.GetUnits().length()) >= Global::T3Unstick::BuildersPerBlocker) continue;
             if (!aiTerrainMgr.CanReachAt(u, bpos, u.circuitDef.GetBuildDistance())) continue;
             bestSq = sq;
@@ -289,12 +332,14 @@ namespace T3Unstick {
         }
         if (best is null) return null;
         IUnitTask@ live = null;
-        if (reclaimTask.get("" + best.id, @live) && live !is null && !live.IsDead()) return live;
+        if (reclaimTask.get("" + best.id, @live) && Team::AllyClear::LiveReclaim(live, best)) return live;
         if (Global::AISettings::Role == AiRole::TECH && !TechReclaim::Allowed(best, "t3unstick")) return null;
         IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::HIGH, best, int(Global::T3Unstick::ReclaimSeconds) * SECOND));
+        if (!ai.IsOwnedUnit(u) || !ai.IsOwnedUnit(best) || t is null || t.IsDead()) return null;
         if (t !is null) {
             if (Global::AISettings::Role == AiRole::TECH) TechReclaim::Track(best, t, "t3unstick");
             reclaimTask.set("" + best.id, @t);
+            blockerUnit.set("" + best.id, @best);
         }
         return t;
     }

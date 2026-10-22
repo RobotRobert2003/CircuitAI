@@ -628,6 +628,7 @@ static bool CTerrainManager_CanReachAtSafe(CTerrainManager* mgr, CCircuitUnit* u
 
 static void CCircuitAI_GiveUnits(CCircuitAI* circuit, const CScriptArray* array, int newTeamId)
 {
+	if (array == nullptr) return;
 	std::vector<CCircuitUnit*> units;
 	units.reserve(array->GetSize());
 	for (asUINT i = 0; i < array->GetSize(); ++i) {
@@ -1155,6 +1156,7 @@ void CInitScript::RegisterCore()
 	r = engine->RegisterObjectMethod("CCircuitAI", "CCircuitDef@ GetCircuitDef(Id)", asMETHODPR(CCircuitAI, GetCircuitDef, (CCircuitDef::Id), CCircuitDef*), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "int GetDefCount() const", asMETHOD(CCircuitAI, GetDefCount), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "CCircuitUnit@ GetTeamUnit(Id)", asMETHOD(CCircuitAI, GetTeamUnit), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CCircuitAI", "bool IsOwnedUnit(const CCircuitUnit@) const", asMETHOD(CCircuitAI, IsOwnedUnit), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "array<Id>@ GetOwnedUnitIds() const", asFUNCTION(CCircuitAI_GetOwnedUnitIds), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CCircuitAI", "uint GetOwnedUnitRevision() const", asMETHOD(CCircuitAI, GetOwnedUnitRevision), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitAI", "string GetMapName() const", asFUNCTION(CCircuitAI_GetMapName), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
@@ -1288,7 +1290,8 @@ void CInitScript::RegisterCore()
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void CmdMoveTo(const AIFloat3& in)", asFUNCTION(CCircuitUnit_CmdMoveTo), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-112
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void CmdRepeat(bool)", asFUNCTION(CCircuitUnit_CmdRepeat), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-111
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void CmdFactoryRoute(const array<AIFloat3>@+)", asFUNCTION(CCircuitUnit_CmdFactoryRoute), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-111
-	r = engine->RegisterObjectProperty("CCircuitUnit", "IUnitTask@ const task", asOFFSET(CCircuitUnit, task)); ASSERT(r >= 0);
+	// Auto-handle retains only a generation-validated task; preserve unit.task syntax.
+	r = engine->RegisterObjectMethod("CCircuitUnit", "IUnitTask@+ get_task() const property", asMETHOD(CCircuitUnit, GetLiveTask), asCALL_THISCALL); ASSERT(r >= 0);
 	// RulesParams accessor on Unit
 	r = engine->RegisterObjectMethod("CCircuitUnit", "float GetRulesParam(const string& in, float) const", asFUNCTION(CCircuitUnit_GetRulesParamFloat), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CCircuitUnit", "string GetRulesParam(const string& in, const string& in) const", asFUNCTION(CCircuitUnit_GetRulesParamString), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
