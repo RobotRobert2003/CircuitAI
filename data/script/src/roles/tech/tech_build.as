@@ -755,16 +755,43 @@ namespace TechBuild {
     // reach within EcoMexExpandRadius, outside allied ground, while metal
     // income is the bottleneck. The commander never expands after the opening.
     int lastNoSpotLog = -100000;
+    // Spots whose mex order was stale (an ally's mex stands there), skipped
+    // for a minute. Played (owner's game 2026-10-23, team 9): an ally upgraded
+    // its mex to T2, native kept reopening the spot, and every builder took
+    // the same unbuildable order in turn for 2.5 minutes, the T2 constructor
+    // dropping its moho upgrade for it.
+    array<AIFloat3> staleMexSpots;
+    array<int> staleMexUntil;
 
     IUnitTask@ ExpandMex(CCircuitUnit@ u, float metalIncome)
     {
         if (metalIncome >= Global::RoleSettings::Tech::EcoMexExpandUntilIncome) return null;
+        for (int i = int(staleMexSpots.length()) - 1; i >= 0; --i) {
+            if (ai.frame < staleMexUntil[i]) continue;
+            staleMexSpots.removeAt(i);
+            staleMexUntil.removeAt(i);
+        }
         // Cap 0: every spot inside the radius is considered, nearest the
         // builder first, until an open one is found. Played with cap 1 the
         // call looked at the single nearest spot, found it taken, and the base
         // sat on two mexes all game.
-        IUnitTask@ t = aiEconomyMgr.EnqueueMexWithin(u, u.GetPos(ai.frame),
-            Global::RoleSettings::Tech::EcoMexExpandRadius, 0, true);
+        array<AIFloat3> excluded = staleMexSpots;
+        IUnitTask@ t = null;
+        for (int attempt = 0; attempt < 4; ++attempt) {
+            @t = aiEconomyMgr.EnqueueMexAvoiding(u, u.GetPos(ai.frame),
+                Global::RoleSettings::Tech::EcoMexExpandRadius, true, excluded);
+            if (t is null || aiEconomyMgr.IsMexTaskUsable(t)) break;
+            IBuilderTask@ stale = cast<IBuilderTask>(t);
+            if (stale is null) break;
+            const AIFloat3 at = stale.GetBuildPos();
+            GenericHelpers::LogUtil("[TECH][Build] stale mex order at (" + int(at.x) + ", " + int(at.z)
+                + ") skipped for 60 s (a mex already stands there)", 1);
+            excluded.insertLast(at);
+            staleMexSpots.insertLast(at);
+            staleMexUntil.insertLast(ai.frame + 60 * SECOND);
+            if (stale.target is null && stale.GetUnits().length() == 0) aiBuilderMgr.AbortTask(t);
+            @t = null;
+        }
         if (t !is null) {
             IBuilderTask@ order = cast<IBuilderTask>(t);
             AIFloat3 at = u.GetPos(ai.frame);
