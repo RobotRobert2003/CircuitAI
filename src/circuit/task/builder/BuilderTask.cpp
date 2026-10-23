@@ -39,10 +39,15 @@
 
 #include <climits>
 #include <cmath>
+#include <unordered_set>
 
 namespace circuit {
 
 using namespace springai;
+
+// Units inside IBuilderTask::Reevaluate's policy call, across all AIs: engine
+// callbacks into the AI run on one thread, so only nesting can find one here.
+static std::unordered_set<CCircuitUnit*> reevaluatingUnits;
 
 IBuilderTask::BuildName IBuilderTask::buildNames = {
 	{"factory", IBuilderTask::BuildType::FACTORY},
@@ -881,6 +886,20 @@ bool IBuilderTask::Reevaluate(CCircuitUnit* unit)
 	if (unit->IsAttrNoDisrupt()) {
 		return true;
 	}
+	// Crash (owner's game, 2026-10-23, Ascendancy, ~34:00): a re-evaluation that
+	// assigns a new task starts it at once, and its Start re-evaluates the same
+	// unit. When policy flips between two jobs (an interrupt guard and another
+	// build), each sent the unit back to the other: ~1800 nested assignments in
+	// one frame overflowed the stack. A unit already being re-evaluated further
+	// up keeps the task it was just given; policy sees it again next update.
+	if (reevaluatingUnits.find(unit) != reevaluatingUnits.end()) {
+		return true;
+	}
+	struct ReevaluationScope {
+		CCircuitUnit* unit;
+		~ReevaluationScope() { reevaluatingUnits.erase(unit); }
+	} scope{unit};
+	reevaluatingUnits.insert(unit);
 	HideAssignee(unit);
 	IUnitTask* task = manager->MakeTask(unit);
 	// D-114 crash (owner's game, build94, F43291): MakeTask runs the script's
