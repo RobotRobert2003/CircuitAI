@@ -78,6 +78,7 @@ private:
 	static void RegisterCRouteTask(asIScriptEngine* engine);
 	static void RegisterCFerryTask(asIScriptEngine* engine);
 	static void RegisterCAirWaveTask(asIScriptEngine* engine);
+	static void RegisterCEscortStrikeTask(asIScriptEngine* engine);
 	static void RegisterUnitTasks(asIScriptEngine* engine);
 
 	CMaskHandler::TypeMask AddRole(const std::string& name, int actAsRole);

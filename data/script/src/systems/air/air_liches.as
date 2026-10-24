@@ -19,24 +19,34 @@ Hold: a finished Liche stages at home on the same route task as the held
 Phoenixes, fire held. The base response never takes one (AirBaseResponse::Kind):
 a nuclear missile is not a weapon for our own base.
 
-Launch (AirWaves::_Launch): every offensive T2 bomber wave takes the held Liches
-with it as a second CAirWaveTask. Both assemble at the start position and leave
-together; the Liche operation picks its own target from its own weights, but
-only inside the raid's district: within LicheRaidRadius of the bomber wave's
-aim (owner, 2026-10-21). Before that the Liches chose anywhere on the map and
-flew off on their own (Project SD-129: bombers north at 7288,1304, Liches
-south at 5680,12896), and stayed home whenever no tier target was known
-anywhere. With no tier target in the district they still go, on the raid's
-fallbacks there. A defensive sortie leaves the Liches at home. Escorts: only
-fighters beyond the bomber wave's own escort need go with the Liches.
+Launch (AirWaves::_Launch -> LaunchWith): every offensive T2 bomber wave takes
+the held Liches with it. Owner 2026-10-24: the Liches fly WITH the wave, not
+ahead of it. Faster than the Phoenixes, on their own route they outran the
+wave's fighters and died before reaching their target (2026-10-23 live game,
+team 13: five runs at one anti-nuke, no hit; the run only ordered its ATTACK on
+the last leg of its route). So the Liches no longer fly an operation of their
+own. They join one native CEscortStrikeTask (src/circuit/task/fighter/
+EscortStrikeTask.*, not the bombers' CAirWaveTask) that:
+  - guards one living bomber of the wave: one GUARD per Liche, issued once;
+    the wave's own fighters cover them because they stay over the wave;
+  - when that bomber dies, guards the living wave bomber nearest the Liches
+    (one GUARD per Liche again);
+  - breaks a Liche off with one ATTACK the moment a roster target is within
+    StrikeRadius() of it: a third of the T2 bombers' StrikeImmediateRadius
+    (1800 -> 600; a homing missile needs no run-up and hits close targets
+    easily). At most LicheStrikersPerTarget Liches take one target; the rest
+    keep guarding and take the next one;
+  - puts the Liche back on its guard when the target is gone or the ATTACK
+    has run LicheStrikeSeconds;
+  - sends a Liche home (idle -> MakeTask -> staged and held for the next wave)
+    when no wave bomber is left alive.
+Every unit and enemy is held natively by id and resolved at use; no order is
+re-issued while one stands (lag fix, 2026-10-23). A defensive sortie
+leaves the Liches at home. The T2 bomber wave code (air_waves.as,
+CAirWaveTask) is unchanged.
 
-The district is native exclusion: ExcludeStrikeRegion takes at most 8 discs of
-radius <= 10000, so eight such discs whose near edges stand LicheRaidRadius
-from the raid aim leave a free octagon (circumradius ~1.08 x LicheRaidRadius)
-around it. Every pick of the run, in flight and after a kill, stays inside.
-
-Targets (native CAirWaveTask, preference 5 = allowed statics by weight; the
-tier mechanics are shared with the T2 bombers in air_strike_tiers.as):
+Targets, best tier first, then nearest (the tier is the priority; cost does
+not enter):
   1 shields       Keeper, Overseer, Soteria
   2 heavy defence Pulsar, Bulwark, Bastion, Cerberus
   3 strategic     Citadel, Prevailer, Aegis, Rampart, Umbrella, Saviour, Hera,
@@ -44,46 +54,30 @@ tier mechanics are shared with the T2 bombers in air_strike_tiers.as):
   4 geothermal    geothermals, Prude
   5 gantries      all T3 gantries
   6 T2 factories  advanced air, vehicle, bot and sea plants
-The native scorer multiplies a def's weight by its metal cost, so each def gets
-TierWeight * 1000 / cost: cost cancels and the tier decides, then distance and
-route risk. With no feasible static target in the district the launch falls
-back to a mobile anti-nuke (native class 7), then turrets, other economy and
-any structure there. After the first kill the run keeps descending the same way.
-
-In flight (Update, every second): the native immediate strike retargets to the
-best visible allowed static within LicheImmediateRadius (900, half the
-bombers' 1800: a homing missile with range 250 needs no long run-up) of the Liches whose
-weight is at least the handoff threshold, and keeps the current target while
-its own weight reaches it. The threshold is set to the lowest weight of the
-tier just above the current target's, so only a strictly higher tier takes
-over: a shield seen on the way to a factory is bombed first, but two Pulsars
-never steal each other's passes. A shield target keeps itself.
-
-Native limits (no script control): mobile anti-nukes never take over in flight
-(the immediate strike only considers stationary units) and are chosen only
-when no weighted static target is feasible.
+A structure counts once seen (it does not move); a mobile anti-nuke only while
+in sight.
 
 ******************************************************************************/
 namespace AirLiches {
-    const int FallbackMobileAntiNukes = 7;
-    const int FallbackTurrets = 3;
-    const int FallbackEconomy = 4;
-    const int FallbackStructures = 0;
-
     const string Name = "armliche";
-    dictionary held;               // id string -> true: finished Liches staged at home
-    array<CAirWaveTask@> runs;     // live Liche operations
-    array<int> runTarget;          // parallel to runs: target id * 8 + tier last logged
-    AirStrikeTiers::Roster roster; // the six Liche tiers
+    dictionary held;                  // id string -> true: finished Liches staged at home
+    array<CEscortStrikeTask@> runs;   // live Liche escorts
+    array<IUnitTask@> raids;          // parallel to runs: the bomber wave each one flies with
+    array<int> runStrikes;            // parallel to runs: strikes issued when last logged
+    AirStrikeTiers::Roster roster;    // the six Liche tiers
     int ordersSinceLiche = 0;
-    int lastHoldLog = -100000;
 
     bool Enabled() { return Global::RoleSettings::Air::LichesEnabled && AirEconomy::Active(); }
     bool IsLiche(const CCircuitDef@ d) { return d !is null && d.GetName() == Name; }
+    // A third of the T2 bombers' in-flight retarget radius (owner, 2026-10-24).
+    float StrikeRadius()
+    {
+        return Global::RoleSettings::Air::StrikeImmediateRadius * Global::RoleSettings::Air::LicheStrikeRadiusShare;
+    }
 
     void Init()
     {
-        held.deleteAll(); runs.resize(0); runTarget.resize(0); roster.seenTier.deleteAll(); ordersSinceLiche = 0; lastHoldLog = -100000;
+        held.deleteAll(); runs.resize(0); raids.resize(0); runStrikes.resize(0); ordersSinceLiche = 0;
     }
 
     /**************************************************************************
@@ -105,7 +99,14 @@ namespace AirLiches {
         roster.Add(6, array<string> = {"armaap", "armavp", "armalab", "armasy", "coraap", "coravp", "coralab", "corasy",
             "legaap", "legavp", "legalab", "legadvshipyard"}, Global::RoleSettings::Air::LicheWeightT2Factory);
         roster.Finish();
-        AirStrikeTiers::Register(@roster);
+    }
+    // Priority = tier rank (tier 1 -> 6 ... tier 6 -> 1): the tier decides, then the native task takes
+    // the nearest. O(defs) once per launch.
+    void _Allow(CEscortStrikeTask@ et)
+    {
+        for (int i = 0; i < int(roster.tierByDef.length()); ++i)
+            if (roster.tierByDef[i] > 0)
+                et.AllowStrikeDef(ai.GetCircuitDef(i), float(roster.tiers + 1 - roster.tierByDef[i]));
     }
 
     /**************************************************************************
@@ -150,71 +151,40 @@ namespace AirLiches {
     }
 
     /**************************************************************************
-     Launch with an offensive bomber wave. `spareFighters` are the fighters
-     beyond the bomber wave's own escort; `raid` is the wave, already planned.
-     The Liches pick their own target, but only in the raid's district.
-     Returns the Liches launched.
+     Launch with an offensive bomber wave, after its bombers joined `raid` and
+     before its fighters do. The Liches guard the wave's bombers and take
+     their own targets within StrikeRadius() (see the header). They take no
+     fighters of their own (`spareFighters` is unused): the wave's escort covers
+     them because they stay over the wave. Returns the Liches launched.
      **************************************************************************/
     int LaunchWith(int spareFighters, CAirWaveTask@ raid)
     {
-        if (!Enabled() || raid is null) return 0;
+        if (!Enabled() || raid is null || raid.IsDead()) return 0;
         array<string>@ ids = held.getKeys();
         for (uint i = 0; i < ids.length(); ++i) {
             CCircuitUnit@ u = ai.GetTeamUnit(parseInt(ids[i]));
             if (u is null || u.GetBuildProgress() < 1.0f
                 || (u.task !is null && u.task.GetType() == int(Task::Type::PLAYER))) held.delete(ids[i]);
         }
-        const int available = int(held.getSize());
-        if (available == 0) return 0;
-        CCircuitDef@ liche = ai.GetCircuitDef(Name);
-        IUnitTask@ raw = aiMilitaryMgr.Enqueue(TaskF::Wave());
+        if (held.isEmpty()) return 0;
+        // Escort targets: the wave's bombers, by id. Its fighters join after this call.
+        array<int> bombers;
+        array<CCircuitUnit@>@ members = raid.GetUnits();
+        for (uint i = 0; i < members.length(); ++i)
+            if (members[i] !is null && AirWaves::IsWaveBomber(members[i].circuitDef)) bombers.insertLast(members[i].id);
+        if (bombers.length() == 0) return 0;
+        IUnitTask@ raw = aiMilitaryMgr.EnqueueEscortStrike();
         IFighterTask@ ft = (raw is null) ? null : cast<IFighterTask>(raw);
-        CAirWaveTask@ wt = (ft is null) ? null : cast<CAirWaveTask>(ft);
-        if (wt is null || liche is null) {
+        CEscortStrikeTask@ et = (ft is null) ? null : cast<CEscortStrikeTask>(ft);
+        if (et is null) {
             if (raw !is null) raw.Abort();
             return 0;
         }
         InitRoster();
-        const AIFloat3 raidAim = raid.GetAim();
-        AirWaves::ConfigureStrike(wt, liche, held, available);
-        const float resistance = AirWaves::learnedResistance;
-        wt.SetMissionPolicy(Global::RoleSettings::Air::StrikeCorridorPadding,
-            Global::RoleSettings::Air::StrikeEdgeInset, Global::RoleSettings::Air::StrikeUnknownReserve + resistance - 1.0f,
-            Global::RoleSettings::Air::StrikeRiskScale * resistance, Global::RoleSettings::Air::StrikeArmyReserve * resistance,
-            Global::RoleSettings::Air::StrikeLocalAaReserve * resistance, Global::RoleSettings::Air::StrikeSynchronize);
-        // The raid's own planning already kept clear of failed raid regions; the eight
-        // exclusion slots all go to the district.
-        _Configure(wt, raidAim);
-        // Spare payload is not wasted: after the first kill the run keeps descending the tiers.
-        wt.AddTargetFallback(FallbackMobileAntiNukes); // mobile anti-nukes
-        wt.AddTargetFallback(FallbackTurrets); // turrets
-        wt.AddTargetFallback(FallbackEconomy); // other economy and support structures
-        wt.AddTargetFallback(FallbackStructures); // remaining structures
-        // Aim at the raid first: the native frontline scorer measures from the plan's aim.
-        wt.SetPlan(Task::WaveMode::STRIKE, raidAim, Global::RoleSettings::Air::WaveFormDistance,
-            Global::RoleSettings::Air::StrikeLaneSpacing, Global::RoleSettings::Air::WaveOverrun,
-            Global::RoleSettings::Air::WaveFormTimeoutSeconds * SECOND, 0, Task::WAVE_SMART_BEARING, 1);
-        bool picked = wt.PickStrikeTarget(Global::Map::StartPos, 5, 0.0f, false);
-        const bool tiered = picked;
-        if (!picked) picked = wt.PickOperationTarget(Global::Map::StartPos, 0.0f, false);
-        if (!picked) {
-            if (ai.frame - lastHoldLog >= 30 * SECOND) {
-                lastHoldLog = ai.frame;
-                GenericHelpers::LogUtil("[AIR][Liche] held: no feasible target within " + int(Global::RoleSettings::Air::LicheRaidRadius)
-                    + " of the raid aim " + int(raidAim.x) + "," + int(raidAim.z) + " for " + available
-                    + " Liche(s); fewest needed=" + wt.GetRequiredBombers(), 1);
-            }
-            raw.Abort();
-            return 0;
-        }
-        // Spare payload is not wasted: after the first kill the run keeps descending the tiers.
-        wt.AddTargetFallback(FallbackMobileAntiNukes); // mobile anti-nukes
-        wt.AddTargetFallback(FallbackTurrets); // turrets
-        wt.AddTargetFallback(FallbackEconomy); // other economy and support structures
-        wt.AddTargetFallback(FallbackStructures); // remaining structures
-        wt.SetPlan(Task::WaveMode::STRIKE, wt.GetAim(), Global::RoleSettings::Air::WaveFormDistance,
-            Global::RoleSettings::Air::StrikeLaneSpacing, Global::RoleSettings::Air::WaveOverrun,
-            Global::RoleSettings::Air::WaveFormTimeoutSeconds * SECOND, 0, Task::WAVE_SMART_BEARING, 1);
+        _Allow(et);
+        et.SetStrikePolicy(StrikeRadius(), Global::RoleSettings::Air::LicheStrikersPerTarget,
+            Global::RoleSettings::Air::LicheStrikeSeconds);
+        for (uint i = 0; i < bombers.length(); ++i) et.AddEscortTarget(bombers[i]);
         dictionary cohort;
         @ids = held.getKeys();
         for (uint i = 0; i < ids.length(); ++i) {
@@ -222,68 +192,44 @@ namespace AirLiches {
             if (u !is null && aiMilitaryMgr.TransferUnit(u, raw)) { cohort.set(ids[i], int(u.id)); held.delete(ids[i]); }
         }
         if (cohort.isEmpty()) { raw.Abort(); return 0; }
-        const int escorts = AirOperations::AttachFighters(wt, true,
-            AiMax(0, AiMin(spareFighters, AirWaves::FightersFor(int(cohort.getSize())))));
-        AirOperations::TrackBombers(raw, cohort);
-        runs.insertLast(wt); runTarget.insertLast(-1);
-        AirStrikeTiers::Remember(true);
-        const int tier = roster.TargetTier(wt.GetStrikeTargetId());
-        _SetHandoff(wt, tier);
-        GenericHelpers::LogUtil("[AIR][Liche] launched liches=" + cohort.getSize() + " escorts=" + escorts
-            + " target=" + wt.GetStrikeTargetId() + " tier=" + tier + (tiered ? "" : " (raid fallback)")
-            + " required=" + wt.GetRequiredBombers() + " aim=" + int(wt.GetAim().x) + "," + int(wt.GetAim().z)
-            + " raidAim=" + int(raidAim.x) + "," + int(raidAim.z), 1);
+        AirOperations::TrackBombers(raw, cohort); // Liches on a run count toward Target()
+        runs.insertLast(et); raids.insertLast(raid); runStrikes.insertLast(0);
+        GenericHelpers::LogUtil("[AIR][Liche] launched liches=" + cohort.getSize() + " guarding wave bombers=" + bombers.length()
+            + " vip=" + et.GetVipId() + " strikeRadius=" + int(StrikeRadius())
+            + " perTarget=" + Global::RoleSettings::Air::LicheStrikersPerTarget
+            + " raidTarget=" + raid.GetStrikeTargetId() + " raidAim=" + int(raid.GetAim().x) + "," + int(raid.GetAim().z), 1);
         return int(cohort.getSize());
     }
 
-    void _Configure(CAirWaveTask@ wt, const AIFloat3 &in raidAim)
-    {
-        wt.SetOperationPolicy(true, 5, Global::Map::StartPos, Global::RoleSettings::Air::StrikeEscortLead,
-            Global::RoleSettings::Air::StrikeBacklineRiskLimit, Global::RoleSettings::Air::StrikeDistrictRadius);
-        roster.Allow(wt);
-        // A target lost from sight is searched for where the raid went, not at the enemy starts.
-        wt.AddSearchPoint(raidAim);
-        _ConfineTo(wt, raidAim, Global::RoleSettings::Air::LicheRaidRadius);
-    }
-    // Eight native exclusion discs (the most ExcludeStrikeRegion takes, radius <= 10000) whose near
-    // edges stand `radius` from the centre: every target outside an octagon of circumradius about
-    // 1.08 x radius is excluded, out to about 20000 elmos from the centre.
-    void _ConfineTo(CAirWaveTask@ wt, const AIFloat3 &in centre, float radius)
-    {
-        const float disc = 10000.0f;
-        const float reach = AiMax(256.0f, radius) + disc;
-        for (int k = 0; k < 8; ++k) {
-            const float a = float(k) * 0.7853982f;
-            wt.ExcludeStrikeRegion(AIFloat3(centre.x + cos(a) * reach, 0.0f, centre.z + sin(a) * reach), disc);
-        }
-    }
-    void _SetHandoff(CAirWaveTask@ wt, int tier)
-    {
-        wt.SetAttackHandoffPolicy(Global::RoleSettings::Air::StrikeEarlyAttack, roster.Threshold(tier),
-            Global::RoleSettings::Air::LicheImmediateRadius);
-    }
-
     /**************************************************************************
-     In flight (Air_MainUpdate, every 30 frames): keep each run's handoff
-     threshold one tier above its current target. Liche targets are remembered
-     from the start for an Armada AIR (a chosen target is often one seen long
-     before, out of radar now): one contact scan per second.
+     Air_MainUpdate, every 30 frames. The native task does the flying; this only
+     ends an escort whose wave is over while its Liches still have a bomber to
+     guard (bombers that left the wave alive), so they come home to be held for
+     the next wave, and logs each run's strike count when it changes.
      **************************************************************************/
     void Update()
     {
-        for (int i = int(runs.length()) - 1; i >= 0; --i)
-            if (runs[i] is null || runs[i].IsDead()) { runs.removeAt(i); runTarget.removeAt(i); }
-        if (!Enabled() || Global::AISettings::Side != "armada") return;
-        InitRoster();
-        AirStrikeTiers::Remember();
-        for (uint r = 0; r < runs.length(); ++r) {
-            const int target = runs[r].GetStrikeTargetId();
-            const int tier = roster.TargetTier(target);
-            _SetHandoff(runs[r], tier);
-            if (target * 8 + tier == runTarget[r]) continue;
-            runTarget[r] = target * 8 + tier;
-            GenericHelpers::LogUtil("[AIR][Liche] run target=" + target + " tier=" + tier
-                + " handoff=" + roster.Threshold(tier), 1);
+        for (int i = int(runs.length()) - 1; i >= 0; --i) {
+            CEscortStrikeTask@ et = runs[i];
+            if (et is null || et.IsDead()) {
+                if (et !is null)
+                    GenericHelpers::LogUtil("[AIR][Liche] run over strikes=" + et.GetStrikesIssued() + " fired=" + et.GetShotsFired()
+                        + " destroyed=" + et.GetTargetsDestroyed(), 1);
+                runs.removeAt(i); raids.removeAt(i); runStrikes.removeAt(i);
+                continue;
+            }
+            if ((raids[i] is null || raids[i].IsDead()) && et.GetStriking() == 0) {
+                GenericHelpers::LogUtil("[AIR][Liche] wave over: escort ends, liches=" + et.GetUnits().length() + " go home; strikes="
+                    + et.GetStrikesIssued() + " fired=" + et.GetShotsFired() + " destroyed=" + et.GetTargetsDestroyed(), 1);
+                et.Abort();
+                runs.removeAt(i); raids.removeAt(i); runStrikes.removeAt(i);
+                continue;
+            }
+            if (et.GetStrikesIssued() != runStrikes[i]) {
+                runStrikes[i] = et.GetStrikesIssued();
+                GenericHelpers::LogUtil("[AIR][Liche] run strikes=" + et.GetStrikesIssued() + " striking=" + et.GetStriking()
+                    + " fired=" + et.GetShotsFired() + " destroyed=" + et.GetTargetsDestroyed() + " vip=" + et.GetVipId(), 1);
+            }
         }
     }
 

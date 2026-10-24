@@ -116,6 +116,7 @@ public:
 	IFighterTask* EnqueueGather(const TaskF::SFightTask& ti, const springai::AIFloat3& pos, int deadline);
 	bool SetGatherPower(IUnitTask* task, float power);
 	IUnitTask* EnqueueExternalControl(const std::string& ownerRule);
+	IUnitTask* EnqueueEscortStrike();  // AirLiches: strikers that guard a raid (CEscortStrikeTask)
 	IUnitTask* EnqueueCargoHold(int transportId);
 	virtual CRetreatTask* EnqueueRetreat() override;
 

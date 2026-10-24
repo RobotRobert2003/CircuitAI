@@ -28,6 +28,7 @@
 #include "task/fighter/RouteTask.h"
 #include "task/fighter/FerryTask.h"
 #include "task/fighter/AirWaveTask.h"
+#include "task/fighter/EscortStrikeTask.h"
 #include "unit/CircuitUnit.h"
 #include "unit/TransportUtils.h"
 #include "CircuitAI.h"
@@ -1811,6 +1812,22 @@ void CInitScript::RegisterCAirWaveTask(asIScriptEngine* engine)
 	r = engine->RegisterObjectMethod("CAirWaveTask", "int GetFormedCount() const", asMETHOD(CAirWaveTask, GetFormedCount), asCALL_THISCALL); ASSERT(r >= 0);
 }
 
+void CInitScript::RegisterCEscortStrikeTask(asIScriptEngine* engine)
+{
+	RegisterIFighterTask<CEscortStrikeTask>(engine, "CEscortStrikeTask");
+	RegisterCast<IFighterTask, CEscortStrikeTask>(engine, "IFighterTask", "CEscortStrikeTask");
+	// AirLiches (systems/air/air_liches.as): escort targets are unit ids, resolved
+	// natively at each use; the task never holds a unit handle across frames.
+	int r = engine->RegisterObjectMethod("CEscortStrikeTask", "void AddEscortTarget(int)", asMETHOD(CEscortStrikeTask, AddEscortTarget), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEscortStrikeTask", "void AllowStrikeDef(CCircuitDef@, float)", asMETHOD(CEscortStrikeTask, AllowStrikeDef), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEscortStrikeTask", "void SetStrikePolicy(float radius, int perTarget, int attackSeconds)", asMETHOD(CEscortStrikeTask, SetStrikePolicy), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEscortStrikeTask", "int GetVipId() const", asMETHOD(CEscortStrikeTask, GetVipId), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEscortStrikeTask", "int GetStriking() const", asMETHOD(CEscortStrikeTask, GetStriking), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEscortStrikeTask", "int GetStrikesIssued() const", asMETHOD(CEscortStrikeTask, GetStrikesIssued), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEscortStrikeTask", "int GetShotsFired() const", asMETHOD(CEscortStrikeTask, GetShotsFired), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEscortStrikeTask", "int GetTargetsDestroyed() const", asMETHOD(CEscortStrikeTask, GetTargetsDestroyed), asCALL_THISCALL); ASSERT(r >= 0);
+}
+
 void CInitScript::RegisterUnitTasks(asIScriptEngine* engine)
 {
 	RegisterIUnitTask<IUnitTask>(engine, "IUnitTask");
@@ -1820,6 +1837,7 @@ void CInitScript::RegisterUnitTasks(asIScriptEngine* engine)
 	RegisterCRouteTask(engine);
 	RegisterCFerryTask(engine);
 	RegisterCAirWaveTask(engine);
+	RegisterCEscortStrikeTask(engine);
 }
 
 CMaskHandler::TypeMask CInitScript::AddRole(const std::string& name, int actAsRole)

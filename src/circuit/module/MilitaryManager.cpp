@@ -27,6 +27,7 @@
 #include "task/fighter/RouteTask.h"
 #include "task/fighter/FerryTask.h"
 #include "task/fighter/AirWaveTask.h"
+#include "task/fighter/EscortStrikeTask.h"
 #include "task/fighter/DefendTask.h"
 #include "task/fighter/ScoutTask.h"
 #include "task/fighter/RaidTask.h"
@@ -1002,6 +1003,16 @@ IUnitTask* CMilitaryManager::EnqueueExternalControl(const std::string& ownerRule
 {
     if (ownerRule.empty()) return nullptr;
     IUnitTask* task = new CExternalControlTask(this, ownerRule);
+    updateTasks.push_back(task);
+    TaskAdded(task);
+    return task;
+}
+
+IUnitTask* CMilitaryManager::EnqueueEscortStrike()
+{
+    // Script-owned like the external control task: not in fightTasks, so no
+    // native guard census or CFGuardTask lookup ever counts or casts it.
+    IUnitTask* task = new CEscortStrikeTask(this);
     updateTasks.push_back(task);
     TaskAdded(task);
     return task;

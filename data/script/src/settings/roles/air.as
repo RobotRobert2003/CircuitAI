@@ -471,8 +471,8 @@ namespace Air {
             /******************** LICHES (Armada T2 nuclear bomber, systems/air/air_liches.as) ********************/
             // Off here; experimental_balanced turns it on. Liches are built from the T2 plants once the
             // 10 s minimum metal income reaches LicheMetalIncome (latched for the game), held at home,
-            // and launched with each offensive T2 bomber wave as their own operation with their own targets,
-            // picked inside the wave's district (LicheRaidRadius).
+            // and launched with each offensive T2 bomber wave: they guard one of its bombers and break off
+            // for their own targets close by (systems/air/air_liches.as, owner 2026-10-24).
             bool LichesEnabled = false;
             float LicheMetalIncome = 150.0f;   // metal/s, 10 s minimum (Economy::GetMinMetalIncomeLast10s)
             int LicheReserve = 8;              // Liches held or building beyond those already on a run
@@ -487,14 +487,12 @@ namespace Air {
             float LicheWeightGeo = 400.0f;            // 4) geothermal, Prude
             float LicheWeightGantry = 20.0f;          // 5) T3 gantries
             float LicheWeightT2Factory = 1.0f;        // 6) T2 air, vehicle, bot and sea factories
-            // In flight a visible higher-tier target this close to the Liches takes over. Half the T2 bombers'
-            // StrikeImmediateRadius (1800): the Liche's homing missile (range 250) needs no long lined-up run,
-            // so it picks targets closer in front (owner, 2026-10-17).
-            float LicheImmediateRadius = 900.0f;
-            // The Liches fly with the T2 bomber raid: their target, every later one and the in-flight handoff
-            // all stay within this distance of the raid's aim (owner, 2026-10-21). Native exclusion makes the
-            // edge an octagon reaching about 1.08x this.
-            float LicheRaidRadius = 2400.0f;
+            // A Liche guarding the wave breaks off with an ATTACK the moment a roster target is this close
+            // to it: this share of the T2 bombers' StrikeImmediateRadius (1800 -> 600). The homing missile
+            // needs no run-up and hits close targets easily (owner, 2026-10-24: "cut that number in 1/3").
+            float LicheStrikeRadiusShare = 1.0f / 3.0f;
+            int LicheStrikersPerTarget = 2;  // Liches on one target at once; the rest keep guarding (<= 0: no cap)
+            int LicheStrikeSeconds = 45;     // an ATTACK not resolved by then ends and the Liche rejoins the wave
 
             /******************** T2 BOMBER TARGET TIERS (systems/air/air_strike_tiers.as) ********************/
             // Off here; experimental_balanced turns it on. The T2 bomber waves (Blizzard, Hailstorm, Phoenix) pick

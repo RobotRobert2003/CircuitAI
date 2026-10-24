@@ -100,7 +100,7 @@ namespace Main {
 		// (src/settings/roles/air.as LichesEnabled, off there; systems/air/air_liches.as)
 		Global::RoleSettings::Air::LichesEnabled = true;
 		// AIR (owner, 2026-10-21): T2 bombers pick tiered economy targets the Liche way (advanced fusion, fusion,
-		// T2 converter, advanced geo, factory); the Liches fly with the raid and pick inside its district
+		// T2 converter, advanced geo, factory); the Liches guard the raid's bombers (owner, 2026-10-24)
 		// (src/settings/roles/air.as BomberTiersEnabled, off there; systems/air/air_strike_tiers.as)
 		Global::RoleSettings::Air::BomberTiersEnabled = true;
         Global::Commander::AfusDefenceRadius = Global::Commander::BaseRadius;

@@ -1,0 +1,18 @@
+{
+  "stop_minute": 13,
+  "expect": [
+    {"key":"observer", "pattern":"\\[LicheStrike\\] loaded", "scope":"any", "by_minute":1},
+    {"key":"supplied", "pattern":"\\[LicheStrike\\] stage=1 supplied", "scope":"any", "by_minute":1},
+    {"key":"launch", "pattern":"\\[AIR\\]\\[Liche\\] launched liches=", "by_minute":6},
+    {"key":"guard", "pattern":"ESCORT: team=0 vip -1 -> [0-9]+", "scope":"any", "by_minute":6},
+    {"key":"strike", "pattern":"ESCORT: team=0 strike unit=", "scope":"any", "by_minute":9},
+    {"key":"fired", "pattern":"ESCORT: team=0 fired unit=", "scope":"any", "by_minute":10},
+    {"key":"stage3", "pattern":"\\[LicheStrike\\] stage=3", "scope":"any", "by_minute":9}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope":"any"},
+    {"key":"invariant", "pattern":"INVARIANT", "scope":"any"},
+    {"key":"crash", "pattern":"Access violation|has crashed|Fatal:", "scope":"any"},
+    {"key":"observer", "pattern":"Error in.*liche_strike_fixture|Removed widget: Liche strike fixture", "scope":"any"}
+  ]
+}

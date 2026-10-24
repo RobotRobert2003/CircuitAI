@@ -7,6 +7,7 @@
 
 #include "task/static/SuperTask.h"  // D-124
 #include "task/fighter/AirWaveTask.h"
+#include "task/fighter/EscortStrikeTask.h"
 #include "CircuitAI.h"
 #include "scheduler/Scheduler.h"
 #include "script/ScriptManager.h"
@@ -387,6 +388,8 @@ int CCircuitAI::HandleGameEvent(int topic, const void* data)
 				CCircuitUnit* attacker = GetTeamUnit(evt->attacker);
 				CAirWaveTask* wave = attacker == nullptr ? nullptr : dynamic_cast<CAirWaveTask*>(attacker->GetTask());
 				if (wave != nullptr) wave->OnDamageDealt(attacker, evt->weaponDefId);
+				CEscortStrikeTask* escort = attacker == nullptr ? nullptr : dynamic_cast<CEscortStrikeTask*>(attacker->GetTask());
+				if (escort != nullptr) escort->OnWeaponFired(attacker, evt->weaponDefId);
 			}
 			CEnemyInfo* enemy = GetEnemyInfo(evt->enemy);
 			ret = (enemy != nullptr) ? this->EnemyDamaged(enemy) : ERROR_ENEMY_DAMAGED;
@@ -415,6 +418,8 @@ int CCircuitAI::HandleGameEvent(int topic, const void* data)
                 if (commanderControl) commanderControl->WeaponFired(evt->unitId,evt->weaponDefId);
 				CAirWaveTask* wave = dynamic_cast<CAirWaveTask*>(unit->GetTask());
                 if (wave != nullptr) wave->OnWeaponFired(unit, evt->weaponDefId);
+				CEscortStrikeTask* escort = dynamic_cast<CEscortStrikeTask*>(unit->GetTask());
+				if (escort != nullptr) escort->OnWeaponFired(unit, evt->weaponDefId);
 				CSuperTask* firingTask = dynamic_cast<CSuperTask*>(unit->GetTask());
 				if (firingTask != nullptr) {
 					const AIFloat3 aim = firingTask->GetAimPos();
