@@ -28,7 +28,7 @@ namespace IceScream {
 	// landLocked heuristic: not yet surveyed on this map; every spot passes false. A future
 	// pass may flag isolated starts that need hover/amphibious to break out.
 	StartSpot@[] spots = {
-		StartSpot(AIFloat3(  565, 0, 4713), AiRole::FRONT, false), // P1  front
+		StartSpot(AIFloat3(  565, 0, 4713), AiRole::TECH, false), // P1  front
 		StartSpot(AIFloat3( 1075, 0, 3512), AiRole::FRONT, false), // P2  front
 		StartSpot(AIFloat3( 2174, 0, 2373), AiRole::FRONT, false), // P3  front
 		StartSpot(AIFloat3( 2979, 0, 1634), AiRole::FRONT, false), // P4  front
@@ -36,7 +36,7 @@ namespace IceScream {
 		StartSpot(AIFloat3(  589, 0, 2652), AiRole::AIR,   false), // P6  air
 		StartSpot(AIFloat3( 3952, 0, 4570), AiRole::FRONT, false), // P7  front
 		StartSpot(AIFloat3( 4320, 0, 3317), AiRole::FRONT, false), // P8  front
-		StartSpot(AIFloat3(14870, 0,  576), AiRole::FRONT, false), // P9  front
+		StartSpot(AIFloat3(14870, 0,  576), AiRole::TECH, false), // P9  front
 		StartSpot(AIFloat3(14300, 0, 1586), AiRole::FRONT, false), // P10 front
 		StartSpot(AIFloat3(13223, 0, 2788), AiRole::FRONT, false), // P11 front
 		StartSpot(AIFloat3(12338, 0, 3462), AiRole::FRONT, false), // P12 front
