@@ -22,6 +22,11 @@ namespace EskerCreek {
 	//   sea                                            -> SEA
 	//   anything else / unlisted                       -> FRONT
 	//
+	// Local overrides of the export (which lists every spot as front): P6 is the rearmost
+	// west spot (smallest x) and becomes AIR. P14 is its mirror: the spots are point-
+	// symmetric about the map centre (each Pn / Pn+8 pair sums to ~(12250, 8190)), and P14
+	// is likewise the rearmost east spot (largest x), so it is AIR too.
+	//
 	// landLocked heuristic: not yet surveyed on this map; every spot passes false. A future
 	// pass may flag isolated starts that need hover/amphibious to break out.
 	StartSpot@[] spots = {
@@ -30,7 +35,7 @@ namespace EskerCreek {
 		StartSpot(AIFloat3( 1953, 0, 2845), AiRole::FRONT, false), // P3  front
 		StartSpot(AIFloat3( 2435, 0, 3391), AiRole::FRONT, false), // P4  front
 		StartSpot(AIFloat3( 1825, 0, 4319), AiRole::FRONT, false), // P5  front
-		StartSpot(AIFloat3( 1688, 0, 5944), AiRole::FRONT, false), // P6  front
+		StartSpot(AIFloat3( 1688, 0, 5944), AiRole::AIR,   false), // P6  air (local override; was front)
 		StartSpot(AIFloat3( 2358, 0, 7047), AiRole::FRONT, false), // P7  front
 		StartSpot(AIFloat3( 2114, 0, 8004), AiRole::FRONT, false), // P8  front
 		StartSpot(AIFloat3( 9971, 0, 7925), AiRole::FRONT, false), // P9  front
@@ -38,7 +43,7 @@ namespace EskerCreek {
 		StartSpot(AIFloat3(10281, 0, 5307), AiRole::FRONT, false), // P11 front
 		StartSpot(AIFloat3( 9803, 0, 4779), AiRole::FRONT, false), // P12 front
 		StartSpot(AIFloat3(10436, 0, 3887), AiRole::FRONT, false), // P13 front
-		StartSpot(AIFloat3(10542, 0, 2220), AiRole::FRONT, false), // P14 front
+		StartSpot(AIFloat3(10542, 0, 2220), AiRole::AIR,   false), // P14 air (local override; was front; mirror of P6)
 		StartSpot(AIFloat3( 9890, 0, 1186), AiRole::FRONT, false), // P15 front
 		StartSpot(AIFloat3(10104, 0,  211), AiRole::FRONT, false) // P16 front
 	};

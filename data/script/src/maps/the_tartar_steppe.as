@@ -28,7 +28,7 @@ namespace TheTartarSteppe {
 		StartSpot(AIFloat3( 2151, 0,  1051), AiRole::FRONT, false), // P1  front
 		StartSpot(AIFloat3( 2200, 0,  2770), AiRole::FRONT, false), // P2  front
 		StartSpot(AIFloat3( 2314, 0,  4142), AiRole::FRONT, false), // P3  front
-		StartSpot(AIFloat3( 2421, 0,  5615), AiRole::FRONT, false), // P4  front
+		StartSpot(AIFloat3( 2421, 0,  5615), AiRole::SUPPORT, false), // P4  front
 		StartSpot(AIFloat3( 2427, 0,  6654), AiRole::FRONT, false), // P5  front
 		StartSpot(AIFloat3( 2333, 0,  8233), AiRole::FRONT, false), // P6  front
 		StartSpot(AIFloat3( 2182, 0,  9511), AiRole::FRONT, false), // P7  front
@@ -37,7 +37,7 @@ namespace TheTartarSteppe {
 		StartSpot(AIFloat3(10105, 0,  9486), AiRole::FRONT, false), // P10 front
 		StartSpot(AIFloat3( 9949, 0,  8150), AiRole::FRONT, false), // P11 front
 		StartSpot(AIFloat3( 9889, 0,  6680), AiRole::FRONT, false), // P12 front
-		StartSpot(AIFloat3( 9854, 0,  5597), AiRole::FRONT, false), // P13 front
+		StartSpot(AIFloat3( 9854, 0,  5597), AiRole::SUPPORT, false), // P13 front
 		StartSpot(AIFloat3( 9979, 0,  4173), AiRole::FRONT, false), // P14 front
 		StartSpot(AIFloat3(10101, 0,  2790), AiRole::FRONT, false), // P15 front
 		StartSpot(AIFloat3(10151, 0,  1118), AiRole::FRONT, false) // P16 front
