@@ -320,11 +320,12 @@ void CCircuitUnit::CmdMoveTo(const AIFloat3& pos, short options, int timeout)
         }
     }
 	// Owner 2026-10-24: a commander gets at most one new (non-queued) MOVE per
-	// second from any owner. A busy commander keeps its live order; an idle
-	// one moves at once, so no task waits on a dropped order.
+	// second from any owner, idle or not (a STOP before the MOVE empties the
+	// queue, so an idle exemption let 11-28 frame gaps through). The owner
+	// re-asks on its next tick; a dropped order sends nothing.
 	if (circuitDef->IsRoleComm() && !(options & UNIT_COMMAND_OPTION_SHIFT_KEY) && manager != nullptr) {
 		const int now = manager->GetCircuit()->GetLastFrame();
-		if (now - commMoveFrame < FRAMES_PER_SEC && manager->GetCircuit()->GetUnitAPI()->GetCMDQueueSize(id) > 0) return;
+		if (now - commMoveFrame < FRAMES_PER_SEC) return;
 		commMoveFrame = now;
 	}
 	unit->MoveTo(pos, options, timeout);
