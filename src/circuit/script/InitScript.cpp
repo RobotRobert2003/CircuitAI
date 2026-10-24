@@ -1745,6 +1745,7 @@ void CInitScript::RegisterCRouteTask(asIScriptEngine* engine)
 	r = engine->RegisterObjectMethod("CRouteTask", "void SetLanes(int, float, float)", asMETHOD(CRouteTask, SetLanes), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CRouteTask", "void SetTraversal(bool, float, bool)", asMETHOD(CRouteTask, SetTraversal), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CRouteTask", "void SetPatrol(bool)", asMETHOD(CRouteTask, SetPatrol), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CRouteTask", "void SetResumeAhead(bool)", asMETHOD(CRouteTask, SetResumeAhead), asCALL_THISCALL); ASSERT(r >= 0);  // spam lanes
     r = engine->RegisterObjectMethod("CRouteTask", "void SetAirControl(bool)", asMETHOD(CRouteTask, SetAirControl), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CRouteTask", "void SetSeaControl(bool)", asMETHOD(CRouteTask, SetSeaControl), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CRouteTask", "void SetMoveCompaction(bool)", asMETHOD(CRouteTask, SetMoveCompaction), asCALL_THISCALL); ASSERT(r >= 0);

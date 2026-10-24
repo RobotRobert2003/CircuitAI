@@ -154,6 +154,7 @@ namespace Spam {
         EdgeLanes::Update();   // owner, 2026-10-17: the edge lanes' lab and its repeat
         EdgePorc::Update();    // owner, 2026-10-19: the edge lanes' forward porc
         ReleaseAtLaneEnds();   // owner, 2026-10-20: units at their lane's end go to normal attacks
+        CheckRoutedUnits();    // D-111: INV-043, also while spam is paused (its routes still run)
         const float mi = Economy::GetMinMetalIncomeLast10s();
         const float ei = Economy::GetMinEnergyIncomeLast10s();
         const bool funded = IsEnabled() && SpamMath::Funded(mi, ei, aiEconomyMgr.isEnergyEmpty,
@@ -194,7 +195,6 @@ namespace Spam {
             WidgetLink::Send("spam", "off|" + int(mi) + "|" + int(ei));
             return;
         }
-        CheckRoutedUnits();   // D-111: INV-043
         if (repeatTask.getSize() == 0 && ai.frame % (30 * SECOND) == 0)
             GenericHelpers::LogUtil("[Spam] waiting for eligible pump; workers=" + aiBuilderMgr.GetWorkerCount(), 1);
         AdoptProducedUnits();
@@ -220,8 +220,16 @@ namespace Spam {
                 || u.task.GetType() == int(Task::Type::RETREAT) || u.task.IsExternalControlled())) continue;
             IFighterTask@ fight = u.task is null ? null : cast<IFighterTask>(u.task);
             if (fight !is null && cast<CRouteTask>(fight) !is null) continue;
+            const string from = (u.task is null) ? "none" : ("" + u.task.GetType() + (fight is null ? "" : "/" + int(fight.GetFightType())));
             IUnitTask@ route = MilitaryMakeTask(u);
-            if (route !is null && aiMilitaryMgr.TransferUnit(u, route)) ++joined;
+            if (route !is null && aiMilitaryMgr.TransferUnit(u, route)) {
+                ++joined;
+                // which task held a spam unit off its lane (type/fight type); the route
+                // task resumes it from where it stands (SetResumeAhead), not its lab
+                const AIFloat3 p = u.GetPos(ai.frame);
+                GenericHelpers::LogUtil("[SpamAdopt] unit=" + u.id + " def=" + u.circuitDef.GetName() + " from task " + from
+                    + " pos=(" + int(p.x) + "," + int(p.z) + ")", 1);
+            }
         }
         if (joined > 0) GenericHelpers::LogUtil("[Spam] released " + joined + " existing units onto producer lanes", 1);
     }
@@ -749,6 +757,13 @@ namespace Spam {
         @task = (ft is null) ? null : cast<CRouteTask>(ft);
         if (task is null) return null;
         task.SetRoute(points);
+        // Owner, 2026-10-24: a unit keeps its move queue to the very end. A lane
+        // change applies to units produced after it (those on the field keep their
+        // own lane, CRouteTask per-unit routes); a unit that rejoins or idles carries
+        // on from the next waypoint ahead, never from the first one; and the task
+        // counts it arrived only within LaneEndRadius of its final move order.
+        task.SetResumeAhead(true);
+        task.SetTraversal(false, Global::Spam::LaneEndRadius, false);
         // Spread WITHIN the factory's line: each unit is dealt its own lane
         // across a band, so the stream crosses the map as a broad front that
         // one shell cannot erase and that sees a band's width, then focuses
@@ -888,56 +903,71 @@ namespace Spam {
         }
         CRouteTask@ task = RouteFor(factory);
         if (task is null) return null;
+        // one line per unit joining a lane, so a test knows which units are on lanes
+        if (!routedUnits.exists(ukey))
+            GenericHelpers::LogUtil("[SpamJoin] unit=" + u.id + " def=" + u.circuitDef.GetName() + " lane="
+                + (EdgeLanes::IsEdgeKey("" + factory.id) ? "edge" : ("" + factory.id)), 1);
         routedUnits.set(ukey, factory.id);
         return task;
     }
 
     // Owner, 2026-10-20: every spam lane, as the edge lanes (EdgeLanes::ReleaseArrived):
-    // a unit within LaneReleaseRadius of its lane's last point leaves the route task for
-    // a native default military task (attack/raid), and MilitaryMakeTask and
-    // AdoptProducedUnits never put it back on a lane. The edge lab's lane is left to
-    // EdgeLanes. Each lane's end is cached per routesVersion. Every 2 s, O(units on lanes).
+    // a unit that has reached its final move order leaves the route task for a native
+    // default military task (attack/raid), and MilitaryMakeTask and AdoptProducedUnits
+    // never put it back on a lane. Owner, 2026-10-24: "reached" is the route task's own
+    // IsAtEnd, within LaneEndRadius (150) of the unit's last lane point (lane offset
+    // included), not 400 elmos of the lane's centre end. The edge lab's lane is left
+    // to EdgeLanes (the same rule). Every 2 s, O(units on lanes), O(1) each.
     dictionary released;          // unit id string -> true
-    dictionary laneEndX;          // factory id string -> float, the lane's last point
-    dictionary laneEndZ;
-    dictionary laneEndVersion;    // factory id string -> routesVersion of that end
     int laneReleaseFrame = -1;
     bool IsReleased(CCircuitUnit@ u) { return u !is null && released.exists("" + u.id); }
+    // Hand one arrived unit back to normal attacks; one line per unit, so a test can
+    // match every hand-back with the unit's final move order (spam_route_watch.lua)
+    bool Release(CCircuitUnit@ u, const string &in lane)
+    {
+        const string key = "" + u.id;
+        released.set(key, true);
+        routedUnits.delete(key);   // INV-043: leaving the lane on purpose
+        const AIFloat3 p = u.GetPos(ai.frame);
+        GenericHelpers::LogUtil("[SpamRelease] unit=" + u.id + " def=" + u.circuitDef.GetName() + " lane=" + lane
+            + " pos=(" + int(p.x) + "," + int(p.z) + ")", 1);
+        IUnitTask@ normal = aiMilitaryMgr.DefaultMakeTask(u);
+        return normal !is null && aiMilitaryMgr.TransferUnit(u, normal);
+    }
+    // Owner, 2026-10-24: a lost lab's lane runs on. Its route task is not aborted (that
+    // sent every unit on the field to native scout/raid tasks: Project SD-129, a bombed
+    // Hades lab); no unit joins it any more, its units keep their queues to the end and
+    // are handed back there as on any lane, and it is aborted once its last unit left.
+    array<CRouteTask@> orphanRoutes;
+    array<bool> orphanEdge;
     void ReleaseAtLaneEnds()
     {
-        if (!Global::Spam::LaneReleaseAtEnd || routeByFactory.getSize() == 0 || ai.frame - laneReleaseFrame < 2 * SECOND) return;
+        if (ai.frame - laneReleaseFrame < 2 * SECOND || (routeByFactory.getSize() == 0 && orphanRoutes.length() == 0)) return;
         laneReleaseFrame = ai.frame;
-        const float r = Global::Spam::LaneReleaseRadius;
         int n = 0;
+        for (int i = int(orphanRoutes.length()) - 1; i >= 0; --i) {
+            CRouteTask@ task = orphanRoutes[i];
+            array<CCircuitUnit@>@ us = (task is null || task.IsDead()) ? null : task.GetUnits();
+            if (us is null || us.length() == 0) {
+                orphanRoutes.removeAt(i); orphanEdge.removeAt(i);   // first: Abort calls OnTaskRemoved
+                if (us !is null) task.Abort();
+                continue;
+            }
+            if (!orphanEdge[i] && !Global::Spam::LaneReleaseAtEnd) continue;   // held at the end, as on a live lane
+            for (uint j = 0; j < us.length(); ++j)
+                if (us[j] !is null && task.IsAtEnd(us[j]) && Release(us[j], orphanEdge[i] ? "edge" : "orphan")) ++n;
+        }
+        if (!Global::Spam::LaneReleaseAtEnd) return;
         array<string>@ keys = routeByFactory.getKeys();
         for (uint i = 0; i < keys.length(); ++i) {
             if (EdgeLanes::IsEdgeKey(keys[i])) continue;
             CRouteTask@ task = null;
             if (!routeByFactory.get(keys[i], @task) || task is null || task.IsDead()) continue;
             array<CCircuitUnit@>@ us = task.GetUnits();
-            if (us.length() == 0) continue;
-            float ex = 0.0f, ez = 0.0f;
-            int ver = -1;
-            if (!laneEndX.get(keys[i], ex) || !laneEndZ.get(keys[i], ez) || !laneEndVersion.get(keys[i], ver) || ver != routesVersion) {
-                CCircuitUnit@ f = ai.GetTeamUnit(int(parseInt(keys[i])));
-                if (f is null) continue;
-                array<AIFloat3> points = _RouteOfKey(keys[i], f.GetPos(ai.frame));
-                if (points.length() == 0) continue;
-                ex = points[points.length() - 1].x;
-                ez = points[points.length() - 1].z;
-                laneEndX.set(keys[i], ex);
-                laneEndZ.set(keys[i], ez);
-                laneEndVersion.set(keys[i], routesVersion);
-            }
-            const AIFloat3 end(ex, 0.0f, ez);
             for (uint j = 0; j < us.length(); ++j) {
                 CCircuitUnit@ u = us[j];
-                if (u is null || MapHelpers::SqDist(u.GetPos(ai.frame), end) > r * r) continue;
-                const string key = "" + u.id;
-                released.set(key, true);
-                routedUnits.delete(key);   // INV-043: leaving the lane on purpose
-                IUnitTask@ normal = aiMilitaryMgr.DefaultMakeTask(u);
-                if (normal !is null && aiMilitaryMgr.TransferUnit(u, normal)) ++n;
+                if (u is null || !task.IsAtEnd(u)) continue;
+                if (Release(u, keys[i])) ++n;
             }
         }
         if (n > 0) GenericHelpers::LogUtil("[Spam] released " + n + " unit(s) at their lane's end to normal attacks", 1);
@@ -965,7 +995,7 @@ namespace Spam {
             CRouteTask@ rt = (ft is null) ? null : cast<CRouteTask>(ft);
             if (rt !is null) continue;
             ++moved;
-            if (example.length() == 0) example = u.circuitDef.GetName() + " " + u.id + " now on task type " + ((u.task is null) ? -1 : int(u.task.GetType()));
+            if (example.length() == 0) example = u.circuitDef.GetName() + " " + u.id + " now on task type " + ((u.task is null) ? -1 : int(u.task.GetType())) + (ft is null ? "" : "/" + int(ft.GetFightType()));
             routedUnits.delete(keys[i]);
         }
         if (moved > 0) Invariants::Violation("INV-043", "spam", moved + " spam unit(s) left their lane (" + example + ")");
@@ -974,11 +1004,14 @@ namespace Spam {
     void OnFactoryRemoved(CCircuitUnit@ factory)
     {
         if (factory is null) return;
-        EdgeLanes::OnFactoryRemoved(factory);
         const string key = "" + factory.id;
+        const bool edge = EdgeLanes::IsEdgeKey(key);   // before EdgeLanes forgets its lab
+        EdgeLanes::OnFactoryRemoved(factory);
         CRouteTask@ task = null;
-        if (routeByFactory.get(key, @task) && task !is null) {
-            task.Abort();   // its units go idle and rejoin the nearest remaining route
+        if (routeByFactory.get(key, @task) && task !is null && !task.IsDead()) {
+            // owner, 2026-10-24: units on the field keep their lane (orphanRoutes)
+            if (task.GetUnits().length() > 0) { orphanRoutes.insertLast(task); orphanEdge.insertLast(edge); }
+            else task.Abort();
         }
         routeByFactory.delete(key);
         laneByFactory.delete(key);
@@ -991,7 +1024,10 @@ namespace Spam {
 
     void OnTaskRemoved(IUnitTask@ task)
     {
-        if (task is null || routeByFactory.getSize() == 0) return;
+        if (task is null) return;
+        for (int i = int(orphanRoutes.length()) - 1; i >= 0; --i)
+            if (cast<IUnitTask>(orphanRoutes[i]) is task) { orphanRoutes.removeAt(i); orphanEdge.removeAt(i); }
+        if (routeByFactory.getSize() == 0) return;
         array<string>@ keys = routeByFactory.getKeys();
         for (uint i = 0; i < keys.length(); ++i) {
             CRouteTask@ t = null;

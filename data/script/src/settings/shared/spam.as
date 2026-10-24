@@ -60,10 +60,13 @@ namespace Spam {
         bool EdgeVehicleLab = false;         // false: a T1 bot lab; true: a T1 vehicle plant
         int EdgeUnitLanes = 3;               // a narrow band along the edge
         float EdgeUnitLaneSpacing = 96.0f;
-        float EdgeReleaseRadius = 400.0f;    // within this of the far corner a unit leaves the lane for normal attacks
         // owner, 2026-10-20: every spam lane releases its units at its end, as the edge lanes do (off here)
         bool LaneReleaseAtEnd = false;
-        float LaneReleaseRadius = 400.0f;    // within this of a lane's last point a unit leaves it for normal attacks
+        // owner, 2026-10-24: a spam unit (edge lanes included) is handed back to normal
+        // attacks only within this of its own final move order (CRouteTask::IsAtEnd: its
+        // lane's last point, lane offset included); until then it keeps its move queue.
+        // Also the route task's arrival radius, so an idle unit further out re-issues.
+        float LaneEndRadius = 150.0f;
         // owner, 2026-10-24: every spam lane (edge lanes, FRONT and TECH pumps) gets one
         // more last point, the enemy team's back corner across the map from where the
         // lane ended, so the run is an L. A lane ending within CornerMiddleShare of the

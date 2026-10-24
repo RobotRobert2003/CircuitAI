@@ -272,7 +272,7 @@ namespace EdgeLanes {
         ReleaseArrived(lab);
         Report(lab);
     }
-    // Owner, 2026-10-17: a unit that reached the lane's end (the far corner)
+    // Owner, 2026-10-17: a unit that reached the lane's end (its last rally)
     // leaves the route task and goes back to the ordinary military logic
     // (native attack/raid tasks). It stops getting route orders, and Spam never
     // pulls it back onto a lane. Checked every 2 s, O(units on the lane).
@@ -286,16 +286,14 @@ namespace EdgeLanes {
         CRouteTask@ task = null;
         if (!Spam::routeByFactory.get("" + lab.id, @task) || task is null || task.IsDead()) return;
         array<CCircuitUnit@>@ us = task.GetUnits();
-        const float r = Global::Spam::EdgeReleaseRadius;
         int n = 0;
         for (uint i = 0; i < us.length(); ++i) {
             CCircuitUnit@ u = us[i];
-            if (u is null || MapHelpers::SqDist(u.GetPos(ai.frame), rally[rally.length() - 1]) > r * r) continue;
-            const string key = "" + u.id;
-            released.set(key, true);
-            Spam::routedUnits.delete(key);   // INV-043: leaving the lane on purpose
-            IUnitTask@ normal = aiMilitaryMgr.DefaultMakeTask(u);
-            if (normal !is null && aiMilitaryMgr.TransferUnit(u, normal)) ++n;
+            // owner, 2026-10-24: only once the route task counts it arrived, within
+            // Spam::LaneEndRadius (150) of its own final move order
+            if (u is null || !task.IsAtEnd(u)) continue;
+            released.set("" + u.id, true);
+            if (Spam::Release(u, "edge")) ++n;
         }
         if (n > 0) GenericHelpers::LogUtil("[EdgeLanes] " + Name(lane) + " lane: released " + n
             + " unit(s) at the lane's end to normal attacks", 1);

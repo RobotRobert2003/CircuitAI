@@ -74,6 +74,14 @@ public:
     void SetHoldPosition(bool enabled) { holdPosition = enabled; }
 	// Opt-in looping engine patrol; ordinary routes retain their traversal.
 	void SetPatrol(bool enabled) { patrol = enabled; dirty = !route.empty(); }
+	/*
+	 * Opt-in (spam lanes): a unit keeps the queue it was given to its end.
+	 * A route change applies to units joining after it; units already on the
+	 * lane keep their own lane points (per-unit routes) and get no new orders.
+	 * Joining mid-field or going idle re-issues the queue from the next
+	 * waypoint ahead (AheadIndex), never from the first one.
+	 */
+	void SetResumeAhead(bool enabled) { resumeAhead = enabled; }
 	int GetRouteVersion() const { return version; }
 	unsigned int GetRouteSize() const { return route.size(); }
 	bool IsAtEnd(CCircuitUnit* unit) const;
@@ -83,6 +91,9 @@ private:
 	// One move straight to the end of the route, lane waypoints skipped.
 	void IssueDirect(CCircuitUnit* unit);
 	unsigned int NearestAheadIndex(CCircuitUnit* unit) const;
+	// The next waypoint along the route: the far end of the leg the unit is
+	// nearest to (its near end when the unit is before that leg). O(route size).
+	unsigned int AheadIndex(CCircuitUnit* unit) const;
 	// The route point `idx` as seen from `unit`'s lane.
 	springai::AIFloat3 LanePoint(CCircuitUnit* unit, unsigned int idx) const;
 	int LaneOf(CCircuitUnit* unit) const;
@@ -110,6 +121,7 @@ private:
 	bool preserveWaypoints = false;
 	bool fightAtEnd = false;
 	bool patrol = false;
+	bool resumeAhead = false;
     bool holdPosition = false;
     bool airControl = false;
     bool seaControl = false;

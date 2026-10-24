@@ -172,7 +172,9 @@ AIFloat3 CRouteTask::LanePoint(CCircuitUnit* unit, unsigned int idx) const
 void CRouteTask::Start(CCircuitUnit* unit)
 {
     if (holdPosition) unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
-	IssueRoute(unit, 0);
+	// A unit rejoining mid-field (adopted, re-tasked) carries on from where it
+	// stands; a fresh unit at its factory is before the first leg, so index 0.
+	IssueRoute(unit, (resumeAhead && !patrol) ? AheadIndex(unit) : 0);
     if (seaTarget >= 0) IssuePriorityTarget(unit, seaTarget, navalTarget, landTarget);
 }
 
@@ -223,6 +225,9 @@ void CRouteTask::Update()
         retryUnits.erase(unit);
         if (!changed && !resume && !ManagedControl() && IsAtEnd(unit)) continue;
 		if (patrol) IssueRoute(unit, 0);
+		// Spam lanes (retry after idle, range resume): the queue from where the
+		// unit is; IssueDirect would cut every remaining bend (the lane's L) short.
+		else if (resumeAhead) IssueRoute(unit, AheadIndex(unit));
 		else if (preserveWaypoints) IssueRoute(unit, NearestAheadIndex(unit));
 		else IssueDirect(unit);
 	}
@@ -250,7 +255,10 @@ void CRouteTask::OnUnitIdle(CCircuitUnit* unit)
 	if (route.empty() || IsAtEnd(unit)) {
 		return;  // holding at the destination; weapons keep firing on their own
 	}
-    if (preserveWaypoints) { retryUnits.insert(unit); return; }
+    // Spam lanes: Update re-issues from the waypoint ahead at most once a second
+    // per unit (lastIssue), so a unit blocked short of the end cannot turn its
+    // own idle callbacks into a command storm.
+    if (preserveWaypoints || resumeAhead) { retryUnits.insert(unit); return; }
 	// Stuck or the queue was cleared: continue from the nearest waypoint ahead
 	IssueRoute(unit, NearestAheadIndex(unit));
 }
@@ -361,10 +369,42 @@ bool CRouteTask::SetLandTarget(int id)
 
 void CRouteTask::SetRoute(std::vector<AIFloat3>&& waypoints)
 {
-    if (ManagedControl() && unitRoutes.empty() && waypoints.size() == route.size()
+    // AIR/SEA and spam lanes (resumeAhead): an unchanged route is not re-issued.
+    // Spam refreshes every lane whenever the combat front or focus moves; an
+    // edge lane's points never change and its units were sent straight to the end.
+    if (((ManagedControl() && unitRoutes.empty()) || resumeAhead) && waypoints.size() == route.size()
         && std::equal(route.begin(), route.end(), waypoints.begin(), [](const AIFloat3& a, const AIFloat3& b) {
             return a.x == b.x && a.y == b.y && a.z == b.z;
         })) return;
+    if (resumeAhead && !patrol) {
+        // Spam lanes (owner, 2026-10-24): a unit already on the lane keeps the
+        // queue it was given - its own lane points, as issued - to the very end;
+        // the new route is for units that join after this. Nothing is re-issued,
+        // so a lane refresh sends no commands to units on the field.
+        // O(units x route size) per route change, which script makes only when
+        // the front or the focus moves.
+        for (CCircuitUnit* unit : units) {
+            if (route.empty() || unitRoutes.count(unit) != 0) continue;
+            std::vector<AIFloat3> own;
+            const auto sent = dispatches.find(unit);
+            if (sent != dispatches.end() && !sent->second.commands.empty()) {
+                // exactly the orders it was given (from where they were issued)
+                own.reserve(sent->second.commands.size());
+                for (const auto& c : sent->second.commands) own.push_back(AIFloat3(c.x, c.y, c.z));
+            } else {
+                own.reserve(route.size());
+                for (unsigned int i = 0; i < route.size(); ++i) own.push_back(LanePoint(unit, i));
+            }
+            unitRoutes[unit] = std::move(own);
+            unitArrival[unit] = arriveRadius;
+        }
+        route = std::move(waypoints);
+        ++version;
+        if (!route.empty()) {
+            position = route.back();
+        }
+        return;
+    }
 	unitRoutes.clear();
     unitArrival.clear();
 	route = std::move(waypoints);
@@ -386,7 +426,15 @@ bool CRouteTask::IsAtEnd(CCircuitUnit* unit) const
     const float radius=it==unitArrival.end() ? arriveRadius : it->second;
     // SEA formation completion is relative to this member's lane/row, not
     // the cohort center. Otherwise an offset ship idles and requeues forever.
-    const AIFloat3 goal=LanePoint(unit,route.size()-1);
+    AIFloat3 goal=LanePoint(unit,route.size()-1);
+    // Spam lanes: the final move order the unit was actually given. LanePoint
+    // can differ from it by a lane offset, because its terrain fallback reads
+    // the unit's current movement area (seen: 204 elmos at hand-back).
+    const auto sent=dispatches.find(unit);
+    if (resumeAhead && sent!=dispatches.end() && !sent->second.commands.empty()) {
+        const auto& last=sent->second.commands.back();
+        goal=AIFloat3(last.x,last.y,last.z);
+    }
     return unit->GetPos(frame).SqDistance2D(goal) < SQUARE(radius);
 }
 
@@ -410,6 +458,38 @@ unsigned int CRouteTask::NearestAheadIndex(CCircuitUnit* unit) const
 		}
 	}
 	if ((best + 1 < route.size()) && (bestSq < SQUARE(arriveRadius))) {
+		++best;
+	}
+	return best;
+}
+
+unsigned int CRouteTask::AheadIndex(CCircuitUnit* unit) const
+{
+	const auto& route = RouteFor(unit);
+	if (route.size() < 2) {
+		return 0;
+	}
+	const AIFloat3& pos = unit->GetPos(manager->GetCircuit()->GetLastFrame());
+	// Unlike NearestAheadIndex (nearest waypoint), a unit half way along a long
+	// leg is never sent back to the leg's start: the nearest LEG decides.
+	unsigned int best = 0;
+	float bestSq = std::numeric_limits<float>::max();
+	for (unsigned int i = 1; i < route.size(); ++i) {
+		const AIFloat3& a = route[i - 1];
+		const AIFloat3& b = route[i];
+		const float dx = b.x - a.x, dz = b.z - a.z;
+		const float lenSq = dx * dx + dz * dz;
+		float t = (lenSq > 1.f) ? ((pos.x - a.x) * dx + (pos.z - a.z) * dz) / lenSq : 1.f;
+		const unsigned int next = (t <= 0.f) ? i - 1 : i;  // before the leg: its start is next
+		t = std::clamp(t, 0.f, 1.f);
+		const float ox = a.x + dx * t - pos.x, oz = a.z + dz * t - pos.z;
+		const float sq = ox * ox + oz * oz;
+		if (sq < bestSq) {
+			bestSq = sq;
+			best = next;
+		}
+	}
+	if ((best + 1 < route.size()) && (pos.SqDistance2D(route[best]) < SQUARE(arriveRadius))) {
 		++best;
 	}
 	return best;
