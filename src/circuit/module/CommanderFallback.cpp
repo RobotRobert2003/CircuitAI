@@ -244,7 +244,7 @@ bool CCommanderControl::Fallback(CCircuitUnit* unit,State& s,IUnitTask* current,
         task=ai->GetBuilderManager()->EnqueueCommander(current);
         ai->GetBuilderManager()->AssignTask(unit,task);
         if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); task=nullptr; return false; }
-        s.started=frame; s.exit=s.fallbackGoal; s.failed=0; s.cloak=unit->GetUnit()->IsCloaked(); ++operation;
+        s.started=frame; s.exit=s.fallbackGoal; s.failed=0; s.cloak=WantsCloak(unit); ++operation;
         unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
         TRY_UNIT(ai,unit,unit->CmdStop();)
         return true;

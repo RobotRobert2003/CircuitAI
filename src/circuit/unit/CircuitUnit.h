@@ -180,7 +180,7 @@ public:
 	int GetCommanderTarget() const { return commanderTarget; }
 	// A task's ATTACK on anything but the locked commander is withheld.
 	bool IsCommanderLocked(const CEnemyInfo* enemy) const;
-	void CmdCloak(bool state);
+	void CmdCloak(bool state, bool force = false);  // force: skip the same-state resend filter
 	void CmdFireAtRadar(bool state);
 	void CmdFindPad(int timeout = INT_MAX);
 	void CmdManualFire(short options = 0, int timeout = INT_MAX);

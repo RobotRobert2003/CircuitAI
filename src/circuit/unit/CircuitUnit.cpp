@@ -449,9 +449,9 @@ void CCircuitUnit::SetCommanderTarget(int commId, int frame)
     }
 }
 
-void CCircuitUnit::CmdCloak(bool state)
+void CCircuitUnit::CmdCloak(bool state, bool force)
 {
-	if (RepeatState(sentCloak, sentCloakFrame, state ? 1 : 0)) return;
+	if (RepeatState(sentCloak, sentCloakFrame, state ? 1 : 0) && !force) return;
 	float params[] = {state ? 1.f : 0.f};
 	SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_WANT_CLOAK, params);  // personal
 //	unit->ExecuteCustomCommand(CMD_CLOAK_SHIELD, {state ? 1.f : 0.f});  // area

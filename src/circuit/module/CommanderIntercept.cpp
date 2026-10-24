@@ -265,7 +265,7 @@ bool CCommanderControl::PriorityDGun(CCircuitUnit* unit,State& s,int frame) {
         task=ai->GetBuilderManager()->EnqueueCommander(current);
         ai->GetBuilderManager()->AssignTask(unit,task);
         if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return false; }
-        s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); s.failed=0; ++operation;
+        s.started=frame; s.cloak=WantsCloak(unit); s.failed=0; ++operation;
         unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
         TRY_UNIT(ai,unit,unit->CmdStop();)
     }
@@ -303,7 +303,7 @@ bool CCommanderControl::PriorityApproach(CCircuitUnit* unit,State& s,const comma
         task=ai->GetBuilderManager()->EnqueueCommander(current);
         ai->GetBuilderManager()->AssignTask(unit,task);
         if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return false; }
-        s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); s.failed=0; ++operation;
+        s.started=frame; s.cloak=WantsCloak(unit); s.failed=0; ++operation;
         unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
         TRY_UNIT(ai,unit,unit->CmdStop();)
     }

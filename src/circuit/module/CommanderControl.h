@@ -29,6 +29,9 @@ public:
     bool ReceiveProjectiles(const char* message);
     IUnitTask* FrontWork(CCircuitUnit* unit,int kind,CCircuitDef* buildDef,float radius);
     bool CanStartRadar(CCircuitUnit* unit);
+    // CCommanderTask hand-back: false when the combat logic owns the cloak
+    // and fire state (a handled commander); the task then restores neither.
+    bool ReleaseConceal(CCircuitUnit* unit);
 private:
     // Values are logged as integers; append new modes only.
     enum class Mode { SUPPORT,ASSESS,APPROACH,ALIGN,PENDING,ESCAPE,RECOVER,FALLBACK };
@@ -43,6 +46,10 @@ private:
         float detourDist=0.f; // distance to the front at the last detour MOVE
         // Same-goal MOVE resend backoff and fallback goal hold (owner 2026-10-19).
         int moveSent=-10000,moveResends=0,fallbackGoalSince=-10000,anyMoveSent=-10000;
+        // Cloak on/off (owner 2026-10-24): on goes at once; off waits until
+        // cloak has not been wanted for uncloak_seconds and the last off is as
+        // old. offWish/offFire hold a deferred off for Update().
+        int uncloakSent=-10000,cloakSent=-10000,onWish=-10000,offWish=-10000,offFire=-1;
         springai::AIFloat3 moveGoal{-1,0,-1};
         springai::AIFloat3 frontProgressPos;
         // D-293 fallback: held until fallbackUntil, porc line replanned once/second.
@@ -94,6 +101,7 @@ private:
         bool frontRecovery=false;
         float frontMexSeconds=0,frontStallSeconds=10,frontDetourSeconds=0; // 0: no detour backoff
         float moveResendSeconds=0;   // 0: a swallowed/failed MOVE is resent every tick
+        float uncloakSeconds=3;      // owner 2026-10-24: at most one cloak-off per this many seconds; 0: no limit
         float fallbackGoalHoldSeconds=0; // 0: the fallback goal may change every replan
         float scan=1000,leash=700,step=96,support=600,minValue=180,killReward=45;
         float hpReserve=.35f,retreat=.45f,recover=.8f,aggression=.25f;
@@ -177,6 +185,10 @@ private:
     bool Route(CCircuitUnit* unit,const springai::AIFloat3& from,const springai::AIFloat3& to) const;
     void Move(CCircuitUnit* unit,State& state,const springai::AIFloat3& goal,int frame);
     void Conceal(CCircuitUnit* unit,State& state,bool value);
+    bool UncloakDue(const State& state,int frame) const;
+    void Uncloak(CCircuitUnit* unit,State& state,int fire,int frame);
+    // BAR's cloak gadget keeps the wanted cloak through a D-gun decloak.
+    static bool WantsCloak(CCircuitUnit* unit);
     void Transition(CCircuitUnit* unit,State& state,Mode mode,int frame);
     bool Deploy(CCircuitUnit* unit,State& state,int frame);
     springai::AIFloat3 FrontPosition(CCircuitUnit* unit,State& state,int frame);

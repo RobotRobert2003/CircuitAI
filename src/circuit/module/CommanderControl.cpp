@@ -144,7 +144,7 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"front_radius",&options.frontRadius,100,1000},{"front_threat",&options.frontThreat,0,50},
         {"front_mex_seconds",&options.frontMexSeconds,0,30},{"front_stall_seconds",&options.frontStallSeconds,3,60},
         {"front_detour_seconds",&options.frontDetourSeconds,0,3},{"t3_decline_gate",&options.t3DeclineGate,0,1},
-        {"move_resend_seconds",&options.moveResendSeconds,0,3},{"fallback_goal_hold_seconds",&options.fallbackGoalHoldSeconds,0,5},
+        {"move_resend_seconds",&options.moveResendSeconds,0,3},{"uncloak_seconds",&options.uncloakSeconds,0,10},{"fallback_goal_hold_seconds",&options.fallbackGoalHoldSeconds,0,5},
         {"t3_intercept",&options.t3Intercept,0,1},{"t3_health",&options.t3Health,.1f,.5f},
         {"t3_distance",&options.t3Distance,250,2000},{"detection_margin",&options.detectionMargin,8,200},
         {"afus_defence_radius",&options.afusDefenceRadius,0,5000},{"priority_dgun",&options.priorityDGun,0,1},
@@ -424,13 +424,66 @@ void CCommanderControl::Move(CCircuitUnit* unit,State& s,const AIFloat3& goal,in
     s.goal=goal; s.route={{CMD_MOVE,0,frame+90,goal.x,goal.y,goal.z}}; s.anyMoveSent=frame;
     TRY_UNIT(ai,unit,unit->CmdMoveTo(goal,0,frame+90);)
 }
+bool CCommanderControl::WantsCloak(CCircuitUnit* unit) {
+    // A D-gun shot decloaks (engine) but leaves the wanted cloak on, and the
+    // gadget re-cloaks ~4.3 s later; IsCloaked() alone reads that as "off".
+    return unit->GetUnit()->IsCloaked() || unit->GetUnit()->GetRulesParamFloat("wantcloak",0)>0;
+}
+bool CCommanderControl::UncloakDue(const State& s,int frame) const {
+    const int hold=int(options.uncloakSeconds*FRAMES_PER_SEC);
+    return frame>=s.onWish+hold && frame>=s.uncloakSent+hold;
+}
+void CCommanderControl::Uncloak(CCircuitUnit* unit,State& s,int fire,int frame) {
+    if(unit->GetRequestedFireState()!=fire) unit->TrySetFireState(static_cast<CCircuitDef::FireT>(fire));
+    TRY_UNIT(ai,unit,unit->CmdCloak(false);)
+    s.cloak=false; s.uncloakSent=frame; s.offWish=-10000; s.offFire=-1;
+    ai->LOG("[CommanderCloak] unit=%i cloak=0 frame=%i",unit->GetId(),frame);
+}
 void CCommanderControl::Conceal(CCircuitUnit* unit,State& s,bool value) {
+    // Owner 2026-10-24: cloak on (hold fire) goes out at once, every time.
+    // Cloak off (fire at will) waits until cloak has not been wanted for
+    // uncloak_seconds, and goes out at most once per uncloak_seconds; until
+    // then the commander stays cloaked and holding fire. Callers flip the
+    // wish tick to tick (a priority target lost from sight for one second,
+    // the bank around a shot); Update() sends a deferred off once it is due.
+    const int frame=ai->GetLastFrame();
+    if(value) { s.onWish=frame; s.offWish=-10000; s.offFire=-1; }
+    else if(s.cloak && options.uncloakSeconds>0) {
+        if(s.offWish<0) s.offWish=frame;
+        if(!UncloakDue(s,frame)) return;
+        Uncloak(unit,s,s.offFire>=0?s.offFire:CCircuitDef::FireType::OPEN,frame); return;
+    }
     const int fire=value?CCircuitDef::FireType::HOLD:CCircuitDef::FireType::OPEN;
     if(unit->GetRequestedFireState()!=fire) unit->TrySetFireState(fire);
-    if(value!=s.cloak) {
-        TRY_UNIT(ai,unit,unit->CmdCloak(value);)
+    // Another owner (retreat, a task restore) may have cleared the wanted
+    // cloak: re-assert it, at most once per second while that command is in
+    // flight. One rules-param read per tick, only while concealed.
+    const bool lost=value && s.cloak && frame>=s.cloakSent+FRAMES_PER_SEC && !WantsCloak(unit);
+    if(value!=s.cloak || lost) {
+        TRY_UNIT(ai,unit,unit->CmdCloak(value,value);) // on bypasses the 10 s same-state filter
         s.cloak=value;
+        (value?s.cloakSent:s.uncloakSent)=frame;
+        ai->LOG("[CommanderCloak] unit=%i cloak=%i%s frame=%i",unit->GetId(),int(value),lost?" reassert":"",frame);
     }
+}
+bool CCommanderControl::ReleaseConceal(CCircuitUnit* unit) {
+    // The combat logic owns a handled commander's cloak: handing the unit
+    // back never restores a cloak captured mid-engagement (it kept idle
+    // commanders cloaked and holding fire for 30+ s in the cloak arena).
+    // A combat cloak ends through the uncloak_seconds limit instead.
+    auto it=commanders.find(unit->GetId());
+    if(it==commanders.end() || !Handles(unit)) return true;
+    auto& s=it->second; const int frame=ai->GetLastFrame();
+    const int open=unit->GetCircuitDef()->GetFireState();
+    if(s.cloak) {
+        if(s.offWish<0) s.offWish=frame;
+        s.offFire=open;
+        if(options.uncloakSeconds<=0 || UncloakDue(s,frame)) Uncloak(unit,s,open,frame);
+        return false; // else still cloaked, holding fire; Update() finishes
+    }
+    if(unit->GetRequestedFireState()==CCircuitDef::FireType::HOLD) unit->TrySetFireState(static_cast<CCircuitDef::FireT>(open));
+    if(WantsCloak(unit)) { TRY_UNIT(ai,unit,unit->CmdCloak(false);) }
+    return false;
 }
 void CCommanderControl::Transition(CCircuitUnit* unit,State& s,Mode mode,int frame) {
     if(s.mode==mode) return;
@@ -451,6 +504,9 @@ void CCommanderControl::Update() {
         // Fixed three-frame active/idle observation cadence independent of the
         // total action population. Immediate own-shot/move-failure invalidation.
         if(frame>=s.fundingUntil || !ai->GetEnemyInfo(s.fundingTarget)) s.fundingBudget=0;
+        // A deferred cloak-off (Conceal / ReleaseConceal) nobody re-wanted.
+        if(s.cloak && s.offWish>=0 && UncloakDue(s,frame))
+            Uncloak(unit,s,s.offFire>=0?s.offFire:CCircuitDef::FireType::OPEN,frame);
         if(frame>=s.next) { s.next=frame+3; Tick(unit,s,frame); }
         reserve+=std::max(s.budget,s.fundingBudget);
     }
@@ -471,6 +527,7 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
         || unit->GetUnit()->IsParalyzed() || unit->IsDisarmed(frame)
         || unit->GetUnit()->GetRulesParamFloat("circuit_comm_transported",0)>0) {
         s.budget=0; s.fundingBudget=0; s.pending=-1; s.leaseUntil=0;
+        s.offWish=-10000; // a player or external owner now owns the cloak
         EndT3(unit,s,frame,"ownership");
         ai->GetAllyTeam()->GetCommanderShots().Release(ai->GetTeamId(),unit->GetId());
         if(task) task->Resume(unit);
@@ -538,7 +595,7 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
                 t=ai->GetBuilderManager()->EnqueueCommander(current);
                 ai->GetBuilderManager()->AssignTask(unit,t);
                 if(unit->GetTask()!=t) { ai->GetBuilderManager()->AbortTask(t); t=nullptr; }
-                else { s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); ++operation; TRY_UNIT(ai,unit,unit->CmdStop();) }
+                else { s.started=frame; s.cloak=WantsCloak(unit); ++operation; TRY_UNIT(ai,unit,unit->CmdStop();) }
             }
             if(t) {
                 Conceal(unit,s,true); Transition(unit,s,Mode::ESCAPE,frame);
@@ -564,7 +621,7 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
                 t=ai->GetBuilderManager()->EnqueueCommander(current);
                 ai->GetBuilderManager()->AssignTask(unit,t);
                 if(unit->GetTask()!=t) { ai->GetBuilderManager()->AbortTask(t); t=nullptr; }
-                else { s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); ++operation; TRY_UNIT(ai,unit,unit->CmdStop();) }
+                else { s.started=frame; s.cloak=WantsCloak(unit); ++operation; TRY_UNIT(ai,unit,unit->CmdStop();) }
             }
             if(t) {
                 Conceal(unit,s,true); Transition(unit,s,Mode::ASSESS,frame);
@@ -698,7 +755,7 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
         task=ai->GetBuilderManager()->EnqueueCommander(current);
         ai->GetBuilderManager()->AssignTask(unit,task);
         if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return; }
-        s.started=frame; s.exit=safe; s.failed=0; s.cloak=unit->GetUnit()->IsCloaked(); ++operation;
+        s.started=frame; s.exit=safe; s.failed=0; s.cloak=WantsCloak(unit); ++operation;
         Transition(unit,s,Mode::ASSESS,frame);
         unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
         // Clear construction/movement commands before taking a precision shot.
@@ -725,7 +782,12 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
     }
     if(endangered || expired || s.mode==Mode::ESCAPE || !opportunity) {
         Transition(unit,s,Mode::ESCAPE,frame);
-        Conceal(unit,s,fundedCloak && bank>shot+cap.cloakMoving);
+        // Owner 2026-10-24: after a shot the commander re-cloaks and retreats.
+        // The shot drained the bank below a second shot's budget; the retreat
+        // only needs the moving upkeep for escape_seconds.
+        const bool shotRetreat=cap.cloak && s.fired>=s.started
+            && bank>=cap.cloakMoving*options.escapeSeconds+options.margin;
+        Conceal(unit,s,(fundedCloak && bank>shot+cap.cloakMoving) || shotRetreat);
         AIFloat3 exit=safe;
         // Consider both reachable side exits, including projectile volumes
         // when the optional ally-LOS adapter is present. Never infer a blind
@@ -827,7 +889,7 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
             task=ai->GetBuilderManager()->EnqueueCommander(nullptr);
             ai->GetBuilderManager()->AssignTask(unit,task);
             if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return false; }
-            s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); ++operation;
+            s.started=frame; s.cloak=WantsCloak(unit); ++operation;
             s.frontProgressFrame=frame; s.frontProgressPos=pos;
             ai->LOG("[CommanderFront] unit=%i deploy x=%.0f z=%.0f",unit->GetId(),goal.x,goal.z);
         }
@@ -921,7 +983,7 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         task=ai->GetBuilderManager()->EnqueueCommander(old);
         ai->GetBuilderManager()->AssignTask(unit,task);
         if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return false; }
-        s.started=frame; s.failed=0; s.cloak=unit->GetUnit()->IsCloaked(); ++operation;
+        s.started=frame; s.failed=0; s.cloak=WantsCloak(unit); ++operation;
     }
     s.deployed=true; s.exit=pos;
     Conceal(unit,s,false); Transition(unit,s,Mode::SUPPORT,frame);

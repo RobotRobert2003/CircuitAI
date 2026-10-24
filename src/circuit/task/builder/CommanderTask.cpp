@@ -21,10 +21,13 @@ void CCommanderTask::AssignTo(CCircuitUnit* unit) {
 }
 void CCommanderTask::Restore(CCircuitUnit* unit) {
     if(unit->IsDead() || unit->IsDestroying()) return;
+    // A handled commander's cloak and fire state belong to the commander
+    // control (owner 2026-10-24: cloak-off at most once per 3 s).
+    const bool restore=manager->GetCircuit()->GetCommanderControl()->ReleaseConceal(unit);
     TRY_UNIT(manager->GetCircuit(),unit,
-        unit->TrySetFireState(static_cast<CCircuitDef::FireT>(oldFire));
+        if(restore) unit->TrySetFireState(static_cast<CCircuitDef::FireT>(oldFire));
         unit->TrySetMoveState(static_cast<CCircuitDef::MoveT>(oldMove));
-        unit->CmdCloak(oldCloak);
+        if(restore) unit->CmdCloak(oldCloak);
     )
 }
 void CCommanderTask::Stop(bool done) {

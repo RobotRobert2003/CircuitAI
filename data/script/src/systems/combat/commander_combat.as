@@ -71,6 +71,7 @@ namespace CommanderCombat {
             Option("front_detour_seconds",Global::Commander::FrontDetourSeconds);
             Option("t3_decline_gate",Global::Commander::T3DeclineGate);
             Option("move_resend_seconds",Global::Commander::MoveResendSeconds);
+            Option("uncloak_seconds",Global::Commander::UncloakSeconds);
             Option("fallback_goal_hold_seconds",Global::Commander::FallbackGoalHoldSeconds);
             Option("t3_intercept",Global::Commander::T3Intercept);
             Option("t3_health",Global::Commander::T3Health);

@@ -457,7 +457,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
                         task=ai->GetBuilderManager()->EnqueueCommander(unit->GetTask());
                         ai->GetBuilderManager()->AssignTask(unit,task);
                         if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); task=nullptr; }
-                        else { s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); ++operation; }
+                        else { s.started=frame; s.cloak=WantsCloak(unit); ++operation; }
                     }
                     if(task && spot.y>=0 && OnMap(spot) && ai->GetTerrainManager()->CanReachAt(unit,spot,64)
                         && ai->GetMap()->IsPossibleToBuildAt(porc->GetDef(),spot,0)) {
@@ -516,7 +516,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         task=ai->GetBuilderManager()->EnqueueCommander(current);
         ai->GetBuilderManager()->AssignTask(unit,task);
         if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return true; }
-        s.started=frame; s.cloak=cloaked; s.failed=0; ++operation;
+        s.started=frame; s.cloak=WantsCloak(unit); s.failed=0; ++operation;
         unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
         TRY_UNIT(ai,unit,unit->CmdStop();)
     }
