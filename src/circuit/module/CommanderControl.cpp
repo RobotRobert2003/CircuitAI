@@ -401,13 +401,19 @@ void CCommanderControl::Move(CCircuitUnit* unit,State& s,const AIFloat3& goal,in
     // Exact destination, ownership and live queue suffix must all agree. A
     // swallowed order or move failure is reissued; a moving target is new intent.
     if(!s.route.empty() && s.goal==goal && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) return;
+    // Owner 2026-10-24: at most one commander MOVE per second, whatever the
+    // goal (Darkside 2026-10-23: FRONT deploys re-moved every 26 frames to
+    // points 20-100 elmos apart). The next tick re-asks with fresh state.
+    if(frame<s.anyMoveSent+FRAMES_PER_SEC) return;
     // Owner 2026-10-19: the same goal is resent at most once per
     // move_resend_seconds, +1 s per resend in a row, at most 3 s. A goal the
     // engine keeps refusing was resent every tick (fallback line, All That
     // Glitters: one commander 6 MOVEs/s to the same point). A new goal
     // goes at once.
     if(options.moveResendSeconds>0) {
-        if(s.moveGoal.SqDistance2D(goal)<16.f*16.f) {
+        // A goal within 96 elmos of the last one is the same intent: the
+        // front anchor jitters by tens of elmos between deploy samples.
+        if(s.moveGoal.SqDistance2D(goal)<96.f*96.f) {
             const float wait=std::min(3.f,options.moveResendSeconds+s.moveResends);
             if(frame<s.moveSent+int(wait*FRAMES_PER_SEC)) return;
             ++s.moveResends;
@@ -415,7 +421,7 @@ void CCommanderControl::Move(CCircuitUnit* unit,State& s,const AIFloat3& goal,in
         s.moveGoal=goal; s.moveSent=frame;
     }
     CheckPerimeter(unit,s,goal,frame,"move");
-    s.goal=goal; s.route={{CMD_MOVE,0,frame+90,goal.x,goal.y,goal.z}};
+    s.goal=goal; s.route={{CMD_MOVE,0,frame+90,goal.x,goal.y,goal.z}}; s.anyMoveSent=frame;
     TRY_UNIT(ai,unit,unit->CmdMoveTo(goal,0,frame+90);)
 }
 void CCommanderControl::Conceal(CCircuitUnit* unit,State& s,bool value) {

@@ -234,6 +234,12 @@ bool CRangedEngagement::Move(CCircuitUnit* unit,const AIFloat3& dest,bool escape
     if(!urgent && !(policy.coordinated && urgentMove) && moving && policy.moveMinSeconds>0.f
         && ai->GetLastFrame()<lastMoveFrame+int(policy.moveMinSeconds*FRAMES_PER_SEC)
         && ai->GetUnitAPI()->GetCMDQueueSize(id)>0 && LegalPath(unit,path,escape)) return true;
+    // Owner 2026-10-24: move_floor_seconds is absolute. Urgent, escape and
+    // idle re-moves wait too (Darkside 2026-10-23: legmed re-pathed every
+    // 1.6 s with 8-19 queued waypoints, up to 33 MOVEs/s per hull). The
+    // next decision tick re-asks with a fresh destination.
+    if(policy.moveFloorSeconds>0.f
+        && ai->GetLastFrame()<lastMoveFrame+int(policy.moveFloorSeconds*FRAMES_PER_SEC)) return true;
     if(!ai->GetTerrainManager()->CanMoveToPos(unit->GetArea(),dest) || !SafeMove(unit,pos,dest,policy.safetyMargin,escape)) return false;
     if(trace) ai->LOG("RANGED: move-replace unit=%d objective=%d mode=%d urgent=%d moving=%d pending=%d queue=%d from=%.1f,%.1f old=%.1f,%.1f new=%.1f,%.1f",
         id,moveObjective,moveMode,int(urgentMove),int(moving),int(query!=nullptr),
@@ -305,6 +311,11 @@ bool CRangedEngagement::Move(CCircuitUnit* unit,const AIFloat3& dest,bool escape
         }
         // Validate the actual worker path, then every continued route against
         // fresh coverage. No engine callbacks run on path worker threads.
+        // Owner 2026-10-24: max_waypoints sends only the validated route's
+        // first legs. A unit that runs out of them re-paths on a later tick
+        // (no unvalidated shortcut leg is ever queued).
+        const int cap=unit->GetCircuitDef()->GetRangedPolicy().maxWaypoints;
+        if(cap>=1 && points.size()>size_t(cap)) points.resize(cap);
         path=points; pathCursor=0; query.reset(); moving=true; issuing=true;
         TRY_UNIT(ai,unit,
             for(size_t i=0;i<path.size();++i) unit->CmdMoveTo(path[i],i?UNIT_COMMAND_OPTION_SHIFT_KEY:0);

@@ -534,6 +534,12 @@ void CFactoryManager::ReadConfig()
 			number("target_hysteresis", policy.targetHysteresis, 1.f, 3.f);
 			number("move_min_seconds", policy.moveMinSeconds, 0.f, 3.f);
 			number("target_min_seconds", policy.targetMinSeconds, 0.f, 3.f);
+			number("move_floor_seconds", policy.moveFloorSeconds, 0.f, 3.f);
+			{
+				float waypoints = float(policy.maxWaypoints);
+				number("max_waypoints", waypoints, 0.f, 32.f);
+				policy.maxWaypoints = int(waypoints);
+			}
 			number("target_switch_ratio", policy.targetSwitchRatio, 1.f, 5.f);
 			number("sensor_offset", policy.sensorOffset, 32.f, 512.f);
 			number("cloak_reserve_seconds", policy.cloakReserve, 0.f, 30.f);

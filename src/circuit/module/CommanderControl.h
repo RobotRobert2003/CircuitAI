@@ -42,7 +42,7 @@ private:
         int detourNext=0,detourFails=0,t3DeclineFails=0;
         float detourDist=0.f; // distance to the front at the last detour MOVE
         // Same-goal MOVE resend backoff and fallback goal hold (owner 2026-10-19).
-        int moveSent=-10000,moveResends=0,fallbackGoalSince=-10000;
+        int moveSent=-10000,moveResends=0,fallbackGoalSince=-10000,anyMoveSent=-10000;
         springai::AIFloat3 moveGoal{-1,0,-1};
         springai::AIFloat3 frontProgressPos;
         // D-293 fallback: held until fallbackUntil, porc line replanned once/second.

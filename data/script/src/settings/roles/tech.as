@@ -314,6 +314,8 @@ namespace Tech {
             float TeamShareMetalBudget = 0.20f;             // D-106: at most this share of our metal storage is given per donation, the lowest-filled teammate first
             float TeamShareCheckSeconds = 5.0f;             // D-106: a donation at most this often (the engine's share command settles each slow update)
             float TeamShareMinAmount = 25.0f;               // D-106: smaller gifts are not sent
+            float TeamShareAiPauseAbove = 0.80f;            // owner 2026-10-24: every allied AI (us included) at or over this metal fill stops AI-to-AI donations
+            float TeamShareAiResumeBelow = 0.50f;           // owner 2026-10-24: ... until one allied AI drops under this fill
             float AfusFundedShare = 0.85f;                  // D-105: the advanced lab is not reclaimed when bank + income x the advanced fusion's remaining build time covers this share of its cost
             float AfusBuildTime = 330000.0f;                // D-105: the advanced fusion's buildtime (corafus 329200, armafus 312500, legafus 340000 in BAR's unitdefs)
             float AfusProjectionRadius = 600.0f;            // D-105: build power within this of the advanced fusion frame counts for its finish time

@@ -1,6 +1,7 @@
 #include "../../global.as"
 #include "../../helpers/common/generic_helpers.as"
 #include "../../helpers/math/team_share_math.as"
+#include "roster.as"
 
 /******************************************************************************
 
@@ -106,6 +107,33 @@ namespace TeamEconomy {
         }
         GenericHelpers::LogUtil("[" + Team::Roster::RoleName(Global::AISettings::Role) + "][Share] after the donation: we sent " + int(TeamEconomy::OwnMetal(TeamEconomy::SENT)) + "; " + line + " (D-106)", 1);
     }
+    // Owner 2026-10-24: once every allied AI (us included) is at or over
+    // TeamShareAiPauseAbove metal fill, AI-to-AI donations stop; they resume
+    // when one allied AI drops under TeamShareAiResumeBelow. Human teammates
+    // still receive. (Darkside 2026-10-23: all 8 AIs full, ~150 sends/min
+    // bouncing metal between them.) Read on the snapshots UpdateAll refreshed.
+    bool aiSharePaused = false;
+    void UpdateAiSharePause(int n)
+    {
+        const float stor = aiEconomyMgr.metal.storage;
+        float lowest = (stor > 0.0f) ? aiEconomyMgr.metal.current / stor : 1.0f;
+        int ais = 0;
+        for (int i = 0; i < n; ++i) {
+            const int tid = TeamEconomy::TeamAt(i);
+            if (tid < 0 || !TeamEconomy::Alive(tid) || Team::Roster::Get(tid) is null) continue;
+            ++ais;
+            const float fill = TeamEconomy::MetalFill(tid);
+            if (fill < lowest) lowest = fill;
+        }
+        const bool was = aiSharePaused;
+        if (ais == 0) aiSharePaused = false;
+        else if (!aiSharePaused && lowest >= Global::RoleSettings::Tech::TeamShareAiPauseAbove) aiSharePaused = true;
+        else if (aiSharePaused && lowest < Global::RoleSettings::Tech::TeamShareAiResumeBelow) aiSharePaused = false;
+        if (was != aiSharePaused)
+            GenericHelpers::LogUtil("[" + Team::Roster::RoleName(Global::AISettings::Role) + "][Share] AI-to-AI donations "
+                + (aiSharePaused ? "paused" : "resumed") + ": lowest allied AI metal fill " + int(lowest * 100.0f) + "% (" + ais + " allied AIs)", 1);
+    }
+
     void ShareOverflow()
     {
         VerifyShare();
@@ -118,11 +146,13 @@ namespace TeamEconomy {
         if (ai.frame - teamShareFrame < int(Global::RoleSettings::Tech::TeamShareCheckSeconds * SECOND)) return;
         teamShareFrame = ai.frame;
         const int n = TeamEconomy::UpdateAll();
+        UpdateAiSharePause(n);
         array<int> ids;
         array<float> fills;
         for (int i = 0; i < n; ++i) {
             const int tid = TeamEconomy::TeamAt(i);
             if (tid < 0 || !TeamEconomy::Alive(tid) || TeamEconomy::Metal(tid, TeamEconomy::FREE) < Global::RoleSettings::Tech::TeamShareMinAmount) continue;
+            if (aiSharePaused && Team::Roster::Get(tid) !is null) continue;
             // insertion by fill, lowest first
             const float f = TeamEconomy::MetalFill(tid);
             uint at = 0;

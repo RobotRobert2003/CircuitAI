@@ -440,6 +440,7 @@ void CCircuitUnit::SetCommanderTarget(int commId, int frame)
 
 void CCircuitUnit::CmdCloak(bool state)
 {
+	if (RepeatState(sentCloak, sentCloakFrame, state ? 1 : 0)) return;
 	float params[] = {state ? 1.f : 0.f};
 	SendCustomCommand(unit->GetSkirmishAIId(), id, CMD_WANT_CLOAK, params);  // personal
 //	unit->ExecuteCustomCommand(CMD_CLOAK_SHIELD, {state ? 1.f : 0.f});  // area
@@ -617,10 +618,23 @@ void CCircuitUnit::CmdResurrectInArea(const AIFloat3& pos, float radius, short o
 	unit->ResurrectInArea(pos, radius, options, timeout);
 }
 
+bool CCircuitUnit::RepeatState(int& sent, int& sentFrame, int value)
+{
+	// True when this exact value was sent within the last 10 s: skip it. A
+	// value we never sent (including the engine's default) always goes out.
+	static constexpr int STATE_RESEND_FRAMES = FRAMES_PER_SEC * 10;
+	if (manager == nullptr) return false;
+	const int frame = manager->GetCircuit()->GetLastFrame();
+	if (sent == value && frame - sentFrame < STATE_RESEND_FRAMES) return true;
+	sent = value; sentFrame = frame;
+	return false;
+}
+
 void CCircuitUnit::CmdSetFireState(CCircuitDef::FireT state)
 {
-	unit->SetFireState(state);
     requestedFire=state;
+	if (RepeatState(sentFire, sentFireFrame, state)) return;
+	unit->SetFireState(state);
 }
 
 void CCircuitUnit::TrySetFireState(CCircuitDef::FireT state)
@@ -633,8 +647,9 @@ void CCircuitUnit::TrySetFireState(CCircuitDef::FireT state)
 
 void CCircuitUnit::CmdSetMoveState(CCircuitDef::MoveT state)
 {
-	unit->SetMoveState(state);
     requestedMove=state;
+	if (RepeatState(sentMove, sentMoveFrame, state)) return;
+	unit->SetMoveState(state);
 }
 
 void CCircuitUnit::TrySetMoveState(CCircuitDef::MoveT state)

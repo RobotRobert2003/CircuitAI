@@ -262,6 +262,12 @@ private:
 
 	CDGunAction* dgunAct;
     int requestedFire=CCircuitDef::FireType::OPEN, requestedMove=CCircuitDef::MoveType::MANEUVRE;
+    // Owner 2026-10-24: the last fire/move/cloak state we actually sent, and
+    // when. The same value is not resent within STATE_RESEND_FRAMES (commander
+    // hand-overs resent all three every ~2 s, Darkside 2026-10-23).
+    int sentFire=-1, sentMove=-1, sentCloak=-1;
+    int sentFireFrame=-100000, sentMoveFrame=-100000, sentCloakFrame=-100000;
+    bool RepeatState(int& sent, int& sentFrame, int value);
 	ITravelAction* travelAct;
 
 	int moveFails;

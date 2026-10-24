@@ -1005,7 +1005,7 @@
 			"legmed": {
 				"role":	["assault"],
 				"attribute": ["siege", "ranged"],
-				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false, "hold_fireline": true, "fire_at_will": true, "spam_max_cost": 75},
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false, "hold_fireline": true, "fire_at_will": true, "spam_max_cost": 75, "move_floor_seconds": 1, "max_waypoints": 4},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
