@@ -319,6 +319,14 @@ void CCircuitUnit::CmdMoveTo(const AIFloat3& pos, short options, int timeout)
                 now,id,circuitDef->GetDef()->GetName(),int(task->GetType()),fighter,sample.count,here.x,here.z,pos.x,pos.z,int(options),timeout);
         }
     }
+	// Owner 2026-10-24: a commander gets at most one new (non-queued) MOVE per
+	// second from any owner. A busy commander keeps its live order; an idle
+	// one moves at once, so no task waits on a dropped order.
+	if (circuitDef->IsRoleComm() && !(options & UNIT_COMMAND_OPTION_SHIFT_KEY) && manager != nullptr) {
+		const int now = manager->GetCircuit()->GetLastFrame();
+		if (now - commMoveFrame < FRAMES_PER_SEC && manager->GetCircuit()->GetUnitAPI()->GetCMDQueueSize(id) > 0) return;
+		commMoveFrame = now;
+	}
 	unit->MoveTo(pos, options, timeout);
 //	unit->ExecuteCustomCommand(CMD_RAW_MOVE, {pos.x, pos.y, pos.z}, options, timeout);
 }

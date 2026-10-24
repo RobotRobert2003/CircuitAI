@@ -268,6 +268,7 @@ private:
     int sentFire=-1, sentMove=-1, sentCloak=-1;
     int sentFireFrame=-100000, sentMoveFrame=-100000, sentCloakFrame=-100000;
     bool RepeatState(int& sent, int& sentFrame, int value);
+    int commMoveFrame=-100000; // owner 2026-10-24: last new commander MOVE
 	ITravelAction* travelAct;
 
 	int moveFails;
