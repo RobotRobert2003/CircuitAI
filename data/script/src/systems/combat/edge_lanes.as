@@ -22,6 +22,9 @@ from the centre of our team's starts to the centre of the enemy team's starts;
   rally 2   on the same edge, EdgeSecondShare (2/3) of the way
   rally 3   the far corner on that side (the map corner furthest along the
             axis and toward that edge)
+  rally 4   the enemy's other back corner, across the map from rally 3
+            (Spam::AppendEnemyCorner, owner 2026-10-24): the lane is an L.
+            Left out when no playable ground is found near it
 
 Each point is pulled inward from the edge (map corner toward the centre) until
 it stands in the spam unit's own movement area reachable from its lab: the
@@ -193,6 +196,7 @@ namespace EdgeLanes {
         const AIFloat3 r3 = CornerPoint(d, from, s0, e0, lane);
         if (r1.x < 0.0f || r2.x < 0.0f || r3.x < 0.0f) return r;
         r.insertLast(r1); r.insertLast(r2); r.insertLast(r3);
+        Spam::AppendEnemyCorner(r, d, from, "");   // rally 4, when playable (owner, 2026-10-24)
         return r;
     }
     string Name(int s) { return (s < 0) ? "left" : "right"; }
@@ -286,7 +290,7 @@ namespace EdgeLanes {
         int n = 0;
         for (uint i = 0; i < us.length(); ++i) {
             CCircuitUnit@ u = us[i];
-            if (u is null || MapHelpers::SqDist(u.GetPos(ai.frame), rally[2]) > r * r) continue;
+            if (u is null || MapHelpers::SqDist(u.GetPos(ai.frame), rally[rally.length() - 1]) > r * r) continue;
             const string key = "" + u.id;
             released.set(key, true);
             Spam::routedUnits.delete(key);   // INV-043: leaving the lane on purpose
@@ -294,7 +298,7 @@ namespace EdgeLanes {
             if (normal !is null && aiMilitaryMgr.TransferUnit(u, normal)) ++n;
         }
         if (n > 0) GenericHelpers::LogUtil("[EdgeLanes] " + Name(lane) + " lane: released " + n
-            + " unit(s) at the far corner to normal attacks", 1);
+            + " unit(s) at the lane's end to normal attacks", 1);
         // forget dead units
         if (ai.frame % (60 * SECOND) < 2 * SECOND) {
             array<string>@ keys = released.getKeys();
@@ -316,10 +320,10 @@ namespace EdgeLanes {
         AIFloat3 lead(-1.0f, 0.0f, -1.0f);
         for (uint i = 0; i < us.length(); ++i) {
             const AIFloat3 q = us[i].GetPos(ai.frame);
-            const float sq = MapHelpers::SqDist(q, rally[2]);
+            const float sq = MapHelpers::SqDist(q, rally[rally.length() - 1]);
             if (sq < best) { best = sq; lead = q; }
         }
-        GenericHelpers::LogUtil("[EdgeLanes] " + Name(lane) + " lane: " + us.length() + " unit(s) on it; nearest the corner at ("
+        GenericHelpers::LogUtil("[EdgeLanes] " + Name(lane) + " lane: " + us.length() + " unit(s) on it; nearest the lane's end at ("
             + int(lead.x) + "," + int(lead.z) + "), " + int(sqrt(best)) + " from it", 1);
     }
 
@@ -442,7 +446,7 @@ namespace EdgeLanes {
                 rally = r;
                 GenericHelpers::LogUtil("[EdgeLanes] " + Name(lane) + " lane lab site (" + int(p.x) + "," + int(p.z) + ") facing " + f
                     + " (pass " + (pass + 1) + "); rally (" + int(r[0].x) + "," + int(r[0].z) + ") -> (" + int(r[1].x) + "," + int(r[1].z) + ") -> corner ("
-                    + int(r[2].x) + "," + int(r[2].z) + ")", 1);
+                    + int(r[2].x) + "," + int(r[2].z) + ")" + (r.length() > 3 ? " -> enemy corner (" + int(r[3].x) + "," + int(r[3].z) + ")" : ""), 1);
                 return true;
             }
         }

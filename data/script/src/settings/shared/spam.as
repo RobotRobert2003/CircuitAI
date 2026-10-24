@@ -64,6 +64,12 @@ namespace Spam {
         // owner, 2026-10-20: every spam lane releases its units at its end, as the edge lanes do (off here)
         bool LaneReleaseAtEnd = false;
         float LaneReleaseRadius = 400.0f;    // within this of a lane's last point a unit leaves it for normal attacks
+        // owner, 2026-10-24: every spam lane (edge lanes, FRONT and TECH pumps) gets one
+        // more last point, the enemy team's back corner across the map from where the
+        // lane ended, so the run is an L. A lane ending within CornerMiddleShare of the
+        // back edge's length from its middle takes either corner at random (kept per lane).
+        bool EnemyCornerEnabled = true;
+        float CornerMiddleShare = 0.15f;
         dictionary UnitByFactory = {
             {"armlab", "armpw"},   {"corlab", "corak"},    {"leglab", "leggob"},
             {"armvp", "armflash"}, {"corvp", "corgator"},  {"legvp", "leghades"}

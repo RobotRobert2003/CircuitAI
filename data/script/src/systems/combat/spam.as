@@ -29,7 +29,9 @@ minimum; deactivation at ReleaseFraction of each so a dip does not flap):
               Routes of different factories run in parallel lanes: the k-th
               factory is offset sideways by LaneSpacing * (0, +1, -1, +2, ...)
               from the direct line, with two intermediate waypoints so the
-              lane is held, not just the end point.
+              lane is held, not just the end point. Every lane then ends at
+              the enemy team's back corner across the map from where it
+              ended (AppendEnemyCorner, owner 2026-10-24): an L.
   units       A finished spam unit is assigned to its factory's route task
               from Military::AiMakeTask using the real producer ID (nearest
               live pump only for gifts or a lost producer). Plain move orders
@@ -548,11 +550,12 @@ namespace Spam {
             array<AIFloat3> points = _RouteOfKey(k, order[i].GetPos(ai.frame));
             if (routeByFactory.get(k, @task) && task !is null && points.length() > 0) task.SetRoute(points);
             GenericHelpers::LogUtil("[Spam] factory " + order[i].id + " runs spread lane " + (i + 1) + " of " + order.length()
-                + " at " + int(side) + " elmos sideways (front at " + int(centre) + ", lanes " + int(step) + " apart) (D-119)", 1);
+                + " at " + int(side) + " elmos sideways (front at " + int(centre) + ", lanes " + int(step) + " apart) (D-119); waypoints" + RouteText(points), 1);
         }
         if (changed) ++routesVersion;
     }
-    array<AIFloat3> _RouteOfKey(const string &in key, const AIFloat3 &in from)
+    // `corner`: end with the enemy corner (AppendEnemyCorner); off for deliveries
+    array<AIFloat3> _RouteOfKey(const string &in key, const AIFloat3 &in from, bool corner = true)
     {
         float side = 0.0f;
         int lane = 0;
@@ -574,7 +577,78 @@ namespace Spam {
             if (end.x < 0.0f) { valid.resize(0); return valid; }
             valid.insertLast(end);
         }
+        if (corner) AppendEnemyCorner(valid, d, from, key);
         return valid;
+    }
+
+    // Owner, 2026-10-24: every spam lane ends with one more point, the enemy team's
+    // back corner across the map from where the lane ended, so the run goes down its
+    // lane and then along the enemy's back edge: an L or a reverse L. The back edge
+    // is the map edge the team axis (our starts' centre to theirs, EdgeLanes::Ends)
+    // points at, snapped to x or z. A lane ending within CornerMiddleShare of that
+    // edge's length from its middle takes either corner at random, once per lane.
+    // The corner is pulled in until it stands in the spam unit's movement area
+    // reachable from its lab (EdgeLanes::PullIn, as the edge rallies).
+    // Cost: only on a route rebuild; at most three rays of ~80 cached area lookups
+    // per corner, and a lab's two corners are cached by its key (an empty key, the
+    // edge lane's, caches nothing: its rallies are cached by EdgeLanes instead).
+    dictionary cornerPick;     // factory id string -> 0 the low corner, 1 the high corner
+    dictionary cornerX;        // factory id string + "|" + pick -> the playable corner
+    dictionary cornerZ;
+    void AppendEnemyCorner(array<AIFloat3>@ route, CCircuitDef@ d, const AIFloat3 &in from, const string &in key)
+    {
+        if (!Global::Spam::EnemyCornerEnabled || route is null || route.length() == 0 || d is null) return;
+        AIFloat3 s, e;
+        if (!EdgeLanes::Ends(s, e)) return;
+        const AIFloat3 last = route[route.length() - 1];
+        const float w = float(aiTerrainMgr.GetTerrainWidth()), h = float(aiTerrainMgr.GetTerrainHeight());
+        const float m = Global::Spam::MapMargin;
+        const bool acrossX = abs(e.x - s.x) >= abs(e.z - s.z);   // the enemy is across x: the back edge is x = 0 or x = w
+        const float back = acrossX ? ((e.x > s.x) ? w - m : m) : ((e.z > s.z) ? h - m : m);
+        const float size = acrossX ? h : w;                         // the back edge's length
+        const float at = acrossX ? last.z : last.x;                 // where along it the lane ended
+        int pick = 0;
+        bool random = false;
+        if (at < size * (0.5f - Global::Spam::CornerMiddleShare)) pick = 1;        // ended low: the high corner
+        else if (at > size * (0.5f + Global::Spam::CornerMiddleShare)) pick = 0;   // ended high: the low corner
+        else {
+            random = true;
+            if (key.length() == 0 || !cornerPick.get(key, pick)) {
+                pick = AiRandom(0, 1);
+                if (key.length() > 0) cornerPick.set(key, pick);
+            }
+        }
+        const string ck = key + "|" + pick;
+        float cx = 0.0f, cz = 0.0f;
+        AIFloat3 c;
+        if (key.length() > 0 && cornerX.get(ck, cx) && cornerZ.get(ck, cz)) {
+            c = AIFloat3(cx, 0.0f, cz);
+        } else {
+            const float along = (pick == 1) ? size - m : m;
+            const AIFloat3 raw = acrossX ? AIFloat3(back, 0.0f, along) : AIFloat3(along, 0.0f, back);
+            // In from the corner three ways - along the back edge, along the side
+            // edge toward our side, and toward the map centre - and keep the
+            // playable point nearest the corner. Played 2026-10-24 (Kings Assault):
+            // the centre ray alone stopped 2400 elmos short of an unplayable corner
+            const float other = (pick == 1) ? m : size - m;
+            const float home = (back > (acrossX ? w : h) * 0.5f) ? m : (acrossX ? w : h) - m;
+            array<AIFloat3> toward = {
+                acrossX ? AIFloat3(back, 0.0f, other) : AIFloat3(other, 0.0f, back),
+                acrossX ? AIFloat3(home, 0.0f, along) : AIFloat3(along, 0.0f, home),
+                AIFloat3(w * 0.5f, 0.0f, h * 0.5f) };
+            c = AIFloat3(-1.0f, 0.0f, -1.0f);
+            for (uint i = 0; i < toward.length(); ++i) {
+                const AIFloat3 q = EdgeLanes::PullIn(d, from, raw, toward[i]);
+                if (q.x >= 0.0f && (c.x < 0.0f || MapHelpers::SqDist(q, raw) < MapHelpers::SqDist(c, raw))) c = q;
+            }
+            if (key.length() > 0) { cornerX.set(ck, c.x); cornerZ.set(ck, c.z); }
+            GenericHelpers::LogUtil("[Spam] lane " + (key.length() > 0 ? key : "edge") + " ends at (" + int(last.x) + "," + int(last.z)
+                + "); enemy corner (" + int(c.x) + "," + int(c.z) + ")" + (random ? " picked at random (lane ends mid-map)" : "")
+                + (c.x < 0.0f ? ": no playable ground, lane unchanged" : ""), 1);
+        }
+        // no playable ground there, or the lane already ends at that corner
+        if (c.x < 0.0f || MapHelpers::SqDist(c, last) < 400.0f * 400.0f) return;
+        route.insertLast(c);
     }
 
     AIFloat3 ReachableNear(CCircuitDef@ def, const AIFloat3 &in from, const AIFloat3 &in desired)
@@ -594,10 +668,10 @@ namespace Spam {
     }
 
     // D-111: the waypoints of a factory's lane, for its factory route
-    array<AIFloat3> RouteOf(CCircuitUnit@ factory)
+    array<AIFloat3> RouteOf(CCircuitUnit@ factory, bool corner = true)
     {
         _EnsureFocus();
-        return _RouteOfKey("" + factory.id, factory.GetPos(ai.frame));
+        return _RouteOfKey("" + factory.id, factory.GetPos(ai.frame), corner);
     }
 
     // D-312: logistics borrows a real spam lane without creating a factory or
@@ -633,7 +707,7 @@ namespace Spam {
         }
         if (selected>=0) {
             CCircuitUnit@ factory=ai.GetTeamUnit(selected);
-            array<AIFloat3> points=RouteOf(factory);
+            array<AIFloat3> points=RouteOf(factory,false);   // a delivery ends at the lane's end, not the enemy corner
             points.insertAt(0,factory.GetPos(ai.frame));
             return points;
         }
@@ -686,8 +760,14 @@ namespace Spam {
         routeByFactory.set(key, @task);
         ++routesVersion;
         GenericHelpers::LogUtil("[Spam] Route created for factory " + factory.id + " lane " + lane
-            + " -> (" + int(Destination().x) + "," + int(Destination().z) + ")", 1);
+            + " -> (" + int(Destination().x) + "," + int(Destination().z) + "); waypoints" + RouteText(points), 1);
         return task;
+    }
+    string RouteText(const array<AIFloat3> &in points)
+    {
+        string s = "";
+        for (uint i = 0; i < points.length(); ++i) s += " (" + int(points[i].x) + "," + int(points[i].z) + ")";
+        return s;
     }
 
     void RefreshRoutes()
@@ -903,6 +983,8 @@ namespace Spam {
         routeByFactory.delete(key);
         laneByFactory.delete(key);
         spreadByFactory.delete(key);
+        cornerPick.delete(key);
+        for (int i = 0; i < 2; ++i) { cornerX.delete(key + "|" + i); cornerZ.delete(key + "|" + i); }
         repeatTask.delete(key);
         factoryVersion.delete(key);
     }
