@@ -7,14 +7,14 @@ namespace FullMetalPlate {
 	// Role determination and factory selection now occur in Main::AiMain using shared helpers.
 
 	// Full Metal Plate (12288 x 12288, the whole map is metal: no mex spots, so the game places AIs with GuessTwo
-	// on a 768-elmo grid). Owner 2026-10-24: 7 FRONT + 1 SUPPORT per team, evenly spaced along the map box
+	// on a 768-elmo grid). Owner 2026-10-24: 8 spots per team (all FRONT since 2026-10-24 11:07), evenly spaced along the map box
 	// (x 0-3072 / 9216-12288, full height) and centred across it; every spot sits on a GuessTwo grid point so
 	// the start_boxes.json diamonds (Team 2) put each AI exactly on its spot. Team 1 = humans, mirrored roles.
 	StartSpot@[] spots = {
 		StartSpot(AIFloat3( 1536, 0,   768), AiRole::FRONT, false), // P1
 		StartSpot(AIFloat3( 1536, 0,  2304), AiRole::FRONT, false), // P2
 		StartSpot(AIFloat3( 1536, 0,  3840), AiRole::FRONT, false), // P3
-		StartSpot(AIFloat3( 1536, 0,  5376), AiRole::SUPPORT, false), // P4
+		StartSpot(AIFloat3( 1536, 0,  5376), AiRole::FRONT, false), // P4
 		StartSpot(AIFloat3( 1536, 0,  6912), AiRole::FRONT, false), // P5
 		StartSpot(AIFloat3( 1536, 0,  8448), AiRole::FRONT, false), // P6
 		StartSpot(AIFloat3( 1536, 0,  9984), AiRole::FRONT, false), // P7
@@ -23,7 +23,7 @@ namespace FullMetalPlate {
 		StartSpot(AIFloat3(10752, 0,   768), AiRole::FRONT, false), // P9
 		StartSpot(AIFloat3(10752, 0,  2304), AiRole::FRONT, false), // P10
 		StartSpot(AIFloat3(10752, 0,  3840), AiRole::FRONT, false), // P11
-		StartSpot(AIFloat3(10752, 0,  5376), AiRole::SUPPORT, false), // P12
+		StartSpot(AIFloat3(10752, 0,  5376), AiRole::FRONT, false), // P12
 		StartSpot(AIFloat3(10752, 0,  6912), AiRole::FRONT, false), // P13
 		StartSpot(AIFloat3(10752, 0,  8448), AiRole::FRONT, false), // P14
 		StartSpot(AIFloat3(10752, 0,  9984), AiRole::FRONT, false), // P15
