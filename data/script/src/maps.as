@@ -10,6 +10,8 @@
 #include "maps/flats_and_forests.as"
 #include "maps/glacial_gap.as"
 #include "maps/forge.as"
+#include "maps/full_metal_plate.as"
+#include "maps/oort_cloud.as"
 #include "maps/red_river_estuary.as"
 #include "maps/serene_caldera.as"
 #include "maps/shore_to_shore.as"
@@ -97,6 +99,8 @@ namespace Maps {
         mapManager.RegisterMapConfig(FlatsAndForests::config);
         mapManager.RegisterMapConfig(GlacialGap::config);
         mapManager.RegisterMapConfig(Forge::config);
+        mapManager.RegisterMapConfig(FullMetalPlate::config);
+        mapManager.RegisterMapConfig(OortCloud::config);
         mapManager.RegisterMapConfig(RedRiverEstuary::config);
         mapManager.RegisterMapConfig(SereneCaldera::config);
         mapManager.RegisterMapConfig(ShoreToShore::config);
