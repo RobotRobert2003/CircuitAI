@@ -75,6 +75,8 @@ struct Inputs {
                                            // a constructor landing first does not hold the ground
     float homeRadius = 900.f;
     int lane = -1;                         // the spot's cluster lane, -1 none
+    int corridor = -1;                     // D-357: the FRONT team whose published coverage corridor holds the spot, -1 none
+    bool corridorForward = false;          // the spot lies past the corridor's midpoint
     bool forward = false;                  // the cluster lies past its lane's midpoint
     bool window = true;                    // the land window (MexOwnershipSeconds) still runs
     bool theatreWindow = true;             // the sea/race window (MexTheatreSeconds) still runs
@@ -142,6 +144,15 @@ inline Result Resolve(const Inputs& in) {
             out.rule = Rule::OPEN_LAND;
             out.owner = nearest([](const Entrant& e) { return e.startDistance2D; }, [](const Entrant&) { return true; });
             return out;
+        }
+        // D-357: a published FRONT corridor is that seat's lane: its clusters go to
+        // it (a lane-spot claimant) ahead of the ground partition; past its
+        // midpoint they are enemy ground during the window, as the partition's.
+        if (in.corridor >= 0) {
+            bool member = false;
+            for (const auto& c : in.entrants) if (c.team == in.corridor && c.laneSpots) member = true;
+            if (member && in.corridorForward) { out.rule = Rule::FORWARD; out.owner = -1; return out; }
+            if (member) { out.rule = Rule::LANE; out.owner = in.corridor; return out; }
         }
         if (in.lane >= 0 && in.forward) { out.rule = Rule::FORWARD; out.owner = -1; return out; }
         if (in.lane >= 0) {

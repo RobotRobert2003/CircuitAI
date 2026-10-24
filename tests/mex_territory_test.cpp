@@ -75,6 +75,24 @@ static void TestLanes() {
     Require(Resolve(in).rule == Rule::LAND_WALK, "off-lane land spots keep the walking rule");
 }
 
+// D-357: a published FRONT coverage corridor is that seat's lane.
+static void TestCorridor() {
+    Inputs in;
+    in.corridor = 1;
+    in.entrants = { Ground(0, 300.f, 2500.f, false, 0), Ground(1, 500.f, 2500.f, true, -1), Ground(2, 200.f, 2500.f, true, 1) };
+    const auto r = Resolve(in);
+    Require(r.rule == Rule::LANE && r.owner == 1, "a corridor cluster goes to the corridor's FRONT, not the nearer walker or the ground lane");
+    in.corridorForward = true;
+    const auto f = Resolve(in);
+    Require(f.rule == Rule::FORWARD && f.owner == -1, "a cluster past the corridor midpoint is nobody's during the window");
+    in.corridorForward = false; in.corridor = 0;
+    Require(Resolve(in).rule == Rule::LAND_WALK && Resolve(in).owner == 2, "a corridor of a seat that claims no lane spots is ignored");
+    in.corridor = 1; in.lane = 1;
+    Require(Resolve(in).owner == 1, "the corridor wins over the ground partition's lane");
+    in.window = false;
+    Require(Resolve(in).rule == Rule::OPEN_LAND, "after the window the corridor no longer reserves");
+}
+
 static void TestRace() {
     // Supreme east island: both sides' con air at 273-274 s, TACTICAL's hovers 56 s ahead.
     Inputs in;
@@ -200,7 +218,7 @@ static void TestPartition() {
 
 int main() {
     try {
-        TestMaskAndHome(); TestSeaAndFord(); TestLanes(); TestRace(); TestWindowOpenings(); TestBalance(); TestValue(); TestPartition();
+        TestMaskAndHome(); TestSeaAndFord(); TestLanes(); TestCorridor(); TestRace(); TestWindowOpenings(); TestBalance(); TestValue(); TestPartition();
     } catch (const std::exception& e) {
         std::cerr << "mex_territory_test: FAIL " << e.what() << "\n";
         return 1;

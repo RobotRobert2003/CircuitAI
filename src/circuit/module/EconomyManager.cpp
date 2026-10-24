@@ -1052,11 +1052,16 @@ bool CEconomyManager::IsOwnSpot(const springai::AIFloat3& pos)
 
 IBuilderTask* CEconomyManager::EnqueueMexWithin(
 		CCircuitUnit* builder, const AIFloat3& center, float radius, int maxSpots, bool allyAware,
-        const std::vector<AIFloat3>& excluded)
+        const std::vector<AIFloat3>& excluded, const MexAccept& accept)
 {
     // The caller owns a bounded, expiring policy list. Empty is the exact old
     // path; rejected candidates never consume or release another task's claim.
-    const auto excludedSpot = [&excluded](const AIFloat3& p) {
+    // D-357: an accept predicate (the FRONT corridor window) is the same kind of
+    // caller-owned filter, applied to queued re-offers and new spots alike.
+    const auto excludedSpot = [&excluded, &accept](const AIFloat3& p) {
+        if (accept && !accept(p)) {
+            return true;
+        }
         return std::any_of(excluded.begin(), excluded.end(), [&p](const AIFloat3& q) {
             return p.SqDistance2D(q) < SQUARE(64.f);
         });
@@ -1155,6 +1160,39 @@ IBuilderTask* CEconomyManager::EnqueueMexWithin(
 		}
 	}
 	return nullptr;
+}
+
+// D-357: the dry form of EnqueueMexWithin's new-spot admission. Same spot
+// order, open/ally/reach/allowance tests and the definition placement test the
+// enqueue loop applies; nothing is claimed. Used by the FRONT commander's
+// advance rung (INV-235) once per offer; O(spots in radius x definitions).
+int CEconomyManager::CountOpenMexWithin(CCircuitUnit* builder, const AIFloat3& center, float radius, bool allyAware, const MexAccept& accept)
+{
+	if (metalMap) {
+		return GetFieldMexCount(center, radius) > 0 ? 0 : 1;  // field maps: EnqueueFieldMex decides
+	}
+	if ((builder == nullptr) || (builder->GetCircuitDef() == nullptr)) {
+		return 0;
+	}
+	CMetalManager* metalMgr = circuit->GetMetalManager();
+	CTerrainManager* terrainMgr = circuit->GetTerrainManager();
+	const int frame = circuit->GetLastFrame();
+	const std::vector<CCircuitDef*>& mexDefs = metalDefs.GetBuildDefs(builder->GetCircuitDef());
+	int count = 0;
+	for (const auto& spot : GetNearestSpotsWithin(metalMgr, center, radius)) {
+		const AIFloat3& pos = metalMgr->GetSpots()[spot.first].position;
+		if ((accept && !accept(pos)) || !metalMgr->IsOpenSpot(spot.first) || !IsOpenMexSpot(spot.first)
+				|| !CanReachMex(builder, pos) || !IsMexExpansionAllowed(pos, allyAware)) {
+			continue;
+		}
+		for (CCircuitDef* mexDef : mexDefs) {
+			if ((mexDef != nullptr) && mexDef->IsAvailable(frame) && terrainMgr->CanBeBuiltAt(mexDef, pos)) {
+				++count;
+				break;
+			}
+		}
+	}
+	return count;
 }
 
 int CEconomyManager::GetMexTaskCountWithin(const AIFloat3& center, float radius) const

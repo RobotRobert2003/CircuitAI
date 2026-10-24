@@ -5,6 +5,7 @@
 #include "unit/enemy/EnemyUnit.h"
 #include "spring/SpringUnit.h"
 #include "terrain/TerrainManager.h"
+#include "terrain/BattleAnalysis.h"
 #include "terrain/HeightMapGeometry.h"
 #include "module/MilitaryManager.h"
 #include "setup/SetupManager.h"
@@ -141,6 +142,12 @@ const CRangedWorld::CohortPlan& CRangedWorld::PlanIndependentCohort(CCircuitUnit
         if(!c.def || c.def->IsAbleToFly() || c.pos.y< -20.f || !(c.def->GetCategory()&def->GetTargetCategory())) return;
         if(c.mobile?!policy.allowMobile:!policy.allowStatic) return;
         float distance=g.center.SqDistance2D(c.pos);
+        // The role's strategic corridor constrains distant objectives, never
+        // close defensive fire. Published grid lookup is O(1), with no scan or
+        // callback added per target (D-354 coverage-lane regression).
+        auto* battle=circuit->GetBattle();
+        if(battle->GetFrontLaneLength()>0.f && battle->GetFrontLaneDistance(c.pos)>battle->GetFrontLaneWidth()
+            && distance>SQUARE(def->GetMaxRange()+battle->GetFrontLaneRangeSlack()))return;
         if(engagedAllies) distance=.4f*distance+.6f*alliedFront.SqDistance2D(c.pos);
         if(c.id==g.target) distance/=policy.targetHysteresis;
         if(policy.engagementSeconds>0.f)
@@ -385,6 +392,7 @@ void CRangedWorld::AssessCohort(CCircuitUnit* unit,CohortPlan& g,const Contact& 
     const int now=circuit->GetLastFrame();
     auto* def=unit->GetCircuitDef(); const auto& p=def->GetRangedPolicy();
     const float horizon=p.engagementSeconds, firing=range*p.rangeFraction;
+    g.ownValue=0.f; g.hostileValue=0.f;
     AIFloat3 firingPoint=enemy.pos+g.back*firing;
     const auto* area=circuit->GetTerrainManager()->GetAreaData();
     // KI-571: a valid enemy plus a firing offset can lie beyond any map edge.
@@ -487,6 +495,7 @@ void CRangedWorld::AssessCohort(CCircuitUnit* unit,CohortPlan& g,const Contact& 
             if(weight>0.f) own.hullHealth=own.hullHealth>0.f?std::min(own.hullHealth,f.combatHealth):f.combatHealth;
         }
     });
+    g.ownValue=own.value; g.hostileValue=hostile.value;
     const float distance=std::sqrt(g.center.SqDistance2D(enemy.pos));
     AIFloat3 pursuit=enemy.pos-g.center; pursuit.Normalize2D();
     const float fleeing=std::max(0.f,Projection(enemy.velocity,pursuit));

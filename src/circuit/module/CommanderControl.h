@@ -40,6 +40,8 @@ private:
         // Throttles (owner 2026-10-19): a failed detour or a declined T3 waits
         // 1 s, +1 s per failure in a row, at most 3 s; success resets.
         int detourNext=0,detourFails=0,t3DeclineFails=0;
+        int t3PositionUntil=0,t3PositionTarget=-1;
+        bool immediatePending=false;
         float detourDist=0.f; // distance to the front at the last detour MOVE
         // Same-goal MOVE resend backoff and fallback goal hold (owner 2026-10-19).
         int moveSent=-10000,moveResends=0,fallbackGoalSince=-10000;
@@ -77,6 +79,21 @@ private:
         commander::FallbackBoundary workBoundary; // perimeter when workTask was offered
         std::map<int,int> timedNext;
         std::vector<routecommand::Command> route;
+        // D-356 lane push census of the last FrontPosition: corridor combat
+        // screens within scan, the furthest one's lane progress, the anchor
+        // bound actually applied (INV-234 re-derives it in Deploy), and the
+        // "then home" latch (never released: the meta's "then home").
+        int pushScreens=0; float pushScreenProgress=-1,pushBound=-1;
+        // The lane progress the recorded front was built at. INV-234 compares
+        // this, not a re-projection of the point: on a folded polyline the
+        // exact lane point can project onto a later segment (b06 Glacial,
+        // +194 elmos), which is geometry, not a goal beyond the bound.
+        float pushGoalProgress=-1;
+        bool pushHome=false;
+        // D-357 corridor mex sweep: distinct spots offered, the last one, and
+        // whether the next lane offer is the turret that follows them.
+        int laneMexCount=0; bool laneMexTurret=false;
+        springai::AIFloat3 laneMexLast{-1,0,-1};
     };
     struct Threat {
         commander::Point pos,velocity;
@@ -91,6 +108,7 @@ private:
         bool frontRecovery=false;
         float frontMexSeconds=0,frontStallSeconds=10,frontDetourSeconds=0; // 0: no detour backoff
         float moveResendSeconds=0;   // 0: a swallowed/failed MOVE is resent every tick
+        float t3ImmediateShot=0,t3PositionSeconds=0; // opt-in balanced combat policy
         float fallbackGoalHoldSeconds=0; // 0: the fallback goal may change every replan
         float scan=1000,leash=700,step=96,support=600,minValue=180,killReward=45;
         float hpReserve=.35f,retreat=.45f,recover=.8f,aggression=.25f;
@@ -98,6 +116,21 @@ private:
         float maxApproach=180,maxSeconds=12,cloakSeconds=1.5f,donorReserve=1200;
         float friendlyMargin=12,normalRange=.85f,frontWorkers=2;
         float frontDistance=1600,frontStandoff=650,frontRadius=500,frontThreat=3;
+        float frontPushAhead=0; // 0: old screen-led anchor; positive: continuous lane advance
+        // D-356: the push is screen-led (corridor combat units required before
+        // the anchor leaves the commander's own progress; 0 = unscreened), ends
+        // after front_push_until_seconds or once observed enemy riot metal
+        // reaches front_push_home_riot ("then home"; 0 = never), and FRONT
+        // offers beyond lane half-width + front_lane_margin are declined
+        // (0 = the commander's build distance).
+        float frontPushScreen=0,frontPushUntilSeconds=0,frontPushHomeRiot=0,frontLaneMargin=0;
+        // D-357: corridor mex sweep. Spots within half-width + front_mex_reach
+        // (0 = build distance) of the lane, from front_mex_behind behind the
+        // commander to front_mex_ahead ahead of it; enemy extractors on those
+        // spots are captured when front_mex_capture_enemy; one line turret per
+        // front_mex_turret_every corridor mexes (0 = none).
+        float frontMexReach=0,frontMexBehind=400,frontMexAhead=600,frontMexCaptureEnemy=0,frontMexTurretEvery=0;
+        float frontMexEnemyHome=0; // spots this close to an enemy start are the enemy's home ground: never swept (0 = off)
         float t3Intercept=1,t3Health=.2f,t3Distance=1000,detectionMargin=32;
         float afusDefenceRadius=0; // opt-in script policy; zero preserves ordinary combat
         // D-293: fall back to the backline porc line before a capable group.
@@ -169,7 +202,7 @@ private:
     // moving: unguided ballistic shells mostly miss a moving commander (D-294).
     float Exposure(commander::Point from,commander::Point to,float seconds,float height,bool moving=false,float newVolleyRisk=1.f) const;
     bool Route(CCircuitUnit* unit,const springai::AIFloat3& from,const springai::AIFloat3& to) const;
-    void Move(CCircuitUnit* unit,State& state,const springai::AIFloat3& goal,int frame);
+    void Move(CCircuitUnit* unit,State& state,const springai::AIFloat3& goal,int frame,bool transit=false);
     void Conceal(CCircuitUnit* unit,State& state,bool value);
     void Transition(CCircuitUnit* unit,State& state,Mode mode,int frame);
     bool Deploy(CCircuitUnit* unit,State& state,int frame);
@@ -178,7 +211,7 @@ private:
     bool Intercept(CCircuitUnit* unit,State& state,int frame);
     void EndT3(CCircuitUnit* unit,State& state,int frame,const char* reason);
     void Decline(CCircuitUnit* unit,State& state,const commander::Contact& target,int frame,const char* reason);
-    bool Fire(CCircuitUnit* unit,State& state,const commander::Line& line,int frame);
+    bool Fire(CCircuitUnit* unit,State& state,const commander::Line& line,int frame,bool acceptT3Risk=false);
     bool FallbackActive(const State& state,int frame) const { return state.fallback && frame<state.fallbackUntil; }
     // Engine reachability indexes sectors by position without bounds checks
     // (KI register, GetClosestSector). Reject garbage/off-map points first.
@@ -189,10 +222,18 @@ private:
     void PlanFallback(CCircuitUnit* unit,State& state,int frame);
     bool Fallback(CCircuitUnit* unit,State& state,IUnitTask* current,int frame);
     void CheckPerimeter(CCircuitUnit* unit,const State& state,const springai::AIFloat3& goal,int frame,const char* source) const;
-    // D-299 work ladder (CommanderWork.cpp). Kinds 5..12; see FrontWork.
+    // D-299 work ladder (CommanderWork.cpp). Kinds 5..16; see FrontWork. The
+    // script names them in commander.json front_ladder (CommanderFront::Work).
     enum WorkKind { WORK_LINE=5,WORK_REPAIR_DEFENCE=6,WORK_REPAIR_UNITS=7,WORK_RECLAIM=8,
-        WORK_TIMED=9,WORK_RADAR=10,WORK_FACTORY=11,WORK_BASE=12,WORK_MEX=13 };
+        WORK_TIMED=9,WORK_RADAR=10,WORK_FACTORY=11,WORK_BASE=12,WORK_MEX=13,WORK_ADVANCE=14,WORK_HOLD=15,
+        WORK_MEX_LANE=16 };
     IUnitTask* LadderWork(CCircuitUnit* unit,State& state,int kind,CCircuitDef* buildDef,float radius,int frame);
+    // D-357: the corridor mex sweep (WORK_MEX_LANE) and its dry probe (INV-235).
+    IUnitTask* LaneMexWork(CCircuitUnit* unit,State& state,CCircuitDef* turretDef,int frame);
+    bool LaneMexAvailable(CCircuitUnit* unit,State& state,int frame);
+    float LaneMexAheadLimit(CCircuitUnit* unit,State& state,int frame,float own);
+    // D-356: the "then home" latch of the lane push.
+    bool PushHome(CCircuitUnit* unit,State& state,int frame);
     IUnitTask* RepairWork(CCircuitUnit* unit,const State& state,bool defence,float radius,int frame);
     IUnitTask* ReclaimWork(CCircuitUnit* unit,const State& state,float radius,int frame);
     IUnitTask* LineWork(CCircuitUnit* unit,State& state,CCircuitDef* buildDef,int frame);

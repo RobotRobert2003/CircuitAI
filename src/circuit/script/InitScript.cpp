@@ -172,6 +172,22 @@ static CScriptArray* CBattleAnalysis_GetUnitTerrainRoute(CBattleAnalysis* battle
     return array;
 }
 
+static CScriptArray* CBattleAnalysis_GetDistributedRoute(CBattleAnalysis* battle,const AIFloat3& from,
+        const AIFloat3& to,const AIFloat3& axisFrom,const AIFloat3& axisTo,int cls,float share,int seats,
+        float tolerance,float spacingWeight,float resourceWeight) {
+    auto* cache=static_cast<CScriptManager::STypeInfoCache*>(asGetActiveContext()->GetEngine()->GetUserData());
+    const auto points=battle->GetDistributedRoute(from,to,axisFrom,axisTo,cls,share,seats,tolerance,spacingWeight,resourceWeight);
+    auto* array=CScriptArray::Create(cache->vec3Array,static_cast<asUINT>(points.size()));
+    for(asUINT i=0;i<array->GetSize();++i)*static_cast<AIFloat3*>(array->At(i))=points[i];
+    return array;
+}
+static bool CBattleAnalysis_SetFrontLane(CBattleAnalysis* battle,const CScriptArray* input,float width) {
+    if(!input || input->GetSize()>4096)return false;
+    std::vector<AIFloat3> points;points.reserve(input->GetSize());
+    for(asUINT i=0;i<input->GetSize();++i)points.push_back(*static_cast<const AIFloat3*>(input->At(i)));
+    return battle->SetFrontLane(points,width);
+}
+
 // D-296: scout raid route over the observed ground-hazard layer.
 static CScriptArray* CBattleAnalysis_GetUnitRaidRoute(CBattleAnalysis* battle, const CCircuitDef* def,
         const AIFloat3& from, const AIFloat3& to, float hazardMargin, float hazardWeight, bool avoidHazards)
@@ -1480,6 +1496,13 @@ void CInitScript::RegisterMgr()
     r = engine->RegisterObjectMethod("CBattleAnalysis", "float GetAllyAssetCost(int) const", asMETHOD(CBattleAnalysis, GetAllyAssetCost), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "float AmphThreat(const AIFloat3& in) const", asMETHOD(CBattleAnalysis, AmphThreat), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "array<AIFloat3>@ GetTerrainRoute(const AIFloat3& in, const AIFloat3& in, int, float, float, float, float)", asFUNCTION(CBattleAnalysis_GetTerrainRoute), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","array<AIFloat3>@ GetDistributedRoute(const AIFloat3& in, const AIFloat3& in, const AIFloat3& in, const AIFloat3& in, int, float, int, float, float, float)",asFUNCTION(CBattleAnalysis_GetDistributedRoute),asCALL_CDECL_OBJFIRST);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","bool SetFrontLane(const array<AIFloat3>@, float)",asFUNCTION(CBattleAnalysis_SetFrontLane),asCALL_CDECL_OBJFIRST);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","float GetFrontLaneLength() const",asMETHOD(CBattleAnalysis,GetFrontLaneLength),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","float GetFrontLaneWidth() const",asMETHOD(CBattleAnalysis,GetFrontLaneWidth),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","float GetFrontLaneDistance(const AIFloat3& in) const",asMETHOD(CBattleAnalysis,GetFrontLaneDistance),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","AIFloat3 GetFrontLaneGoal(const AIFloat3& in, float) const",asMETHOD(CBattleAnalysis,GetFrontLaneGoal),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","void SetFrontLaneOptions(float, float, float, bool)",asMETHOD(CBattleAnalysis,SetFrontLaneOptions),asCALL_THISCALL);ASSERT(r>=0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "array<AIFloat3>@ GetUnitTerrainRoute(const CCircuitDef@, const AIFloat3& in, const AIFloat3& in, bool, float, float, float, float)", asFUNCTION(CBattleAnalysis_GetUnitTerrainRoute), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBattleAnalysis", "AIFloat3 GetAirContactPos(int) const", asMETHOD(CBattleAnalysis, GetAirContactPos), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBattleAnalysis", "float GetAirContactCost(int) const", asMETHOD(CBattleAnalysis, GetAirContactCost), asCALL_THISCALL); ASSERT(r >= 0);

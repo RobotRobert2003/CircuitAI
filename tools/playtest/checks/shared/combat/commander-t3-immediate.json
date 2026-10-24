@@ -1,0 +1,17 @@
+{
+  "stop_minute": 1,
+  "expect": [
+    {"key":"loaded","pattern":"\\[RangedArena\\].* loaded","scope":"any","by_minute":0.4},
+    {"key":"immediate","pattern":"\\[CommanderT3\\] unit=(?P<unit>\\d+) target=\\d+ action=fire immediate=1","scope":"any","by_minute":0.425},
+    {"key":"target","pattern":"\\[CommanderT3\\] unit=\\d+ target=(?P<target>\\d+) action=fire immediate=1","scope":"any","by_minute":0.425},
+    {"key":"shot","pattern":"\\[Commander\\] unit=(?P<unit>\\d+) shot_confirmed","scope":"any","by_minute":0.425,"same_as":"immediate","after_key":"immediate"},
+    {"key":"weapon","pattern":"\\[RangedArena\\].*shot id=(?P<unit>\\d+) unit=armcom .*weaponName=.*(dgun|disintegrator)","scope":"any","by_minute":0.425,"same_as":"immediate","after_key":"immediate"},
+    {"key":"kill","pattern":"\\[RangedArena\\].*death id=(?P<target>\\d+) team=1 unit=corjugg","scope":"any","by_minute":0.5,"same_as":"target","after_key":"shot"}
+  ],
+  "forbid": [
+    {"key":"script","pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"\\[INVARIANT\\]","scope":"any"},
+    {"key":"fixture","pattern":"\\[RangedArena\\].*ERROR|Error in.*ranged_arena","scope":"any"},
+    {"key":"crash","pattern":"Access violation|has crashed|Fatal:","scope":"any"}
+  ]
+}

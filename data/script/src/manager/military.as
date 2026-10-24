@@ -6,6 +6,7 @@
 #include "../systems/combat/scout_raid.as"
 #include "../systems/team/ferry.as"
 #include "../systems/amphibious/amphibious_ops.as"
+#include "../systems/world/coverage_lanes.as"
 
 namespace Military {
 
@@ -15,6 +16,12 @@ namespace Military {
     {
         if (u is null) return previous;
         const AIFloat3 pos = u.GetPos(ai.frame);
+        // D-354/D-356: the corridor goal; coverage/advance is read once by
+        // CoverageLanes::Load, not per objective query.
+        if(Global::AISettings::Role==AiRole::FRONT && aiBattle.GetFrontLaneLength()>0.f) {
+            CoverageLanes::Load();
+            return aiBattle.GetFrontLaneGoal(pos,CoverageLanes::advance);
+        }
         const int lane = Lanes::BestLane(Lanes::BOT);
         if (lane >= 0) {
             float nearest = 1e30f;

@@ -3,6 +3,7 @@
 // used for route planning.
 #include "../presentation/widget_link.as"
 #include "../world/lanes.as"
+#include "../world/coverage_lanes.as"
 
 /******************************************************************************
 
@@ -44,6 +45,7 @@ namespace SeaLanes {
     class Lane {
         int factory = -1, kind = 0, contact = -1, frame = -1;
         AIFloat3 contactPos = AIFloat3(-1, 0, -1);
+        string geometryKey;
         array<AIFloat3> points;
     }
     array<Lane@> lanes;
@@ -132,8 +134,8 @@ namespace SeaLanes {
     void Compute(Lane@ lane, CCircuitUnit@ factory) {
         const AIFloat3 mouth = Mouth(factory);
         const int body = aiBattle.WaterBody(mouth, false);
-        lane.frame = ai.frame; lane.points.resize(0); lane.contact = -1; lane.kind = -1;
-        if (body < 0) return;
+        lane.frame = ai.frame; lane.contact = -1; lane.kind = -1;
+        if (body < 0) {lane.points.resize(0);lane.geometryKey="";return;}
         // Closest last known enemy on this water body (live or remembered).
         float best = 1e30f; AIFloat3 contact(-1, 0, -1);
         const int contacts = aiBattle.GetSeaForceCount();
@@ -155,6 +157,55 @@ namespace SeaLanes {
                 if (d < bestStart) { bestStart = d; kind = k; water = w; land = l; }
             }
         }
+        CoverageLanes::Load();
+        AIFloat3 axisFrom,axisTo;
+        if(CoverageLanes::enabled && kind>=0 && CoverageLanes::Axis(axisFrom,axisTo)) {
+            // Divide each connected sea among SEA seats, then subdivide that
+            // seat among its factories. Unequal factory counts cannot steal
+            // another player's band. Contacts mark the route; they do not
+            // collapse every lane onto the same nearest enemy.
+            int rank=0,count=1,localRank=0,localCount=0;
+            const float own=CoverageLanes::Side(Global::Map::StartPos,axisFrom,axisTo);
+            array<Team::Roster::Entry@>@ peers=Team::Roster::WithRole(AiRole::SEA);
+            for(uint i=0;i<peers.length();++i) {
+                if(peers[i].teamId==ai.teamId || !aiEconomyMgr.IsTeamAlive(peers[i].teamId))continue;
+                AIFloat3 peerWater,peerLand;
+                if(Final(body,peers[i].startPos,peerWater,peerLand)!=0)continue;
+                ++count;const float side=CoverageLanes::Side(peers[i].startPos,axisFrom,axisTo);
+                if(side<own || (side==own && peers[i].teamId<ai.teamId))++rank;
+            }
+            const float ownFactory=CoverageLanes::Side(mouth,axisFrom,axisTo);
+            for(uint i=0;i<lanes.length();++i) {
+                CCircuitUnit@ other=ai.GetTeamUnit(lanes[i].factory);
+                if(!NavalFactory(other))continue;
+                const AIFloat3 p=Mouth(other);if(aiBattle.WaterBody(p,false)!=body)continue;
+                ++localCount;const float side=CoverageLanes::Side(p,axisFrom,axisTo);
+                if(side<ownFactory || (side==ownFactory && other.id<factory.id))++localRank;
+            }
+            localCount=AiMax(1,localCount);
+            const float share=(float(rank)+(float(localRank)+.5f)/float(localCount))/float(count);
+            const string key=""+body+":"+rank+":"+count+":"+localRank+":"+localCount+":"+int(mouth.x)+":"+int(mouth.z)+":"+int(water.x)+":"+int(water.z)+":"+int(axisFrom.x)+":"+int(axisFrom.z)+":"+int(axisTo.x)+":"+int(axisTo.z);
+            if(key!=lane.geometryKey) {
+                // Failed static geometry is cached until an input changes too.
+                lane.geometryKey=key;
+                array<AIFloat3>@ route=CoverageLanes::Route(mouth,water,axisFrom,axisTo,Lanes::NAVAL,share,count*localCount);
+                lane.points.resize(0);
+                if(route !is null && route.length()>1) {
+                    lane.points.insertLast(Opening(factory));Append(lane.points,route);
+                    if(kind==1)lane.points.insertLast(land);
+                }
+            }
+            lane.contactPos=contact;lane.kind=kind;
+            if(contact.x>=0) {
+                float nearest=CoverageLanes::halfWidth*CoverageLanes::halfWidth;
+                for(uint i=0;i<lane.points.length();++i) {
+                    const float d=lane.points[i].SqDistance2D(contact);
+                    if(d<nearest){nearest=d;lane.contact=int(i);}
+                }
+            }
+            return;
+        }
+        lane.geometryKey="";lane.points.resize(0);
         // Drawn from the factory opening; routed from the first open water
         // beyond it (the route search needs a navigable start).
         lane.points.insertLast(Opening(factory));

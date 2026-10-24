@@ -59,6 +59,8 @@ def prepare(args):
     if case.get('aggression_widget_test'):
         stage += ['--extra-widget',str(ROOT/'tools/widgets/gui_barb_team_link.lua'),
                   '--extra-widget',str(HERE/'widgets/aggression_watch.lua')]
+    if case.get('coverage_overlay'):
+        stage += ['--extra-widget',str(ROOT/'tools/widgets/gui_barb_team_link.lua')]
     subprocess.run(stage, check=True)
     script = directory/'script.txt'
     script.write_text(script.read_text().replace('[GAME]\n{','[GAME]\n{\n FixedRNGSeed='+str(args.seed)+';',1))
@@ -78,6 +80,8 @@ def prepare(args):
         if name=='builder' and case.get('builders'): condition = 'ai.teamId==1'
         if name=='builder' and case.get('commander_front_work'):
             condition = 'ai.teamId!=0 || !u.circuitDef.IsRoleAny(Unit::Role::COMM.mask)'
+            if case.get('coverage_probe'):
+                condition = '!u.circuitDef.IsRoleAny(Unit::Role::COMM.mask)'
         if name=='builder' and case.get('production'):
             repair += '\n if (ai.teamId==0 && !u.circuitDef.IsMobile()) return aiBuilderMgr.DefaultMakeTask(u);'
         path.write_text(source[:start]+repair+'\n if ('+condition+') return '+manager+'.Enqueue('+wait+'); // supplied arena only\n'+source[start:])
@@ -146,10 +150,36 @@ def prepare(args):
             source=source[:start]+'\n if (ai.teamId=='+str(case.get('enemy_team',1))+' && ai.frame<2*SECOND) CommanderCombat::Override("enabled",0.f); // keep enemy commander home\n'+source[start:]
         # D-293: exercise the per-AI script override on team 0 only; it must
         # win over the profile JSON that CommanderCombat::Update applies.
+        # D-356: a coverage probe case observes every commander, so its
+        # overrides (the unscreened push) apply to every team.
+        scope='ai.frame<2*SECOND' if case.get('coverage_probe') else 'ai.teamId==0 && ai.frame<2*SECOND'
         for key,value in case.get('commander_overrides',{}).items():
-            source=source[:start]+'\n if (ai.teamId==0 && ai.frame<2*SECOND) CommanderCombat::Override("'+key+'",'+repr(float(value))+'f); // per-AI override fixture\n'+source[start:]
+            source=source[:start]+'\n if ('+scope+') CommanderCombat::Override("'+key+'",'+repr(float(value))+'f); // per-AI override fixture\n'+source[start:]
         declarations=''
         events=''
+        if case.get('coverage_probe'):
+            minimum=float(case.get('coverage_min_advance',1000))
+            if not 0 < minimum <= 50000: raise ValueError('Invalid coverage_min_advance')
+            declarations+='const float _CoverageProbeMinimum='+repr(minimum)+'f; int _CoverageProbeNext=0;\n'
+            events+='''
+ if(ai.frame>=_CoverageProbeNext && ai.frame>=30*SECOND) {
+     _CoverageProbeNext=ai.frame+5*SECOND;
+     array<Id>@ ids=ai.GetOwnedUnitIds();
+     for(uint i=0;i<ids.length();++i) {
+         CCircuitUnit@ u=ai.GetTeamUnit(ids[i]);
+         if(u is null || !u.circuitDef.IsRoleAny(Unit::Role::COMM.mask))continue;
+         const AIFloat3 p=u.GetPos(ai.frame);
+         AiLog("[CoverageProbe] team="+ai.teamId+" frame="+ai.frame+" unit="+u.id
+             +" x="+p.x+" z="+p.z+" distance="+aiBattle.GetFrontLaneDistance(p)
+             +" width="+aiBattle.GetFrontLaneWidth()+" length="+aiBattle.GetFrontLaneLength()
+             +" moved="+sqrt(p.SqDistance2D(Global::Map::StartPos)));
+         if(ai.frame>=120*SECOND && aiBattle.GetFrontLaneLength()>0.f
+             && aiBattle.GetFrontLaneDistance(p)<=aiBattle.GetFrontLaneWidth()
+             && p.SqDistance2D(Global::Map::StartPos)>=_CoverageProbeMinimum*_CoverageProbeMinimum)
+             AiLog("[CoverageProbe] advanced_in_lane team="+ai.teamId);
+     }
+ }
+'''
         for index,event in enumerate(case.get('commander_override_events',[])):
             key=event['key']
             if not re.fullmatch(r'[a-zA-Z0-9_.]+',key):raise ValueError('Invalid commander option key')
@@ -249,7 +279,8 @@ def prepare(args):
     if case.get('production'):
         pins['overrides'] += ['team 0 factories and static assistants active; mobile builders '+('active' if case.get('builders') else 'frozen')]
     if case.get('commander_front_work'):
-        pins['overrides'] += ['team 0 commanders use real FRONT builder policy; other builders frozen']
+        pins['overrides'] += [('all commanders' if case.get('coverage_probe') else 'team 0 commanders')
+                             +' use real FRONT builder policy; other builders frozen']
     if case.get('trace_spam'):
         pins['overrides'] += ['TECH layout/economy invariant Tick disabled for supplied buildings; production/lifecycle and spam invariants retained', 'read-only factory task census every 10 seconds']
     if case.get('hold_friendly'):

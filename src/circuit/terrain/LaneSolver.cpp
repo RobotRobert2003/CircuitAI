@@ -17,6 +17,89 @@ std::uint64_t Fingerprint(const std::vector<Route>& routes) {
     return hash;
 }
 static constexpr int NB[8][2] = {{1,0},{-1,0},{0,1},{0,-1},{1,1},{1,-1},{-1,1},{-1,-1}};
+std::vector<int> Solver::DistributedRoute(const Point& from, const Point& to,
+        const Point& axisFrom, const Point& axisTo, int cls, float share, int seats,
+        float tolerance, float spacingWeight, float resourceWeight,
+        const std::vector<Point>& resources) const {
+    const auto inside=[&](const Point& p) { return std::isfinite(p.x) && std::isfinite(p.z)
+        && p.x>=0 && p.z>=0 && p.x<gw*cellSize && p.z<gh*cellSize; };
+    const float length=axisFrom.distance2D(axisTo);
+    if(!inside(from) || !inside(to) || !std::isfinite(length) || length<cellSize
+        || cls<0 || cls>=_LANE_CLASSES_ || seats<1 || seats>64
+        || !std::isfinite(share) || share<0 || share>1 || !std::isfinite(tolerance)
+        || !std::isfinite(spacingWeight) || !std::isfinite(resourceWeight)) return {};
+    const int origin=Cell(from), goal=Cell(to), n=gw*gh;
+    if(!pass[cls][origin] || !pass[cls][goal]) return {};
+    tolerance=std::clamp(tolerance,0.f,.45f);
+    spacingWeight=std::clamp(spacingWeight,0.f,64.f);
+    resourceWeight=std::clamp(resourceWeight,0.f,4.f);
+    const float ax=(axisTo.x-axisFrom.x)/length, az=(axisTo.z-axisFrom.z)/length;
+    const auto forward=[&](int c) { const auto p=CellPos(c); return (p.x-axisFrom.x)*ax+(p.z-axisFrom.z)*az; };
+    const auto sideways=[&](int c) { const auto p=CellPos(c); return -(p.x-axisFrom.x)*az+(p.z-axisFrom.z)*ax; };
+    const auto neighbour=[&](int c,int k) {
+        const int x=c%gw,z=c/gw,dx=NB[k][0],dz=NB[k][1],nx=x+dx,nz=z+dz;
+        if(nx<0 || nx>=gw || nz<0 || nz>=gh || (!edges.empty() && !(edges[c]&(1<<k)))) return -1;
+        const int next=nz*gw+nx;
+        if(!pass[cls][next] || (dx && dz && (!pass[cls][z*gw+nx] || !pass[cls][nz*gw+x]))) return -1;
+        return next;
+    };
+    // One component flood, transverse sorts and one weighted search: O(G log G)
+    // time, O(G) scratch. Called only on strategic input changes, never per
+    // unit/frame. No callbacks or shared mutable storage; deterministic cell
+    // order resolves ties (lane_solver_test covers spacing/chokes/resources).
+    std::vector<char> reachable(n,0); std::vector<int> queue; queue.reserve(n);
+    reachable[origin]=1; queue.push_back(origin);
+    for(std::size_t q=0;q<queue.size();++q) {
+        if((q&1023)==0) CheckCancelled();
+        for(int k=0;k<8;++k) { const int next=neighbour(queue[q],k);
+            if(next>=0 && !reachable[next]) { reachable[next]=1; queue.push_back(next); }
+        }
+    }
+    if(!reachable[goal]) return {};
+    // Include map margins on both sides of the team's axis. Separate bins
+    // retain the actual passable cross-section, including split channels.
+    const int offset=int(std::ceil(float(gw+gh))), bins=2*offset+1;
+    std::vector<std::vector<int>> sections(bins);
+    const auto section=[&](int c) { return std::clamp(int(std::floor(forward(c)/cellSize))+offset,0,bins-1); };
+    for(int c:queue) sections[section(c)].push_back(c);
+    Grid ideal(bins,0.f), width(bins,float(cellSize));
+    for(int b=0;b<bins;++b) {
+        auto& cells=sections[b]; if(cells.empty()) continue;
+        std::sort(cells.begin(),cells.end(),[&](int a,int c) { const float x=sideways(a),y=sideways(c);return x!=y?x<y:a<c; });
+        ideal[b]=sideways(cells[std::min(cells.size()-1,std::size_t(share*float(cells.size()-1)+.5f))]);
+        // Use traversable width, not the outer span across an impassable bay.
+        width[b]=std::max(float(cellSize),float(cells.size()*cellSize)/float(seats));
+    }
+    std::vector<int> resourceDistance(n,7); queue.clear();
+    for(const auto& p:resources) if(inside(p)) {
+        const int c=Cell(p); if(reachable[c] && resourceDistance[c]>0) {resourceDistance[c]=0;queue.push_back(c);}
+    }
+    for(std::size_t q=0;q<queue.size();++q) {
+        const int c=queue[q]; if(resourceDistance[c]>=6) continue;
+        for(int k=0;k<8;++k) {const int next=neighbour(c,k);
+            if(next>=0 && reachable[next] && resourceDistance[next]>resourceDistance[c]+1) {
+                resourceDistance[next]=resourceDistance[c]+1;queue.push_back(next);
+            }
+        }
+    }
+    Grid penalty(n,1.f);
+    for(int c=0;c<n;++c) if(reachable[c]) {
+        const int b=section(c);
+        const float progress=std::clamp(forward(c)/length,0.f,1.f);
+        const float fade=std::min(1.f,std::min(progress,1.f-progress)*8.f);
+        const float deviation=std::max(0.f,std::abs(sideways(c)-ideal[b])/width[b]-tolerance);
+        const float resource=float(std::max(0,6-resourceDistance[c]))/6.f;
+        penalty[c]=(1.f+spacingWeight*fade*deviation*deviation)/(1.f+resourceWeight*resource);
+    }
+    Grid distance;std::vector<int> previous;SearchWorkspace search;
+    DijkstraMulti({goal},penalty,cls,nullptr,distance,previous,true,0.f,nullptr,0.f,true,nullptr,origin,&search);
+    if(!search.Seen(origin) || distance[origin]==std::numeric_limits<float>::max()) return {};
+    std::vector<int> result;
+    for(int c=origin;c>=0 && result.size()<std::size_t(n);c=previous[c]) {
+        result.push_back(c);if(c==goal)return result;
+    }
+    return {};
+}
 Solver::Solver(const Terrain& t, Settings settings, const std::atomic<bool>* cancel)
     : Settings(settings), gw(t.gw), gh(t.gh), cellSize(t.cellSize), height(t.height),
       surfaceSlope(t.surfaceSlope), edges(t.edges), pass(t.pass), body8(t.body8), cancel(cancel)

@@ -11,7 +11,7 @@
       "key": "timed",
       "pattern": "\\[CommanderWork\\] unit=\\d+ work=9 ",
       "scope": "any",
-      "by_minute": 2
+      "by_minute": 5
     },
     {
       "key": "fallback",

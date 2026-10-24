@@ -1,0 +1,186 @@
+{
+  "commander_overrides": {"front_push_screen": 0},
+  "name": "coverage-front-comet",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "Three FRONT seats per side: terrain-distributed lanes and physical commander advance.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      1800,
+      1800
+    ],
+    [
+      4000,
+      1800
+    ],
+    [
+      5600,
+      1800
+    ],
+    [
+      1800,
+      5400
+    ],
+    [
+      4000,
+      5400
+    ],
+    [
+      5600,
+      5400
+    ]
+  ],
+  "ally_spots": "1,2,3",
+  "camera": [
+    4096,
+    3072,
+    11000
+  ],
+  "photos": [
+    60,
+    150,
+    230
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "commander_initial": true,
+  "commander_front_work": true,
+  "coverage_probe": true,
+  "start_metal": 100000,
+  "commander_trace": true,
+  "checks": "coverage-front-comet",
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "groups": [
+    {
+      "unit": "armlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        1620,
+        1800
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        1620,
+        1620
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 1,
+      "count": 1,
+      "position": [
+        3820,
+        1800
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 1,
+      "count": 1,
+      "position": [
+        3820,
+        1620
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 2,
+      "count": 1,
+      "position": [
+        5420,
+        1800
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 2,
+      "count": 1,
+      "position": [
+        5420,
+        1620
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 3,
+      "count": 1,
+      "position": [
+        1620,
+        5400
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 3,
+      "count": 1,
+      "position": [
+        1620,
+        5220
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 4,
+      "count": 1,
+      "position": [
+        3820,
+        5400
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 4,
+      "count": 1,
+      "position": [
+        3820,
+        5220
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 5,
+      "count": 1,
+      "position": [
+        5420,
+        5400
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 5,
+      "count": 1,
+      "position": [
+        5420,
+        5220
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "coverage_overlay": true,
+  "camera_angle": 0.1
+}

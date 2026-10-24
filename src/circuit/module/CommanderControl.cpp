@@ -1,4 +1,5 @@
 #include "module/CommanderControl.h"
+#include "terrain/BattleAnalysis.h"
 #include "module/BuilderManager.h"
 #include "module/EconomyManager.h"
 #include "module/FactoryManager.h"
@@ -85,7 +86,7 @@ void CCommanderControl::WeaponFired(int id,int weapon) {
     auto it=commanders.find(id); auto* unit=ai->GetTeamUnit(id);
     if(it==commanders.end() || !Handles(unit) || !unit->GetCircuitDef()->GetDGunDef()
         || unit->GetCircuitDef()->GetDGunDef()->GetDef()->GetWeaponDefId()!=weapon) return;
-    auto& s=it->second; s.fired=ai->GetLastFrame(); s.pending=-1; s.next=0;
+    auto& s=it->second; s.fired=ai->GetLastFrame(); s.pending=-1; s.immediatePending=false; s.next=0;
     // Shot event confirms dispatch, not a kill. Every repeat uses fresh HP.
     if(dynamic_cast<CCommanderTask*>(unit->GetTask()))
         Transition(unit,s,Mode::ESCAPE,s.fired);
@@ -140,10 +141,19 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"cloak_seconds",&options.cloakSeconds,0,5},{"donor_reserve",&options.donorReserve,0,50000},
         {"friendly_margin",&options.friendlyMargin,0,100},{"normal_range",&options.normalRange,.5f,1},
         {"front_workers",&options.frontWorkers,1,20},
+        {"front_push_ahead",&options.frontPushAhead,0,2000},
+        // D-356 screen-led push, its end, and the FRONT offer corridor margin
+        {"front_push_screen",&options.frontPushScreen,0,20},{"front_push_until_seconds",&options.frontPushUntilSeconds,0,7200},
+        {"front_push_home_riot",&options.frontPushHomeRiot,0,100000},{"front_lane_margin",&options.frontLaneMargin,0,2000},
+        // D-357 corridor mex sweep
+        {"front_mex_reach",&options.frontMexReach,0,2000},{"front_mex_behind",&options.frontMexBehind,0,4000},
+        {"front_mex_ahead",&options.frontMexAhead,0,4000},{"front_mex_capture_enemy",&options.frontMexCaptureEnemy,0,1},
+        {"front_mex_turret_every",&options.frontMexTurretEvery,0,20},{"front_mex_enemy_home",&options.frontMexEnemyHome,0,4000},
         {"front_distance",&options.frontDistance,200,10000},{"front_standoff",&options.frontStandoff,200,1500},
         {"front_radius",&options.frontRadius,100,1000},{"front_threat",&options.frontThreat,0,50},
         {"front_mex_seconds",&options.frontMexSeconds,0,30},{"front_stall_seconds",&options.frontStallSeconds,3,60},
         {"front_detour_seconds",&options.frontDetourSeconds,0,3},{"t3_decline_gate",&options.t3DeclineGate,0,1},
+        {"t3_immediate_shot",&options.t3ImmediateShot,0,1},{"t3_position_seconds",&options.t3PositionSeconds,0,3},
         {"move_resend_seconds",&options.moveResendSeconds,0,3},{"fallback_goal_hold_seconds",&options.fallbackGoalHoldSeconds,0,5},
         {"t3_intercept",&options.t3Intercept,0,1},{"t3_health",&options.t3Health,.1f,.5f},
         {"t3_distance",&options.t3Distance,250,2000},{"detection_margin",&options.detectionMargin,8,200},
@@ -397,7 +407,7 @@ bool CCommanderControl::Route(CCircuitUnit* unit,const AIFloat3& from,const AIFl
     }
     return true;
 }
-void CCommanderControl::Move(CCircuitUnit* unit,State& s,const AIFloat3& goal,int frame) {
+void CCommanderControl::Move(CCircuitUnit* unit,State& s,const AIFloat3& goal,int frame,bool transit) {
     // Exact destination, ownership and live queue suffix must all agree. A
     // swallowed order or move failure is reissued; a moving target is new intent.
     if(!s.route.empty() && s.goal==goal && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) return;
@@ -415,8 +425,14 @@ void CCommanderControl::Move(CCircuitUnit* unit,State& s,const AIFloat3& goal,in
         s.moveGoal=goal; s.moveSent=frame;
     }
     CheckPerimeter(unit,s,goal,frame,"move");
-    s.goal=goal; s.route={{CMD_MOVE,0,frame+90,goal.x,goal.y,goal.z}};
-    TRY_UNIT(ai,unit,unit->CmdMoveTo(goal,0,frame+90);)
+    // MobileCAI expires MOVE on its simulation thread. A 240-elmo lane
+    // step takes longer than the old 3-second timeout at commander speed.
+    // Give transit its travel time plus slack, bounded at 30 seconds; combat
+    // and MoveFailed still preempt immediately and stalls retain their watchdog.
+    const int lifetime=transit?std::clamp(int(std::sqrt(unit->GetPos(frame).SqDistance2D(goal))
+        /std::max(1.f,unit->GetCircuitDef()->GetSpeed())*FRAMES_PER_SEC)+90,90,900):90;
+    s.goal=goal; s.route={{CMD_MOVE,0,frame+lifetime,goal.x,goal.y,goal.z}};
+    TRY_UNIT(ai,unit,unit->CmdMoveTo(goal,0,frame+lifetime);)
 }
 void CCommanderControl::Conceal(CCircuitUnit* unit,State& s,bool value) {
     const int fire=value?CCircuitDef::FireType::HOLD:CCircuitDef::FireType::OPEN;
@@ -475,7 +491,7 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
         Transition(unit,s,Mode::SUPPORT,frame); s.pending=-1;
         s.retry=frame+30; // external retreat/role takeover wins
     }
-    if(!task && frame<s.retry) return;
+    if(!task && frame<s.retry && options.t3ImmediateShot<=0) return;
     const AIFloat3 pos=unit->GetPos(frame);
     if(pos.y>ai->GetMap()->GetElevationAt(pos.x,pos.z)+unit->GetCircuitDef()->GetRadius()*2.f) {
         // The C AI interface has no transporter query. Suspended ground units
@@ -494,9 +510,11 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
     // D-294: a T3 in range is engaged from the line (concealed per-T3 plan)
     // ahead of the D-293 withdrawal, which then covers everything else.
     if(Intercept(unit,s,frame)) return;
+    if(!task && frame<s.retry) return;
     if(current->GetType()==IUnitTask::Type::RETREAT && Handles(unit)) {
         const bool hide=RetreatCloakFunded(unit) && CloakSafe(unit,P(pos),P(pos),options.escapeSeconds);
-        unit->TrySetFireState(hide?CCircuitDef::FireType::HOLD:CCircuitDef::FireType::RETURN);
+        const int fire=hide?CCircuitDef::FireType::HOLD:CCircuitDef::FireType::RETURN;
+        if(unit->GetRequestedFireState()!=fire) unit->TrySetFireState(fire);
     }
     // Under fire from an attacker it cannot see (a submerged amphibious T3,
     // fire from beyond sight) and no known T3 owns the situation: cloak and
@@ -647,6 +665,8 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
         // No submerged manual fire; shore movement may still use normal torpedo.
         if(candidate.y<0 || (i>0 && !Route(unit,pos,candidate))) continue;
         if(i>0 && candidate.SqDistance2D(home)>options.leash*options.leash && !emergency) continue;
+        if(i>0 && !emergency && ai->GetBattle()->GetFrontLaneLength()>0.f
+            && ai->GetBattle()->GetFrontLaneDistance(candidate)>ai->GetBattle()->GetFrontLaneWidth())continue;
         const float travel=i==0?0.f:commander::TravelSeconds(commander::Length(offsets[i]),speed,
             cap.acceleration,cap.turnRate,i==3?0.f:1.5707963f);
         const float escape=commander::Length(P(candidate)-P(safe))/speed;
@@ -777,6 +797,14 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
     auto* task=dynamic_cast<CCommanderTask*>(unit->GetTask());
     if(FallbackActive(s,frame)) return false; // the porc line bounds exploration
     if(options.frontDuty) {
+        // INV-236 (D-356): front duty is a FRONT-only policy; the script sets
+        // "advance" for the roles in commander.json advance_roles and front_duty
+        // for FRONT alone. A commander with duty but no advance would be a
+        // non-advancing role (SEA, AIR, TECH, SUPPORT) walking its lane.
+        if(!options.advance) {
+            if(frame>=s.lastLog+30) { s.lastLog=frame; ai->LOG("[INVARIANT] INV-236 front duty without advance role unit=%i",unit->GetId()); }
+            return false;
+        }
         // Let the existing idle scheduler offer construction after arrival.
         // Only deployment yields; local combat observation never pauses.
         if(frame<s.frontYield) return false;
@@ -787,13 +815,43 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         if(frame<s.lineUntil && !s.lineDone) return false;
         const auto pos=unit->GetPos(frame),goal=FrontPosition(unit,s,frame);
         if(goal.x<0 || Exposure(P(pos),P(pos),1.f,pos.y)>unit->GetUnit()->GetHealth()*.12f) return false;
+        // INV-234 (D-356): the push goal never passes front_distance nor the
+        // screen-led bound (the furthest corridor screen plus front_push_ahead,
+        // or the commander's own progress without the required screens),
+        // re-derived here from the census FrontPosition recorded.
+        if(options.frontPushAhead>0 && s.pushBound>=0 && s.pushGoalProgress>=0 && ai->GetBattle()->GetFrontLaneLength()>0.f) {
+            // The recorded front's own progress, not a re-projection of the
+            // point (a folded polyline projects it onto a later segment).
+            const float progress=s.pushGoalProgress;
+            // The unscreened push (front_push_screen 0) is bounded by front_distance alone.
+            const float bound=options.frontPushScreen>0?std::min(options.frontDistance,s.pushBound):options.frontDistance;
+            if(progress>bound+64.f)
+                ai->LOG("[INVARIANT] INV-234 lane push goal beyond its bound unit=%i progress=%.0f bound=%.0f screens=%i",
+                    unit->GetId(),progress,bound,s.pushScreens);
+        }
         auto* build=dynamic_cast<IBuilderTask*>(unit->GetTask());
         // Finish a live frame/chain; planned base economy no longer prevents
         // deployment forever. Front work has its own bounded area and owner.
         // A ladder task (repair, reclaim, radar on the way) is local by
-        // construction; finish it before walking on (D-299).
-        if(build && !build->IsDead() && (build->GetNextTask() || build->GetTarget() || build==s.workTask
-            || build->GetPosition().SqDistance2D(goal)<=options.frontRadius*options.frontRadius)) return true;
+        // construction; finish it before walking on (D-299). A repair or
+        // reclaim ladder task has no build definition and is still finishing
+        // work (D-356: the moving anchor no longer abandons it).
+        if(build && !build->IsDead()) {
+            const bool finishing=(build==s.workTask
+                    || (build->GetBuildDef() && build->GetTarget() && !build->GetTarget()->IsFinished()))
+                && build->GetPosition().SqDistance2D(pos)<=std::pow(options.frontRadius+unit->GetCircuitDef()->GetBuildDistance(),2.f);
+            const bool local=pos.SqDistance2D(goal)<=options.frontRadius*options.frontRadius*.25f
+                && build->GetPosition().SqDistance2D(goal)<=options.frontRadius*options.frontRadius;
+            if(options.frontPushAhead>0 ? (finishing || local)
+                : (build->GetNextTask() || build->GetTarget() || build==s.workTask
+                    || build->GetPosition().SqDistance2D(goal)<=options.frontRadius*options.frontRadius)) return true;
+        }
+        // Keep the script's bounded front hold while the anchor is still here.
+        // A moving front or combat preempts it immediately; do not churn a
+        // CommanderTask/STOP pair every deployment yield just to remain still.
+        if(options.frontPushAhead>0 && !task && unit->GetTask()==s.workTask
+            && unit->GetTask()->GetType()==IUnitTask::Type::WAIT
+            && pos.SqDistance2D(goal)<=options.frontRadius*options.frontRadius*.25f) return true;
         // The deploy owner otherwise never asks the idle builder's work ladder.
         // Script opts into en-route mex work. Reuse the same local safe/ally-aware
         // selector and spot claims, at most once per configured interval. Cost:
@@ -802,7 +860,10 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         if(options.work && options.frontMexSeconds>0
             && frame>=s.frontMexFrame+int(std::max(1.f,options.frontMexSeconds)*FRAMES_PER_SEC)) {
             s.frontMexFrame=frame;
-            if(auto* mex=FrontWork(unit,WORK_MEX,nullptr,0)) {
+            // D-357: on a published corridor the en-route spot is the corridor
+            // sweep's (lane window), not the LOS disc around the commander.
+            const int kind=ai->GetBattle()->GetFrontLaneLength()>0.f?WORK_MEX_LANE:WORK_MEX;
+            if(auto* mex=FrontWork(unit,kind,nullptr,0)) {
                 ai->GetBuilderManager()->AssignTask(unit,mex);
                 if(unit->GetTask()==mex) {
                     s.route.clear();
@@ -843,15 +904,24 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
                     return true;
                 }
             }
-            const Point delta=P(goal)-P(pos);
-            AIFloat3 next=F(P(pos)+commander::Normal(delta)*std::min(240.f,commander::Length(delta)));
-            next.y=ai->GetMap()->GetElevationAt(next.x,next.z);
             if(!s.route.empty() && s.goal.SqDistance2D(pos)>48*48
                 && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) return true;
             // A detour MOVE gets its backoff to play out before the straight
             // step and reach are re-sampled (both cost terrain queries).
             if(frame<s.detourNext) return true;
-            if(Route(unit,pos,next)) { s.detourFails=0; Move(unit,s,next,frame); }
+            // Project the lane only when replacing movement, not on every
+            // combat tick while the existing route is still owned and live.
+            const Point delta=P(goal)-P(pos);
+            AIFloat3 next=F(P(pos)+commander::Normal(delta)*std::min(240.f,commander::Length(delta)));
+            const bool assignedLane=ai->GetBattle()->GetFrontLaneLength()>0.f;
+            // Local construction can carry us beyond the front. Clamping a
+            // backward step to zero repeatedly orders our present position
+            // (commander-front-hold). Preserve signed progress on this lane.
+            const float laneRemaining=assignedLane?ai->GetBattle()->GetFrontLaneProgress(goal)
+                -ai->GetBattle()->GetFrontLaneProgress(pos):0.f;
+            if(assignedLane)next=ai->GetBattle()->GetFrontLaneGoal(pos,std::clamp(laneRemaining,-240.f,240.f));
+            next.y=ai->GetMap()->GetElevationAt(next.x,next.z);
+            if(Route(unit,pos,next)) { s.detourFails=0; Move(unit,s,next,frame,options.frontPushAhead>0); }
             else if(options.frontRecovery) {
                 // A blocked straight step is not an unreachable destination.
                 // Let Recoil route around terrain; local combat still preempts
@@ -860,11 +930,29 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
                 // in practice; take the unreachable exit and pick a new one.
                 // A detour that brought the commander 64 elmos closer since the
                 // last one is working, not failing: it does not spend retries.
-                const float goalDist=std::sqrt(pos.SqDistance2D(goal));
+                auto detourGoal=assignedLane?next:goal;
+                bool reachable=ai->GetTerrainManager()->CanReachAt(unit,detourGoal,64);
+                if(assignedLane && !reachable && (options.frontDetourSeconds<=0 || s.detourFails<3)) {
+                    // A coarse terrain cell at a bend can be unreachable for
+                    // this UnitDef even when the corridor continues beyond it.
+                    // Probe at most three farther lane points, only after the
+                    // normal short step fails and outside the detour backoff.
+                    // coverage-front-supreme exercises this at its north bend.
+                    const float remaining=std::abs(laneRemaining);
+                    for(float ahead:{480.f,720.f,960.f}) {
+                        auto probe=ai->GetBattle()->GetFrontLaneGoal(pos,std::copysign(std::min(ahead,remaining),laneRemaining));
+                        if(probe.SqDistance2D(detourGoal)<64.f*64.f)continue;
+                        probe.y=ai->GetMap()->GetElevationAt(probe.x,probe.z);
+                        if(ai->GetTerrainManager()->CanReachAt(unit,probe,64)) {
+                            detourGoal=probe;reachable=true;break;
+                        }
+                    }
+                }
+                const float goalDist=std::sqrt(pos.SqDistance2D(detourGoal));
                 if(s.detourFails>0 && goalDist<s.detourDist-64.f) s.detourFails=0;
-                if((options.frontDetourSeconds<=0 || s.detourFails<3) && ai->GetTerrainManager()->CanReachAt(unit,goal,64)) {
-                    ai->LOG("[CommanderFront] unit=%i detour x=%.0f z=%.0f frame=%i fails=%i",unit->GetId(),goal.x,goal.z,frame,s.detourFails);
-                    Move(unit,s,goal,frame); s.detourDist=goalDist;
+                if((options.frontDetourSeconds<=0 || s.detourFails<3) && reachable) {
+                    ai->LOG("[CommanderFront] unit=%i detour x=%.0f z=%.0f frame=%i fails=%i",unit->GetId(),detourGoal.x,detourGoal.z,frame,s.detourFails);
+                    Move(unit,s,detourGoal,frame,options.frontPushAhead>0); s.detourDist=goalDist;
                     if(options.frontDetourSeconds>0) {
                         s.detourNext=frame+int(std::min(3.f,options.frontDetourSeconds+s.detourFails)*FRAMES_PER_SEC);
                         ++s.detourFails;
@@ -902,6 +990,8 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
     if(support<options.support) return false;
     const auto home=ai->GetSetupManager()->GetBasePos();
     AIFloat3 goal=F(anchor); goal.y=ai->GetMap()->GetElevationAt(goal.x,goal.z);
+    if(ai->GetBattle()->GetFrontLaneLength()>0.f
+        && ai->GetBattle()->GetFrontLaneDistance(goal)>ai->GetBattle()->GetFrontLaneWidth())return false;
     if(goal.SqDistance2D(home)>options.leash*options.leash || !Route(unit,pos,goal)) return false;
     if(!task) {
         auto* old=unit->GetTask();

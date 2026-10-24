@@ -1,0 +1,186 @@
+{
+  "commander_overrides": {"front_push_screen": 0},
+  "name": "coverage-front-supreme",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "Three FRONT seats per side: terrain-distributed lanes and physical commander advance.",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      2513,
+      7983
+    ],
+    [
+      4595,
+      7440
+    ],
+    [
+      4997,
+      8570
+    ],
+    [
+      9764,
+      4339
+    ],
+    [
+      7729,
+      4835
+    ],
+    [
+      7292,
+      3727
+    ]
+  ],
+  "ally_spots": "1,2,3",
+  "camera": [
+    6144,
+    6144,
+    16000
+  ],
+  "photos": [
+    60,
+    150,
+    230
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "commander_initial": true,
+  "commander_front_work": true,
+  "coverage_probe": true,
+  "start_metal": 100000,
+  "commander_trace": true,
+  "checks": "coverage-front-supreme",
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "groups": [
+    {
+      "unit": "armlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2333,
+        7983
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2333,
+        7803
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4415,
+        7440
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4415,
+        7260
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4817,
+        8570
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4817,
+        8390
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 3,
+      "count": 1,
+      "position": [
+        9584,
+        4339
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 3,
+      "count": 1,
+      "position": [
+        9584,
+        4159
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 4,
+      "count": 1,
+      "position": [
+        7549,
+        4835
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 4,
+      "count": 1,
+      "position": [
+        7549,
+        4655
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armlab",
+      "team": 5,
+      "count": 1,
+      "position": [
+        7112,
+        3727
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 5,
+      "count": 1,
+      "position": [
+        7112,
+        3547
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "coverage_overlay": true,
+  "camera_angle": 0.1
+}

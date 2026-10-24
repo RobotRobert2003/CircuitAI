@@ -154,6 +154,25 @@ inline Line ScoreLine(const std::vector<Contact>& contacts, Point origin, Point 
     }
     return result;
 }
+// Immediate T3 policy: score only reachable shot directions, retaining query
+// order on equal value. O(T*(E+F)) worst case, no allocation or engine calls;
+// invoked only when the weapon is ready. Friendly swept-volume veto is shared
+// with ordinary firing. Commander combat tests cover blocked and moving targets.
+inline Line ImmediateT3Line(const std::vector<Contact>& contacts,Point origin,
+        float range,float speed,float width,float killReward,float safetyWidth) {
+    Line best;
+    for(const auto& c:contacts) {
+        if(!c.t3 || c.friendly || c.blocker || !c.targetable || c.reserved
+            || c.height<-c.radius*.4f || Length(c.pos-origin)>range+c.radius) continue;
+        const Point lead=c.pos+c.velocity*(Length(c.pos-origin)/speed);
+        auto line=ScoreLine(contacts,origin,lead-origin,range,speed,width,killReward,safetyWidth,c.id);
+        if(line.requiredHit && (best.target<0 || line.value>best.value)) {
+            line.target=c.id;
+            best=line;
+        }
+    }
+    return best;
+}
 // D-293 fallback group. A seed is a capable attacker within reach of the
 // commander; its group is every capable attacker within radius of the seed.
 // O(S*A) for S seeds in reach and A locally observed attackers (both bounded
@@ -198,5 +217,24 @@ inline float BlastDamage(float damage,float radius,float edge,float surfaceDista
 }
 inline bool Survivable(float health,float maximum,float damage,float reserve) {
     return std::isfinite(damage) && health-damage>=maximum*reserve;
+}
+// D-356: the FRONT commander's lane push anchor, as lane progress (elmos along
+// the corridor polyline). The commander leads its corridor screen by at most
+// pushAhead ("com forward with the army", 53-expansion-and-territory.md). With
+// no screen requirement (screensNeeded<=0) it leads its own position, the
+// legacy continuous push. With a requirement that is not met it holds where it
+// stands (an anchor at its own progress). Every result is capped by
+// frontDistance (the profile's farthest front) and limit (lane length minus
+// the contact stand-off). INV-234 is this bound re-derived in Deploy.
+struct PushAnchor { float progress=0, bound=0; bool screened=false; };
+inline PushAnchor LanePushAnchor(float own,float furthestScreen,int screens,int screensNeeded,
+                                 float pushAhead,float frontDistance,float limit) {
+    PushAnchor out;
+    out.screened=screensNeeded<=0 || screens>=screensNeeded;
+    const float base=screensNeeded<=0 ? std::max(own,furthestScreen)
+        : (out.screened ? furthestScreen : own-pushAhead);
+    out.bound=std::min(frontDistance,base+pushAhead);
+    out.progress=std::max(0.f,std::min(limit,out.bound));
+    return out;
 }
 }

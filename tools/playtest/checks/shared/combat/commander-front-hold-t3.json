@@ -1,0 +1,102 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {
+      "key": "ready",
+      "pattern": "\\[CommanderFront\\] ready=1",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "advances within lane",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=0(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "bounded front hold",
+      "pattern": "\\[CommanderWork\\] unit=(?P<unit>\\d+) work=15 task=-1",
+      "scope": "any",
+      "by_minute": 7
+    },
+    {
+      "key": "engine hold command",
+      "pattern": "\\[RangedArena\\].*unit_command key=armcom:5 count=[1-9]",
+      "scope": "any",
+      "by_minute": 7.5
+    },
+    {
+      "key": "immediate",
+      "pattern": "\\[CommanderT3\\] unit=(?P<unit>\\d+) target=\\d+ action=fire immediate=1",
+      "scope": "any",
+      "by_minute": 7.55,
+      "same_as": "bounded front hold",
+      "after_key": "waiting spawn anchor"
+    },
+    {
+      "key": "target",
+      "pattern": "\\[CommanderT3\\] unit=\\d+ target=(?P<target>\\d+) action=fire immediate=1",
+      "scope": "any",
+      "by_minute": 7.55
+    },
+    {
+      "key": "shot",
+      "pattern": "\\[Commander\\] unit=(?P<unit>\\d+) shot_confirmed",
+      "scope": "any",
+      "by_minute": 7.55,
+      "same_as": "immediate",
+      "after_key": "immediate"
+    },
+    {
+      "key": "weapon",
+      "pattern": "\\[RangedArena\\].*shot id=(?P<unit>\\d+) unit=armcom .*weaponName=.*(dgun|disintegrator)",
+      "scope": "any",
+      "by_minute": 7.55,
+      "same_as": "immediate",
+      "after_key": "immediate"
+    },
+    {
+      "key": "kill",
+      "pattern": "\\[RangedArena\\].*death id=(?P<target>\\d+) team=1 unit=corjugg",
+      "scope": "any",
+      "by_minute": 7.6,
+      "same_as": "target",
+      "after_key": "shot"
+    },
+    {
+      "key": "waiting spawn anchor",
+      "after_key": "bounded front hold",
+      "scope": "any",
+      "same_as": "bounded front hold",
+      "by_minute": 7.55,
+      "pattern": "\\[RangedArena\\].*spawn_anchor unit=(?P<unit>\\d+) command=5"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR(?! coverage_commander_lost team=[01]\\b)|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "no free front patrol",
+      "pattern": "\\[CommanderFront\\].*work=4\\b",
+      "scope": "any"
+    }
+  ]
+}
