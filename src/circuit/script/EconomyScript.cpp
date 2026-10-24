@@ -98,6 +98,48 @@ static void CEconomyManager_AddAllyStart(CEconomyManager* mgr, const AIFloat3& p
 static void SetMexOwnership(CEconomyManager* mgr, bool enabled, float seconds) { mgr->SetMexOwnership(enabled, seconds); }
 static void SetMexAllyStart(CEconomyManager* mgr, int team, const AIFloat3& pos, int commander) { mgr->SetMexAllyStart(team, pos, commander); }
 static bool CanReachMex(CEconomyManager* mgr, CCircuitUnit* unit, const AIFloat3& pos) { return mgr->CanReachMex(unit, pos); }
+// D-352 mex theatres: policy from the roster (claims, enemy classes, settings), queries for the roles and the widget.
+static void CEconomyManager_SetMexTheatres(CEconomyManager* mgr, bool enabled, float theatreSeconds, float homeRadius) { mgr->SetMexTheatres(enabled, theatreSeconds, homeRadius); }
+static void CEconomyManager_SetMexLaneSettings(CEconomyManager* mgr, float mergeRadius, float mergeShare, float bandRadius) { mgr->SetMexLaneSettings(mergeRadius, mergeShare, bandRadius); }
+static void CEconomyManager_SetMexAllyClaim(CEconomyManager* mgr, int team, const AIFloat3& start, const AIFloat3& anchor,
+		const std::string& groundDef, const std::string& classDef, int readyFrame, float secureSeconds,
+		const std::string& combatDef, int combatReadyFrame, bool laneSpots) {
+	mgr->SetMexAllyClaim(team, start, anchor, groundDef.c_str(), classDef.c_str(), readyFrame, secureSeconds, combatDef.c_str(), combatReadyFrame, laneSpots);
+}
+static void CEconomyManager_RemoveMexAllyClaim(CEconomyManager* mgr, int team) { mgr->RemoveMexAllyClaim(team); }
+// D-357: a FRONT ally's coverage corridor; at most 4096 points, an empty array clears it.
+static void CEconomyManager_SetMexCorridor(CEconomyManager* mgr, int team, const CScriptArray* input, float halfWidth) {
+	std::vector<AIFloat3> points;
+	if (input != nullptr && input->GetSize() <= 4096) {
+		points.reserve(input->GetSize());
+		for (asUINT i = 0; i < input->GetSize(); ++i) points.push_back(*static_cast<const AIFloat3*>(input->At(i)));
+	}
+	mgr->SetMexCorridor(team, points, halfWidth);
+}
+static void CEconomyManager_SetMexEnemyClass(CEconomyManager* mgr, const std::string& classDef, float readySeconds) { mgr->SetMexEnemyClass(classDef.c_str(), readySeconds); }
+static int CEconomyManager_MexTheatre(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexTheatre(pos); }
+static int CEconomyManager_MexSpotOwner(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexSpotOwner(pos); }
+static int CEconomyManager_MexSpotRule(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexSpotRule(pos); }
+static float CEconomyManager_MexSpotEnemySeconds(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexSpotEnemySeconds(pos); }
+static float CEconomyManager_MexSpotValue(CEconomyManager* mgr, const AIFloat3& pos, int team) { return mgr->MexSpotValue(pos, team); }
+static int CEconomyManager_MexSpotAdmission(CEconomyManager* mgr, CCircuitUnit* builder, const AIFloat3& pos) { return mgr->MexSpotAdmission(builder, pos); }
+static int CEconomyManager_MexLaneCount(CEconomyManager* mgr) { return mgr->MexLaneCount(); }
+static int CEconomyManager_MexLane(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexLane(pos); }
+static AIFloat3 CEconomyManager_MexLaneChoke(CEconomyManager* mgr, int lane) { return mgr->MexLaneChoke(lane); }
+static AIFloat3 CEconomyManager_MexLaneMidpoint(CEconomyManager* mgr, int lane) { return mgr->MexLaneMidpoint(lane); }
+static float CEconomyManager_MexLaneWidth(CEconomyManager* mgr, int lane) { return mgr->MexLaneWidth(lane); }
+static bool CEconomyManager_MexLaneMember(CEconomyManager* mgr, int lane, int team) { return mgr->MexLaneMember(lane, team); }
+static CScriptArray* CEconomyManager_MexLaneSpine(CEconomyManager* mgr, int lane, int step) {
+	asIScriptEngine* engine = asGetActiveContext()->GetEngine();
+	auto* cache = static_cast<CScriptManager::STypeInfoCache*>(engine->GetUserData());
+	const auto points = mgr->MexLaneSpine(lane, step);
+	CScriptArray* array = CScriptArray::Create(cache->vec3Array, static_cast<asUINT>(points.size()));
+	for (asUINT i = 0; i < array->GetSize(); ++i) *static_cast<AIFloat3*>(array->At(i)) = points[i];
+	return array;
+}
+static std::string CEconomyManager_DescribeMexTerritory(CEconomyManager* mgr) { return mgr->DescribeMexTerritory(); }
+static void CEconomyManager_DumpMexTerritory(CEconomyManager* mgr, const std::string& why) { mgr->DumpMexTerritory(why.c_str()); }
+static bool CEconomyManager_IsMexTheatresEnabled(CEconomyManager* mgr) { return mgr->IsMexTheatresEnabled(); }
 static bool IsOwnMex(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->IsOwnSpot(pos); }
 
 static IUnitTask* CEconomyManager_EnqueueMexWithinAware(
@@ -214,6 +256,29 @@ CEconomyScript::CEconomyScript(CScriptManager* scr, CEconomyManager* mgr)
 	r = engine->RegisterObjectMethod("CEconomyManager", "int GetMexTaskCountWithin(const AIFloat3& in, float) const", asMETHOD(CEconomyManager, GetMexTaskCountWithin), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "IUnitTask@+ EnqueueMexAvoiding(CCircuitUnit@, const AIFloat3& in, float, bool, array<AIFloat3>@)", asFUNCTION(CEconomyManager_EnqueueMexAvoiding), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "bool IsMexTaskUsable(IUnitTask@)", asFUNCTION(CEconomyManager_IsMexTaskUsable), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	// D-352 mex theatres (resource/MexTerritory.h): claims and enemy classes are policy from the roster.
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexTheatres(bool, float theatreSeconds, float homeRadius)", asFUNCTION(CEconomyManager_SetMexTheatres), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexLaneSettings(float mergeRadius, float mergeShare, float bandRadius)", asFUNCTION(CEconomyManager_SetMexLaneSettings), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexAllyClaim(int team, const AIFloat3& in start, const AIFloat3& in anchor, const string& in groundDef, const string& in classDef, int readyFrame, float secureSeconds, const string& in combatDef, int combatReadyFrame, bool laneSpots)", asFUNCTION(CEconomyManager_SetMexAllyClaim), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void RemoveMexAllyClaim(int)", asFUNCTION(CEconomyManager_RemoveMexAllyClaim), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexCorridor(int team, const array<AIFloat3>@ points, float halfWidth)", asFUNCTION(CEconomyManager_SetMexCorridor), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexEnemyClass(const string& in, float readySeconds)", asFUNCTION(CEconomyManager_SetMexEnemyClass), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool IsMexTheatresEnabled()", asFUNCTION(CEconomyManager_IsMexTheatresEnabled), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexTheatre(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexTheatre), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexSpotOwner(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexSpotOwner), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexSpotRule(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexSpotRule), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "float MexSpotEnemySeconds(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexSpotEnemySeconds), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "float MexSpotValue(const AIFloat3& in, int team)", asFUNCTION(CEconomyManager_MexSpotValue), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexSpotAdmission(CCircuitUnit@, const AIFloat3& in)", asFUNCTION(CEconomyManager_MexSpotAdmission), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexLaneCount()", asFUNCTION(CEconomyManager_MexLaneCount), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexLane(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexLane), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "AIFloat3 MexLaneChoke(int)", asFUNCTION(CEconomyManager_MexLaneChoke), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "AIFloat3 MexLaneMidpoint(int)", asFUNCTION(CEconomyManager_MexLaneMidpoint), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "float MexLaneWidth(int)", asFUNCTION(CEconomyManager_MexLaneWidth), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "bool MexLaneMember(int lane, int team)", asFUNCTION(CEconomyManager_MexLaneMember), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "array<AIFloat3>@ MexLaneSpine(int lane, int step)", asFUNCTION(CEconomyManager_MexLaneSpine), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "string DescribeMexTerritory()", asFUNCTION(CEconomyManager_DescribeMexTerritory), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void DumpMexTerritory(const string& in)", asFUNCTION(CEconomyManager_DumpMexTerritory), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	// Per-role energy table overrides (D-047); -1 keeps a field.
 	r = engine->RegisterObjectMethod("CEconomyManager", "void SetEnergyCondition(const CCircuitDef@, int limit, float metalIncome, float energyIncome)", asFUNCTION(CEconomyManager_SetEnergyCondition), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "int GetEnergyLimit(const CCircuitDef@) const", asFUNCTION(CEconomyManager_GetEnergyLimit), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);

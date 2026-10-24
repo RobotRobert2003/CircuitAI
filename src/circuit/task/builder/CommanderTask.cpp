@@ -15,18 +15,20 @@ CCommanderTask::~CCommanderTask() { if(previous) previous->Release(); }
 void CCommanderTask::AssignTo(CCircuitUnit* unit) {
     // Do not call IFighterTask::AssignTo: its generic DGun action would be a
     // second command owner. This task owns no generic fighter side sets.
+    restored=false;
     oldFire=unit->GetRequestedFireState(); oldMove=unit->GetRequestedMoveState();
     oldCloak=unit->GetUnit()->IsCloaked();
     IUnitTask::AssignTo(unit);
 }
 void CCommanderTask::Restore(CCircuitUnit* unit) {
-    if(unit->IsDead() || unit->IsDestroying()) return;
+    if(restored || unit->IsDead() || unit->IsDestroying()) return;
+    restored=true;
     // A handled commander's cloak and fire state belong to the commander
     // control (owner 2026-10-24: cloak-off at most once per 3 s).
     const bool restore=manager->GetCircuit()->GetCommanderControl()->ReleaseConceal(unit);
     TRY_UNIT(manager->GetCircuit(),unit,
-        if(restore) unit->TrySetFireState(static_cast<CCircuitDef::FireT>(oldFire));
-        unit->TrySetMoveState(static_cast<CCircuitDef::MoveT>(oldMove));
+        if(restore && unit->GetRequestedFireState()!=oldFire) unit->TrySetFireState(static_cast<CCircuitDef::FireT>(oldFire));
+        if(unit->GetRequestedMoveState()!=oldMove) unit->TrySetMoveState(static_cast<CCircuitDef::MoveT>(oldMove));
         if(restore) unit->CmdCloak(oldCloak);
     )
 }

@@ -268,6 +268,51 @@ namespace AirBuild {
             && AirWorkforce::incomeE >= Global::RoleSettings::Air::FusionAccessMinEnergy
             && LabBudget(def, worker.circuitDef.GetBuildSpeed());
     }
+    // D-352: the best race-won spot this team owns, by value per second.
+    int theatreTraceFrame = -30 * SECOND;  // the rule's decline trace, once per 30 s
+    IUnitTask@ TheatreMex(CCircuitUnit@ worker)
+    {
+        if (worker is null) return null;
+        const float radius = Global::RoleSettings::Air::TheatreMexRadius;
+        AIFloat3 best(-1.0f, 0.0f, -1.0f);
+        float bestValue = 0.0f;
+        int owned = 0, hot = 0, closed = 0, parked = 0;
+        const int count = ai.GetMetalSpotCount();
+        for (int i = 0; i < count; ++i) {
+            const AIFloat3 p = ai.GetMetalSpot(i);
+            if (p.x < 0.0f || MapHelpers::SqDist(p, Global::Map::StartPos) > radius * radius) continue;
+            if (aiEconomyMgr.MexSpotOwner(p) != ai.teamId || (aiEconomyMgr.MexTheatre(p) & 1) != 0) continue;
+            ++owned;
+            const int adm = aiEconomyMgr.MexSpotAdmission(worker, p);
+            // One theatre job at a time: a mex task of ours parked on an owned race-won spot.
+            if ((adm & 64) != 0) { ++parked; continue; }
+            if (aiEconomyMgr.MexSpotEnemySeconds(p) * SECOND < float(ai.frame)
+                && aiBattle.AirThreat(p) > Global::RoleSettings::Air::TheatreMexThreat) { ++hot; continue; }
+            // A spot native would refuse (closed by an ally's extractor, unreachable,
+            // not admitted, no footprint) must not pin the best choice.
+            if ((adm & 62) != 62) { ++closed; continue; }
+            const float v = aiEconomyMgr.MexSpotValue(p, ai.teamId);
+            if (v > bestValue) { bestValue = v; best = p; }
+        }
+        array<AIFloat3> none;
+        IUnitTask@ t = (parked > 0 || best.x < 0.0f) ? null : aiEconomyMgr.EnqueueMexAvoiding(worker, best, SQUARE_SIZE * 8, true, none);
+        if (t !is null || ai.frame - theatreTraceFrame >= 30 * SECOND) {
+            theatreTraceFrame = ai.frame;
+            GenericHelpers::LogUtil("[AIR][TheatreMex] worker " + worker.id + " owned=" + owned + " parked=" + parked + " hot=" + hot + " closed=" + closed
+                + " best=" + int(best.x) + ":" + int(best.z) + (t !is null ? " ordered" : " none")
+                + (best.x < 0.0f ? "" : " adm=" + aiEconomyMgr.MexSpotAdmission(worker, best))
+                + " home=" + aiEconomyMgr.GetMexTaskCountWithin(Global::Map::StartPos, Global::RoleSettings::Air::HomeMexRadius), 1);
+            // The closed spots, once per trace: which and why.
+            for (int i = 0; (closed > 0 || parked > 0) && i < count; ++i) {
+                const AIFloat3 p = ai.GetMetalSpot(i);
+                if (p.x < 0.0f || MapHelpers::SqDist(p, Global::Map::StartPos) > radius * radius) continue;
+                if (aiEconomyMgr.MexSpotOwner(p) != ai.teamId || (aiEconomyMgr.MexTheatre(p) & 1) != 0) continue;
+                const int adm = aiEconomyMgr.MexSpotAdmission(worker, p);
+                if ((adm & 62) != 62 || (adm & 64) != 0) GenericHelpers::LogUtil("[AIR][TheatreMex]   closed " + int(p.x) + ":" + int(p.z) + " adm=" + adm, 1);
+            }
+        }
+        return t;
+    }
     IUnitTask@ TransitionMex(CCircuitUnit@ worker)
     {
         if (!Global::RoleSettings::Air::FundFirstLab || FundedLab() !is null

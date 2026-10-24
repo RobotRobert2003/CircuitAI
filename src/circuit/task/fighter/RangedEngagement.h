@@ -43,6 +43,8 @@ private:
     size_t pathCursor=0;
     springai::AIFloat3 lastPos, destination;
     std::unique_ptr<springai::Weapon> liveWeapon;
+    std::unique_ptr<springai::Weapon> pokeWeapon; // primary mount, owned for this engagement
+    int pokeReload=-1,pokeShotFrame=-100000;
     std::shared_ptr<IPathQuery> query;
     // Callback cancellation must not depend on allocator reuse of this/owner.
     std::shared_ptr<int> lifetime=std::make_shared<int>(0);

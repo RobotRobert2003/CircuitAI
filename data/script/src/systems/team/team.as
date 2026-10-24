@@ -11,6 +11,7 @@
 #include "pinpointer_pool.as"
 #include "ally_clear.as"
 #include "nuke_recon.as"
+#include "../world/coverage_lanes.as"
 
 namespace Team {
     // Return true if the def represents a T2 constructor (land or air)
@@ -53,6 +54,7 @@ namespace Team {
         if (SeaTech::Handle(msg, fromTeamId)) return;
         if (NukeRecon::Handle(msg, fromTeamId)) return;
         if (Roster::HandleMessage(msg, fromTeamId)) return;
+        if (CoverageLanes::HandleMessage(msg, fromTeamId)) return;   // D-357: a FRONT ally's corridor claim
         if (CommanderEnergy::HandleMessage(msg, fromTeamId)) return;
         if (PinpointerPool::HandleMessage(msg, fromTeamId)) return;
         if (GeoRelease::HandleMessage(msg, fromTeamId)) return;

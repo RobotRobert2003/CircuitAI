@@ -24,6 +24,10 @@
 #include <cstdlib>
 
 namespace circuit {
+namespace {
+constexpr float POKE_DIRECTION_MIN_LENGTH_SQ = .5f;
+constexpr float PRESSED_STATIC_TARGET_MULTIPLIER = 2.f;
+}
 using springai::AIFloat3;
 static ranged::Point P(const AIFloat3& p) { return {p.x,p.z}; }
 static const bool trace = std::getenv("CIRCUIT_RANGED_TRACE") != nullptr;
@@ -39,12 +43,23 @@ CRangedEngagement::CRangedEngagement(CCircuitAI* ai,IUnitTask* owner,CCircuitUni
     // Priority targets are explicit user targets in BAR and can fire on HOLD.
     // Automatic fire would bypass precision/splash selection while approaching
     // the firing band (the engine includes target radius in reach).
-    // Owner 2026-10-19: a coordinated fire_at_will cohort (Thug, Mace) fires
-    // at will for its whole life: its fast reload wastes nothing on stray
-    // targets, while held fire left it silent between priority picks.
     const auto& policy=unit->GetCircuitDef()->GetRangedPolicy();
-    fireOpen=policy.coordinated && policy.fireAtWill;
-    unit->TrySetFireState(fireOpen?CCircuitDef::FireType::OPEN:CCircuitDef::HOLD);
+    // Fast-reload Thugs/Maces otherwise remain silent between priority picks.
+    // The individual controller retains precision HOLD behavior.
+    // Keep primary reload observation across loss of a priority target. Leaving
+    // firing range clears liveWeapon; treating that as ready made poke phases
+    // alternate every decision while the gun was actually still reloading.
+    // One wrapper per controller lifetime, one fresh callback per decision.
+    if(policy.coordinated && policy.pokeIn>0.f && !caps.weapons.empty()) {
+        pokeWeapon.reset(unit->GetUnit()->GetWeapon(caps.weapons.front().mount.get()));
+        pokeReload=pokeWeapon->GetReloadFrame();
+    }
+    // Poke hulls open fire only while a peer engagement owns their movement.
+    // Ordinary kite/retreat retains explicit targeting; blanket OPEN lost the
+    // third Thug in the outmatched-mobile regression (D-355).
+    const bool open=policy.coordinated && policy.fireAtWill && policy.pokeIn<=0.f;
+    fireOpen=open;
+    unit->TrySetFireState(open?CCircuitDef::FireType::OPEN:CCircuitDef::HOLD);
     ai->LOG("RANGED: assigned %s(%d) weapons=%u",unit->GetCircuitDef()->GetDef()->GetName(),id,unsigned(caps.weapons.size()));
     if(caps.weapons.empty()) ai->LOG("[INVARIANT] INV-147 ranged unit %d has no compatible loaded weapon",id);
     if(trace) for(const auto& w:caps.weapons) ai->LOG("RANGED: weapon unit=%d index=%d range=%.1f speed=%.3f gravity=%.3f category=%d forward=%d",id,w.index,w.range,w.speed,w.gravity,w.category,int(w.forward));
@@ -336,6 +351,8 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
         ai->LOG("[INVARIANT] INV-166 coordinated unit has invalid cohort membership unit=%d",id); return;
     }
     if(group.target<0 && group.mode==cohort::Mode::HOLD) {
+        if(policy.fireAtWill && policy.pokeIn>0.f && unit->GetRequestedFireState()!=CCircuitDef::HOLD)
+            unit->TrySetFireState(CCircuitDef::HOLD);
         // Cancel the old approach when a protected contact leaves vision.
         // Otherwise Disperse deliberately preserves that in-flight move.
         if(policy.engagementSeconds>0.f && group.protectedTarget>=0) {
@@ -371,7 +388,8 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     // only intermittently. EVEN and OUTMATCHED hulls pop out at poke_health.
     const bool poking=assessed && policy.pokeIn>0.f && group.target>=0
         && !group.sustainedRush && !group.rushFallback && !group.formationRear
-        && group.mode!=cohort::Mode::REGROUP;
+        && group.mode!=cohort::Mode::REGROUP
+        && (group.reason==cohort::Reason::FAVORABLE || group.reason==cohort::Reason::OUTMATCHED);
     const cohort::Poke regime=poking?cohort::PokeRegime(group.ownValue,group.hostileValue,policy.pokeRatio):cohort::Poke::EVEN;
     const bool dominant=poking && regime==cohort::Poke::PRESS;
     const float pokeIn=dominant?policy.pokeInDominant:policy.pokeIn;
@@ -448,6 +466,7 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
             if(c.def->IsBuilder()) s*=2.f;
             if(c.id==target) s*=policy.targetHysteresis;
             if(world.Reserved(c.id,id)>=c.health) s*=.2f;
+            if(c.def->IsEnemyRoleAny(CCircuitDef::COMM)) s*=policy.commanderPriority;
             if(c.id==target && (heldScoreFrame!=frame || s>heldScore)) { heldScore=s; heldScoreFrame=frame; }
             if(s>score) { score=s; best=i; weapon=int(wi); damage=hit; }
         }
@@ -473,24 +492,30 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     // to the closest pokeable enemy so each step is as short as possible.
     // The regime (above) decides whether reload, health or a pause apply.
     const bool poke=closest!=nullptr;
+    // One owner, no polling watchdog or periodic resends. Phase (reload) changes
+    // do not toggle fire state; only entering/leaving a peer engagement does.
+    if(policy.fireAtWill && policy.pokeIn>0.f) {
+        const int fire=poke && !danger?CCircuitDef::FireType::OPEN:CCircuitDef::FireType::HOLD;
+        if(unit->GetRequestedFireState()!=fire) unit->TrySetFireState(fire);
+    }
     int phase=-1;
     if(poke) {
-        const bool reloading=liveWeapon && liveWeapon->GetReloadFrame()>frame;
+        const bool reloading=pokeReload>frame;
         const float health=unit->GetUnit()->GetHealth()/std::max(1.f,def->GetHealth());
         const bool paused=regime==cohort::Poke::OUTMATCHED
-            && frame<lastShotFrame+int(policy.pokePauseSeconds*FRAMES_PER_SEC);
+            && frame<pokeShotFrame+int(policy.pokePauseSeconds*FRAMES_PER_SEC);
         const float fraction=cohort::PokeFraction(regime,reloading,health,paused,
             policy.pokeIn,policy.pokeInDominant,policy.pokeOut,policy.pokeHealth,policy.pokePressHealth);
         phase=fraction<1.f?1:0;
         const float reach=world.Range(caps.weapons.front(),pos,closest->pos)*fraction;
         AIFloat3 away=pos-closest->pos; away.Normalize2D();
-        if(away.SqLength2D()<.5f) away=group.back;
+        if(away.SqLength2D()<POKE_DIRECTION_MIN_LENGTH_SQ) away=group.back;
         point=closest->pos+away*reach;
     }
     if(group.sustainedRush) { danger=nullptr; incoming=nullptr; withdrawalUntil=0; }
     if(danger) {
         AIFloat3 away=pos-danger->pos; away.Normalize2D();
-        if(away.SqLength2D()<.5f) away=group.back;
+        if(away.SqLength2D()<POKE_DIRECTION_MIN_LENGTH_SQ) away=group.back;
         const bool disengage=!group.committed || group.mode==cohort::Mode::WITHDRAW || !danger->mobile
             || danger->def->IsEnemyRoleAny(CCircuitDef::COMM) || danger->def->IsAbleToReclaim()
             || (!(policy.supportAllies && group.supporting)
@@ -666,8 +691,13 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
         assistCheckFrame=-1;
     }
 
+    if(pokeWeapon) {
+        const int reload=pokeWeapon->GetReloadFrame();
+        if(reload>pokeReload && reload>frame) pokeShotFrame=frame;
+        pokeReload=reload;
+    }
     if(liveWeapon) {
-        const int reload=liveWeapon->GetReloadFrame();
+        const int reload=pokeWeapon && weaponIndex==0?pokeReload:liveWeapon->GetReloadFrame();
         if(reload>lastReload && lastReload>=0) {
             lastShotFrame=frame; failures=0;
             orientUntil=0; // Actual fire completes facing recovery immediately.
@@ -787,7 +817,8 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             if(policy.mode==RangedPolicy::Mode::BOMBARDMENT && !c.mobile) value*=1.5f;
             if(closing && closing->id==c.id) value*=2.f;
             // Owner 2026-10-19: the tower shooting at a pressing hull comes first.
-            if(CRangedWorld::Pressed(c,policy.pressStatic)) value*=2.f;
+            if(CRangedWorld::Pressed(c,policy.pressStatic)) value*=PRESSED_STATIC_TARGET_MULTIPLIER;
+            if(c.def && c.def->IsEnemyRoleAny(CCircuitDef::COMM)) value*=policy.commanderPriority;
             if(c.id==target && (heldScoreFrame!=frame || value>heldScore)) { heldScore=value; heldScoreFrame=frame; }
             if(value>bestScore || (value==bestScore && (best<0 || c.id<contacts[best].id))) {
                 best=i; bestWeapon=int(wi); bestScore=value; bestDamage=damage;

@@ -5,6 +5,7 @@
 #include "unit/enemy/EnemyUnit.h"
 #include "spring/SpringUnit.h"
 #include "terrain/TerrainManager.h"
+#include "terrain/BattleAnalysis.h"
 #include "terrain/HeightMapGeometry.h"
 #include "module/MilitaryManager.h"
 #include "setup/SetupManager.h"
@@ -141,6 +142,12 @@ const CRangedWorld::CohortPlan& CRangedWorld::PlanIndependentCohort(CCircuitUnit
         if(!c.def || c.def->IsAbleToFly() || c.pos.y< -20.f || !(c.def->GetCategory()&def->GetTargetCategory())) return;
         if(c.mobile?!policy.allowMobile:!policy.allowStatic) return;
         float distance=g.center.SqDistance2D(c.pos);
+        // The role's strategic corridor constrains distant objectives, never
+        // close defensive fire. Published grid lookup is O(1), with no scan or
+        // callback added per target (D-354 coverage-lane regression).
+        auto* battle=circuit->GetBattle();
+        if(battle->GetFrontLaneLength()>0.f && battle->GetFrontLaneDistance(c.pos)>battle->GetFrontLaneWidth()
+            && distance>SQUARE(def->GetMaxRange()+battle->GetFrontLaneRangeSlack()))return;
         if(engagedAllies) distance=.4f*distance+.6f*alliedFront.SqDistance2D(c.pos);
         if(c.id==g.target) distance/=policy.targetHysteresis;
         if(policy.engagementSeconds>0.f)

@@ -1,0 +1,14 @@
+{
+  "name": "commander-t3-immediate", "unit": "armcom", "side": "armada", "role": "TACTICAL",
+  "description": "A revealed commander fires at an in-range Behemoth immediately, accepting lethal exposure. Physical D-gun fire is required; survival is recorded but not required by this policy.",
+  "map": "Comet Catcher Remake 1.8", "map_key": "comet", "starts": [[4300,4000],[4000,7000]],
+  "commander_initial": true, "enemy_commander_home": true,
+  "camera": [4300,4100,1200], "photos": [23,24,26], "min_spawn_spacing": 60,
+  "command_breakdown": true, "commander_observation": true, "observation_frames": 3,
+  "groups": [
+    {"unit":"armeyes","team":0,"count":1,"position":[4500,4250],"after_seconds":12},
+    {"unit":"corjugg","team":1,"count":1,"position":[4300,4190],"after_seconds":23}
+  ],
+  "assertions": {"min_shooters":1,"min_kills":1,"max_losses":1,"min_damage":100000,"max_first_shot_seconds":25.5},
+  "checks": "commander-t3-immediate"
+}

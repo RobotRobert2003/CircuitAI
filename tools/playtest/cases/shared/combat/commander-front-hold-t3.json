@@ -1,0 +1,92 @@
+{
+  "commander_overrides": {"front_push_screen": 0, "front_standoff": 1100},
+  "name": "commander-front-hold-t3",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "A FRONT commander enters stationary hold after local work, then must release WAIT and fire immediately at a newly supplied in-range Behemoth; lethal exposure is allowed.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      4300
+    ]
+  ],
+  "camera": [
+    4000,
+    3000,
+    2800
+  ],
+  "photos": [
+    60,
+    120,
+    180
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "hold_friendly": true,
+  "groups": [
+    {
+      "unit": "armlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3900,
+        1700
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3800,
+        1700
+      ],
+      "after_seconds": 45
+    },
+    {
+      "unit": "corjugg",
+      "team": 1,
+      "count": 1,
+      "position": [
+        3780,
+        3504
+      ],
+      "after_seconds": 450,
+      "relative_to": {
+        "unit": "armcom",
+        "offset": [
+          -180,
+          0
+        ],
+        "max_distance": 220,
+        "require_command": 5,
+        "team": 0
+      }
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "min_kills": 1,
+    "max_losses": 1,
+    "min_damage": 100000,
+    "max_first_shot_seconds": 453
+  },
+  "checks": "commander-front-hold-t3",
+  "commander_front_work": true,
+  "commander_initial": true,
+  "start_metal": 100000,
+  "commander_trace": true,
+  "coverage_probe": true,
+  "coverage_loss_teams": [0],
+  "coverage_min_advance": 600,
+  "enemy_commander_home": true
+}

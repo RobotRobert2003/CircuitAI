@@ -1,0 +1,56 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {
+      "key": "ready",
+      "pattern": "\\[CommanderFront\\] ready=1",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "advances within lane",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=0(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "bounded front hold",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=15 task=-1",
+      "scope": "any",
+      "by_minute": 7
+    },
+    {
+      "key": "engine hold command",
+      "pattern": "\\[RangedArena\\].*unit_command key=armcom:5 count=[1-9]",
+      "scope": "any",
+      "by_minute": 7.5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR(?! coverage_commander_lost team=1\\b)|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "no free front patrol",
+      "pattern": "\\[CommanderFront\\].*work=4\\b",
+      "scope": "any"
+    }
+  ]
+}

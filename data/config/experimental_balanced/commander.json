@@ -10,8 +10,26 @@
 		"align_seconds": 0.6, "shots": 2, "margin": 150,
 		"cloak_seconds": 1.5, "escape_seconds": 4.3,
 		"friendly_margin": 12, "front_workers": 2,
-		"front_distance": 3200, "front_standoff": 650, "front_radius": 500, "front_threat": 3,
+		// D-356 lane push: screen-led (front_push_screen corridor combat units before
+		// the anchor leaves the commander), capped by front_distance, ended by
+		// front_push_until_seconds or observed enemy riot metal >= front_push_home_riot
+		// ("com forward until the first riots, then home"). Offers beyond lane
+		// half-width + front_lane_margin are declined. advance_roles lists the roles
+		// whose commander leaves home at all; front_ladder orders the work rungs.
+		"front_distance": 6000,
+		"front_push_ahead": 600, "front_push_screen": 1, "front_push_until_seconds": 0, "front_push_home_riot": 500,
+		"front_lane_margin": 150, "front_hold_seconds": 10, "front_standoff": 650, "front_radius": 500, "front_threat": 3,
+		"advance_roles": "FRONT,TACTICAL",
+		"front_ladder": "mex_lane,line,repair_defence,repair_units,reclaim,mex_los,timed_laser,timed_aa,radar,advance,assist,factory,mex,radar_spacing,laser,base,hold,patrol",
+		// D-357 corridor mex sweep: spots within half-width + front_mex_reach (0: build
+		// distance) of the lane, front_mex_behind behind to front_mex_ahead ahead of the
+		// commander, en route every front_mex_seconds; enemy extractors there are
+		// captured; one line turret per front_mex_turret_every corridor mexes.
+		"front_mex_seconds": 3, "front_mex_reach": 0, "front_mex_behind": 400, "front_mex_ahead": 600,
+		"front_mex_capture_enemy": 1, "front_mex_turret_every": 3, "front_mex_enemy_home": 1100,
 		"front_radar_spacing": 500, "front_laser_spacing": 300,
+		"front_detour_seconds": 1, "move_resend_seconds": 1,
+		"t3_decline_gate": 1, "t3_immediate_shot": 1, "t3_position_seconds": 1,
 		"t3_intercept": 1, "t3_health": 0.2, "t3_distance": 1000, "detection_margin": 32,
 		"donor_reserve": 1200, "grant_limit": 4000,
 		"request_seconds": 3, "grant_seconds": 3,
@@ -23,14 +41,9 @@
 		// D-294: T3 engagement from the line; t3_profiles overrides the plan per unit.
 		"t3_leash": 900, "t3_hold_seconds": 4, "t3_dodge_seconds": 1.2, "t3_hunt_leash": 1800, "t3_screen": 300,
 		"t3_hunt": 0, "t3_artillery_approach": 180, "t3_trade": 0, "t3_retry_seconds": 1, "t3_cloaked_volley_risk": 0.25,
-		// Owner 2026-10-19 order throttles: a failed front detour waits front_detour_seconds
-		// (+1 s per failure in a row, at most 3 s, then a new front); t3_decline_gate 1 makes
-		// any new T3 plan wait out a decline (+1 s per decline in a row, at most 3 s). 0 = off.
-		"front_detour_seconds": 1, "t3_decline_gate": 1,
-		// Owner 2026-10-19 (All That Glitters): the same MOVE goal is resent at most once per
-		// move_resend_seconds (+1 s per resend in a row, at most 3 s); a fallback goal stands
+		// Owner 2026-10-19 (All That Glitters): a fallback goal stands
 		// fallback_goal_hold_seconds before a replan may move it. 0 = off.
-		"move_resend_seconds": 1, "fallback_goal_hold_seconds": 3,
+		"fallback_goal_hold_seconds": 3,
 		"t3_bait_count": 4, "t3_bait_margin": 150, "t3_bait_distance": 120, "t3_bait_spacing": 80, "t3_bait_timeout": 5,
 		// D-299 FRONT commander work ladder: fallback line turrets (1 per line_income metal
 		// income in [line_min, line_max], per line, no stacking), timed LLT + light AA

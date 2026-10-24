@@ -30,7 +30,7 @@ namespace SeaEcoLayout {
         aiTerrainMgr.SetLayoutInt("sea.eco.count",int(blocks.length()));
         aiTerrainMgr.SetLayoutInt("sea.eco.facing",direction);
     }
-    void Reset() { ready=false; blocks.resize(0); exits.deleteAll(); cursor=0; nextSearch=0; }
+    void Reset() { ready=false; blocks.resize(0); exits.deleteAll(); cursor=0; nextSearch=0; backoff=10; dynamic=false; dynamicCursor=0; }
     void Init() {
         if (ready) return;
         ready=true;
@@ -90,6 +90,7 @@ namespace SeaEcoLayout {
     // true = rings around the shipyard with a shrinking block. Not saved: a
     // load restarts from the planned geometry, which is the same search.
     bool dynamic=false; int dynamicCursor=0;
+    int backoff=10; // KI-658: seconds before the next full sweep after one fails
     // KI-657: why candidates failed in the current sweep, logged when a sweep
     // is exhausted (once a minute). dry, threat, forward, zone, band, fusion,
     // rear, reach, path. O(1) per candidate.
@@ -108,6 +109,11 @@ namespace SeaEcoLayout {
         if (aiBattle.SurfThreat(p)>Global::RoleSettings::Sea::HarborMaxThreat) { ++failures[1]; return false; }
         const float depth=float(nano.GetFootprintZ()*n)*16.0f;
         const float half=AiMax(shrunk ? 240.0f : 320.0f,depth*.5f+192.0f);
+        // KI-658: the n x n turret band must stand on wholly free ground, so
+        // test that rectangle read-only first (O(band cells), no reservation,
+        // no log). Most failing candidates used to reserve a zone, lay a band
+        // and release both.
+        if (!aiTerrainMgr.CanReserveArea(p,direction,float(nano.GetFootprintX()*n)*8.0f,depth*.5f)) { ++failures[4]; return false; }
         SeaLayout::PathState@ paths=SeaLayout::Baseline(harbor); // D-343: before this candidate reserves
         Block b; b.centre=p; b.harbor=harbor; b.half=half;
         // D-343: a zone touching a teammate's reservation shrinks until it no
@@ -129,7 +135,7 @@ namespace SeaEcoLayout {
         blocks.insertLast(b); SeaLayout::geometryFrame=-1; SeaLayout::Invalidate(); Save(blocks.length()-1);
         GenericHelpers::LogUtil("[SEA][EcoBlock] planned"+(shrunk || dynamic ? " dynamic" : "")+" centre="+int(p.x)+","+int(p.z)+" harbor="+int(harbor.x)+","+int(harbor.z)
             +" facing="+direction+" turrets="+(n*n)+" fusion="+b.fusion,1);
-        dynamic=false; dynamicCursor=0;
+        dynamic=false; dynamicCursor=0; backoff=10;
         return true;
     }
     bool Plan() {
@@ -153,7 +159,10 @@ namespace SeaEcoLayout {
                 const int level=dynamicCursor/perLevel, c=dynamicCursor%perLevel;
                 const int size=n-level;
                 if (size<2) {
-                    dynamic=false; dynamicCursor=0; cursor=0; nextSearch=ai.frame+10*SECOND;
+                    // KI-658: a full failed sweep backs off 10, 20, 40, then 80 s;
+                    // a planned block resets it.
+                    dynamic=false; dynamicCursor=0; cursor=0; nextSearch=ai.frame+backoff*SECOND;
+                    backoff=AiMin(80,backoff*2);
                     if (ai.frame-exhaustedLog>60*SECOND) {
                         exhaustedLog=ai.frame;
                         GenericHelpers::LogUtil("[SEA][EcoBlock] no site within radius harbor="+int(harbor.x)+","+int(harbor.z)+" facing="+direction+" (planned and dynamic)"+FailureSummary(),1);
@@ -182,7 +191,7 @@ namespace SeaEcoLayout {
                     cursor=0;
                     if (Global::RoleSettings::Sea::DynamicTurrets) { dynamic=true; dynamicCursor=0; nextSearch=ai.frame+SECOND; }
                     else {
-                        nextSearch=ai.frame+10*SECOND;
+                        nextSearch=ai.frame+backoff*SECOND; backoff=AiMin(80,backoff*2);
                         // KI-657: say when the whole grid failed. Once a minute at most.
                         if (ai.frame-exhaustedLog>60*SECOND) {
                             exhaustedLog=ai.frame;

@@ -1,4 +1,5 @@
 #include "circuit/terrain/LaneSolver.h"
+#include "circuit/terrain/LanePath.h"
 
 #include <algorithm>
 #include <future>
@@ -160,11 +161,46 @@ static void TestInputValidationAndClearance() {
     Solver::Clearance(5,5,std::vector<char>(25,1),clearance);
     Require(clearance[12]==3 && clearance[0]==1,"open map edges bound corridor clearance");
 }
+static void TestDistributedCoverage() {
+    Path bend;bend.Set({{0,0,0},{100,0,0},{100,0,100}});
+    Require(bend.Length()==200 && bend.At(150).z==50,"lane advance follows bends by path distance");
+    const auto projected=bend.Project({120,0,60});
+    Require(projected.progress==160 && projected.distance==20,"commander corridor projection follows assigned segment");
+    bend.Set({});Require(bend.Length()==0 && bend.At(10).x<0,"role change clears lane ownership");
+    auto t=Flat(64,33);
+    const Point start(32,10,1056),end(4064,10,1056);
+    auto route=[&](float share,const std::vector<Point>& mex=std::vector<Point>{}) {
+        return Solver(t).DistributedRoute(start,end,start,end,L_LAND,share,3,.15f,32.f,2.f,mex);
+    };
+    auto at=[&](const std::vector<int>& path,int x) {
+        const auto found=std::find_if(path.begin(),path.end(),[&](int c){return c%t.gw==x;});
+        Require(found!=path.end(),"coverage route crosses each longitudinal section");return *found/t.gw;
+    };
+    auto left=route(1.f/6),middle=route(.5f),right=route(5.f/6);
+    Require(!left.empty() && !right.empty(),"distributed open routes exist");
+    // Axis points east; positive lateral is south.
+    Require(at(left,32)<at(middle,32)-6 && at(right,32)>at(middle,32)+6,"open ground is shared instead of all seats taking centre");
+    Require(std::abs((at(middle,32)-at(left,32))-(at(right,32)-at(middle,32)))<=2,"open spacing symmetric within grid tolerance");
+    for(int x=27;x<=36;++x) for(int z=0;z<t.gh;++z) if(z<15 || z>17)t.pass[L_LAND][z*t.gw+x]=0;
+    left=route(1.f/6);right=route(5.f/6);
+    Require(std::abs(at(right,32)-at(left,32))<=2,"lanes compress through shared choke");
+    Require(at(right,47)-at(left,47)>12,"lanes fan back out beyond choke");
+    for(int c:left)Require(t.pass[L_LAND][c],"coverage never crosses blocked terrain");
+    t=Flat(64,33);
+    const auto weighted=route(.5f,{{1568,10,1184},{2080,10,1184},{2592,10,1184}});
+    Require(at(weighted,32)>at(route(.5f),32),"nearby mex clusters attract route within seat tolerance");
+    for(auto& p:t.pass)p.assign(t.height.size(),0);
+    t.pass[L_NAVAL].assign(t.height.size(),1);t.height.assign(t.height.size(),-100);
+    const auto sea=Solver(t).DistributedRoute(start,end,start,end,L_NAVAL,1.f/6,3,.15f,32.f,0.f,{});
+    Require(!sea.empty() && at(sea,32)<10,"same coverage geometry generates naval lanes");
+    for(int z=0;z<t.gh;++z)t.pass[L_NAVAL][z*t.gw+30]=0;
+    Require(Solver(t).DistributedRoute(start,end,start,end,L_NAVAL,.5f,3,.15f,32.f,0.f,{}).empty(),"disconnected water has no invented route");
+}
 int main() {
     try {
-        TestFlatRoutesAndMasks();TestNoCornerCuttingAndDisconnectedWater();
+        TestDistributedCoverage();TestFlatRoutesAndMasks();TestNoCornerCuttingAndDisconnectedWater();
         TestThreatSnapshotAndParallelDeterminism();TestCancellationAndGenerationAdmission();
         TestInputValidationAndClearance();TestMountainSpecialistRoute();TestIsolatedHillsAreNotStrategicLanes();TestVisitingTwoEndsIsNotTraversingMountain();
-        std::cout << "lane_solver_test: 8 suites passed (including 8 concurrent solvers)\n";
+        std::cout << "lane_solver_test: 9 suites passed (including distributed coverage and 8 concurrent solvers)\n";
     } catch (const std::exception& e) { std::cerr<<e.what()<<'\n'; return 1; }
 }

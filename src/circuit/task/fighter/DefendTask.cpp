@@ -384,7 +384,7 @@ void CDefendTask::ApplyTargetPath(const CQueryPathMulti* query)
 void CDefendTask::FallbackFrontPos()
 {
 	CCircuitAI* circuit = manager->GetCircuit();
-	circuit->GetMilitaryManager()->FillFrontPos(leader, urgentPositions);
+	circuit->GetMilitaryManager()->FillFrontPos(leader, urgentPositions, true);
 	if (urgentPositions.empty()) {
 		FallbackBasePos();
 		return;

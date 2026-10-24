@@ -37,6 +37,11 @@ namespace SeaRetreat {
     void Note(CCircuitUnit@ ship, const AIFloat3 &in p, bool retreating) {
         repairEntries.insertLast(""+ship.id+","+(int(p.x/32)*32)+","+(int(p.z/32)*32)+","+(retreating ? 1 : 0));
     }
+    int RetreatingToPoint() {
+        int n=0;
+        for (uint i=0;i<repairEntries.length();++i) if (repairEntries[i].findLast(",1")==int(repairEntries[i].length())-2) ++n;
+        return n;
+    }
     void PublishRepair() {
         if (ai.frame<repairNext) return;
         repairNext=ai.frame+2*SECOND;

@@ -5,6 +5,7 @@
 #include "../../helpers/common/generic_helpers.as"
 #include "../../helpers/spatial/map_helpers.as"
 #include "../presentation/widget_link.as"
+#include "mex_claim.as"
 
 /******************************************************************************
 
@@ -17,6 +18,8 @@ delivery is asynchronous but same-frame-ordered and never re-entrant); human
 allies and enemies never see it. The message is one line:
 
     roster|<version>|teamId|skirmishAIId|role|side|startFactory|x|z|landLocked|spotIndex|isLeader
+        |firstMexX|firstMexZ|advancedConstructors|commanderId
+        |claimGround|claimClass|readyFrame|anchorX|anchorZ|secureSeconds|combatDef|combatReadyFrame|laneSpots   (D-352)
 
 Announcing starts as soon as this instance knows its own role and start
 position (Setup resolves the role on the first factory choice, the start
@@ -52,6 +55,7 @@ namespace Roster {
         int advancedConstructors = 0; // explicit allied acknowledgement, never allied task inspection
         int commanderId = -1; // publish identity on change, query live position only when needed
         int receivedFrame = -1;
+        MexClaimData claim;       // D-352: the sender's own numbers, applied natively as broadcast
     }
 
     dictionary entries;            // team id string -> Entry@
@@ -158,7 +162,8 @@ namespace Roster {
             + "|" + OwnSpotIndex()
             + "|" + ((ai.teamId == ai.GetLeadTeamId()) ? 1 : 0)
             + "|" + int(firstMex.x) + "|" + int(firstMex.z)
-            + "|" + AdvancedConstructors() + "|" + CommanderId();
+            + "|" + AdvancedConstructors() + "|" + CommanderId()
+            + "|" + MexClaim::Encode();
     }
 
     // Returns null when the message is not a roster line of a supported version.
@@ -185,6 +190,17 @@ namespace Roster {
         e.receivedFrame = ai.frame;
         if (parts.length() >= 15) e.advancedConstructors = int(parseInt(parts[14]));
         if (parts.length() >= 16) e.commanderId = int(parseInt(parts[15]));
+        if (parts.length() >= 25 && parts[16].length() > 0) {
+            e.claim.groundDef = parts[16];
+            e.claim.classDef = parts[17];
+            e.claim.readyFrame = int(parseInt(parts[18]));
+            e.claim.anchor = AIFloat3(float(parseInt(parts[19])), 0.0f, float(parseInt(parts[20])));
+            e.claim.secureSeconds = int(parseInt(parts[21]));
+            e.claim.combatDef = parts[22];
+            e.claim.combatReadyFrame = int(parseInt(parts[23]));
+            e.claim.laneSpots = (parseInt(parts[24]) != 0);
+            e.claim.valid = true;
+        }
         return e;
     }
 
@@ -218,7 +234,8 @@ namespace Roster {
         // Recipients can decline duplicate SUPPORT gifts after TECH supplied them.
         const int advanced = AdvancedConstructors();
         const int commander = CommanderId();
-        if (advanced != lastAdvancedConstructors || commander != lastCommanderId) {
+        const bool claimChanged = MexClaim::Tick();  // D-352: readiness, anchor, dumps, widget overlay
+        if (advanced != lastAdvancedConstructors || commander != lastCommanderId || claimChanged) {
             lastAdvancedConstructors = advanced;
             lastCommanderId = commander;
             Reannounce();
@@ -262,8 +279,12 @@ namespace Roster {
         const string key = "" + e.teamId;
         const bool isNew = !entries.exists(key);
         entries.set(key, @e);
-        if (e.teamId != ai.teamId && Global::RoleSettings::MexOwnershipEnabled)
-            aiEconomyMgr.SetMexAllyStart(e.teamId, e.startPos, e.commanderId);
+        if (e.teamId != ai.teamId && Global::RoleSettings::MexOwnershipEnabled) {
+            // D-352: with theatres the broadcast claim is the only input every
+            // ally shares; an older line without one falls back to the commander walk.
+            if (MexClaim::Enabled() && e.claim.valid) { MexClaim::Apply(e.teamId, e.startPos, e.claim); MexClaim::AnnounceEnemy(); }
+            else aiEconomyMgr.SetMexAllyStart(e.teamId, e.startPos, e.commanderId);
+        }
         if (isNew && e.teamId != ai.teamId) {
             // D-072: a metal spot belongs to the team whose start is nearest; the
             // ally-aware mex enqueue needs the allies' starts

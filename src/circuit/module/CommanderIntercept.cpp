@@ -17,6 +17,7 @@
 #include "util/Utils.h"
 #include "Log.h"
 #include "Damage.h"
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 #include <memory>
@@ -109,9 +110,20 @@ bool CCommanderControl::CloakSafe(CCircuitUnit* unit,Point from,Point to,float s
     return false;
 }
 
-bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& line,int frame,bool priority) {
+bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& line,int frame,bool acceptT3Risk) {
     const auto pos=unit->GetPos(frame); const float range=unit->GetDGunRange()-12;
     auto* def=unit->GetCircuitDef();
+    if(acceptT3Risk) {
+        const auto target=std::find_if(contacts.begin(),contacts.end(),[&](const commander::Contact& c) {
+            return c.id==line.target && c.t3 && c.targetable && !c.friendly && !c.blocker && !c.reserved;
+        });
+        auto* owner=dynamic_cast<CCommanderTask*>(unit->GetTask());
+        if(options.t3ImmediateShot<=0 || target==contacts.end() || !line.requiredHit || line.blocked
+            || !owner || owner->GetAssignees().size()!=1 || !owner->GetAssignees().count(unit)) {
+            ai->LOG("[INVARIANT] INV-233 invalid immediate T3 shot unit=%i target=%i",unit->GetId(),line.target);
+            return false;
+        }
+    }
     if(s.afusEngagement && protectedAfus<0) {
         ai->LOG("[INVARIANT] INV-225 commander AFUS shot outside observed protection scope unit=%i",unit->GetId());
         return false;
@@ -130,7 +142,7 @@ bool CCommanderControl::Fire(CCircuitUnit* unit,State& s,const commander::Line& 
     // immutable caches. Predict the same intersections used by shot claims.
     // A priority D-gun (PriorityDGun) is ordered ahead of survival: the owner
     // trades the commander's risk for the shot at a Juggernaut-class unit.
-    if(options.t3Trade<=0 && !priority) {
+    if(options.t3Trade<=0 && !acceptT3Risk) {
         const auto& cap=ai->GetMilitaryManager()->GetRangedWorld()->CapabilitiesFor(def);
         const int armor=std::max(0,def->GetDef()->GetArmorType());
         float blast=0; bool t3=false;

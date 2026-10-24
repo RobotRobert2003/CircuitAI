@@ -94,6 +94,10 @@ namespace Main {
 		Global::RoleSettings::MexOwnershipEnabled = true;
 		// Also initialize before setupMap (and when reconstructing a saved game).
 		aiEconomyMgr.SetMexOwnership(true, Global::RoleSettings::MexOwnershipSeconds);
+		// D-352: mex ownership by theatre (home, sea, lanes, the race); the claim
+		// numbers go out with the roster once the role and start are known.
+		Global::RoleSettings::MexClaim::TheatresEnabled = true;
+		Team::MexClaim::Setup();
 		Global::RoleSettings::Air::FundFirstLab = true;
 		// AIR Armada (owner, 2026-10-17): Liches from 150 metal/s (10 s minimum), launched with each bomber wave,
 		// own tiered targets: shields, Pulsar class, anti-nukes/silos, geo, gantries, T2 factories

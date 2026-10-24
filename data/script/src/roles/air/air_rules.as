@@ -129,6 +129,20 @@ namespace AirRules {
             @t = aiEconomyMgr.EnqueueMexWithin(u, Global::Map::StartPos, Global::RoleSettings::Air::FarMexRadius, 0, true);
             if (t !is null) return AirBuild::Record(t, "mex.expand.far", u);
         }
+        // D-352: a race-won spot the team owns (a summit, an island) beyond the
+        // home radius, nearest value first; skipped while the enemy's earliest
+        // arrival has passed and air threat stands there (the live half of "reliably").
+        if (!commander && Team::MexClaim::Enabled()) {
+            // One theatre job at a time: AirBuild::TheatreMex declines while a mex
+            // task of ours is parked on an owned race-won spot.
+            if (AirWorkforce::incomeM >= Global::RoleSettings::Air::TheatreMexMetal) {
+                @t = AirBuild::TheatreMex(u);
+                if (t !is null) return AirBuild::Record(t, "mex.theatre", u);
+            } else if (ai.frame - AirBuild::theatreTraceFrame >= 30 * SECOND) {
+                AirBuild::theatreTraceFrame = ai.frame;
+                GenericHelpers::LogUtil("[AIR][TheatreMex] gate income=" + AirWorkforce::incomeM, 1);
+            }
+        }
         // Affordable production support and the first wind buffer must not starve
         // behind an aspirational energy target that moves upward with mex income.
         if (AirEconomy::energy >= 250.0f) {

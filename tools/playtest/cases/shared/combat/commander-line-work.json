@@ -1,4 +1,5 @@
 {
+  "commander_overrides": {"front_push_screen": 0},
   "name": "commander-line-work",
   "storage_scenario": "commander-line-work",
   "unit": "armcom",

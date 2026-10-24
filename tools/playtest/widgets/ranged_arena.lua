@@ -45,6 +45,7 @@ local function site(g,x,z)
             -- Ships and floating units spawn on water; everything else on land.
             local naval=(UnitDefs[def.id].minWaterDepth or 0)>0 or UnitDefs[def.id].floatOnWater
             local free=(y>=0 or naval) and math.abs(y-reference)<=64
+            if g.anchorPosition and (px-g.anchorPosition[1])^2+(pz-g.anchorPosition[2])^2>g.relative_to.max_distance^2 then free=false end
             if free and mobile and not UnitDefs[def.id].canFly then free=Spring.TestMoveOrder(def.id,px,y,pz,0,0,0,true,true,false) end
             if free and not mobile then free=Spring.TestBuildOrder(def.id,px,y,pz,0)>0 end
             for _,p in ipairs(occupied) do if (px-p[1])^2+(pz-p[2])^2<(cfg.min_spawn_spacing or 96)^2 then free=false;break end end
@@ -52,6 +53,29 @@ local function site(g,x,z)
         end
     end
     log("ERROR unbuildable_spawn="..g.unit.." x="..x.." z="..z)
+end
+-- Correctness fixtures only: resolve once when a declared wave becomes due.
+-- Earlier construction can change a commander's resting point. A fixed world
+-- coordinate does not establish an in-range shot or an actual WAIT handover.
+local function anchorGroup(g)
+    if not g.relative_to then return true end
+    local spec,id=g.relative_to,nil
+    for candidate,u in pairs(tracked) do
+        if u.team==spec.team and UnitDefs[u.def].name==spec.unit then
+            if id then log("ERROR ambiguous_spawn_anchor="..spec.unit);return false end
+            id=candidate
+        end
+    end
+    if not id then log("ERROR missing_spawn_anchor="..spec.unit);return false end
+    local x,_,z=Spring.GetUnitPosition(id)
+    local cmd=Spring.GetUnitCurrentCommand(id)
+    if not x or (spec.require_command and cmd~=spec.require_command) then
+        log("ERROR spawn_anchor_command unit="..id.." command="..tostring(cmd));return false
+    end
+    g.anchorPosition={x,z}
+    g.position={x+spec.offset[1],z+spec.offset[2]}
+    log("spawn_anchor unit="..id.." command="..tostring(cmd).." x="..math.floor(x).." z="..math.floor(z))
+    return true
 end
 local function child(id)
     if not id or tracked[id] then return end
@@ -159,6 +183,19 @@ function widget:UnitCreated(id,def,team,builder)
 end
 function widget:UnitDestroyed(id,def,team,attacker,attackerDef,attackerTeam)
     factoryIds[id]=nil
+    -- D-356: coverage_loss_teams narrows the probe's commander-loss error to the
+    -- listed teams (a 1v1 hold fixture tests its own commander; the enemy
+    -- commander dying to the forward turret is not that fixture's failure).
+    local lossCounted=true
+    if cfg.coverage_loss_teams then
+        lossCounted=false
+        for _,t in ipairs(cfg.coverage_loss_teams) do if t==team then lossCounted=true end end
+    end
+    if cfg.coverage_probe and lossCounted and team>=0 and team<#(cfg.starts or {})
+        and UnitDefs[def] and UnitDefs[def].customParams
+        and UnitDefs[def].customParams.iscommander then
+        log("ERROR coverage_commander_lost team="..team.." id="..id)
+    end
     if cfg.kill_census and tracked[id] then
         local by=attackerDef and UnitDefs[attackerDef] and UnitDefs[attackerDef].name or "none"
         log("killed def="..UnitDefs[def].name.." team="..team.." by="..by.." byTeam="..tostring(attackerTeam))
@@ -273,7 +310,7 @@ function widget:GameFrame(f)
     for _,g in ipairs(cfg.groups) do
         if not g.queued and f>=(g.after_seconds or 10)*30 then
             g.queued=true
-            for i=1,g.count do
+            for i=1,(anchorGroup(g) and g.count or 0) do
                 local columns=g.columns or 4;local spacing=g.spacing or 120
                 local x=g.position[1]+((i-1)%columns)*spacing
                 local z=g.position[2]+math.floor((i-1)/columns)*spacing
@@ -358,7 +395,10 @@ function widget:GameFrame(f)
                     if cfg.commander_geometry then log("commander_geometry id="..id.." y="..tostring(y).." ground="..Spring.GetGroundHeight(x,z).." radius="..Spring.GetUnitRadius(id)) end
                     log("commander id="..id.." x="..math.floor(x).." z="..math.floor(z).." hp="..math.floor(hp or 0)
                         .." cloaked="..tostring(Spring.GetUnitIsCloaked(id)).." fire="..tostring(state.firestate))
-                    if cfg.commander_front_work and f<45*30 and z>4350 then
+                    -- Legacy Comet opening fixture: its nano arrives at 45 s
+                    -- and its north-facing front is z=4350. Coverage fixtures
+                    -- have explicit starts/nano schedules and their own probes.
+                    if cfg.commander_front_work and not cfg.coverage_probe and f<45*30 and z>4350 then
                         log("ERROR commander_left_before_nano id="..id)
                     end
                 end
@@ -377,7 +417,8 @@ function widget:GameFrame(f)
                             local x,_,z=Spring.GetUnitPosition(id);local tx,_,tz=Spring.GetUnitPosition(target)
                             if tx then distance=math.floor(math.sqrt((x-tx)^2+(z-tz)^2)) end
                         end
-                        log("shot id="..id.." unit="..d.name.." weapon="..index.." target="..tostring(kind==1 and target or -1).." distance="..distance.." intent="..tostring(Spring.GetUnitRulesParam(id,"unitTargetID") or -1))
+                        log("shot id="..id.." unit="..d.name.." weapon="..index.." target="..tostring(kind==1 and target or -1).." distance="..distance.." intent="..tostring(Spring.GetUnitRulesParam(id,"unitTargetID") or -1)
+                            .." weaponName="..tostring(WeaponDefs[w.weaponDef].name or "unknown"))
                         if cfg.shot_census and caseUnits[d.name] and kind==1 and target then
                             local targetDef=Spring.GetUnitDefID(target)
                             if targetDef then

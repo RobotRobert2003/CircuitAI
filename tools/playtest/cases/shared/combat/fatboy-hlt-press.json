@@ -75,8 +75,12 @@
     }
   ],
   "assertions": {
-    "min_kills": 0,
-    "min_shooters": 0,
-    "max_losses": 4
-  }
+    "min_kills": 3,
+    "min_shooters": 4,
+    "max_losses": 0
+  },
+  "checks": "micro-elimination",
+  "completion_targets": [
+    "armhlt"
+  ]
 }

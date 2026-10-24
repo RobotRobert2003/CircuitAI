@@ -4,6 +4,15 @@
 #include <string>
 
 namespace circuit {
+namespace ranged_policy_defaults {
+inline constexpr float POKE_DISABLED = 0.f;
+inline constexpr float POKE_PRESS_RANGE = .90f;
+inline constexpr float POKE_OUT_RANGE = 1.05f;
+inline constexpr float POKE_METAL_RATIO = 2.f;
+inline constexpr float POKE_HEALTH = .8f;
+inline constexpr float POKE_PRESS_HEALTH = .5f;
+inline constexpr float POKE_PAUSE_SECONDS = 5.f;
+}
 // JSON owns policy. The RANGED attribute is the only admission switch; these
 // values do not change legacy siege, squad, naval, air or specialist owners.
 struct RangedPolicy {
@@ -43,6 +52,7 @@ struct RangedPolicy {
     bool allowMobile = true;
     bool allowStatic = true;
     bool preferHeavy = false;
+    float commanderPriority = 1.f; // multiplier after shot geometry/admission, never a second owner
     bool preferScreen = true;
     bool allowRadar = true;
     bool advanceUnknownRadar = true;
@@ -81,12 +91,17 @@ struct RangedPolicy {
     // ranged enemies keep the kite; longer-ranged ones, static coverage,
     // commanders and reclaimers keep the full escape. Sustained rushes, rush
     // fallback, regrouping and the rear line are unchanged.
-    float pokeIn = 0.f, pokeInDominant = .90f, pokeOut = 1.05f, pokeRatio = 2.f;
+    float pokeIn = ranged_policy_defaults::POKE_DISABLED;
+    float pokeInDominant = ranged_policy_defaults::POKE_PRESS_RANGE;
+    float pokeOut = ranged_policy_defaults::POKE_OUT_RANGE;
+    float pokeRatio = ranged_policy_defaults::POKE_METAL_RATIO;
     // Owner 2026-10-19 regimes (see cohort::PokeRegime): EVEN and OUTMATCHED
     // hulls step in only above pokeHealth of max HP; a PRESS hull holds the
     // deep band through its reload down to pokePressHealth; OUTMATCHED steps
     // in again only pokePauseSeconds after its last shot.
-    float pokeHealth = .8f, pokePressHealth = .5f, pokePauseSeconds = 5.f;
+    float pokeHealth = ranged_policy_defaults::POKE_HEALTH;
+    float pokePressHealth = ranged_policy_defaults::POKE_PRESS_HEALTH;
+    float pokePauseSeconds = ranged_policy_defaults::POKE_PAUSE_SECONDS;
     // Owner 2026-10-19: 0 = off. Armed static defences of this tech level or
     // lower (BAR customparams.techlevel, 1 when absent) are not coverage this
     // hull avoids: it picks firing sites, paths and stays inside their reach

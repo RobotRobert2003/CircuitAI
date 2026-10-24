@@ -2,6 +2,29 @@
 #include "terrain/GroundCohort.h"
 #include <cassert>
 #include <cstdio>
+namespace {
+constexpr float POKE_RANGE = 380;
+constexpr float PEER_REACH = 402;
+constexpr float SHORT_RANGE = 180;
+constexpr float SHORT_REACH = 200;
+constexpr float LONG_RANGE = 475;
+constexpr float LONG_REACH = 500;
+constexpr float DOMINANT_METAL = 2000;
+constexpr float ENEMY_METAL = 1000;
+constexpr float BELOW_DOMINANT_METAL = 1900;
+constexpr float PRESS_METAL = 1500;
+constexpr float EVEN_METAL = 1400;
+constexpr float POKE_IN = .95f;
+constexpr float PRESS_IN = .90f;
+constexpr float READY_HEALTH = .9f;
+constexpr float POKE_OUT = 1.05f;
+constexpr float DEFAULT_RATIO = 2.f;
+constexpr float PROFILE_RATIO = 1.5f;
+constexpr float POKE_HEALTH = .8f;
+constexpr float PRESS_HEALTH = .5f;
+constexpr float PRESS_READY_HEALTH = .7f;
+}
+
 int main() {
     using namespace circuit;
     {
@@ -46,31 +69,31 @@ int main() {
     assert(cohort::KiteStep(8,16,true)==192);
     assert(!cohort::ShortKite(380,325,45,1.25)); // narrow Centurion firing band
     assert(cohort::ShortKite(380,180,45,1.25)); // shorter-range light raiders
-    // Owner 2026-10-17 poke cadence (Thug/Mace 380): equal range pokes; Pawn keeps kiting; long range escapes.
-    assert(cohort::Pokeable(380,402,380,.95f,1.05f));
-    assert(cohort::Pokeable(380,402,380,.90f,1.05f));
-    assert(!cohort::Pokeable(180,200,380,.95f,1.05f));
-    assert(!cohort::Pokeable(475,500,380,.95f,1.05f));
-    assert(!cohort::Pokeable(380,402,380,0.f,1.05f)); // off by default
-    assert(cohort::Dominant(2000,1000,2.f) && !cohort::Dominant(1900,1000,2.f) && !cohort::Dominant(500,0,2.f));
+    // Owner 2026-10-17 poke cadence (Thug/Mace POKE_RANGE): equal range pokes; Pawn keeps kiting; long range escapes.
+    assert(cohort::Pokeable(POKE_RANGE,PEER_REACH,POKE_RANGE,POKE_IN,POKE_OUT));
+    assert(cohort::Pokeable(POKE_RANGE,PEER_REACH,POKE_RANGE,PRESS_IN,POKE_OUT));
+    assert(!cohort::Pokeable(SHORT_RANGE,SHORT_REACH,POKE_RANGE,POKE_IN,POKE_OUT));
+    assert(!cohort::Pokeable(LONG_RANGE,LONG_REACH,POKE_RANGE,POKE_IN,POKE_OUT));
+    assert(!cohort::Pokeable(POKE_RANGE,PEER_REACH,POKE_RANGE,0.f,POKE_OUT)); // off by default
+    assert(cohort::Dominant(DOMINANT_METAL,ENEMY_METAL,DEFAULT_RATIO) && !cohort::Dominant(BELOW_DOMINANT_METAL,ENEMY_METAL,DEFAULT_RATIO) && !cohort::Dominant(LONG_REACH,0,DEFAULT_RATIO));
     // Owner 2026-10-19 regimes: press at 1.5:1, even, outmatched at 1:1.5.
     using cohort::Poke;
-    assert(cohort::PokeRegime(1500,1000,1.5f)==Poke::PRESS);
-    assert(cohort::PokeRegime(1400,1000,1.5f)==Poke::EVEN);
-    assert(cohort::PokeRegime(1000,1400,1.5f)==Poke::EVEN);
-    assert(cohort::PokeRegime(1000,1500,1.5f)==Poke::OUTMATCHED);
-    assert(cohort::PokeRegime(0,500,1.5f)==Poke::OUTMATCHED);
-    assert(cohort::PokeRegime(500,0,1.5f)==Poke::EVEN);
+    assert(cohort::PokeRegime(PRESS_METAL,ENEMY_METAL,PROFILE_RATIO)==Poke::PRESS);
+    assert(cohort::PokeRegime(EVEN_METAL,ENEMY_METAL,PROFILE_RATIO)==Poke::EVEN);
+    assert(cohort::PokeRegime(ENEMY_METAL,EVEN_METAL,PROFILE_RATIO)==Poke::EVEN);
+    assert(cohort::PokeRegime(ENEMY_METAL,PRESS_METAL,PROFILE_RATIO)==Poke::OUTMATCHED);
+    assert(cohort::PokeRegime(0,LONG_REACH,PROFILE_RATIO)==Poke::OUTMATCHED);
+    assert(cohort::PokeRegime(LONG_REACH,0,PROFILE_RATIO)==Poke::EVEN);
     // EVEN: in while ready and above 80% HP; out while reloading or damaged.
-    assert(cohort::PokeFraction(Poke::EVEN,false,.9f,false,.95f,.9f,1.05f,.8f,.5f)==.95f);
-    assert(cohort::PokeFraction(Poke::EVEN,true,.9f,false,.95f,.9f,1.05f,.8f,.5f)==1.05f);
-    assert(cohort::PokeFraction(Poke::EVEN,false,.8f,false,.95f,.9f,1.05f,.8f,.5f)==1.05f);
+    assert(cohort::PokeFraction(Poke::EVEN,false,READY_HEALTH,false,POKE_IN,READY_HEALTH,POKE_OUT,POKE_HEALTH,PRESS_HEALTH)==POKE_IN);
+    assert(cohort::PokeFraction(Poke::EVEN,true,READY_HEALTH,false,POKE_IN,READY_HEALTH,POKE_OUT,POKE_HEALTH,PRESS_HEALTH)==POKE_OUT);
+    assert(cohort::PokeFraction(Poke::EVEN,false,POKE_HEALTH,false,POKE_IN,READY_HEALTH,POKE_OUT,POKE_HEALTH,PRESS_HEALTH)==POKE_OUT);
     // OUTMATCHED: a ready, healthy hull still waits out its pause.
-    assert(cohort::PokeFraction(Poke::OUTMATCHED,false,.9f,true,.95f,.9f,1.05f,.8f,.5f)==1.05f);
-    assert(cohort::PokeFraction(Poke::OUTMATCHED,false,.9f,false,.95f,.9f,1.05f,.8f,.5f)==.95f);
+    assert(cohort::PokeFraction(Poke::OUTMATCHED,false,READY_HEALTH,true,POKE_IN,READY_HEALTH,POKE_OUT,POKE_HEALTH,PRESS_HEALTH)==POKE_OUT);
+    assert(cohort::PokeFraction(Poke::OUTMATCHED,false,READY_HEALTH,false,POKE_IN,READY_HEALTH,POKE_OUT,POKE_HEALTH,PRESS_HEALTH)==POKE_IN);
     // PRESS: stays in through the reload, out only at the press health.
-    assert(cohort::PokeFraction(Poke::PRESS,true,.7f,false,.95f,.9f,1.05f,.8f,.5f)==.9f);
-    assert(cohort::PokeFraction(Poke::PRESS,true,.5f,false,.95f,.9f,1.05f,.8f,.5f)==1.05f);
+    assert(cohort::PokeFraction(Poke::PRESS,true,PRESS_READY_HEALTH,false,POKE_IN,READY_HEALTH,POKE_OUT,POKE_HEALTH,PRESS_HEALTH)==PRESS_IN);
+    assert(cohort::PokeFraction(Poke::PRESS,true,PRESS_HEALTH,false,POKE_IN,READY_HEALTH,POKE_OUT,POKE_HEALTH,PRESS_HEALTH)==POKE_OUT);
     assert(cohort::Admit({400,0},{0,0},450));
     assert(!cohort::Admit({800,0},{0,0},450)); // no recruitment through a chain
     assert(!cohort::CanRush(380,325,45,45,840,810,1.75,6,440)); // kite Centurion

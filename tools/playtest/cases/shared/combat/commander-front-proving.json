@@ -3,7 +3,7 @@
   "unit": "armcom",
   "side": "armada",
   "role": "FRONT",
-  "description": "Real FRONT duty crosses Proving Grounds terrain, takes en-route mex work and resumes progress.",
+  "description": "Real FRONT duty crosses Proving Grounds terrain on its distributed coverage lane, takes en-route mex work and reaches the lane's 3600-elmo front anchor.",
   "map": "Proving Grounds v1.0",
   "map_key": "proving",
   "starts": [
@@ -63,12 +63,12 @@
   "commander_initial": true,
   "start_metal": 100000,
   "commander_trace": true,
-  "commander_overrides": {
+  "commander_overrides": {"front_push_screen": 0,
     "front_distance": 3600
   },
   "front_arrival": [
-    4846,
-    5680,
+    3971,
+    7008,
     300
   ]
 }

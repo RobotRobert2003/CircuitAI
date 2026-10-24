@@ -337,7 +337,10 @@ public:
 	springai::AIFloat3 GetScoutPosition(CCircuitUnit* unit);
 	springai::AIFloat3 GroundObjective(CCircuitUnit* unit, const springai::AIFloat3& previous);
 	void ClearScoutPosition(IUnitTask* task);
-	void FillFrontPos(CCircuitUnit* unit, F3Vec& outPositions);
+	// defend: a DefendTask leader; it follows the coverage lane only when
+	// coverage.json defend_follows_lane says so (D-356), else the influence
+	// and metal-cluster front positions below.
+	void FillFrontPos(CCircuitUnit* unit, F3Vec& outPositions, bool defend = false);
 	void FillAttackSafePos(CCircuitUnit* unit, F3Vec& outPositions);
 	void FillStaticSafePos(CCircuitUnit* unit, F3Vec& outPositions);
 	void FillSafePos(CCircuitUnit* unit, F3Vec& outPositions);

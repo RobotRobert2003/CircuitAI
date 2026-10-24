@@ -24,7 +24,11 @@
 
 #include "AIFloat3.h"
 #include "terrain/LaneSolver.h"
+#include "terrain/LanePath.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -160,6 +164,36 @@ public:
     std::vector<springai::AIFloat3> GetTerrainRoute(const springai::AIFloat3& from,
         const springai::AIFloat3& to, int cls, float landCost, float waterCost,
         float threatWeight, float maxWaterThreat);
+    std::vector<springai::AIFloat3> GetDistributedRoute(const springai::AIFloat3& from,
+        const springai::AIFloat3& to,const springai::AIFloat3& axisFrom,const springai::AIFloat3& axisTo,
+        int cls,float share,int seats,float tolerance,float spacingWeight,float resourceWeight);
+    bool SetFrontLane(const std::vector<springai::AIFloat3>& points,float halfWidth);
+    float GetFrontLaneLength() const {return frontLanePath.Length();}
+    float GetFrontLaneWidth() const {return frontLaneWidth;}
+    float GetFrontLaneProgress(const springai::AIFloat3& p) const {return frontLanePath.Project({p.x,p.y,p.z}).progress;}
+    float GetFrontLaneDistance(const springai::AIFloat3& p) const;
+    springai::AIFloat3 GetFrontLanePoint(float distance) const;
+    springai::AIFloat3 GetFrontLaneGoal(const springai::AIFloat3& from,float advance) const;
+    // D-356: coverage.json levers the corridor consumers read (advance per
+    // objective query, range slack and base radius of the attack filter, and
+    // whether defend groups follow the lane); set once by CoverageLanes::Load.
+    void SetFrontLaneOptions(float advance,float rangeSlack,float baseRadius,bool defendFollows) {
+        if(std::isfinite(advance)) frontLaneAdvance=std::clamp(advance,0.f,4000.f);
+        if(std::isfinite(rangeSlack)) frontLaneRangeSlack=std::clamp(rangeSlack,0.f,4000.f);
+        if(std::isfinite(baseRadius)) frontLaneBaseRadius=std::clamp(baseRadius,0.f,10000.f);
+        frontLaneDefendFollows=defendFollows;
+    }
+    float GetFrontLaneAdvance() const {return frontLaneAdvance;}
+    float GetFrontLaneRangeSlack() const {return frontLaneRangeSlack;}
+    float GetFrontLaneBaseRadius() const {return frontLaneBaseRadius;}
+    bool FrontLaneDefendFollows() const {return frontLaneDefendFollows;}
+    // D-357: 2D distance from p to the nearest enemy lane end (an enemy start);
+    // +inf when none is known. O(enemy starts), used per candidate mex spot.
+    float EnemyEndDistance(const springai::AIFloat3& p) const {
+        float best=std::numeric_limits<float>::infinity();
+        for(const auto& e:enemyEnds) best=std::min(best,p.distance2D(e));
+        return best;
+    }
     std::vector<springai::AIFloat3> GetUnitTerrainRoute(const CCircuitDef* def,
         const springai::AIFloat3& from, const springai::AIFloat3& to, bool dry,
         float landCost, float waterCost, float threatWeight, float maxWaterThreat);
@@ -371,6 +405,11 @@ private:
 	std::vector<char> pass[_LANE_CLASSES_];
 	std::vector<springai::AIFloat3> allyEnds, enemyEnds;
 	std::vector<SLane> lanes;
+    lane::Path frontLanePath;
+    Grid frontLaneDistance;
+    float frontLaneWidth=0.f;
+    float frontLaneAdvance=512.f,frontLaneRangeSlack=256.f,frontLaneBaseRadius=1200.f;
+    bool frontLaneDefendFollows=false;
 };
 
 } // namespace circuit

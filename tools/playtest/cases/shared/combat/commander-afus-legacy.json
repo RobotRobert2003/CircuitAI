@@ -4,6 +4,7 @@
   "side": "armada",
   "role": "SUPPORT",
   "description": "Ordinary T3 combat remains active without the AFUS defence context.",
+  "commander_overrides": {"afus_defence_radius": 0},
   "map": "Comet Catcher Remake 1.8",
   "map_key": "comet",
   "starts": [

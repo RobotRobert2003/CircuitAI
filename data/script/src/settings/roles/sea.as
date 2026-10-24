@@ -179,6 +179,13 @@ namespace Sea {
             int FleetRoutesPerTick = 16;        // combat re-routes per census, rest next census
             bool MergeChasingCohorts = true;    // one pack per hull chasing one target
             float ChaseMergeRadius = 900.0f;
+            // D-351: submarine routes go out one leg at a time (elmos); the
+            // next leg follows when the leg is walked. 0 = whole route.
+            float SubmarineLegLength = 1024.0f;
+            float FleetLegLength = 0.0f;          // surface hulls: whole route
+            // D-351: a cohort keeps its current objective unless another of the
+            // same rank scores this many times higher. 1 = no hold.
+            float TargetHoldRatio = 1.5f;
             float ForwardRepairBuffer = 250.0f;
             float ForwardRepairHealth = 0.75f;     // publish a point below this health
             float ForwardRepairMaxDistance = 2000.0f;
@@ -376,6 +383,7 @@ namespace Sea {
             float SeaplaneMetalReserve = 500.0f; // retained in addition to the full platform cost
             float SeaplaneEnergyReserve = 1000.0f;
             float NearbyMexRadius = 2400.0f; // fixed home harbor radius, not an ever-moving expansion centre
+            float HomeMexRadius = 0.0f; // D-352: SEA's land spots around its commander (0 = the shared MexClaim::HomeRadius)
             bool ExpandMexClusters = true; // SEA only, independent of experimental economy/layouts
             float ExpansionMexRadius = 3600.0f; // follows the constructor; no home-radius or income ceiling
             float ExpansionClusterRadius = 600.0f;

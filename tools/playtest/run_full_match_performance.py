@@ -30,7 +30,7 @@ def wrap(path,name,result,args,call,label):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--map',choices=['metal-plate','glacial','serene','glitters','supreme','shore'],required=True)
+    p.add_argument('--map',choices=['metal-plate','glacial','serene','glitters','supreme','supreme21','shore','carrot','pinch','sulphur','redriver'],required=True)
     p.add_argument('--dll',type=Path,required=True)
     p.add_argument('--data',type=Path,help='Matching pinned data tree; defaults to current repository data')
     # D-298: default to the lobby's last game; a pinned archive dies on the next BAR update.
@@ -75,7 +75,9 @@ def main():
     print('FULL_MATCH_DIRECTORY='+str(d),flush=True)
     (RAW_ROOT / 'perf-current.txt').write_text(str(d))
     name={'metal-plate':'Full Metal Plate 1.7','glacial':'Glacial Gap v1.1','serene':'Serene Caldera v1.3',
-          'glitters':'All That Glitters v2.2.3','supreme':'Supreme Isthmus v1.7','shore':'Shore_to_Shore_V3'}[a.map]
+          'glitters':'All That Glitters v2.2.3','supreme':'Supreme Isthmus v1.7','supreme21':'Supreme Isthmus v2.1',
+          'shore':'Shore_to_Shore_V3','carrot':'Carrot Mountains v2.0','pinch':'Pinch Point 1.03',
+          'sulphur':'Sulphur Springs v1.1','redriver':'Red River Remake v1.2'}[a.map]
     role='SEA' if a.map=='serene' else 'AIR'
     extra=[]
     if a.map=='metal-plate':
@@ -107,7 +109,9 @@ def main():
     if a.map=='serene':focus={'x':7680,'z':6500,'height':10500}
     if a.map=='glitters':focus={'x':3072,'z':5120,'height':10000}
     if a.map=='shore':focus={'x':7680,'z':1536,'height':15500}
-    if a.map=='supreme':focus={'x':6144,'z':6144,'height':12000}
+    if a.map in ('supreme','supreme21','carrot'):focus={'x':6144,'z':6144,'height':12000}
+    if a.map=='pinch':focus={'x':8192,'z':5120,'height':14000}
+    if a.map in ('sulphur','redriver'):focus={'x':6144,'z':6144,'height':13000}
     # The screenshot callback captures the current speed before queued speed
     # commands apply. Resume after the screenshot, never in the same frame.
     shot_minutes=[5,10,15,20,30,40,50,60,70,80,89]

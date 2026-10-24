@@ -607,6 +607,14 @@ namespace RoleSea {
             return defaultTask;
         }
 
+        // D-352: the land spots inside the home radius are this seat's (rule 1);
+        // the commander takes them before it assists the yard. Native admission
+        // owns reach and occupancy, so a water start simply finds nothing.
+        if (Team::MexClaim::Enabled() && comm.task is null
+            && aiEconomyMgr.GetMexTaskCountWithin(Global::Map::StartPos, Team::MexClaim::HomeRadius()) < 1) {
+            IUnitTask@ home = aiEconomyMgr.EnqueueMexWithin(comm, Global::Map::StartPos, Team::MexClaim::HomeRadius(), 0, true);
+            if (home !is null) return home;
+        }
         // Prefer guarding the primary T1 shipyard only.
         CCircuitUnit@ target = null;
         if (Factory::primaryT1Shipyard !is null) {

@@ -1,0 +1,58 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {
+      "key": "commander 0 advances",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=0(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 4
+    },
+    {
+      "key": "commander 1 advances",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=1(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 4
+    },
+    {
+      "key": "commander 2 advances",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=2(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 4
+    },
+    {
+      "key": "commander 3 advances",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=3(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 4
+    },
+    {
+      "key": "commander 4 advances",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=4(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 4
+    },
+    {
+      "key": "commander 5 advances",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=5(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 4
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    }
+  ]
+}
