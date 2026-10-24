@@ -30,6 +30,7 @@
   "min_spawn_spacing": 38,
   "command_breakdown": true,
   "commander_observation": true,
+  "observation_frames": 3,
   "hold_friendly": true,
   "groups": [
     {

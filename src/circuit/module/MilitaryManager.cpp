@@ -6,6 +6,7 @@
  */
 
 #include "module/MilitaryManager.h"
+#include "terrain/BattleAnalysis.h"
 #include "module/BuilderManager.h"
 #include "module/EconomyManager.h"
 #include "module/FactoryManager.h"
@@ -1390,9 +1391,16 @@ void CMilitaryManager::ClearScoutPosition(IUnitTask* task)
 	scoutTasks.erase(it);
 }
 
-void CMilitaryManager::FillFrontPos(CCircuitUnit* unit, F3Vec& outPositions)
+void CMilitaryManager::FillFrontPos(CCircuitUnit* unit, F3Vec& outPositions, bool defend)
 {
 	outPositions.clear();
+    // D-354/D-356: on a published corridor the lane goal is the front for
+    // attack leaders; the advance and the defend opt-in come from coverage.json.
+    const auto* battle=circuit->GetBattle();
+    if(!unit->GetCircuitDef()->IsAbleToFly() && battle->GetFrontLaneLength()>0.f && (!defend || battle->FrontLaneDefendFollows())) {
+        const auto goal=battle->GetFrontLaneGoal(unit->GetPos(circuit->GetLastFrame()),battle->GetFrontLaneAdvance());
+        if(circuit->GetTerrainManager()->CanReachAt(unit,goal,64)) {outPositions.push_back(goal);return;}
+    }
 
 	CInfluenceMap* inflMap = circuit->GetInflMap();
 	CMetalManager* metalMgr = circuit->GetMetalManager();

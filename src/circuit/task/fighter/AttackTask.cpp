@@ -12,6 +12,7 @@
 #include "module/MilitaryManager.h"
 #include "setup/SetupManager.h"
 #include "terrain/TerrainManager.h"
+#include "terrain/BattleAnalysis.h"
 #include "terrain/path/PathFinder.h"
 #include "terrain/path/QueryPathSingle.h"
 #include "terrain/path/QueryPathMulti.h"
@@ -266,8 +267,18 @@ void CAttackTask::FindTarget()
 
 	SetTarget(nullptr);  // make adequate enemy->GetTasks().size()
 	const std::vector<CEnemyManager::SEnemyGroup>& groups = circuit->GetEnemyManager()->GetEnemyGroups();
+	// D-354/D-356: a FRONT corridor keeps distant objectives inside the lane;
+	// groups within range slack of the leader or base radius of home are
+	// always eligible. Both margins come from coverage.json.
+	const auto* battle=circuit->GetBattle();
+	const bool corridor=!cdef->IsAbleToFly() && battle->GetFrontLaneLength()>0.f;
+	const float rangeSlackSq=SQUARE(highestRange+battle->GetFrontLaneRangeSlack());
+	const float baseRadiusSq=SQUARE(battle->GetFrontLaneBaseRadius());
 	for (unsigned i = 0; i < groups.size(); ++i) {
 		const CEnemyManager::SEnemyGroup& group = groups[i];
+		if(corridor && battle->GetFrontLaneDistance(group.pos)>battle->GetFrontLaneWidth()
+            && pos.SqDistance2D(group.pos)>rangeSlackSq
+            && basePos.SqDistance2D(group.pos)>baseRadiusSq)continue;
 		const bool isOverpowered = maxPower * 0.125f > group.influence;
 		if (minimumCost <= 0.f && hasGoodTarget && isOverpowered) {
 			continue;

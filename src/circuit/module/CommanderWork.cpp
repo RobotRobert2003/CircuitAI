@@ -10,10 +10,12 @@
 #include "spring/SpringMap.h"
 #include "map/ThreatMap.h"
 #include "terrain/TerrainManager.h"
+#include "terrain/BattleAnalysis.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 #include "Log.h"
 #include <algorithm>
+#include <functional>
 #include <limits>
 
 #include "Feature.h"
@@ -81,6 +83,7 @@ IUnitTask* CCommanderControl::LadderWork(CCircuitUnit* unit,State& s,int kind,CC
             }
             return ai->GetEconomyManager()->EnqueueMexWithin(unit,pos,area,0,true);
         }
+        case WORK_MEX_LANE: return holding?nullptr:LaneMexWork(unit,s,buildDef,frame);
         case WORK_TIMED: {
             // First timed_until seconds of the game: one of buildDef every
             // timed_interval after the commander first reaches the front.
@@ -343,5 +346,108 @@ IUnitTask* CCommanderControl::AssistWork(CCircuitUnit* unit,const State& s,const
     }
     if(plant) return ai->GetBuilderManager()->EnqueueB(TaskB::Guard(IBuilderTask::Priority::NORMAL,plant,false,FRAMES_PER_SEC*20));
     return best;
+}
+
+// D-357: the corridor window a FRONT commander sweeps for metal. A spot
+// qualifies when it lies within the lane's half-width plus reach of the
+// corridor (O(1) grid read) and its lane progress is between behind and
+// ahead of the commander's own. Without capture, a spot with any enemy unit
+// on it is skipped; with capture, an enemy extractor there is a target (the
+// mex task reclaims it before building, MexTask.cpp) unless the threat map
+// says the spot is hot. One bounded engine area query per candidate spot
+// (spots inside the window, typically under twenty), per offer, not per frame.
+static std::function<bool(const AIFloat3&)> LaneMexAccept(CCircuitAI* ai,CCircuitUnit* unit,const CBattleAnalysis* battle,
+        float width,float lo,float hi,bool capture,float frontThreat,float enemyHome) {
+    return [=](const AIFloat3& p) {
+        if(battle->GetFrontLaneDistance(p)>width) return false;
+        // The enemy's home spots (front_mex_enemy_home of an enemy start) are a
+        // commander rush, not a lane sweep (hold arena, b02: taking and fortifying
+        // the spot 630 elmos from the enemy start drew its commander into a fight).
+        if(enemyHome>0 && battle->EnemyEndDistance(p)<enemyHome) return false;
+        const float progress=battle->GetFrontLaneProgress(p);
+        if(progress<lo || progress>hi) return false;
+        const bool enemyOnSpot=!ai->GetCallback()->GetEnemyUnitIdsIn(p,64.f,false).empty();
+        if(!enemyOnSpot) return true;
+        return capture && ai->GetThreatMap()->GetThreatAt(unit,p)<=frontThreat;
+    };
+}
+
+// The lane progress the sweep may reach ahead of the commander: its push
+// anchor (one cached FrontPosition per second), or its own progress when the
+// lane has no front for it (home latch, unreachable or exposed anchor).
+float CCommanderControl::LaneMexAheadLimit(CCircuitUnit* unit,State& s,int frame,float own) {
+    const AIFloat3 anchor=FrontPosition(unit,s,frame);
+    return anchor.x<0?own:std::max(own,ai->GetBattle()->GetFrontLaneProgress(anchor));
+}
+
+IUnitTask* CCommanderControl::LaneMexWork(CCircuitUnit* unit,State& s,CCircuitDef* turretDef,int frame) {
+    const auto* battle=ai->GetBattle();
+    if(battle->GetFrontLaneLength()<=0.f) return nullptr;
+    const AIFloat3 pos=unit->GetPos(frame);
+    auto* builder=ai->GetBuilderManager();
+    auto* clb=ai->GetCallback();
+    // The turret that follows every front_mex_turret_every corridor mexes:
+    // the script's line turret definition, at the last mex taken ("mex plus
+    // LLT at the cluster"), once, unless one already stands or is planned there.
+    if(s.laneMexTurret && turretDef && options.frontMexTurretEvery>0 && s.laneMexLast.x>=0
+        && unit->GetCircuitDef()->CanBuild(turretDef)) {
+        const float near2=4.f*options.lineSpacing*options.lineSpacing;
+        bool standing=false;
+        workIds=clb->GetFriendlyUnitIdsIn(s.laneMexLast,2.f*options.lineSpacing,false);
+        for(int id:workIds) if(clb->Unit_GetDefId(id)==turretDef->GetId()) { standing=true; break; }
+        for(IBuilderTask* task:builder->GetTasks(BT::DEFENCE)) {
+            if(task->IsDead() || task->GetBuildDef()!=turretDef || task->GetPosition().SqDistance2D(s.laneMexLast)>near2) continue;
+            s.laneMexTurret=false;
+            return task->CanAssignTo(unit)?task:nullptr;
+        }
+        if(standing) s.laneMexTurret=false;
+        else if(ai->GetEconomyManager()->GetMetalCur()>=turretDef->GetCostM()*.5f
+            && ai->GetThreatMap()->GetThreatAt(unit,s.laneMexLast)<=options.frontThreat) {
+            auto* task=builder->Enqueue(TaskB::Common(BT::DEFENCE,IBuilderTask::Priority::NORMAL,turretDef,s.laneMexLast,128.f,true,30*FRAMES_PER_SEC));
+            if(task) {
+                s.laneMexTurret=false;
+                ai->LOG("[CommanderFront] unit=%i lane_turret x=%.0f z=%.0f after=%i",unit->GetId(),s.laneMexLast.x,s.laneMexLast.z,s.laneMexCount);
+                return task;
+            }
+        }
+    }
+    const float reach=options.frontMexReach>0?options.frontMexReach:unit->GetCircuitDef()->GetBuildDistance();
+    const float width=battle->GetFrontLaneWidth()+reach;
+    const float own=battle->GetFrontLaneProgress(pos);
+    const float radius=std::max(options.frontMexBehind,options.frontMexAhead)+width;
+    // The sweep never leads the front: spots ahead are taken only up to the
+    // push anchor (screen rule, front_distance, lane limit, enemy-group
+    // stand-off, threat), so the commander does not creep mex by mex into an
+    // enemy it would not walk toward (hold arena, b01: both commanders met).
+    const auto accept=LaneMexAccept(ai,unit,battle,width,own-options.frontMexBehind,
+        std::min(own+options.frontMexAhead,LaneMexAheadLimit(unit,s,frame,own)),
+        options.frontMexCaptureEnemy>0,options.frontThreat,options.frontMexEnemyHome);
+    IBuilderTask* task=ai->GetEconomyManager()->EnqueueMexWithin(unit,pos,radius,0,true,{},accept);
+    if(task) {
+        const AIFloat3 at=task->GetPosition();
+        if(at.SqDistance2D(s.laneMexLast)>64.f*64.f) {
+            s.laneMexLast=at; ++s.laneMexCount;
+            if(options.frontMexTurretEvery>0 && s.laneMexCount%int(options.frontMexTurretEvery)==0) s.laneMexTurret=true;
+            ai->LOG("[CommanderFront] unit=%i lane_mex x=%.0f z=%.0f progress=%.0f own=%.0f count=%i",
+                unit->GetId(),at.x,at.z,battle->GetFrontLaneProgress(at),own,s.laneMexCount);
+        }
+    }
+    return task;
+}
+
+// The dry form of LaneMexWork's admission (the same window and the same
+// economy admission, with no claim made), for INV-235 at the advance rung.
+bool CCommanderControl::LaneMexAvailable(CCircuitUnit* unit,State& s,int frame) {
+    const auto* battle=ai->GetBattle();
+    if(FallbackActive(s,frame) || battle->GetFrontLaneLength()<=0.f) return false;
+    const AIFloat3 pos=unit->GetPos(frame);
+    const float reach=options.frontMexReach>0?options.frontMexReach:unit->GetCircuitDef()->GetBuildDistance();
+    const float width=battle->GetFrontLaneWidth()+reach;
+    const float own=battle->GetFrontLaneProgress(pos);
+    const float radius=std::max(options.frontMexBehind,options.frontMexAhead)+width;
+    const auto accept=LaneMexAccept(ai,unit,battle,width,own-options.frontMexBehind,
+        std::min(own+options.frontMexAhead,LaneMexAheadLimit(unit,s,frame,own)),
+        options.frontMexCaptureEnemy>0,options.frontThreat,options.frontMexEnemyHome);
+    return ai->GetEconomyManager()->CountOpenMexWithin(unit,pos,radius,true,accept)>0;
 }
 }

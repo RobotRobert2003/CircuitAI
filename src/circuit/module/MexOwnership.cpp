@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace circuit {
 using springai::AIFloat3;
@@ -229,6 +230,49 @@ void CEconomyManager::SetMexAllyClaim(int team, const AIFloat3& start, const AIF
 
 void CEconomyManager::RemoveMexAllyClaim(int team) {
     if (mexClaims.erase(team) > 0) mexTerritoryDirty = true;
+    if (mexCorridors.erase(team) > 0) mexTerritoryDirty = true;
+}
+
+// D-357: a FRONT ally's coverage corridor, as the roster broadcast it. The
+// polyline is copied once per publication (a seat or endpoint change, rare);
+// RebuildMexTerritory resolves clusters against it. An empty polyline clears.
+void CEconomyManager::SetMexCorridor(int team, const std::vector<AIFloat3>& points, float halfWidth) {
+    if (points.size() < 2 || !std::isfinite(halfWidth) || halfWidth <= 0.f) {
+        if (mexCorridors.erase(team) > 0) mexTerritoryDirty = true;
+        return;
+    }
+    SMexCorridor corridor;
+    corridor.points.reserve(points.size());
+    for (const auto& q : points) {
+        if (!ValidMexPosition(q)) return;
+        corridor.points.push_back(q);
+    }
+    corridor.halfWidth = std::clamp(halfWidth, 64.f, 2048.f);
+    for (std::size_t i = 1; i < corridor.points.size(); ++i) corridor.length += std::sqrt(corridor.points[i].SqDistance2D(corridor.points[i - 1]));
+    mexCorridors[team] = std::move(corridor);
+    mexTerritoryDirty = true;
+}
+
+// Nearest corridor holding the point (distance to the polyline within its
+// half-width); ties to the lower team id. Progress along it decides forward.
+static int CorridorOwner(const std::map<int, CEconomyManager::SMexCorridor>& corridors, const AIFloat3& pos, bool& forward) {
+    int owner = -1; float best = std::numeric_limits<float>::max(); forward = false;
+    for (const auto& [team, c] : corridors) {
+        float distance = std::numeric_limits<float>::max(), progress = 0.f, walked = 0.f;
+        for (std::size_t i = 1; i < c.points.size(); ++i) {
+            const AIFloat3& a = c.points[i - 1]; const AIFloat3& b = c.points[i];
+            const float dx = b.x - a.x, dz = b.z - a.z, len2 = dx * dx + dz * dz;
+            const float u = len2 > 0.f ? std::clamp(((pos.x - a.x) * dx + (pos.z - a.z) * dz) / len2, 0.f, 1.f) : 0.f;
+            const float px = a.x + dx * u - pos.x, pz = a.z + dz * u - pos.z;
+            const float d = std::sqrt(px * px + pz * pz);
+            if (d < distance) { distance = d; progress = walked + std::sqrt(len2) * u; }
+            walked += std::sqrt(len2);
+        }
+        if (distance <= c.halfWidth && (owner < 0 || distance < best || (distance == best && team < owner))) {
+            best = distance; owner = team; forward = c.length > 0.f && progress > c.length * .5f;
+        }
+    }
+    return owner;
 }
 
 void CEconomyManager::SetMexEnemyClass(const char* classDef, float readySeconds) {
@@ -571,6 +615,7 @@ void CEconomyManager::RebuildMexTerritory() {
         const int cluster = mexSpotCluster[i];
         in.lane = cluster >= 0 && std::size_t(cluster) < mexLanes.clusterLane.size() ? mexLanes.clusterLane[cluster] : -1;
         in.forward = in.lane >= 0 && mexLanes.clusterForward[cluster] != 0;
+        in.corridor = mexCorridors.empty() ? -1 : CorridorOwner(mexCorridors, pos, in.corridorForward);
         const auto r = mex_territory::Resolve(in);
         SMexResolved& out = mexResolved[i];
         out.mask = r.mask; out.rule = int(r.rule); out.owner = r.owner; out.lane = in.lane;

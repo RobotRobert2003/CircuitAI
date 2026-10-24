@@ -627,6 +627,7 @@ local function mouseRelease(x,y,b)
     pressed=nil; return was
 end
 return {Receive=receive,Draw=draw,SetMode=setMode,Mode=function() return mode end,Snapshot=snapshot,
+    ShowsTeam=function(team) return activeTeams[team]==true and permitted(team) end,
     Config=config,GetConfig=getConfig,Live=function() return options.live end,
     SetRefresh=function(fn) refreshAction=fn end,Requested=function(id) refreshRequested[id]=true end,
     Select=function(team,lane) selectedTeam,selectedLane=team,lane end,
@@ -3576,6 +3577,7 @@ local seaLanes = (function()
     local show = true          -- the whole Tactics overlay
     local showLanes, showRepair = true, true
     local byTeam = {}
+    local frontByTeam = {}    -- same geometry protocol; independent land/sea publications
     local repairByTeam = {}    -- team -> { {ship, x, y, z, retreating} }
     local function receiveRepair(team, payload)
         local list = {}
@@ -3629,7 +3631,8 @@ local seaLanes = (function()
     local function rebuild()
         strands = {}
         local all = {}
-        for team, entry in pairs(byTeam) do
+        for _, entries in ipairs({byTeam, frontByTeam}) do
+        for team, entry in pairs(entries) do
             if isPermittedTeam(team) then
                 for _, lane in ipairs(entry.lanes) do
                     if #lane.pts >= 2 then
@@ -3638,6 +3641,7 @@ local seaLanes = (function()
                     end
                 end
             end
+        end
         end
         table.sort(all, function(a, b) return a.key < b.key end)
         local grid = {}
@@ -3688,7 +3692,7 @@ local seaLanes = (function()
             strands[#strands + 1] = { team = l.team, lane = l.lane, pts = pts }
         end
     end
-    local function receive(team, payload)
+    local function receive(team, payload, front)
         local parts = {}
         for v in (payload .. ";"):gmatch("(.-);") do parts[#parts + 1] = v end
         if parts[1] ~= "1" then return end
@@ -3705,7 +3709,7 @@ local seaLanes = (function()
                 entry.lanes[#entry.lanes + 1] = lane
             end
         end
-        byTeam[team] = entry
+        if front then frontByTeam[team] = entry else byTeam[team] = entry end
         rebuild()
     end
     local function colour(team, alpha)
@@ -3782,12 +3786,14 @@ local seaLanes = (function()
         if not showLanes then return end
         local k = LINE_PX * elmosPerPixel()
         gl.LineWidth(LINE_PX + 1.5); gl.Color(0, 0, 0, 0.45)
-        for _, st in ipairs(strands) do gl.BeginEnd(GL.LINE_STRIP, function() strandVertices(st, k, -1) end) end
+        for _, st in ipairs(strands) do if theatres.ShowsTeam(st.team) then gl.BeginEnd(GL.LINE_STRIP, function() strandVertices(st, k, -1) end) end end
         gl.LineWidth(LINE_PX)
         for _, st in ipairs(strands) do
+            if theatres.ShowsTeam(st.team) then
             local r, g, b = colour(st.team, 1)
             gl.Color(r, g, b, 0.95)
             gl.BeginEnd(GL.LINE_STRIP, function() strandVertices(st, k) end)
+            end
         end
         gl.LineWidth(1); gl.Color(1, 1, 1, 1)
     end
@@ -3855,7 +3861,7 @@ local seaLanes = (function()
             local seen = {}
             local function once(key) if seen[key] then return false end seen[key] = true return true end
             for team, entry in pairs(byTeam) do
-                if isPermittedTeam(team) then
+                if theatres.ShowsTeam(team) then
                     local r, g, b = colour(team, 1)
                     for _, lane in ipairs(entry.lanes) do
                         local pts = lane.pts
@@ -3908,18 +3914,23 @@ local seaLanes = (function()
         gl.Translate(0, sy, 0); gl.Scale(sx / mx, -sy / mz, 1)
         gl.LineWidth(1.5)
         for _, st in ipairs(strands) do
+            if theatres.ShowsTeam(st.team) then
             gl.Color(colour(st.team, 0.9))
             gl.BeginEnd(GL.LINE_STRIP, function() for _, p in ipairs(st.pts) do gl.Vertex(p[1], p[3], 0) end end)
+            end
         end
         gl.PopMatrix(); gl.LineWidth(1); gl.Color(1, 1, 1, 1)
     end
     local function textCommand(cmd)
         local what, state = cmd:match("^barb(%a+)%s*(%a*)$")
         if what == "tactics" then what = "tactical" end
-        if what ~= "tactical" and what ~= "sealanes" and what ~= "repair" then return false end
+        -- barblanes/barblandlanes/barbsealanes are the shared player/team/off
+        -- lane selection (widget:TextCommand, D-354); the tactical view's own
+        -- lane layer is barbtacticallanes (D-356: the old alias was unreachable).
+        if what ~= "tactical" and what ~= "tacticallanes" and what ~= "repair" then return false end
         local function set(current) if state == "on" then return true elseif state == "off" then return false end return not current end
         if what == "tactical" then show = set(show); territory.Set(show)
-        elseif what == "sealanes" then showLanes = set(showLanes); if showLanes then show = true end
+        elseif what == "tacticallanes" then showLanes = set(showLanes); if showLanes then show = true end
         else showRepair = set(showRepair); if showRepair then show = true end end
         Spring.Echo(string.format("[BARb link] tactical view %s (lanes %s, repair %s)", show and "on" or "off",
             showLanes and "on" or "off", showRepair and "on" or "off"))
@@ -3928,6 +3939,7 @@ local seaLanes = (function()
     return {
         Receive = receive, ReceiveRepair = receiveRepair, DrawWorld = drawWorld, DrawScreen = drawScreen, DrawMiniMap = drawMiniMap, TextCommand = textCommand,
         GetConfig = function() return { show = show, lanes = showLanes, repair = showRepair } end,
+        EnableLanes = function() show, showLanes = true, true end,
         Config = function(c)
             if type(c) ~= "table" then return end
             if c.show ~= nil then show = c.show == true end
@@ -4014,6 +4026,12 @@ local territory = (function()
         end)
     end
     local SPOT = 44
+    -- Membership checks reuse the lane selection; no geometry rebuild or
+    -- per-frame filtered arrays. Territory spots remain a separate layer.
+    local function laneVisible(lane)
+        for _, team in ipairs(lane.members) do if theatres.ShowsTeam(team) then return true end end
+        return false
+    end
     local function drawSpot(s)
         local r, g, b = colour(s.owner, 1)
         local rule = s.rule
@@ -4036,6 +4054,7 @@ local territory = (function()
                 end
                 gl.LineWidth(1.6)
                 for _, lane in ipairs(entry.lanes) do
+                    if laneVisible(lane) then
                     local r, g, b = colour(lane.members[1], 1)
                     gl.Color(r, g, b, 0.55)
                     if #lane.pts >= 2 then
@@ -4050,6 +4069,7 @@ local territory = (function()
                     if mx and mx >= 0 then gl.Color(1, 1, 1, 0.8); ring(mx, ground(mx, mz), mz, 60, 12) end
                     local cx, cz = lane.choke[1], lane.choke[2]
                     if cx and cx >= 0 then gl.Color(1, 0.85, 0.3, 0.9); gl.LineWidth(2.2); cross(cx, ground(cx, cz) + 4, cz, 70); gl.LineWidth(1.6) end
+                    end
                 end
                 gl.LineWidth(2)
                 for _, s in ipairs(entry.spots) do drawSpot(s) end
@@ -4074,9 +4094,11 @@ local territory = (function()
                 end)
                 gl.LineWidth(1)
                 for _, lane in ipairs(entry.lanes) do
+                    if laneVisible(lane) then
                     local r, g, b = colour(lane.members[1], 1)
                     gl.Color(r, g, b, 0.6)
                     gl.BeginEnd(GL.LINE_STRIP, function() for _, p in ipairs(lane.pts) do gl.Vertex(p[1], p[3], 0) end end)
+                    end
                 end
             end
         end
@@ -4105,6 +4127,7 @@ local territory = (function()
                     end
                 end
                 for _, lane in ipairs(entry.lanes) do
+                    if laneVisible(lane) then
                     local cx, cz = lane.choke[1], lane.choke[2]
                     if cx and cx >= 0 then
                         local sx, sy = toScreen(cx, ground(cx, cz), cz)
@@ -4112,6 +4135,7 @@ local territory = (function()
                             gl.Color(1, 0.85, 0.3, 1)
                             gl.Text(string.format("lane %d choke %s  P%s", lane.id or 0, lane.width >= 0 and (math.floor(lane.width) .. " wide") or "", table.concat(lane.members, "+")), sx, sy + 16, 11, "oc")
                         end
+                    end
                     end
                 end
                 local sx, sy = 12, 12
@@ -4155,6 +4179,7 @@ local function setTheatres(value)
         if mayCommand(id) and (value~="team" or ais[id].allyTeam==selectedAlly) then ids[#ids+1]=id end
     end
     theatres.SetMode(value,ids)
+    if value~=nil then seaLanes.EnableLanes() end
     local function request(id)
         theatrePending[id]={time=Spring.GetTimer(),frame=spGetGameFrame()}
         theatres.Requested(id)
@@ -4531,6 +4556,8 @@ local function onAIMessage(aiTeam, dataStr)
 		addEvent(string.format("Team %d sea assist: %s", sender, rest), "info")
 	elseif topic == "sealanes" and sender == aiTeam then
 		seaLanes.Receive(sender, table.concat(p, "|", 5))
+	elseif topic == "frontlanes" and sender == aiTeam then
+		seaLanes.Receive(sender, table.concat(p, "|", 5), true)
 	elseif topic == "territory" and sender == aiTeam then
 		territory.Receive(sender, table.concat(p, "|", 5))
 	elseif topic == "searepair" and sender == aiTeam then
@@ -5150,6 +5177,17 @@ function widget:MouseWheel(up, value)
 end
 
 function widget:TextCommand(cmd)
+	local laneCommand, laneMode = cmd:match("^barb(%a+)%s*(%a*)$")
+	if laneCommand=="lanes" or laneCommand=="landlanes" or laneCommand=="sealanes" then
+		-- D-356: with no player selected, "on"/"player" show the member team's
+		-- lanes rather than nothing (the older barbtheatres fell back the same way).
+		if laneMode=="off" or laneMode=="hide" then setTheatres(nil)
+		elseif laneMode=="team" then setTheatres("team")
+		elseif laneMode=="player" or laneMode=="on" then setTheatres(selected or "team")
+		elseif laneMode=="" then if theatres.Mode() then setTheatres(nil) else setTheatres(selected or "team") end
+		else return false end
+		return true
+	end
 	if field.TextCommand(cmd) then return true end
 	if marks.TextCommand(cmd) then return true end
 	if seaLanes.TextCommand(cmd) then return true end

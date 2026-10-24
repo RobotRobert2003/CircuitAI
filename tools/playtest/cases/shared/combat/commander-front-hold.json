@@ -1,0 +1,71 @@
+{
+  "commander_overrides": {"front_push_screen": 0},
+  "name": "commander-front-hold",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "After the opener, advance along a short lane and hold the front without engine patrol acquisition.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      1800
+    ],
+    [
+      4000,
+      4300
+    ]
+  ],
+  "camera": [
+    4000,
+    3000,
+    2800
+  ],
+  "photos": [
+    60,
+    120,
+    180
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "hold_friendly": true,
+  "groups": [
+    {
+      "unit": "armlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3900,
+        1700
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3800,
+        1700
+      ],
+      "after_seconds": 45
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "checks": "commander-front-hold",
+  "commander_front_work": true,
+  "commander_initial": true,
+  "start_metal": 100000,
+  "commander_trace": true,
+  "coverage_probe": true,
+  "coverage_loss_teams": [0],
+  "coverage_min_advance": 600,
+  "enemy_commander_home": true
+}

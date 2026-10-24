@@ -26,8 +26,13 @@ public:
 	virtual void OnUnitIdle(CCircuitUnit* unit) override;
 	virtual void OnUnitDestroyed(CCircuitUnit* unit, CEnemyInfo* attacker) override;
 
+	// Configure before assignment. Clear the predecessor's queue and use engine
+	// WAIT so an idle mobile cannot generate an automatic chase command.
+	void SetStationary(bool value) { isStationary = value; if (value) isStop = true; }
+
 protected:
 	bool isStop;
+	bool isStationary = false;
 };
 
 } // namespace circuit

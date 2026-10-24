@@ -1,0 +1,67 @@
+{
+  "name": "coverage-sea-supreme",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "SEA",
+  "description": "Two supplied shipyards publish distinct distributed routes through the same connected sea. Own SEA builder policy stays active to initialize the role and its production-factory registry.",
+  "map": "Supreme Isthmus v1.7",
+  "map_key": "supreme",
+  "starts": [
+    [
+      7492,
+      1220
+    ],
+    [
+      2000,
+      3000
+    ]
+  ],
+  "camera": [
+    5000,
+    3500,
+    12000
+  ],
+  "photos": [
+    45,
+    100
+  ],
+  "min_spawn_spacing": 96,
+  "commander_observation": true,
+  "commander_initial": true,
+  "command_breakdown": true,
+  "hold_all": true,
+  "hold_friendly": true,
+  "start_metal": 1000,
+  "checks": "coverage-sea-supreme",
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "groups": [
+    {
+      "unit": "armsy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        6000,
+        1200
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armsy",
+      "team": 0,
+      "count": 1,
+      "position": [
+        5500,
+        1700
+      ],
+      "after_seconds": 12
+    }
+  ],
+  "coverage_overlay": true,
+  "builders": true,
+  "camera_angle": 0.1
+}

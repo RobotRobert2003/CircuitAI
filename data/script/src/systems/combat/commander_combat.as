@@ -1,4 +1,5 @@
 #include "../../global.as"
+#include "../world/coverage_lanes.as"
 
 namespace CommanderCombat {
     int appliedRole=-1;
@@ -31,6 +32,7 @@ namespace CommanderCombat {
         appliedRole=-1;
     }
     void Update() {
+        CoverageLanes::Tick();
         // Configure once per role transition. Native observes only the maintained
         // commander registry; script does not scan units or issue combat orders.
         const int role=int(Global::AISettings::Role);
@@ -38,10 +40,25 @@ namespace CommanderCombat {
         if(role!=appliedRole || side!=appliedSide) {
             appliedRole=role;
             appliedSide=side;
-            const bool front=role==int(AiRole::FRONT) || role==int(AiRole::TACTICAL);
+            // D-356: the roles whose commander leaves home at all come from the
+            // profile (commander.json advance_roles); SEA, AIR, TECH and SUPPORT
+            // commanders stay home by default (no D-gun under water, build
+            // power worth more at the base). front_duty (the lane push and the
+            // work ladder) stays FRONT-only; INV-236 checks the pair natively.
+            bool front=false;
+            {
+                array<string>@ roles=aiSetupMgr.ConfigString("commander/combat/advance_roles","FRONT,TACTICAL").split(",");
+                const string own=Team::Roster::RoleName(Global::AISettings::Role);
+                for(uint i=0;i<roles.length();++i) {
+                    string name=roles[i];
+                    while(name.length()>0 && name.substr(0,1)==" ") name=name.substr(1);
+                    while(name.length()>0 && name.substr(name.length()-1,1)==" ") name=name.substr(0,name.length()-1);
+                    if(name==own) front=true;
+                }
+            }
             Option("enabled",Global::Commander::Enabled?1.f:0.f);
             Option("advance",front?1.f:0.f);
-            aiBuilderMgr.SetCommanderCombatOption("front_duty",role==int(AiRole::FRONT)?1.f:0.f);
+            aiBuilderMgr.SetCommanderCombatOption("front_duty",(role==int(AiRole::FRONT) && front)?1.f:0.f);
             Option("leash",front?Global::Commander::FrontLeash:Global::Commander::HomeLeash);
             Option("scan",Global::Commander::Scan);
             Option("support",Global::Commander::SupportMetal);
@@ -62,12 +79,30 @@ namespace CommanderCombat {
             Option("friendly_margin",Global::Commander::FriendlyMargin);
             Option("front_workers",Global::Commander::FrontWorkers);
             Option("front_distance",Global::Commander::FrontDistance);
+            Option("front_push_ahead",0.f);
+            // D-356 push bound and end; D-357 corridor mex sweep. JSON supplies the
+            // policy; the fallbacks equal the native defaults (legacy behaviour).
+            Option("front_push_screen",0.f);
+            Option("front_push_until_seconds",0.f);
+            Option("front_push_home_riot",0.f);
+            Option("front_lane_margin",0.f);
+            Option("front_mex_reach",0.f);
+            Option("front_mex_behind",400.f);
+            Option("front_mex_ahead",600.f);
+            Option("front_mex_capture_enemy",0.f);
+            Option("front_mex_turret_every",0.f);
+            Option("front_mex_enemy_home",0.f);
             Option("front_standoff",Global::Commander::FrontStandoff);
             Option("front_radius",Global::Commander::FrontRadius);
             Option("front_threat",Global::Commander::FrontThreat);
             Option("front_recovery",Global::Commander::FrontRecovery?1.f:0.f);
             Option("front_mex_seconds",Global::Commander::FrontMexSeconds);
             Option("front_stall_seconds",Global::Commander::FrontStallSeconds);
+            Option("front_detour_seconds",0.f);
+            Option("move_resend_seconds",0.f);
+            Option("t3_decline_gate",0.f);
+            Option("t3_immediate_shot",0.f);
+            Option("t3_position_seconds",0.f);
             Option("t3_intercept",Global::Commander::T3Intercept);
             Option("t3_health",Global::Commander::T3Health);
             Option("t3_distance",Global::Commander::T3Distance);

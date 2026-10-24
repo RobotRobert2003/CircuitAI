@@ -25,7 +25,7 @@ public:
 private:
     IUnitTask* previous;
     int oldFire=2,oldMove=1;
-    bool oldCloak=false;
+    bool oldCloak=false,restored=false;
     void Restore(CCircuitUnit* unit);
 };
 }

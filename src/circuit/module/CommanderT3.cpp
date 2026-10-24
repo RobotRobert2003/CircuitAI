@@ -10,6 +10,7 @@
 #include "unit/enemy/EnemyUnit.h"
 #include "setup/SetupManager.h"
 #include "terrain/TerrainManager.h"
+#include "terrain/BattleAnalysis.h"
 #include "spring/SpringMap.h"
 #include "spring/SpringUnit.h"
 #include "CircuitAI.h"
@@ -119,6 +120,7 @@ void CCommanderControl::Decline(CCircuitUnit* unit,State& s,const commander::Con
 }
 
 void CCommanderControl::EndT3(CCircuitUnit* unit,State& s,int frame,const char* reason) {
+    s.t3PositionUntil=0; s.t3PositionTarget=-1;
     if(s.t3ScreenDef>=0) {
         if(dynamic_cast<CCommanderTask*>(unit->GetTask())) { TRY_UNIT(ai,unit,unit->CmdStop();) }
         s.t3ScreenDef=-1; s.t3ScreenUnit=-1;
@@ -170,16 +172,59 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         s.t3LastShot=s.fired; ++s.t3Shots; s.t3JukeSide=-s.t3JukeSide; s.t3DeclineFails=0;
         s.t3JukeUntil=s.fired+int(s.t3Juke>0?FRAMES_PER_SEC*.8f:0);
     }
-    if(s.t3Target>=0 && s.pending>=0) {
+    if(s.pending<0) s.immediatePending=false;
+    if(s.pending>=0 && (s.t3Target>=0 || s.immediatePending)) {
         if(unit->GetDGunReloadFrame()>frame) { s.fired=frame; s.pending=-1; }
         else if(frame-s.pending>30) {
             s.pending=-1; s.leaseUntil=0;
             ai->GetAllyTeam()->GetCommanderShots().Release(ai->GetTeamId(),unit->GetId());
         } else return true;
+        s.immediatePending=false;
     }
+    // Owner 2026-10-23: an available T3 shot wins over concealment, approach,
+    // retreat and predicted death. Only this explicit policy accepts that risk;
+    // the shared line geometry, weapon readiness and exclusive owner still apply.
+    // This precedes retry/decline gates so a target walking into reach is not
+    // delayed by a previously rejected approach. No extra observation is made.
+    if(options.t3ImmediateShot>0 && pos.y>=0.f && !unit->GetDGunAct()
+        && unit->IsDGunReady(frame,ai->GetEconomyManager()->GetEnergyCur()-std::max(0.f,reserve))) {
+        const float projectile=std::max(1.f,def->GetDGunDef()->GetDef()->GetProjectileSpeed()*30.f);
+        const float width=std::min(24.f,std::max(4.f,def->GetDGunDef()->GetAoe()*.25f));
+        const auto line=commander::ImmediateT3Line(contacts,P(pos),unit->GetDGunRange()-12,
+            projectile,width,options.killReward,options.friendlyMargin);
+        if(line.target>=0) {
+            if(!task) {
+                task=ai->GetBuilderManager()->EnqueueCommander(unit->GetTask());
+                ai->GetBuilderManager()->AssignTask(unit,task);
+                if(unit->GetTask()!=task) { ai->GetBuilderManager()->AbortTask(task); return true; }
+                s.started=frame; s.cloak=unit->GetUnit()->IsCloaked(); ++operation;
+                unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
+            }
+            if(task->GetAssignees().size()!=1 || !task->GetAssignees().count(unit)) return true;
+            EndT3(unit,s,frame,"immediate_shot");
+            s.afusEngagement=false;
+            acceptIntercept();
+            s.t3DeclineFails=0;
+            const bool immediateConcealed=unit->GetUnit()->IsCloaked();
+            if(Fire(unit,s,line,frame,true)) {
+                s.immediatePending=true;
+                ai->LOG("[CommanderT3] unit=%i target=%i action=fire immediate=1 concealed=%i frame=%i",unit->GetId(),line.target,int(immediateConcealed),frame);
+                if(protectedAfus>=0) ai->LOG("[CommanderBase] unit=%i afus=%i target=%i tier=3 action=fire concealed=%i frame=%i",
+                    unit->GetId(),protectedAfus,line.target,int(unit->GetUnit()->IsCloaked()),frame);
+                return true;
+            }
+        }
+    }
+    if(!task && frame<s.retry) return false;
     if(options.t3Intercept<=0 || !cap.cloak) { s.fundingBudget=0; EndT3(unit,s,frame,"disabled"); return false; }
 
     const bool baseDefence=protectedAfus>=0;
+    // Strategic pursuit stays in the published FRONT corridor. This is an
+    // O(1) grid read; immediate shots above and escape/juke moves stay reactive.
+    const auto inLane=[&](const AIFloat3& point) {
+        return ai->GetBattle()->GetFrontLaneLength()<=0.f
+            || ai->GetBattle()->GetFrontLaneDistance(point)<=ai->GetBattle()->GetFrontLaneWidth();
+    };
     if(s.afusEngagement && !baseDefence) {
         // Fresh observation handles AFUS destruction, transfer and leaving its
         // radius. Do not let lost-contact memory pursue a T1/T2 outside scope.
@@ -296,7 +341,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
                     AIFloat3 station=F(last+(from*.5f+across*(sideSign*.87f))*off);
                     station.y=ai->GetMap()->GetElevationAt(station.x,station.z);
                     const float seconds=(station-pos).Length2D()/std::max(1.f,cap.speed)+.3f;
-                    if(station.y<0 || !OnMap(station) || station.SqDistance2D(s.t3Anchor)>SQUARE(T3Leash(s))
+                    if(station.y<0 || !OnMap(station) || !inLane(station) || station.SqDistance2D(s.t3Anchor)>SQUARE(T3Leash(s))
                         || shelledPath(P(pos),P(station)) || !ai->GetTerrainManager()->CanReachAt(unit,station,64)
                         || !CloakSafe(unit,P(pos),P(station),seconds)) continue;
                     if(seconds<bestSeconds) { bestSeconds=seconds; best=station; }
@@ -632,7 +677,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
             if(nearest>range-16.f) {
                 AIFloat3 close=F(target->pos-toTarget*(target->radius+s.t3Standoff));
                 close.y=ai->GetMap()->GetElevationAt(close.x,close.z);
-                if(close.y>=0 && OnMap(close) && ai->GetTerrainManager()->CanReachAt(unit,close,64)) Move(unit,s,close,frame);
+                if(close.y>=0 && OnMap(close) && inLane(close) && ai->GetTerrainManager()->CanReachAt(unit,close,64)) Move(unit,s,close,frame);
             }
             return true;
         }
@@ -663,6 +708,16 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
     if(approach==T3_HOLD && !(s.t3Artillery && options.t3Hunt<=0)
         && frame-s.t3Progress>int(options.t3HoldSeconds*FRAMES_PER_SEC)) approach=T3_FLANK;
     Transition(unit,s,submerged || approach==T3_HOLD?Mode::ASSESS:Mode::APPROACH,frame);
+    // Retain only this engagement's live approach queue, for a bounded interval.
+    // Danger, shot readiness and ownership were rechecked above; invalid paths,
+    // new targets, failures, arrival and expiry replan immediately. This avoids
+    // rotating stations on every observation without limiting combat reactions.
+    if(options.t3PositionSeconds>0 && frame<s.t3PositionUntil && s.t3PositionTarget==target->id
+        && !s.route.empty() && s.goal.SqDistance2D(pos)>64.f
+        && s.goal.y>=0 && inLane(s.goal) && s.goal.SqDistance2D(s.t3Anchor)<=SQUARE(T3Leash(s))
+        && !shelledPath(P(pos),P(s.goal))
+        && (revealed || CloakSafe(unit,P(pos),P(s.goal),pos.distance2D(s.goal)/std::max(1.f,cap.speed)+.3f))
+        && ai->GetUnitAPI()->HasRouteIntent(unit->GetId(),s.route,frame)) return true;
     AIFloat3 goal=pos; float bestScore=-std::numeric_limits<float>::max(); bool found=false;
     int rejected[4]={0,0,0,0}; // water/leash, unreachable, detected, no lane
     {
@@ -758,7 +813,7 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
             const float seconds=(station-pos).Length2D()/std::max(1.f,cap.speed)+.3f;
             // The engine paths around our own line; straight-line sampling
             // (Route) is for short local steps and rejects every gap.
-            if(station.y<0 || !OnMap(station) || station.SqDistance2D(s.t3Anchor)>SQUARE(T3Leash(s))
+            if(station.y<0 || !OnMap(station) || !inLane(station) || station.SqDistance2D(s.t3Anchor)>SQUARE(T3Leash(s))
                 || seconds+1.5f>deadline[i]
                 // A hunt is the run out through the line artillery is shelling:
                 // check only where it ends (b30 legelrpcmech never left the line).
@@ -789,7 +844,11 @@ bool CCommanderControl::Intercept(CCircuitUnit* unit,State& s,int frame) {
         clear.y=ai->GetMap()->GetElevationAt(clear.x,clear.z);
         if(clear.y>=0 && OnMap(clear) && !shelled(P(clear))) { goal=clear; found=true; }
     }
-    if(found && goal.SqDistance2D(pos)>8.f*8.f && (cloaked || engaged || revealed)) Move(unit,s,goal,frame);
+    if(found && goal.SqDistance2D(pos)>8.f*8.f && (cloaked || engaged || revealed)) {
+        Move(unit,s,goal,frame);
+        s.t3PositionUntil=frame+int(options.t3PositionSeconds*FRAMES_PER_SEC);
+        s.t3PositionTarget=target->id;
+    }
     else if(ai->GetUnitAPI()->HasQueuedCommand(unit->GetId(),CMD_MOVE)) {
         // A previous scout/approach order may outlive its legal station after
         // reacquisition or detector movement. This task owns the queue; cancel

@@ -19,6 +19,25 @@ class LaneUIMemoryTests(unittest.TestCase):
         self.lua.execute((ROOT / 'tools/widgets/gui_barb_team_link.lua').read_text(encoding='utf-8'))
         self.lua.execute("widget:Initialize(); WG.barblink.SetOpen(true); WG.barblink.TheatreOptions({x=8,y=1000})")
 
+    def test_front_publication_does_not_replace_sea_routes(self):
+        sea, both, cleared = self.lua.execute('''
+            WG.barblink.SetTheatres('all')
+            local vertices=0
+            gl.Vertex=function() vertices=vertices+1 end
+            local function draw()
+                vertices=0;widget:DrawWorld();return vertices
+            end
+            widget:RecvSkirmishAIMessage(0,'barb|sealanes|0|0|1;10;42,0,-1,100,100,500,500')
+            local sea=draw()
+            widget:RecvSkirmishAIMessage(0,'barb|frontlanes|0|0|1;11;0,2,-1,100,700,500,1100')
+            local both=draw()
+            widget:RecvSkirmishAIMessage(0,'barb|frontlanes|0|0|1;12')
+            return sea,both,draw()
+        ''')
+        self.assertGreater(sea, 0)
+        self.assertGreater(both, sea)
+        self.assertEqual(cleared, sea)
+
     def test_all_players_frame_allocation_and_retained_memory(self):
         allocated, retained = self.lua.execute('''
             for team=0,15 do publish(team,9,400) end
@@ -35,6 +54,42 @@ class LaneUIMemoryTests(unittest.TestCase):
         self.assertLess(allocated, 256, f'per-frame allocation: {allocated:.1f} KiB')
         self.assertLess(retained, 128, f'retained growth: {retained:.1f} KiB')
         print(f'all-player fixture: peak {allocated:.1f} KiB/frame, retained delta {retained:.1f} KiB')
+
+    def test_published_routes_follow_buttons_on_every_surface(self):
+        self.lua.execute('''
+            for _,team in ipairs({0,1,8}) do
+                for _,kind in ipairs({'sealanes','frontlanes'}) do
+                    widget:RecvSkirmishAIMessage(team,'barb|'..kind..'|'..team..'|'..math.floor(team/8)..'|1;10;42,0,-1,100,100,500,500')
+                end
+                if team~=1 then
+                    widget:RecvSkirmishAIMessage(team,'barb|territory|'..team..'|'..math.floor(team/8)..'|1;10;11;900;L,1,300,300,400,400,100,'..team..',100:100,500:500')
+                end
+            end
+            local function counts()
+                WG.barblink.SetOpen(false)
+                local result={}
+                for i,draw in ipairs({function() widget:DrawWorld() end,
+                    function() widget:DrawInMiniMap(200,100) end,
+                    function() widget:DrawScreen() end}) do
+                    local n=0;gl.Vertex=function() n=n+1 end;draw();result[i]=n
+                end
+                WG.barblink.SetOpen(true)
+                return result
+            end
+            local function button(id) widget:DrawScreen();click(id) end
+            for _,n in ipairs(counts()) do assert(n==0,'default hidden') end
+            button('lanesPlayer');local player=counts()
+            button('lanesTeam');local team=counts()
+            for i=1,3 do assert(player[i]>0 and team[i]>player[i],'surface filter '..i) end
+            button('ally1');local other=counts()
+            for i=1,3 do assert(other[i]==player[i],'ally selection '..i) end
+            button('lanesOff')
+            for _,n in ipairs(counts()) do assert(n==0,'Hide must remove every route surface') end
+            widget:TextCommand('barblanes player')
+            for i,n in ipairs(counts()) do assert(n==player[i],'command player') end
+            widget:TextCommand('barbsealanes off')
+            for _,n in ipairs(counts()) do assert(n==0,'alias hide') end
+        ''')
 
     def test_player_selection_preserves_all_mode_and_follows_player_mode(self):
         self.lua.execute('''

@@ -10,6 +10,28 @@ static Contact Enemy(int id,float x,float z,float cost=100) {
     Contact c; c.id=id; c.pos={x,z}; c.radius=12; c.cost=cost; c.health=500; c.damage=99999; return c;
 }
 int main(int argc,char** argv) {
+    // Immediate T3 shots ignore approach/risk policy, but never the physical
+    // lane, allied shot reservations, surface eligibility or friendly veto.
+    {
+        auto heavy=Enemy(1,190,0,5000); heavy.t3=true;
+        auto light=Enemy(2,100,80,100);
+        std::vector<Contact> scene{heavy,light};
+        assert(ImmediateT3Line(scene,{0,0},238,900,8,45,12).target==1);
+        auto ally=Enemy(3,100,0); ally.friendly=true;
+        scene.push_back(ally);
+        assert(ImmediateT3Line(scene,{0,0},238,900,8,45,12).target<0);
+        scene.pop_back();
+        scene[0].reserved=true;
+        assert(ImmediateT3Line(scene,{0,0},238,900,8,45,12).target<0);
+        scene[0].reserved=false; scene[0].height=-100;
+        assert(ImmediateT3Line(scene,{0,0},238,900,8,45,12).target<0);
+        scene[0].height=0; scene[0].pos={400,0};
+        assert(ImmediateT3Line(scene,{0,0},238,900,8,45,12).target<0);
+        scene[0].pos={190,0}; scene[0].velocity={0,40};
+        assert(ImmediateT3Line(scene,{0,0},238,900,8,45,12).target==1);
+        scene[0].t3=false;
+        assert(ImmediateT3Line(scene,{0,0},238,900,8,45,12).target<0);
+    }
     // AFUS defence: tier outranks distance/cost/retained lower-tier ownership;
     // stable equal-tier ownership, then deterministic distance/ID ties.
     assert(PreferDefenceTarget(3,9,900,2,1,100,1));
@@ -162,6 +184,29 @@ int main(int argc,char** argv) {
     assert(CollisionHits(40,520)==6.f);
     assert(!Survivable(3700,3700,1200*CollisionHits(40,520),.2f));
     assert(CollisionHits(0,520)==1.f);
+    // D-356 lane push anchor: screen-led, capped by front_distance and the lane limit.
+    {
+        // Legacy unscreened push leads the commander's own progress by push_ahead.
+        auto a=LanePushAnchor(1000,-1,0,0,600,6000,9000);
+        assert(a.screened && a.progress==1600 && a.bound==1600);
+        // A screen ahead pulls the unscreened anchor further than the commander alone.
+        a=LanePushAnchor(1000,2200,2,0,600,6000,9000);
+        assert(a.progress==2800);
+        // Screen-led: one corridor screen required and present, lead it by push_ahead.
+        a=LanePushAnchor(1000,2200,1,1,600,6000,9000);
+        assert(a.screened && a.progress==2800);
+        // Screen required and absent: hold where the commander stands.
+        a=LanePushAnchor(1000,-1,0,1,600,6000,9000);
+        assert(!a.screened && a.progress==1000 && a.bound==1000);
+        // A screen behind the commander takes it back toward the army.
+        a=LanePushAnchor(3000,2000,1,1,600,6000,9000);
+        assert(a.progress==2600);
+        // front_distance caps every mode; so does the lane limit; never negative.
+        assert(LanePushAnchor(5800,7000,1,1,600,6000,9000).progress==6000);
+        assert(LanePushAnchor(5800,7000,1,1,600,9000,6400).progress==6400);
+        assert(LanePushAnchor(100,-1,0,1,600,6000,9000).progress==100);
+        assert(LanePushAnchor(0,-1,0,0,600,6000,0).progress==0);
+    }
     if(argc>1 && std::string(argv[1])=="--benchmark") {
         std::vector<Attacker> crowd; for(int i=0;i<400;++i) crowd.push_back({{value(rng)*.25f,value(rng)*.25f},100});
         float groupMetal=0;

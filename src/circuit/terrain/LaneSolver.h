@@ -95,6 +95,13 @@ class Solver final : private Settings {
 public:
     explicit Solver(const Terrain& terrain, Settings settings = {}, const std::atomic<bool>* cancel = nullptr);
     std::vector<Route> Run(const Request& request);
+    // Strategic coverage within the origin's connected movement component.
+    // Policy supplies the lateral seat and tolerances; terrain quantiles make
+    // seats compress at a choke and fan out again beyond it. No live threats.
+    std::vector<int> DistributedRoute(const Point& from, const Point& to,
+        const Point& axisFrom, const Point& axisTo, int cls, float share, int seats,
+        float tolerance, float spacingWeight, float resourceWeight,
+        const std::vector<Point>& resources) const;
     // Point-to-point terrain route, with policy-supplied travel costs and threat ceiling.
     // Empty means unreachable; never snap either end across an impassable cell.
     std::vector<int> PointRoute(const Point& from, const Point& to, int cls, const Grid& threat,

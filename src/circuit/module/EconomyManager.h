@@ -20,6 +20,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <functional>
 #include <string>
 
 namespace springai {
@@ -120,7 +121,21 @@ public:
 	// our own economy's fields the script lacked (D-106)
 	float GetOwnEco(int resource, int field);
 	int GetClaimedMexCountWithin(CCircuitUnit* builder, const springai::AIFloat3& center, float radius, int maxSpots);
-	IBuilderTask* EnqueueMexWithin(CCircuitUnit* builder, const springai::AIFloat3& center, float radius, int maxSpots, bool allyAware = false, const std::vector<springai::AIFloat3>& excluded = {});
+	// D-357: an optional caller predicate narrows the candidate spots (the FRONT
+	// commander's corridor window); an empty predicate is the exact old path.
+	using MexAccept = std::function<bool(const springai::AIFloat3&)>;
+	IBuilderTask* EnqueueMexWithin(CCircuitUnit* builder, const springai::AIFloat3& center, float radius, int maxSpots, bool allyAware = false, const std::vector<springai::AIFloat3>& excluded = {}, const MexAccept& accept = {});
+	// The dry form of EnqueueMexWithin's new-spot admission: open, reachable,
+	// allowed, buildable spots the builder could be offered now; no claim is made.
+	int CountOpenMexWithin(CCircuitUnit* builder, const springai::AIFloat3& center, float radius, bool allyAware, const MexAccept& accept = {});
+	// D-357: a FRONT ally's published coverage corridor (its lane polyline and
+	// half-width). Clusters inside it are that ally's lane clusters during the
+	// land window (resource/MexTerritory.h rule 2); an empty polyline clears it.
+	struct SMexCorridor {
+		std::vector<springai::AIFloat3> points;
+		float halfWidth = 384.f, length = 0.f;
+	};
+	void SetMexCorridor(int team, const std::vector<springai::AIFloat3>& points, float halfWidth);
 	// D-072: a metal spot belongs to the team whose start position is nearest
 	// to it; the script feeds the allies' starts (the roster) and the ally-aware
 	// mex enqueue leaves the others' spots alone.
@@ -476,6 +491,9 @@ private:
 		float arrive = 0.f, secure = 0.f, enemy = 0.f;
 	};
 	std::map<int, SMexClaim> mexClaims;
+	// D-357: published FRONT corridors by team; resolved per spot in RebuildMexTerritory
+	// (O(spots x corridors x points), a few times per game, never per frame).
+	std::map<int, SMexCorridor> mexCorridors;
 	std::vector<SMexEnemy> mexEnemies;
 	std::vector<std::pair<int, float>> mexEnemySeeds;
 	std::uint64_t mexEnemySeedRevision = 0;

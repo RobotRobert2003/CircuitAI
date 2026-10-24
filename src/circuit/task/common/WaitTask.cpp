@@ -50,17 +50,22 @@ void IWaitTask::Start(CCircuitUnit* unit)
 	CCircuitAI* circuit = manager->GetCircuit();
 	CUnitAPI* unitAPI = circuit->GetUnitAPI();
 	int cmdSize = unitAPI->GetCMDQueueSize(unit->GetId());
-	if (cmdSize == 0) {
-		return;
+	if (cmdSize > 0) {
+		std::vector<float> params;
+		params.reserve(cmdSize);
+		for (int commandIdx = 0; commandIdx < cmdSize; ++commandIdx) {
+			params.push_back(unitAPI->GetCMD(unit->GetId(), commandIdx));
+		}
+		TRY_UNIT(circuit, unit,
+			unit->CmdRemove(std::move(params), UNIT_COMMAND_OPTION_ALT_KEY | UNIT_COMMAND_OPTION_CONTROL_KEY);
+		)
 	}
-	std::vector<float> params;
-	params.reserve(cmdSize);
-	for (int commandIdx = 0; commandIdx < cmdSize; ++commandIdx) {
-		params.push_back(unitAPI->GetCMD(unit->GetId(), commandIdx));
+	if (isStationary) {
+		// Queue removal above is ordered before this WAIT. Do not consult the
+		// unit's cached command (it may still describe the removed WAIT).
+		// IUnitTask::AssignTo removes WAIT on every subsequent owner handover.
+		TRY_UNIT(circuit, unit, unit->GetUnit()->Wait();)
 	}
-	TRY_UNIT(circuit, unit,
-		unit->CmdRemove(std::move(params), UNIT_COMMAND_OPTION_ALT_KEY | UNIT_COMMAND_OPTION_CONTROL_KEY);
-	)
 }
 
 void IWaitTask::Update()

@@ -3,6 +3,7 @@
 #include "module/EconomyManager.h"
 #include "module/MilitaryManager.h"
 #include "task/builder/CommanderTask.h"
+#include "task/common/WaitTask.h"
 #include "unit/CircuitUnit.h"
 #include "unit/enemy/EnemyManager.h"
 #include "setup/SetupManager.h"
@@ -11,6 +12,7 @@
 #include "spring/SpringUnit.h"
 #include "map/ThreatMap.h"
 #include "terrain/TerrainManager.h"
+#include "terrain/BattleAnalysis.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 #include "Log.h"
@@ -25,6 +27,82 @@ AIFloat3 CCommanderControl::FrontPosition(CCircuitUnit* unit,State& s,int frame)
     // Positions expire after one second; combat still observes every 3 frames.
     if(frame<s.frontFrame+30) return s.front;
     s.frontFrame=frame;
+    auto* battle=ai->GetBattle();
+    if(battle->GetFrontLaneLength()>0.f) {
+        // D-356: the meta's "com forward until the first riot units appear,
+        // then home". Once home, the lane has no front for this commander:
+        // the ladder's base rungs (assist, plants) keep it busy at home.
+        if(PushHome(unit,s,frame)) { s.pushBound=-1; s.pushGoalProgress=-1; return s.front={-1,0,-1}; }
+        const float length=battle->GetFrontLaneLength();
+        const float limit=std::max(0.f,length-options.frontStandoff);
+        const float own=battle->GetFrontLaneProgress(unit->GetPos(frame));
+        float advance=std::min(limit,std::min(options.frontDistance,length*.5f));
+        // One existing bounded friendly query; only screens in our assigned
+        // corridor advance this commander. Neighbouring lanes cannot pull it.
+        // Legacy anchor: any mobile builder or attacker ahead pulls it forward.
+        // Push anchor: combat units only are a screen (D-356); builders are not.
+        int screens=0; float furthestScreen=-1,furthestAny=-1;
+        const auto& ids=ai->GetCallback()->GetFriendlyUnitIdsIn(unit->GetPos(frame),options.scan,false);
+        for(int id:ids) {
+            if(id==unit->GetId())continue;
+            auto* def=ai->GetCircuitDefSafe(ai->GetCallback()->Unit_GetDefId(id));
+            if(!def || !def->IsMobile() || def->IsAbleToFly() || def->IsRoleComm()
+                || (!def->IsBuilder() && !def->IsAttacker()))continue;
+            float raw[3]={NAN,NAN,NAN};ai->GetUnitAPI()->GetPosition(id,raw);
+            const AIFloat3 p(raw[0],raw[1],raw[2]);
+            if(!std::isfinite(p.x) || !std::isfinite(p.z) || battle->GetFrontLaneDistance(p)>battle->GetFrontLaneWidth())continue;
+            const float progress=battle->GetFrontLaneProgress(p);
+            furthestAny=std::max(furthestAny,progress);
+            if(def->IsAttacker()) { ++screens; furthestScreen=std::max(furthestScreen,progress); }
+        }
+        if(options.frontPushAhead>0) {
+            const auto push=commander::LanePushAnchor(own,furthestScreen,screens,int(options.frontPushScreen),
+                options.frontPushAhead,options.frontDistance,limit);
+            advance=push.progress;
+            s.pushScreens=screens; s.pushScreenProgress=furthestScreen; s.pushBound=push.bound;
+        } else if(furthestAny>=0) {
+            advance=std::max(advance,std::min(limit,furthestAny-100.f));
+            s.pushBound=-1;
+        }
+        // Cached observed enemy groups, not hidden enemy positions. An edge
+        // threat within this corridor arrests its own commander's advance.
+        for(const auto& group:ai->GetEnemyManager()->GetEnemyGroups())
+            if(battle->GetFrontLaneDistance(group.pos)<=battle->GetFrontLaneWidth())
+                advance=std::min(advance,std::max(0.f,battle->GetFrontLaneProgress(group.pos)-options.frontStandoff));
+        auto anchor=battle->GetFrontLanePoint(advance);
+        anchor.y=ai->GetMap()->GetElevationAt(anchor.x,anchor.z);
+        if(!OnMap(anchor) || !ai->GetTerrainManager()->CanReachAt(unit,anchor,64)
+            || ai->GetThreatMap()->GetThreatAt(unit,anchor)>options.frontThreat) {
+            // Legacy: keep the last safe front. Push (D-356): the last front
+            // may lie beyond the bound the screens now give (they fell back
+            // while the fresh anchor is exposed); it is then no longer a legal
+            // goal (INV-234 fired 160 times in the b03 Supreme natural game),
+            // so the commander holds where it stands until the anchor clears.
+            // The unscreened push (front_push_screen 0) keeps the legacy rule:
+            // its only bound is front_distance, and a commander that fell back
+            // in combat walks to its last safe front again.
+            if(options.frontPushAhead>0 && options.frontPushScreen>0 && s.front.x>=0
+                && battle->GetFrontLaneProgress(s.front)>std::min(options.frontDistance,s.pushBound)) {
+                s.route.clear();
+                // Standing beyond the bound itself (the screens fell back past
+                // the commander) leaves no legal front: local work and combat
+                // own the commander until the anchor clears (b04 Glacial:
+                // holding in place at 1178 against a bound of 962 fired INV-234).
+                if(own>std::min(options.frontDistance,s.pushBound)) { s.pushGoalProgress=-1; return s.front={-1,0,-1}; }
+                auto hold=battle->GetFrontLanePoint(std::min(own,limit));
+                hold.y=ai->GetMap()->GetElevationAt(hold.x,hold.z);
+                s.pushGoalProgress=std::min(own,limit);
+                return s.front=hold;
+            }
+            return battle->GetFrontLaneDistance(s.front)<=battle->GetFrontLaneWidth()?s.front:AIFloat3(-1,0,-1);
+        }
+        // A moving forward anchor is not a changed short-step intent. Keep the
+        // owned queue; only a newly retreating boundary invalidates its goal.
+        if(anchor.SqDistance2D(s.front)>64.f*64.f && (options.frontPushAhead<=0
+            || battle->GetFrontLaneProgress(s.goal)>advance))s.route.clear();
+        s.pushGoalProgress=advance;
+        s.front=anchor;return anchor;
+    }
     const auto home=ai->GetSetupManager()->GetStartPos();
     auto enemy=ai->GetEnemyManager()->GetNearestGroupPos(unit->GetPos(frame),options.minValue);
     if(enemy.x<0) enemy=ai->GetEnemyManager()->GetEnemyPos();
@@ -65,6 +143,16 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
     auto found=commanders.find(unit->GetId()); if(found==commanders.end()) return nullptr;
     auto& s=found->second; const int frame=ai->GetLastFrame();
     const auto record=[&](IUnitTask* task) {
+        // D-356: an offer whose site lies beyond the corridor (lane half-width
+        // plus front_lane_margin, or the build distance) is declined, never
+        // aborted: assist/repair/base rungs hand back tasks the shared queue
+        // created for other builders, which keep them.
+        if(auto* build=dynamic_cast<IBuilderTask*>(task);build && !FallbackActive(s,frame)
+            && ai->GetBattle()->GetFrontLaneLength()>0.f
+            && ai->GetBattle()->GetFrontLaneDistance(build->GetPosition())>ai->GetBattle()->GetFrontLaneWidth()
+                +(options.frontLaneMargin>0?options.frontLaneMargin:unit->GetCircuitDef()->GetBuildDistance())) {
+            task=nullptr;
+        }
         // Native placement may move a site (shake, blocked cells). While a
         // fallback holds, an offer that ends outside the perimeter is dropped
         // here, and aborted when no one else took it (INV-218 at the source).
@@ -78,6 +166,44 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
             task->GetType()==IUnitTask::Type::BUILDER?int(static_cast<IBuilderTask*>(task)->GetBuildType()):-1);
         return task;
     };
+    // The script offers kind 14 before local work. One cached lane lookup,
+    // no extra army scan. Fallback and unfinished nearby structures retain
+    // ownership; repairs/guard/base queues cannot monopolise a FRONT builder.
+    if(kind==WORK_ADVANCE) {
+        if(options.frontPushAhead<=0 || FallbackActive(s,frame)
+            || (frame<s.lineUntil && !s.lineDone)) return nullptr;
+        const auto anchor=FrontPosition(unit,s,frame),pos=unit->GetPos(frame);
+        if(anchor.x<0 || pos.SqDistance2D(anchor)<=options.frontRadius*options.frontRadius*.25f) return nullptr;
+        auto* build=dynamic_cast<IBuilderTask*>(unit->GetTask());
+        if(build && !build->IsDead() && build->GetBuildDef()
+            && ((build->GetTarget() && !build->GetTarget()->IsFinished()) || build==s.workTask)
+            && build->GetPosition().SqDistance2D(pos)<=std::pow(options.frontRadius+unit->GetCircuitDef()->GetBuildDistance(),2.f)) return build;
+        if(dynamic_cast<CCommanderTask*>(unit->GetTask())) return unit->GetTask();
+        // INV-235 (D-357): the commander advances by taking the next corridor
+        // mex. The script ladder offers mex_lane before advance; if an admitted
+        // corridor spot still exists here, the ladder order or the admission
+        // disagrees, and the walk is refused so the next ask offers the spot.
+        if(LaneMexAvailable(unit,s,frame)) {
+            ai->LOG("[INVARIANT] INV-235 lane advance offered with an open corridor mex unit=%i x=%.0f z=%.0f",
+                unit->GetId(),pos.x,pos.z);
+            return nullptr;
+        }
+        s.frontProgressFrame=frame; s.frontProgressPos=pos;
+        return ai->GetBuilderManager()->EnqueueCommander(nullptr);
+    }
+    // Script offers a bounded hold after productive front work. Engine PATROL
+    // can acquire repair/reclaim work beyond its endpoint and out of the lane.
+    // Cancel the old queue only when this task starts, never while offering it.
+    if(kind==WORK_HOLD) {
+        if(options.frontPushAhead<=0 || radius<=0 || FallbackActive(s,frame)) return nullptr;
+        const auto anchor=FrontPosition(unit,s,frame);
+        if(anchor.x<0 || unit->GetPos(frame).SqDistance2D(anchor)>
+            options.frontRadius*options.frontRadius*.25f) return nullptr;
+        auto* hold=static_cast<IWaitTask*>(ai->GetBuilderManager()->Enqueue(
+            TaskB::Wait(int(std::clamp(radius,1.f,30.f)*FRAMES_PER_SEC))));
+        hold->SetStationary(true);
+        return record(hold);
+    }
     // Native Start can re-ask policy synchronously; keep a live ladder task.
     if(auto* current=unit->GetTask(); current && current==s.workTask && !current->IsDead()) return current;
     // D-299 ladder kinds: commander-local, filtered to the perimeter while a
@@ -143,5 +269,22 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
     }
     if(result) ai->LOG("[CommanderFront] unit=%i work=%i x=%.0f z=%.0f",unit->GetId(),kind,anchor.x,anchor.z);
     return result;
+}
+
+// D-356 "then home": the push ends after front_push_until_seconds of game
+// time, or once the enemy's observed riot metal (the enemy manager's role
+// census, no scan here) reaches front_push_home_riot. The latch never
+// releases: the meta's rule is "com forward until the first riot units
+// appear, then home" (53-expansion-and-territory.md). Zero disables a gate.
+bool CCommanderControl::PushHome(CCircuitUnit* unit,State& s,int frame) {
+    if(s.pushHome || options.frontPushAhead<=0) return s.pushHome;
+    const char* reason=nullptr;
+    if(options.frontPushUntilSeconds>0 && frame>=int(options.frontPushUntilSeconds*FRAMES_PER_SEC)) reason="time";
+    const float riot=options.frontPushHomeRiot>0?ai->GetEnemyManager()->GetEnemyCost(ROLE_TYPE(RIOT)):0.f;
+    if(!reason && options.frontPushHomeRiot>0 && riot>=options.frontPushHomeRiot) reason="riot";
+    if(!reason) return false;
+    s.pushHome=true; s.route.clear();
+    ai->LOG("[CommanderFront] unit=%i home reason=%s frame=%i riot_metal=%.0f",unit->GetId(),reason,frame,riot);
+    return true;
 }
 }

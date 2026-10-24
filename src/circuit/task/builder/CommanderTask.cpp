@@ -15,15 +15,17 @@ CCommanderTask::~CCommanderTask() { if(previous) previous->Release(); }
 void CCommanderTask::AssignTo(CCircuitUnit* unit) {
     // Do not call IFighterTask::AssignTo: its generic DGun action would be a
     // second command owner. This task owns no generic fighter side sets.
+    restored=false;
     oldFire=unit->GetRequestedFireState(); oldMove=unit->GetRequestedMoveState();
     oldCloak=unit->GetUnit()->IsCloaked();
     IUnitTask::AssignTo(unit);
 }
 void CCommanderTask::Restore(CCircuitUnit* unit) {
-    if(unit->IsDead() || unit->IsDestroying()) return;
+    if(restored || unit->IsDead() || unit->IsDestroying()) return;
+    restored=true;
     TRY_UNIT(manager->GetCircuit(),unit,
-        unit->TrySetFireState(static_cast<CCircuitDef::FireT>(oldFire));
-        unit->TrySetMoveState(static_cast<CCircuitDef::MoveT>(oldMove));
+        if(unit->GetRequestedFireState()!=oldFire) unit->TrySetFireState(static_cast<CCircuitDef::FireT>(oldFire));
+        if(unit->GetRequestedMoveState()!=oldMove) unit->TrySetMoveState(static_cast<CCircuitDef::MoveT>(oldMove));
         unit->CmdCloak(oldCloak);
     )
 }

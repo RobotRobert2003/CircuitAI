@@ -30,6 +30,7 @@
 #include "UnitDef.h"
 #include "MoveData.h"
 #include "map/ThreatMap.h"
+#include "resource/MetalManager.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
 #include "util/Performance.h"
@@ -362,6 +363,71 @@ std::vector<AIFloat3> CBattleAnalysis::GetTerrainRoute(const AIFloat3& from, con
     result.reserve(cells.size());
     for (int c : cells) { auto p = CellPos(c); p.y = Height(p); result.push_back(p); }
     return result;
+}
+
+std::vector<AIFloat3> CBattleAnalysis::GetDistributedRoute(const AIFloat3& from,const AIFloat3& to,
+        const AIFloat3& axisFrom,const AIFloat3& axisTo,int cls,float share,int seats,
+        float tolerance,float spacingWeight,float resourceWeight) {
+    EnsureGrid();
+    if(!laneTerrain) CaptureLaneRequest(1,0.f,0.f,1.f,0.f,1.f,0);
+    const auto started=LaneClock::now();
+    std::vector<lane::Point> resources;
+    for(const auto& cluster:circuit->GetMetalManager()->GetClusters())
+        resources.emplace_back(cluster.weightCentr.x,cluster.weightCentr.y,cluster.weightCentr.z);
+    lane::Solver solver(*laneTerrain,laneSettings);
+    const auto cells=solver.DistributedRoute({from.x,from.y,from.z},{to.x,to.y,to.z},
+        {axisFrom.x,axisFrom.y,axisFrom.z},{axisTo.x,axisTo.y,axisTo.z},cls,share,seats,
+        tolerance,spacingWeight,resourceWeight,resources);
+    std::vector<AIFloat3> result;result.reserve(cells.size());
+    for(int c:cells)result.push_back(CellPos(c));
+    circuit->LOG("[CoverageLane] team=%i class=%i share=%.4f seats=%i points=%i solve_ms=%.3f expanded=%llu",
+        circuit->GetTeamId(),cls,share,seats,int(cells.size()),LaneMilliseconds(started),static_cast<unsigned long long>(solver.Expanded()));
+    return result;
+}
+
+bool CBattleAnalysis::SetFrontLane(const std::vector<AIFloat3>& points,float halfWidth) {
+    if(points.size()>4096 || !std::isfinite(halfWidth) || halfWidth<0) return false;
+    EnsureGrid();
+    std::vector<lane::Point> path;path.reserve(points.size());
+    for(const auto& p:points) {
+        if(!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) || p.x<0 || p.z<0 || p.x>=gw*cellSize || p.z>=gh*cellSize) return false;
+        path.emplace_back(p.x,p.y,p.z);
+    }
+    frontLanePath.Set(std::move(path));frontLaneWidth=std::clamp(halfWidth,64.f,2048.f);
+    frontLaneDistance.clear();
+    if(points.size()<2)return true;
+    // O(G+P) publication, O(1) distance reads in target selection. Eight-neighbour
+    // distance is a Chebyshev corridor approximation (diagonals can extend the
+    // corridor by sqrt(2), plus cell quantization),
+    // not path reachability. Exact progression uses the immutable polyline.
+    frontLaneDistance.assign(height.size(),std::numeric_limits<float>::max());
+    std::queue<int> pending;
+    for(const auto& p:points) {const int c=Cell(p);if(frontLaneDistance[c]!=0){frontLaneDistance[c]=0;pending.push(c);}}
+    while(!pending.empty()) {
+        const int c=pending.front();pending.pop();
+        for(const auto& step:NB) {
+            const int x=c%gw+step[0],z=c/gw+step[1];if(x<0 || x>=gw || z<0 || z>=gh)continue;
+            const int next=z*gw+x;
+            if(frontLaneDistance[next]>frontLaneDistance[c]+cellSize) {
+                frontLaneDistance[next]=frontLaneDistance[c]+cellSize;pending.push(next);
+            }
+        }
+    }
+    return true;
+}
+float CBattleAnalysis::GetFrontLaneDistance(const AIFloat3& p) const {
+    if(frontLaneDistance.empty())return 0.f;
+    return frontLaneDistance[Cell(p)];
+}
+AIFloat3 CBattleAnalysis::GetFrontLanePoint(float distance) const {
+    const auto p=frontLanePath.At(distance);return {p.x,p.y,p.z};
+}
+AIFloat3 CBattleAnalysis::GetFrontLaneGoal(const AIFloat3& from,float advance) const {
+    if(frontLanePath.Length()<=0)return {-1,0,-1};
+    const auto p=frontLanePath.Project({from.x,from.y,from.z});
+    // Signed travel also returns a commander from local work beyond its anchor.
+    // Outside the corridor, rejoin first; At clamps either end of the path.
+    return GetFrontLanePoint(p.progress+(p.distance>frontLaneWidth?0.f:advance));
 }
 
 std::vector<AIFloat3> CBattleAnalysis::GetUnitTerrainRoute(const CCircuitDef* def,
