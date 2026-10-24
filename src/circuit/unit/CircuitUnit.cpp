@@ -325,7 +325,9 @@ void CCircuitUnit::CmdMoveTo(const AIFloat3& pos, short options, int timeout)
 	// re-asks on its next tick; a dropped order sends nothing.
 	if (circuitDef->IsRoleComm() && !(options & UNIT_COMMAND_OPTION_SHIFT_KEY) && manager != nullptr) {
 		const int now = manager->GetCircuit()->GetLastFrame();
-		if (now - commMoveFrame < FRAMES_PER_SEC) return;
+		// +6 frames: the server records orders up to ~3 frames late, and the
+		// replay showed 27-frame gaps with a bare 30-frame floor.
+		if (now - commMoveFrame < FRAMES_PER_SEC + 6) return;
 		commMoveFrame = now;
 	}
 	unit->MoveTo(pos, options, timeout);

@@ -404,7 +404,7 @@ void CCommanderControl::Move(CCircuitUnit* unit,State& s,const AIFloat3& goal,in
     // Owner 2026-10-24: at most one commander MOVE per second, whatever the
     // goal (Darkside 2026-10-23: FRONT deploys re-moved every 26 frames to
     // points 20-100 elmos apart). The next tick re-asks with fresh state.
-    if(frame<s.anyMoveSent+FRAMES_PER_SEC) return;
+    if(frame<s.anyMoveSent+FRAMES_PER_SEC+6) return;
     // Owner 2026-10-19: the same goal is resent at most once per
     // move_resend_seconds, +1 s per resend in a row, at most 3 s. A goal the
     // engine keeps refusing was resent every tick (fallback line, All That
