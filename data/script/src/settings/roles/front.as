@@ -253,6 +253,19 @@ namespace Front {
             float MexUpgradeRadius = 100000.0f;   // from the start position; every mex we hold
             int MexUpgradeMaxConcurrent = 3;      // MEXUP tasks of ours at once
             int MexUpgradeScanSeconds = 3;        // how often busy helpers are reconsidered
+
+            // T2 lab turrets (owner, 2026-10-25; systems/construction/front_factory_nanos.as): from the moment
+            // a T2 bot lab or vehicle plant of ours is framed, FRONT T1 constructors asking for work within
+            // T2FactoryNanoReach build its turrets until T2FactoryNanos stand, are framed or are ordered there,
+            // at most T2FactoryNanoParallel orders at once (past that they help a turret frame). The turret
+            // cap is raised by the turrets still missing. 0: off here; experimental_balanced sets 6 (the
+            // Armada and Legion T2 labs' caretaker in factory.json). Log [FRONT][LabNano].
+            int T2FactoryNanos = 0;
+            int T2FactoryNanoParallel = 3;
+            float T2FactoryNanoStartProgress = 0.0f;   // the lab frame's build progress before the first turret
+            float T2FactoryNanoRadius = 400.0f;        // a turret this near (and nearer than any other factory) is the lab's
+            float T2FactoryNanoReach = 2500.0f;        // constructors this near the lab are asked
+            int T2FactoryNanoScanSeconds = 2;          // turret count refresh while a lab is short
         }
 }
 }

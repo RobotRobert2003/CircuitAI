@@ -85,6 +85,7 @@ namespace Main {
         Global::RoleSettings::Front::EcoLadderGantryAfterAdvFusions = 1;
         Global::RoleSettings::Front::EcoLadderLaterAdvFusionAtStart = true;
         Global::RoleSettings::Front::SpawnFactoryEnabled = true;
+        Global::RoleSettings::Front::T2FactoryNanos = 6; // owner 2026-10-25: a T2 lab's turrets from its frame (front_factory_nanos.as)
         Global::RoleSettings::Front::Recovery = true; // owner 2026-10-19: after losing the base, T1 eco and retake the mexes first (front_recovery.as)
         Global::RoleSettings::Front::TimeTriggerForFirstT2LabMinMetalIncome = 20.0f; // 22-min T2 lab/plant trigger needs +20 metal (AI 11 ordered legavp at +3 after losing its base)
         Global::RoleSettings::Support::ReclaimT1EnergyAfterFusion = true;
