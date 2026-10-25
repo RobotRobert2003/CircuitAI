@@ -37,7 +37,9 @@ namespace AirReclaim {
     IUnitTask@ MakeTask(CCircuitUnit@ worker)
     {
         Tick();
-        if (worker is null || !worker.circuitDef.IsMobile() || !Allowed()
+        // D-362: a reclaim at a floating metal bank wastes the builder's two minutes
+        // and the structure's metal; the retired wind or solar waits for room.
+        if (worker is null || !worker.circuitDef.IsMobile() || !Allowed() || AirEconomy::MetalFloating()
             || jobs.length() >= uint(Global::RoleSettings::Tech::ReclaimEnergyConcurrent)) return null;
         const string side = Global::AISettings::Side;
         const array<string> names = {UnitHelpers::GetWindNameForSide(side), UnitHelpers::GetSolarNameForSide(side), UnitHelpers::GetAdvSolarNameForSide(side)};
