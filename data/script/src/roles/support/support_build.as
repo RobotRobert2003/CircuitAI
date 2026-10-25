@@ -8,7 +8,6 @@
 
 namespace SupportBuild {
     bool transitioned = false;
-    int openingCombatOrders = 0;
     bool donationResolved = false;
     bool economyReady = false;
     int pendingGift = -1;
@@ -183,7 +182,6 @@ namespace SupportBuild {
 
     void Init() {
         transitioned = false;
-        openingCombatOrders = 0;
         donationResolved = false;
         economyReady = false;
         pendingGift = -1;
@@ -203,8 +201,6 @@ namespace SupportBuild {
         Layout::Plan(Global::AISettings::Side, true);
         // Explicit objective: profile TECH strategy dice cannot change SUPPORT.
         TechChain::Init("t2");
-        FactoryProduction::Initialize();
-        SupportProduction::ConfigureCombat();
         // Owner (2026-10-16): no wind or solar ordered while FrontReclaim takes them down (off unless
         // Support::ReclaimT1EnergyAfterFusion; Layout::OnRoleLeave clears it)
         @Global::energyAllowed = @FrontReclaim::EnergyAllowed;
@@ -262,37 +258,49 @@ namespace SupportBuild {
         // Builder recovery handles failed work; production never steals its budget.
         if (advanced && (!donationResolved || !economyReady))
             return aiFactoryMgr.Enqueue(TaskS::Wait(false, 3 * SECOND));
-        // A bounded, inexpensive first group arrives sooner than waiting for a
-        // randomly chosen heavy bot. Afterwards use FRONT's response weights.
-        if (advanced && openingCombatOrders < Global::RoleSettings::Support::OpeningCombatUnits) {
-            const string side = Global::AISettings::Side;
-            const string openingName = side == "armada" ? Global::RoleSettings::Support::ArmadaOpeningCombatUnit
-                : (side == "cortex" ? Global::RoleSettings::Support::CortexOpeningCombatUnit : Global::RoleSettings::Support::LegionOpeningCombatUnit);
-            CCircuitDef@ opening = ai.GetCircuitDef(openingName);
-            if (opening !is null && unit.circuitDef.CanBuild(opening) && opening.IsAvailable(ai.frame)) {
-                IUnitTask@ recruit = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::FIREPOWER,
-                    Task::Priority::NORMAL, opening, unit.GetPos(ai.frame), 64.0f));
-                if (recruit !is null) ++openingCombatOrders;
-                if (recruit !is null && openingCombatOrders == Global::RoleSettings::Support::OpeningCombatUnits)
-                    SupportProduction::CombatBatch();
-                return recruit;
-            }
+        // Owner (2026-10-25): SUPPORT picks no units of its own; the profile's
+        // factory.json / factory_leg.json weights choose (caps still apply).
+        return aiFactoryMgr.DefaultMakeTask(unit);
+    }
+
+    // Owner (2026-10-25): every finished T2 factory gets T2FactoryTurrets construction
+    // turrets, AIR's count for a T2 plant. Layout::NanoTask is TECH's placement (the box
+    // slot nearest a standing lab) and its in-flight cap, so turrets go up a few at a time.
+    // Cost per builder ask: one pass over the factory registry plus one team-unit scan per
+    // T2 factory (GetStaticBuildPowerNear); SUPPORT owns one or two.
+    int lastTurretLog = -100000;
+    IUnitTask@ FactoryTurrets(CCircuitUnit@ worker) {
+        const int wanted = Global::RoleSettings::Support::T2FactoryTurrets;
+        if (wanted <= 0 || !transitioned || !donationResolved || aiEconomyMgr.isEnergyStalling) return null;
+        CCircuitDef@ nano = TechFactories::Nano();
+        if (nano is null || !worker.circuitDef.CanBuild(nano) || !nano.IsAvailable(ai.frame)) return null;
+        if (Economy::GetMinMetalIncomeLast10s() < Global::RoleSettings::Support::T2FactoryTurretMinMetalIncome
+            || aiEconomyMgr.metal.current < nano.costM * Global::RoleSettings::Tech::EcoTurretBankFraction) return null;
+        const float turretPower = nano.GetBuildSpeed() * float(SECOND);
+        if (turretPower <= 0.0f) return null;
+        int factories = 0, under = 0, least = wanted;
+        array<string>@ keys = Factory::allFactories.getKeys();
+        for (uint index = 0; keys !is null && index < keys.length(); ++index) {
+            CCircuitUnit@ factory = null;
+            if (!Factory::allFactories.get(keys[index], @factory) || factory is null || factory.circuitDef is null) continue;
+            const string name = factory.circuitDef.GetName();
+            if (!UnitHelpers::IsT2BotLab(name) && !UnitHelpers::IsT2VehicleLab(name)) continue;
+            if (ai.GetTeamUnit(factory.id) is null || factory.GetBuildProgress() < 1.0f || Lifecycle::IsRetiring(factory)) continue;
+            ++factories;
+            const int standing = int(aiBuilderMgr.GetStaticBuildPowerNear(factory.GetPos(ai.frame),
+                Global::RoleSettings::Tech::ExpLabBuildPowerReach) / turretPower + 0.5f);
+            if (standing < wanted) ++under;
+            least = AiMin(least, standing);
         }
-        IUnitTask@ assistant = SupportProduction::AssistTask(unit);
-        if (assistant !is null) return assistant;
-        IUnitTask@ production = FactoryProduction::MakeTask(unit);
-        IBuilderTask@ recruit = cast<IBuilderTask>(production);
-        // D-293: count a lottery batch as combat by role, not by workertime. A combat unit with
-        // build speed (leginfestor, workertime 100) never advanced combatBatches and so delayed
-        // the next legaceb admission. CFactoryManager's constructor adds the BUILDER role bit to
-        // every mobile unit with build options before ReadConfig adds the JSON roles, so
-        // legack, legaceb and legdecom still do not count. Cost: one mask test per lottery batch.
-        if (recruit !is null && recruit.buildDef !is null
-            && !recruit.buildDef.IsRoleAny(Unit::Role::BUILDER.mask))
-            SupportProduction::CombatBatch();
-        // Registered bot labs must not bypass the explicit assistant policy
-        // through the native random fallback when all combat choices are capped.
-        return production !is null ? production : aiFactoryMgr.Enqueue(TaskS::Wait(false, 3 * SECOND));
+        // Box slots can fall out of a lab's reach: the team-wide count bounds the total.
+        if (under == 0 || nano.count >= wanted * factories + Global::RoleSettings::Support::T2FactoryTurretSpare) return null;
+        IUnitTask@ task = Layout::NanoTask(worker, Task::Priority::NORMAL);
+        if (task !is null && ai.frame - lastTurretLog > 30 * SECOND) {
+            lastTurretLog = ai.frame;
+            GenericHelpers::LogUtil("[SUPPORT][Turrets] ordered one: fewest at a T2 factory " + least + "/" + wanted
+                + ", " + factories + " T2 factories, " + nano.count + " turrets", 1);
+        }
+        return task;
     }
 
     IUnitTask@ MakeTask(CCircuitUnit@ unit) {
@@ -338,6 +346,8 @@ namespace SupportBuild {
             @task = TechBuild::StartFactory(unit);
             if (task !is null) return task;
         }
+        @task = FactoryTurrets(unit);
+        if (task !is null) return task;
         // Reuse the same measured economy state, priority calculation, slot
         // admission and pin/rollback as TECH. No native task is speculatively
         // enqueued before this decision (the old SUPPORT ladder did that).

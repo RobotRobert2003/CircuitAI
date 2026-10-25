@@ -16,10 +16,6 @@ namespace Support {
             float ForwardDefenceBudgetSeconds = 30.0f;
             float ForwardDefenceSetback = 400.0f;
             int ForwardDefenceCountPerType = 2;
-            int OpeningCombatUnits = 3;
-            string ArmadaOpeningCombatUnit = "armfast";
-            string CortexOpeningCombatUnit = "corpyro";
-            string LegionOpeningCombatUnit = "legstr";
             /******************** SUPPORT BASE SETTINGS ********************/
             // All settings applied to support role at game start, logic can change throughout game
             float AllyRange = 1300.0f;
@@ -73,13 +69,13 @@ namespace Support {
 
             // Decoys are combat/deception tools, not routine mobile build power.
             int MaxDecoyCommanders = 0;
-            int MaxFastAssistBots = 10;
-            float FastAssistMinimumMetalIncome = 40.0f;
-            float FastAssistMetalIncomePerBot = 20.0f;
-            float FastAssistFundingSeconds = 30.0f;
-            float FastAssistFundingShare = 0.70f;
-            float FastAssistEnergyReserve = 100.0f;
-            int CombatBatchesPerFastAssist = 1;
+            int MaxFastAssistBots = 10;      // a cap only: factory.json decides whether to build them
+
+            // Owner (2026-10-25): construction turrets on each finished T2 bot / vehicle lab, as AIR
+            // gives a T2 plant (Air::T2ExpansionSupport, Factory::MaxNanosPerT2Factory). 0: off.
+            int T2FactoryTurrets = 20;
+            float T2FactoryTurretMinMetalIncome = 8.0f;  // as Tech::EcoTurretMinMetalIncome
+            int T2FactoryTurretSpare = 6;                // team-wide bound: T2FactoryTurrets per lab plus these
 
             /******************** FRONT TECH NANO POLICY ********************/
             float NanoEnergyPerUnit = 200.0f; // energy per nano

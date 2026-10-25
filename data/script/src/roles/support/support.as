@@ -115,13 +115,6 @@ namespace RoleSupport {
         if (usage != Unit::UseAs::FACTORY)
             return;
 
-        const CCircuitDef@ facDef = unit.circuitDef;
-        if (Factory::userData[facDef.id].attr & Factory::Attr::T3 != 0) {
-            array<string> spam = {"armpw", "corak", "armflea", "armfav", "corfav"};
-            for (uint i = 0; i < spam.length(); ++i)
-                ai.GetCircuitDef(spam[i]).SetIgnore(true);
-        }
-
         GenericHelpers::LogUtil("[SUPPORT] FactoryAiUnitAdded id=" + unit.id + " usage=" + usage, 3);
     }
 
