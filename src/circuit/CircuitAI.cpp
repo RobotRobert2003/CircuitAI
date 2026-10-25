@@ -34,6 +34,7 @@
 #include "angelscript/include/angelscript.h"
 #include "util/Profiler.h"
 #include "util/WidgetState.h"
+#include "util/LagLoad.h"
 #ifdef DEBUG_VIS
 #include "map/InfluenceMap.h"
 #include "map/ThreatMap.h"
@@ -876,6 +877,33 @@ int CCircuitAI::Release(int reason)
 	return 0;  // signaling: OK
 }
 
+// Owner 2026-10-25: input for the unit-count throttle (util/LagLoad.h) and
+// its once-a-minute load line. The first AI to reach a whole second does the
+// work for all SMRTBARbs in this process: one size() per AI, no allocation.
+static void UpdateLagLoad(CCircuitAI* ai, const CGameAttribute::Circuits& circuits, int frame)
+{
+	lagload::State& s = lagload::Get();
+	if (s.frame == frame) return;
+	s.frame = frame;
+	int units = 0;
+	for (CCircuitAI* c : circuits) units += int(c->GetTeamUnits().size());
+	lagload::SetUnits(s, units);
+	const int minute = frame / (60 * FRAMES_PER_SEC);
+	if (minute == s.minute) return;
+	if (s.minute >= 0) {
+		s.enemyUnits = int(ai->GetEnemyInfos().size());
+		const unsigned total = s.moves + s.movesDropped + s.targets + s.targetsDropped + s.turret + s.turretDropped + s.other;
+		ai->LOG("[LagLoad] min=%d ai_units=%d enemy_units_known=%d total=%d level=%.2f floors move=%.1fs target=%.1fs mortar_target=%.1fs turret=%.1fs"
+				" | orders last min: moves %u (held %u) targets %u (held %u) turret %u (held %u) other %u, all %u",
+				minute, s.aiUnits, s.enemyUnits, s.aiUnits + s.enemyUnits, s.level,
+				s.moveFloor / float(FRAMES_PER_SEC), s.targetFloor / float(FRAMES_PER_SEC),
+				s.mortarFloor / float(FRAMES_PER_SEC), s.turretFloor / float(FRAMES_PER_SEC),
+				s.moves, s.movesDropped, s.targets, s.targetsDropped, s.turret, s.turretDropped, s.other, total);
+	}
+	s.minute = minute;
+	s.moves = s.movesDropped = s.targets = s.targetsDropped = s.turret = s.turretDropped = s.other = 0;
+}
+
 int CCircuitAI::Update(int frame)
 {
 	destroyed.clear();
@@ -902,6 +930,7 @@ int CCircuitAI::Update(int frame)
 	}
 
 	allyTeam->Update(this);
+	if (frame % FRAMES_PER_SEC == 0) UpdateLagLoad(this, gameAttribute->GetCircuits(), frame);
 
 	if ((battle != nullptr) && (frame % FRAMES_PER_SEC == teamId % FRAMES_PER_SEC)) {
 		battle->Update(frame);  // D-126: heat decay, enemy composition, hostile water

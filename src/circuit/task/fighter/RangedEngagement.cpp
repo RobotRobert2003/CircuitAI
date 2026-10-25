@@ -117,6 +117,9 @@ void CRangedEngagement::SelectTarget(CCircuitUnit* unit,int selected,int weapon,
             if(target<0) return;
         }
     }
+    // Owner 2026-10-25: unit-count throttle on target changes (mortars 5 s at
+    // 2,300 AI units, 10 s at 3,500). A held-back change keeps the old intent.
+    if((target>=0 || selected>=0) && !unit->LagAllowTarget()) return;
     if(selected!=target || weapon!=weaponIndex) world.ReleaseShot(id);
     TRY_UNIT(ai,unit,
         // Through the unit, so a D-352 commander lock keeps BAR's list.

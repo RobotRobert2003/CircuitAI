@@ -328,6 +328,9 @@ public:
 	bool IsReclaimable()     const { return isReclaimable; }
 	bool IsCapturable()      const { return isCapturable; }
 	bool IsBuilder()         const { return !buildOptions.empty(); }
+	enum class LagClass : char { NONE, MOBILE, TURRET };
+	LagClass GetLagClass()   const { return lagClass; }
+	bool IsLagMortar()       const { return isLagMortar; }
 
 	void SetIsMex(bool value) { isMex = value; }
 	bool IsMex() const { return isMex; }
@@ -451,6 +454,8 @@ private:
 	bool buildAllowed = true;  // JSON construction veto, independent of temporary role caps
 	float targetMinCost = 0.f; // Opt-in valuable-contact preference; zero is legacy.
 	float standoff = 0.f;  // Fraction of weapon range to hold; zero keeps legacy micro.
+	LagClass lagClass = LagClass::NONE;  // owner 2026-10-25 unit-count throttle
+	bool isLagMortar = false;
 	bool isIgnore : 1;
 
 	bool isAttacker : 1;

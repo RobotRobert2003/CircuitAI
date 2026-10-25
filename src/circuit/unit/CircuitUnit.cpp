@@ -17,6 +17,7 @@
 #include "spring/CustomCommand.h"
 #include "CircuitAI.h"
 #include "util/Utils.h"
+#include "util/LagLoad.h"
 #include "task/UnitTask.h"
 #include "task/fighter/FighterTask.h"
 #include <cstdlib>
@@ -330,6 +331,7 @@ void CCircuitUnit::CmdMoveTo(const AIFloat3& pos, short options, int timeout)
 		if (now - commMoveFrame < FRAMES_PER_SEC + 6) return;
 		commMoveFrame = now;
 	}
+	if (!LagAllowMove()) return;
 	unit->MoveTo(pos, options, timeout);
 //	unit->ExecuteCustomCommand(CMD_RAW_MOVE, {pos.x, pos.y, pos.z}, options, timeout);
 }
@@ -343,12 +345,14 @@ void CCircuitUnit::CmdJumpTo(const AIFloat3& pos, short options, int timeout)
 void CCircuitUnit::CmdFightTo(const AIFloat3& pos, short options, int timeout)
 {
 	assert(geom::is_in_map(pos));
+	if (!LagAllowMove() || !LagAllowTurret()) return;
 	unit->Fight(pos, options, timeout);
 }
 
 void CCircuitUnit::CmdPatrolTo(const AIFloat3& pos, short options, int timeout)
 {
 	assert(geom::is_in_map(pos));
+	if (!LagAllowMove() || !LagAllowTurret()) return;
 	unit->PatrolTo(pos, options, timeout);
 }
 
@@ -368,6 +372,7 @@ void CCircuitUnit::CmdWantedSpeed(float speed)
 
 void CCircuitUnit::CmdStop(short options, int timeout)
 {
+	++lagload::Get().other;
 	unit->Stop(options, timeout);
 	priorityTarget = -1; // BAR STOP cancels the priority list; allow a new intent.
 	taskTarget = -1;
@@ -382,6 +387,7 @@ void CCircuitUnit::CmdSetTarget(CEnemyInfo* enemy)
     if (circuitDef->GetTargetMinCost() <= 0.f) return;
     const int next = enemy != nullptr && !enemy->IsHidden() && enemy->IsInRadarOrLOS() ? enemy->GetId() : -1;
     if (next == priorityTarget) return;
+    if (!LagAllowTarget()) return;  // keep the current target
     ClearPriorityTarget();
     if (next < 0) return;
     // Unlike queued ATTACK, BAR priority fire also applies during the preceding
@@ -389,6 +395,45 @@ void CCircuitUnit::CmdSetTarget(CEnemyInfo* enemy)
     // choosing their own targets. Never enable the old global stub for all units.
     SendTaskTarget(next);
     priorityTarget = next;
+}
+
+// Owner 2026-10-25: unit-count throttle. Commanders keep their own 1 s MOVE
+// gate above and are never throttled here; T3 and factories have no class.
+bool CCircuitUnit::LagAllowMove()
+{
+	if (manager == nullptr || circuitDef->GetLagClass() != CCircuitDef::LagClass::MOBILE || circuitDef->IsRoleComm()) return true;
+	lagload::State& load = lagload::Get();
+	const int now = manager->GetCircuit()->GetLastFrame();
+	// Waypoints and follow-up legs queued in the same frame belong to the
+	// order that passed. Checked when the order is sent, so a path that lands
+	// later than its decision cannot slip under the floor.
+	if (now != lagMoveFrame && now - lagMoveFrame < load.moveFloor) { ++load.movesDropped; return false; }
+	lagMoveFrame = now;
+	++load.moves;
+	return true;
+}
+
+bool CCircuitUnit::LagAllowTarget()
+{
+	if (manager == nullptr || circuitDef->GetLagClass() != CCircuitDef::LagClass::MOBILE || circuitDef->IsRoleComm()) return true;
+	lagload::State& load = lagload::Get();
+	const int now = manager->GetCircuit()->GetLastFrame();
+	const int floor = circuitDef->IsLagMortar() ? load.mortarFloor : load.targetFloor;
+	if (now != lagTargetFrame && now - lagTargetFrame < floor) { ++load.targetsDropped; return false; }
+	lagTargetFrame = now;
+	++load.targets;
+	return true;
+}
+
+bool CCircuitUnit::LagAllowTurret()
+{
+	if (manager == nullptr || circuitDef->GetLagClass() != CCircuitDef::LagClass::TURRET) return true;
+	lagload::State& load = lagload::Get();
+	const int now = manager->GetCircuit()->GetLastFrame();
+	if (now != lagTurretFrame && now - lagTurretFrame < load.turretFloor) { ++load.turretDropped; return false; }
+	lagTurretFrame = now;
+	++load.turret;
+	return true;
 }
 
 void CCircuitUnit::ClearPriorityTarget()
@@ -595,6 +640,8 @@ void CCircuitUnit::CmdUnloadUnitsInArea(const AIFloat3& pos, float radius, short
 
 void CCircuitUnit::CmdRepair(CAllyUnit* target, short options, int timeout)
 {
+	if (!LagAllowTurret()) return;
+	++lagload::Get().other;
 	unit->Repair(target->GetUnit(), options, timeout);
 	taskState = ETaskState::EXECUTE;
 }
@@ -604,28 +651,37 @@ void CCircuitUnit::CmdBuild(CCircuitDef* buildDef, const AIFloat3& buildPos, int
 	// Role policy closes this gate before stopping a retired factory. A task
 	// selected before that transition must not restart it on a later idle event.
 	if (!productionEnabled) return;
+	++lagload::Get().other;
 	unit->Build(buildDef->GetDef(), buildPos, facing, options, timeout);
 	taskState = ETaskState::EXECUTE;
 }
 
 void CCircuitUnit::CmdReclaimEnemy(CEnemyInfo* enemy, short options, int timeout)
 {
+	if (!LagAllowTurret()) return;
+	++lagload::Get().other;
 	unit->ReclaimUnit(enemy->GetUnit(), options, timeout);
 }
 
 void CCircuitUnit::CmdReclaimUnit(CAllyUnit* toReclaim, short options, int timeout)
 {
+	if (!LagAllowTurret()) return;
+	++lagload::Get().other;
 	unit->ReclaimUnit(toReclaim->GetUnit(), options, timeout);
 	taskState = ETaskState::EXECUTE;
 }
 
 void CCircuitUnit::CmdReclaimInArea(const AIFloat3& pos, float radius, short options, int timeout)
 {
+	if (!LagAllowTurret()) return;
+	++lagload::Get().other;
 	unit->ReclaimInArea(pos, radius, options, timeout);
 }
 
 void CCircuitUnit::CmdResurrectInArea(const AIFloat3& pos, float radius, short options, int timeout)
 {
+	if (!LagAllowTurret()) return;
+	++lagload::Get().other;
 	unit->ResurrectInArea(pos, radius, options, timeout);
 }
 
@@ -717,6 +773,7 @@ void CCircuitUnit::TrySetIdleMode(int mode)
 
 void CCircuitUnit::Attack(CEnemyInfo* enemy, bool isGround, int timeout, bool queueFight)
 {
+	if (!LagAllowTarget() || !LagAllowMove()) return;
 	if (KeepWeaponRange(enemy, timeout)) return;
 	target = enemy;
 	TRY_UNIT(manager->GetCircuit(), this,
@@ -758,6 +815,7 @@ void CCircuitUnit::Attack(CEnemyInfo* enemy, bool isGround, int timeout, bool qu
 
 void CCircuitUnit::Attack(const AIFloat3& pos, CEnemyInfo* enemy, bool isGround, bool isStatic, int timeout)
 {
+	if (!LagAllowTarget() || !LagAllowMove()) return;
 	if (KeepWeaponRange(enemy, timeout)) return;
 	TRY_UNIT(manager->GetCircuit(), this,
 		if (circuitDef->IsAttrMelee()) {
@@ -795,6 +853,7 @@ void CCircuitUnit::Attack(const AIFloat3& position, CEnemyInfo* enemy, int tile,
 
 void CCircuitUnit::Guard(CCircuitUnit* target, int timeout)
 {
+	if (!LagAllowMove() || !LagAllowTurret()) return;
 	TRY_UNIT(manager->GetCircuit(), this,
 //		unit->ExecuteCustomCommand(CMD_ORBIT, {(float)target->GetId(), 300.0f}, UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY, timeout);
 		unit->Guard(target->GetUnit(), UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY, timeout);

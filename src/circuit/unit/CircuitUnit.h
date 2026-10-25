@@ -174,6 +174,11 @@ public:
 	// commander target owns the unit's priority list; restored on its release.
 	void SendTaskTarget(int targetId);
 	void CancelTaskTarget(int targetId);
+	// Owner 2026-10-25 unit-count throttle (util/LagLoad.h). False drops the
+	// order; orders in the same frame as the last accepted one always pass.
+	bool LagAllowMove();
+	bool LagAllowTarget();
+	bool LagAllowTurret();
 	// Commander snipe (D-352): a scouted enemy commander in range replaces the
 	// priority list; the unit keeps its move and other orders. -1 releases.
 	void SetCommanderTarget(int commId, int frame);
@@ -269,6 +274,7 @@ private:
     int sentFireFrame=-100000, sentMoveFrame=-100000, sentCloakFrame=-100000;
     bool RepeatState(int& sent, int& sentFrame, int value);
     int commMoveFrame=-100000; // owner 2026-10-24: last new commander MOVE
+    int lagMoveFrame=-100000, lagTargetFrame=-100000, lagTurretFrame=-100000; // owner 2026-10-25
 	ITravelAction* travelAct;
 
 	int moveFails;

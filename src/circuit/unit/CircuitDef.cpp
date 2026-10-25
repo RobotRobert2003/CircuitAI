@@ -10,6 +10,8 @@
 #include "util/GameAttribute.h"
 #include "util/Utils.h"
 
+#include <cstring>
+
 #include "spring/SpringCallback.h"
 
 #include "WeaponMount.h"
@@ -17,6 +19,7 @@
 #include "Damage.h"
 #include "Shield.h"
 #include "MoveData.h"
+
 #include "Map.h"
 #include "Log.h"
 
@@ -261,6 +264,22 @@ CCircuitDef::CCircuitDef(CCircuitAI* circuit, UnitDef* def, std::unordered_set<I
 		category |= circuit->GetBadCategory();
 		costM *= 0.1f;  // avoid threat metal
 	}
+
+	// Owner 2026-10-25: classes for the unit-count throttle (util/LagLoad.h).
+	// T3 (techlevel >= 3) and factories, the gantry included, stay NONE;
+	// commanders are skipped at the command boundary (role is set later).
+	it = customParams.find("techlevel");
+	const float techLevel = (it != customParams.end()) ? utils::string_to_float(it->second) : 1.f;
+	if (techLevel >= 3.f) {
+		lagClass = LagClass::NONE;
+	} else if (speed > .1f) {
+		lagClass = LagClass::MOBILE;
+	} else if (buildOptions.empty() && def->IsBuilder() && (isAbleToAssist || isAbleToRepair || isAbleToReclaim)) {
+		lagClass = LagClass::TURRET;
+	} else {
+		lagClass = LagClass::NONE;
+	}
+	isLagMortar = (strcmp(def->GetName(), "cormort") == 0);
 
 //	if (customParams.find("boost_speed_mult") != customParams.end()) {
 //		AddAttribute(ATTR_TYPE(BOOST));
