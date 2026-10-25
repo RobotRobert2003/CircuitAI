@@ -252,12 +252,12 @@ namespace Tech {
             string HeavyAmphCortex = "corkorg";
             string HeavyLandLegion = "legerailtank";
             string HeavyAmphLegion = "legeheatraymech";
-            // D-288 (owner): one land gantry per GantryScaleMetalStep of 10 s minimum
+            // D-288 (owner), step 400 since D-364: one land gantry per GantryScaleMetalStep of 10 s minimum
             // metal income (floor(income / step), capped at GantryScaleMax). The target
             // is a persisted high-water mark (a dip never lowers it); a new order also
             // needs income >= (have + 1) x step x GantryScaleDropShare right now.
             bool GantryScaleEnabled = true;
-            float GantryScaleMetalStep = 500.0f;
+            float GantryScaleMetalStep = 400.0f;            // D-364 (owner): was 500; one gantry per 400 metal per second
             float GantryScaleDropShare = 0.80f;
             float GantryScaleEnergyFloor = 0.0f;        // optional absolute E/s floor (0 = metal only, the owner's rule)
             int GantryScaleMax = 6;
