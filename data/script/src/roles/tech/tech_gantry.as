@@ -30,11 +30,7 @@ namespace TechGantry {
         // the other branch's ten-unit composition or override amphibious policy.
         return ai.GetCircuitDef(UnitHelpers::GetGantrySignatureUnitForSide(Global::AISettings::Side));
     }
-    // D-370: `grossIncome` funds on the 10-second minimum metal income itself. The
-    // default subtracts the current usage, which a TECH spending its income never
-    // clears (at +1,000 metal and +1,000 usage the net is 0), so the gantry the
-    // income step made due could only be funded by a bank above its whole cost.
-    bool Funded(CCircuitDef@ factory, bool includeOpeningUnit, bool grossIncome = false) {
+    bool Funded(CCircuitDef@ factory, bool includeOpeningUnit) {
         if (factory is null) return false;
         float metalCost = factory.costM, energyCost = factory.costE;
         if (includeOpeningUnit) {
@@ -42,8 +38,8 @@ namespace TechGantry {
             if (opening is null || !factory.CanBuild(opening)) return false;
             metalCost += opening.costM; energyCost += opening.costE;
         }
-        const float metalIncome = grossIncome ? Economy::GetMinMetalIncomeLast10s()
-            : AiMax(0.0f, Economy::GetMinMetalIncomeLast10s() - TeamEconomy::OwnMetal(TeamEconomy::USAGE));
+        const float metalIncome = AiMax(0.0f, Economy::GetMinMetalIncomeLast10s()
+            - TeamEconomy::OwnMetal(TeamEconomy::USAGE));
         const float availableEnergy = HeavyRushMath::AvailableEnergy(
             Economy::GetMinEnergyIncomeLast10s(), TeamEconomy::OwnEnergy(TeamEconomy::USAGE),
             ai.GetTeamRulesParam("mmUse", 0.0f), Global::RoleSettings::Tech::GantryEnergyReserve);
@@ -63,6 +59,34 @@ namespace TechGantry {
             TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0,
             TechHeavyRush::Pending(), Funded(factory, true), power,
             Global::RoleSettings::Tech::GantryMinimumBuilderPower);
+    }
+    // What Funded() weighed, for a waiting line
+    string FundingNote(CCircuitDef@ factory, bool includeOpeningUnit) {
+        CCircuitDef@ opening = includeOpeningUnit ? OpeningUnit() : null;
+        const float cost = factory.costM + (opening is null ? 0.0f : opening.costM);
+        return "bank " + int(aiEconomyMgr.metal.current) + "/" + int(cost) + " metal, 10 s income "
+            + int(Economy::GetMinMetalIncomeLast10s()) + " - usage " + int(TeamEconomy::OwnMetal(TeamEconomy::USAGE))
+            + ", energy " + int(Economy::GetMinEnergyIncomeLast10s()) + " - usage " + int(TeamEconomy::OwnEnergy(TeamEconomy::USAGE))
+            + " + converters " + int(ai.GetTeamRulesParam("mmUse", 0.0f));
+    }
+    // The first of Ready()'s checks that fails, in its order (owner, 2026-10-24:
+    // the early wait named no reason). Only for logging: Ready() decides.
+    string ReadyWhy(CCircuitDef@ factory, CCircuitUnit@ builder) {
+        if (builder is null || factory is null) return "no builder or gantry definition";
+        if (!builder.circuitDef.CanBuild(factory)) return builder.circuitDef.GetName() + " cannot build " + factory.GetName();
+        CCircuitDef@ reactor = ai.GetCircuitDef(TechChain::DefFor("afus"));
+        if (reactor is null || reactor.count <= aiBuilderMgr.GetUnfinishedCount(reactor)) return "no finished advanced fusion";
+        if (!metalWindow.Ready(ai.frame, Global::RoleSettings::Tech::EarlyGantryMaximumSampleGapSeconds * SECOND))
+            return "income window not ready";
+        if (metalWindow.Mean() < Global::RoleSettings::Tech::EarlyGantryMetalIncome)
+            return "income " + int(metalWindow.Mean()) + " of " + int(Global::RoleSettings::Tech::EarlyGantryMetalIncome);
+        if (TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0) return "a nuke commitment";
+        if (TechHeavyRush::Pending()) return "a heavy rush pending";
+        if (!Funded(factory, true)) return "funding (" + FundingNote(factory, true) + ")";
+        if (builder.circuitDef.GetBuildSpeed() < Global::RoleSettings::Tech::GantryMinimumBuilderPower)
+            return builder.circuitDef.GetName() + " build power " + int(builder.circuitDef.GetBuildSpeed())
+                + " under " + int(Global::RoleSettings::Tech::GantryMinimumBuilderPower);
+        return "ready";
     }
     bool ReachableBattlefield(const AIFloat3& in position, int facing) {
         CCircuitDef@ opening = OpeningUnit();
@@ -101,29 +125,33 @@ namespace TechGantry {
     }
     IUnitTask@ EarlyWork(CCircuitUnit@ builder) {
         if (EarlyComplete()) return null;
-        if (earlyStartFrame < 0) earlyStartFrame = ai.frame;
         CCircuitDef@ definition = ai.GetCircuitDef(TechChain::DefFor("gantry"));
         if (definition is null) return null;
         // Once the cluster is committed, its own progress/recovery owns the
         // task. Funding fluctuations never abandon a real construction frame.
         TechFactories::Cluster@ cluster = TechFactories::ExistingGantry(definition.GetName());
+        // The attempt clock starts once the gantry is admissible (a cluster, or
+        // Ready), not at the advanced fusion (played 2026-10-24: income reached
+        // 175 at 12:38 and the window opened at 10:55 had expired by 14:23)
+        if (earlyStartFrame < 0 && (cluster !is null || Ready(definition, builder))) earlyStartFrame = ai.frame;
         bool committed = false;
         int progressFrame = earlyStartFrame;
         if (cluster !is null) {
             CCircuitUnit@ factory = TechFactories::LabAt(cluster);
             committed = factory !is null || (cluster.labTask !is null && !cluster.labTask.IsDead());
-            IBuilderTask@ support = cast<IBuilderTask>(cluster.gantrySupportTask);
-            if (support !is null && !support.IsDead())
-                committed = committed || support.target !is null || support.GetUnits().length() > 0;
+            bool supportFrame = false, supportWorker = false;
+            SupportHolds(cluster, supportFrame, supportWorker);
+            committed = committed || supportFrame || supportWorker;
             progressFrame = AiMax(progressFrame, cluster.gantryProgressFrame);
         }
-        if (!committed && ai.frame - progressFrame >= Global::RoleSettings::Tech::EarlyGantryAttemptSeconds * SECOND) {
+        if (!committed && progressFrame >= 0
+            && ai.frame - progressFrame >= Global::RoleSettings::Tech::EarlyGantryAttemptSeconds * SECOND) {
             earlyDeferred = true;
             Waiting("early admission expired; continuing normal air/economy sequence");
             return null;
         }
         if (cluster !is null) return Work(TechFactories::ReadyCluster(cluster), definition, builder);
-        if (!Ready(definition, builder)) { Waiting("waiting for AFUS, income, funding or prior commitments"); return null; }
+        if (!Ready(definition, builder)) { Waiting("waiting: " + ReadyWhy(definition, builder)); return null; }
         @cluster = TechFactories::ReadyCluster(TechFactories::OpenCluster(definition, TechFactories::MayPlan(definition), true));
         if (cluster is null) { Waiting("waiting for a safe reachable cluster/cap/cooldown"); return null; }
         return Work(cluster, definition, builder);
@@ -134,17 +162,16 @@ namespace TechGantry {
     // T3RushTurretsMin..T3RushTurretsMax turrets while its gantry goes up (the
     // first TurretsBeforeLab before the order, the rest beside the frame), then
     // from the frame the gantry stands climbs evenly over T3RushTurretsRampSeconds
-    // to T3RushTurretsRampTo. One turret order in flight at a time.
+    // to T3RushTurretsRampTo. Several turret orders at once (SupportOrder).
     TechFactories::Cluster@ t3Cluster;
     int t3Turrets = -1;
     int t3RampStart = -1;
-    IUnitTask@ t3TurretTask;
     int T3RushTurretTarget(TechFactories::Cluster@ cluster, CCircuitUnit@ factory) {
         if (TechPlan::plan != "t3rush" || Global::RoleSettings::Tech::T3RushTurretsMax <= 0
             || cluster is null || cluster.ahead || cluster.tier < 3) return 0;
         // a given-up cluster (ahead again, ground released) hands the roll to its replacement
         if (t3Cluster is null || (t3Cluster !is cluster && (t3Cluster.ahead || t3Cluster.labRes < 0))) {
-            @t3Cluster = cluster; t3RampStart = -1; @t3TurretTask = null;
+            @t3Cluster = cluster; t3RampStart = -1;
         }
         if (cluster !is t3Cluster) return 0;
         if (t3Turrets < 0) {
@@ -171,35 +198,126 @@ namespace TechGantry {
     IUnitTask@ T3RushTurret(TechFactories::Cluster@ cluster, CCircuitUnit@ builder, CCircuitUnit@ factory) {
         const int want = T3RushTurretTarget(cluster, factory);
         if (want <= 0 || builder is null) return null;
-        CCircuitDef@ turret = TechFactories::Nano();
-        if (turret is null || !builder.circuitDef.CanBuild(turret)) return null;
-        if (t3TurretTask !is null && !t3TurretTask.IsDead()) {
-            IBuilderTask@ pending = cast<IBuilderTask>(t3TurretTask);
-            if (pending !is null && pending.target is null && pending.GetUnits().length() == 0
-                && SafeWorker(builder, pending.GetBuildPos())) return t3TurretTask;
-        } else { @t3TurretTask = null; }
+        string why;
+        return SupportOrder(cluster, builder, TechFactories::Nano(), want, "t3rush gantry turret (of " + want + ")", why);
+    }
+
+    // The gantry block's turret orders (owner, 2026-10-24). The construction
+    // aircraft (corca and the like) are the block's builders: there are many of
+    // them, so up to GantrySupportParallel orders go out at once, each pinned to
+    // its own slot. Nothing here keeps a unit handle across frames: a worker
+    // killed on its way leaves its task with no units, and the next capable
+    // builder that asks takes the task over. Dead tasks are pruned on every ask.
+    void SupportForget(TechFactories::Cluster@ cluster, uint index) {
+        cluster.supportTasks.removeAt(index);
+        cluster.supportSlots.removeAt(index);
+        cluster.supportFrames.removeAt(index);
+    }
+    // Drops dead orders and returns the live ones. An order that died with no
+    // turret on its slot rests the slot GantrySupportSlotRestSeconds, and after
+    // GantrySupportSlotMaxFails such deaths the slot is released (played
+    // 2026-10-24: 157 orders on one slot that never framed, one every 8 frames).
+    int PruneSupport(TechFactories::Cluster@ cluster) {
+        int live = 0;
+        for (int index = int(cluster.supportTasks.length()) - 1; index >= 0; --index) {
+            IUnitTask@ task = cluster.supportTasks[index];
+            if (task !is null && !task.IsDead()) { ++live; continue; }
+            const int slot = cluster.supportSlots[index];
+            SupportForget(cluster, uint(index));
+            if (slot < 0 || aiTerrainMgr.GetReservationState(slot) != 0) continue;   // consumed (built) or held by another order
+            const string key = "" + slot;
+            int fails = 0;
+            cluster.supportSlotFails.get(key, fails);
+            ++fails;
+            cluster.supportSlotFails.set(key, fails);
+            cluster.supportSlotRest.set(key, ai.frame + Global::RoleSettings::Tech::GantrySupportSlotRestSeconds * SECOND);
+            if (fails >= Global::RoleSettings::Tech::GantrySupportSlotMaxFails) {
+                aiTerrainMgr.ReleaseReservation(slot);
+                GenericHelpers::LogUtil("[TECH][Gantry] turret slot " + slot + " given up: " + fails + " orders died there with no frame", 1);
+            }
+        }
+        return live;
+    }
+    // What holds the missing-turret fallback: a turret frame of the block, or an
+    // order whose worker is on its way for under GantrySupportNoFrameSeconds
+    void SupportHolds(TechFactories::Cluster@ cluster, bool &out frame, bool &out worker) {
+        frame = false; worker = false;
+        for (uint index = 0; index < cluster.supportTasks.length(); ++index) {
+            IBuilderTask@ task = cast<IBuilderTask>(cluster.supportTasks[index]);
+            if (task is null || task.IsDead()) continue;
+            if (task.target !is null) { frame = true; continue; }
+            if (task.GetUnits().length() > 0
+                && ai.frame - cluster.supportFrames[index] < Global::RoleSettings::Tech::GantrySupportNoFrameSeconds * SECOND) worker = true;
+        }
+        // Only this cluster's recorded slots count: a neighbour's progressing
+        // turret must not hold our zero-turret recovery indefinitely.
+        for (uint index = 0; index < cluster.turretPos.length() && !frame; ++index) {
+            CCircuitUnit@ candidate = TechFactories::TurretAt(cluster.turretPos[index]);
+            if (candidate !is null && candidate.GetBuildProgress() < 1.0f) frame = true;
+        }
+    }
+    bool OwnsSupport(TechFactories::Cluster@ cluster, IBuilderTask@ task) {
+        for (uint index = 0; index < cluster.supportTasks.length(); ++index)
+            if (task is cluster.supportTasks[index]) return true;
+        return false;
+    }
+    // The next turret work for `builder` on the block, `want` turrets in all
+    // (standing or ordered): an order left without a worker, a turret frame, or
+    // a new order. `why` says why there is none.
+    IUnitTask@ SupportOrder(TechFactories::Cluster@ cluster, CCircuitUnit@ builder, CCircuitDef@ turret, int want,
+        const string& in what, string &out why) {
+        why = "";
+        if (cluster is null || builder is null || turret is null) { why = "no cluster, builder or turret definition"; return null; }
+        if (!builder.circuitDef.CanBuild(turret)) { why = builder.circuitDef.GetName() + " cannot build the turret"; return null; }
+        const int live = PruneSupport(cluster);
+        // 1. an order whose worker is gone (killed or moved on): this builder takes it over
+        for (uint index = 0; index < cluster.supportTasks.length(); ++index) {
+            IBuilderTask@ task = cast<IBuilderTask>(cluster.supportTasks[index]);
+            if (task is null || task.IsDead() || task.GetUnits().length() > 0) continue;
+            if (SafeWorker(builder, task.GetBuildPos())) return cluster.supportTasks[index];
+        }
+        // 2. a turret frame of the block; an unsafe/unreachable one belongs to
+        // recovery, never a duplicate turret
         for (uint index = 0; index < cluster.turretPos.length(); ++index) {
             CCircuitUnit@ frame = TechFactories::TurretAt(cluster.turretPos[index]);
-            if (frame !is null && frame.GetBuildProgress() < 1.0f && SafeWorker(builder, frame.GetPos(ai.frame)))
-                return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame,
-                    Global::RoleSettings::Tech::GantryAssistSeconds * SECOND));
+            if (frame is null || frame.GetBuildProgress() >= 1.0f) continue;
+            if (!SafeWorker(builder, frame.GetPos(ai.frame))) { why = Unsafe(builder, frame.GetPos(ai.frame), "turret frame " + frame.id); continue; }
+            return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame,
+                Global::RoleSettings::Tech::GantryAssistSeconds * SECOND));
         }
-        if (t3TurretTask !is null) return null;   // its order has a worker or a frame: wait for it
-        const int have = TechFactories::TurretsOf(cluster);
-        if (have >= want || Layout::TurretsCapped()) return null;
+        // 3. a new order
+        if (live >= AiMax(1, Global::RoleSettings::Tech::GantrySupportParallel)) { why = "" + live + " turret orders in flight"; return null; }
+        if (TechFactories::TurretsOf(cluster) + live >= want) { why = "the block's " + want + " turrets stand or are ordered"; return null; }
+        if (Layout::TurretsCapped()) { why = "turret cap: " + Layout::TurretsInFlight() + " in flight"; return null; }
         const int slot = aiTerrainMgr.NextSlotAny(cluster.nanoGroup, builder.GetPos(ai.frame));
-        if (slot < 0 || !SafeWorker(builder, aiTerrainMgr.GetReservationPos(slot))) return null;
-        IUnitTask@ task = TechFactories::OrderPinned(builder, Task::BuildType::NANO, turret, slot,
-            "t3rush gantry turret (" + (have + 1) + " of " + want + ")");
-        if (task is null) return null;
+        if (slot < 0) { why = "no free turret slot in group " + cluster.nanoGroup; return null; }
+        int rest = 0;
+        if (cluster.supportSlotRest.get("" + slot, rest) && ai.frame < rest) {
+            why = "turret slot " + slot + " rests " + ((rest - ai.frame) / SECOND + 1) + " s after a lost order";
+            return null;
+        }
         const AIFloat3 position = aiTerrainMgr.GetReservationPos(slot);
+        if (!SafeWorker(builder, position)) { why = Unsafe(builder, position, "turret slot " + slot); return null; }
+        IUnitTask@ task = TechFactories::OrderPinned(builder, Task::BuildType::NANO, turret, slot, what + ", " + (live + 1) + " in flight");
+        if (task is null) { why = "turret slot " + slot + " refused (state " + aiTerrainMgr.GetReservationState(slot) + ")"; return null; }
         bool known = false;
         for (uint index = 0; index < cluster.turretPos.length(); ++index)
             if (MapHelpers::SqDist(position, cluster.turretPos[index]) < SQUARE_SIZE * SQUARE_SIZE) known = true;
         if (!known) cluster.turretPos.insertLast(position);
         cluster.turretFrame = ai.frame; cluster.started = true;
-        @t3TurretTask = task;
+        aiTerrainMgr.SetLayoutInt("tech.cluster." + cluster.labRes + ".started", 1);
+        cluster.supportTasks.insertLast(task);
+        cluster.supportSlots.insertLast(slot);
+        cluster.supportFrames.insertLast(ai.frame);
         return task;
+    }
+    // owner, 2026-10-24: on the t3rush plan the first gantry is ordered once
+    // funded, without its FrontT3TurretsFirst block standing first
+    bool RushWithoutBlock(TechFactories::Cluster@ cluster, CCircuitDef@ definition) {
+        return Global::RoleSettings::Tech::T3RushGantryWithoutTurrets && TechPlan::plan == "t3rush"
+            && cluster !is null && cluster.tier >= 3 && definition !is null
+            && definition.count <= aiBuilderMgr.GetUnfinishedCount(definition)   // no gantry of this kind stands yet
+            && Funded(definition, false);
     }
 
     IUnitTask@ Work(TechFactories::Cluster@ cluster, CCircuitDef@ definition, CCircuitUnit@ builder) {
@@ -225,102 +343,39 @@ namespace TechGantry {
         }
         CCircuitDef@ turret = TechFactories::Nano();
         if (turret is null) return Null("no construction turret definition");
-        const int required = TechFactories::TurretsBeforeLab(cluster);
-        const string progress = "turrets " + completed + "/" + required + " of " + cluster.slots;
-        // One explicit bootstrap assignment at a time. Native owns command
-        // retry/reassignment and its pinned reservation; travel/frame ownership
-        // suppresses fallback without falsifying the progress clock. GetUnits
-        // snapshots only assigned task workers: O(task workers + reserved
-        // turret slots), not an army scan or a constant-time whole decision.
-        IBuilderTask@ support = cast<IBuilderTask>(cluster.gantrySupportTask);
-        bool supportFrame = false, supportWorker = false;
-        if (support !is null && !support.IsDead()) {
-            supportFrame = support.target !is null;
-            supportWorker = support.GetUnits().length() > 0;
-            if (builder.circuitDef.CanBuild(turret) && !supportWorker
-                && SafeWorker(builder, support.GetBuildPos())) return support;
-        } else { @cluster.gantrySupportTask = null; }
-        // Only this cluster's recorded slots count: a neighbour's progressing
-        // turret must not hold our zero-turret recovery indefinitely.
-        CCircuitUnit@ frame = null;
-        for (uint index = 0; index < cluster.turretPos.length(); ++index) {
-            CCircuitUnit@ candidate = TechFactories::TurretAt(cluster.turretPos[index]);
-            if (candidate !is null && candidate.GetBuildProgress() < 1.0f) { @frame = candidate; break; }
-        }
-        if (frame !is null) supportFrame = true;
-        bool fallback = false;
-        bool stepFunded = false;
+        const int block = TechFactories::TurretsBeforeLab(cluster);
+        const bool rush = RushWithoutBlock(cluster, definition);
+        const int required = rush ? 0 : block;
+        const string progress = "turrets " + completed + "/" + block + " of " + cluster.slots + (rush ? " (t3rush: not waited for)" : "");
+        const bool able = builder.circuitDef.CanBuild(definition)
+            && builder.circuitDef.GetBuildSpeed() >= Global::RoleSettings::Tech::GantryMinimumBuilderPower;
+        // The block's turrets: every builder that can build one (the construction
+        // aircraft above all) drops them, several orders at once, until `block`
+        // stand or are ordered. On a rush a gantry builder goes to the gantry.
         string turretWhy = "";
-        // D-370 (owner): a gantry the income step made due (one per
-        // GantryScaleMetalStep) is ordered as soon as it is funded on that income and
-        // this builder can build it; its turret block keeps filling behind it
-        // (gantry.support, lab.front) and the turrets assist the frame. Played: the
-        // T2 constructors that run gantry.scale cannot build the T1 turret, so the
-        // ten-turret prerequisite fell to one T1 worker, and D-281's 90 s fallback
-        // was held by that worker's order for eight minutes while the bank sat full
-        // at +1,100 metal (3 of 10 turrets). The early D-281 cluster keeps its
-        // turrets-first budget rule.
-        if (completed < required && !cluster.earlyGantry && builder.circuitDef.CanBuild(definition)
-            && builder.circuitDef.GetBuildSpeed() >= Global::RoleSettings::Tech::GantryMinimumBuilderPower
-            && Funded(definition, false, true)) {
-            stepFunded = true;
-        } else if (completed < required) {
-            if (frame !is null) {
-                if (SafeWorker(builder, frame.GetPos(ai.frame)))
-                    return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame,
-                        Global::RoleSettings::Tech::GantryAssistSeconds * SECOND));
-                // An existing but unsafe/unreachable frame belongs to recovery;
-                // neither override SafeWorker nor create a duplicate turret.
-                turretWhy = Unsafe(builder, frame.GetPos(ai.frame), "turret frame " + frame.id);
-            } else if (!builder.circuitDef.CanBuild(turret)) {
-                turretWhy = builder.circuitDef.GetName() + " cannot build the turret";
-            } else if (cluster.gantrySupportTask !is null) {
-                // The one bootstrap order is alive with no frame yet: its builder
-                // holds it (native retries the command; the 120 s task timeout
-                // releases a refused placement), or its site is unsafe for this builder
-                turretWhy = supportWorker
-                    ? "support order has its worker, no frame yet (" + (ai.frame - cluster.turretFrame) / SECOND + " s)"
-                    : Unsafe(builder, support.GetBuildPos(), "unassigned support order's site");
-            } else if (Layout::TurretsCapped()) {
-                // OrderPinned refuses a NANO silently under the D-097 turret cap
-                // (orders in flight anywhere, including ones the engine refuses)
-                turretWhy = "turret cap: " + Layout::TurretsInFlight() + " in flight";
-            } else {
-                const int slot = aiTerrainMgr.NextSlotAny(cluster.nanoGroup, builder.GetPos(ai.frame));
-                if (slot < 0) turretWhy = "no free turret slot in group " + cluster.nanoGroup;
-                else if (!SafeWorker(builder, aiTerrainMgr.GetReservationPos(slot))) turretWhy = Unsafe(builder, aiTerrainMgr.GetReservationPos(slot), "turret slot " + slot);
-                else {
-                    IUnitTask@ task = TechFactories::OrderPinned(builder, Task::BuildType::NANO, turret, slot, "gantry support turret");
-                    if (task !is null) {
-                        const AIFloat3 position = aiTerrainMgr.GetReservationPos(slot);
-                        bool known = false;
-                        for (uint index = 0; index < cluster.turretPos.length(); ++index)
-                            if (MapHelpers::SqDist(position, cluster.turretPos[index]) < SQUARE_SIZE * SQUARE_SIZE) known = true;
-                        if (!known) cluster.turretPos.insertLast(position);
-                        cluster.turretFrame = ai.frame; cluster.started = true;
-                        aiTerrainMgr.SetLayoutInt("tech.cluster." + cluster.labRes + ".started", 1);
-                        @cluster.gantrySupportTask = task;
-                        return task;
-                    }
-                    turretWhy = "turret slot " + slot + " refused (state " + aiTerrainMgr.GetReservationState(slot) + ")";
-                }
-            }
+        if (completed < block && !(rush && able)) {
+            IUnitTask@ task = SupportOrder(cluster, builder, turret, block, "gantry support turret", turretWhy);
+            if (task !is null) return task;
+        } else {
+            PruneSupport(cluster);
+        }
+        bool fallback = false;
+        if (completed < required) {
             // D-281's funded fallback: GantryTurretWaitSeconds without turret
-            // progress, no frame or assigned worker holding the block, the
-            // gantry funded and this builder able to build it
+            // progress, no frame or worker on its way (under
+            // GantrySupportNoFrameSeconds) holding the block, the gantry funded
+            // and this builder able to build it
+            bool supportFrame = false, supportWorker = false;
+            SupportHolds(cluster, supportFrame, supportWorker);
             const bool funded = Funded(definition, false);
-            const bool able = builder.circuitDef.CanBuild(definition)
-                && builder.circuitDef.GetBuildSpeed() >= Global::RoleSettings::Tech::GantryMinimumBuilderPower;
             const int waited = (ai.frame - cluster.gantryProgressFrame) / SECOND;
             fallback = GantryMath::CanFallback(ai.frame, cluster.gantryProgressFrame,
                 Global::RoleSettings::Tech::GantryTurretWaitSeconds * SECOND, supportFrame, supportWorker, funded, able);
             if (!fallback) {
                 string hold = waited < Global::RoleSettings::Tech::GantryTurretWaitSeconds
                     ? "fallback in " + (Global::RoleSettings::Tech::GantryTurretWaitSeconds - waited) + " s"
-                    : (supportFrame ? "fallback held by a turret frame" : supportWorker ? "fallback held by the support worker"
-                        : !funded ? "fallback not funded (bank " + int(aiEconomyMgr.metal.current) + "/" + int(definition.costM)
-                            + " metal, 10 s income " + int(Economy::GetMinMetalIncomeLast10s()) + ", energy " + int(Economy::GetMinEnergyIncomeLast10s())
-                            + " - usage " + int(TeamEconomy::OwnEnergy(TeamEconomy::USAGE)) + " + converters " + int(ai.GetTeamRulesParam("mmUse", 0.0f)) + ")"
+                    : (supportFrame ? "fallback held by a turret frame" : supportWorker ? "fallback held by a support worker on its way"
+                        : !funded ? "fallback not funded (" + FundingNote(definition, false) + ")"
                         : "fallback: " + builder.circuitDef.GetName() + " cannot build the gantry or is under " + int(Global::RoleSettings::Tech::GantryMinimumBuilderPower) + " build power");
                 return Null(progress + ": " + turretWhy + "; " + hold);
             }
@@ -343,11 +398,11 @@ namespace TechGantry {
             || !ReachableBattlefield(cluster.pos, cluster.facing)
             || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending())) return Null("early admission: funding, battlefield path or a rush commitment");
         IUnitTask@ task = TechFactories::OrderPinned(builder, Task::BuildType::FACTORY, definition,
-            cluster.labRes, stepFunded ? "gantry (funded by the income step, " + completed + " of " + required + " turrets stand; D-370)"
-            : fallback ? "gantry (funded missing-turret-builder fallback)" : "gantry (supported cluster)");
+            cluster.labRes, fallback ? "gantry (funded missing-turret-builder fallback)"
+                : completed < block ? "gantry (t3rush: its turrets go up beside the frame)" : "gantry (supported cluster)");
         if (task !is null) {
             @cluster.labTask = task; cluster.orderedFrame = ai.frame;
-            cluster.gantryFallback = fallback || stepFunded;   // INV-045's recorded exceptions
+            cluster.gantryFallback = fallback || completed < block;   // INV: ordered short of its block on purpose
             return task;
         }
         return Null("gantry slot " + cluster.labRes + " refused (state " + aiTerrainMgr.GetReservationState(cluster.labRes) + ")");
@@ -362,7 +417,7 @@ namespace TechGantry {
         for (uint index = 0; index < TechFactories::clusters.length(); ++index) {
             TechFactories::Cluster@ cluster = TechFactories::clusters[index];
             if (cluster.ahead || cluster.tier < 3 || cluster.labRes < 0) continue;
-            if (task is cluster.gantrySupportTask || task is cluster.labTask) return true;
+            if (task is cluster.labTask || OwnsSupport(cluster, task)) return true;
             if (task.target !is null && task.target.GetBuildProgress() < 1.0f) {
                 if (task.target.id == cluster.labId) return true;
                 for (uint slot = 0; slot < cluster.turretPos.length(); ++slot)
@@ -386,8 +441,7 @@ namespace TechGantry {
         return false;
     }
     IUnitTask@ SupportWork(CCircuitUnit@ builder) {
-        // D-370: the heavy rush no longer holds the open gantry cluster's turrets either
-        if (!RecoveryEnabled() || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0) return null;
+        if (!RecoveryEnabled() || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending()) return null;
         TechFactories::Cluster@ cluster = TechFactories::ExistingGantry();
         if (cluster is null) {
             // the t3rush gantry stands: its turrets keep climbing (owner, 2026-10-18)
@@ -648,12 +702,7 @@ namespace TechGantryScale {
         lastHave = have; lastOpen = openClusters; lastTurretProgress = AiMax(lastTurretProgress, turretProgress);
         const bool energyOk = Global::RoleSettings::Tech::GantryScaleEnergyFloor <= 0.0f
             || Economy::GetMinEnergyIncomeLast10s() >= Global::RoleSettings::Tech::GantryScaleEnergyFloor;
-        // D-370: only the nuke commitment blocks the step gantry (the chain on its
-        // silo, then the bounded first-stockpile window). The heavy rush used to
-        // block it too, and its finite batch waits for FRONT recipients it may never
-        // get: played, a T3-plan TECH with the heavy strategy rolled sat at a full
-        // bank from +560 to +600 metal for twenty minutes, `blocked=rush`, no gantry.
-        const bool blocked = TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0;
+        const bool blocked = TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending();
         // Hysteresis: the high-water target never cancels work; a new order also
         // needs the income to hold (have + 1) x step x share right now.
         // A map limit on the gantry is the ceiling of what can be due.
