@@ -472,7 +472,7 @@ def write_script(args, d):
         x, z, role = spots[si]
         L += ["\t[TEAM%d]" % t, "\t{", "\t\tAllyTeam=%d;" % ally, "\t\tTeamLeader=0;",
               "\t\tSide=%s;" % side, "\t\tRgbColor=%s;" % COLOURS[t % len(COLOURS)],
-              "\t\tStartPosX=%d;" % int(x), "\t\tStartPosZ=%d;" % int(z), "\t\tHandicap=%d;" % (int(args.bonus) if (t == 0 and args.bonus) else 0), "\t}"]
+              "\t\tStartPosX=%d;" % int(x), "\t\tStartPosZ=%d;" % int(z), "\t\tHandicap=%d;" % (int(args.bonus_all) if getattr(args, "bonus_all", None) else (int(args.bonus) if (t == 0 and args.bonus) else 0)), "\t}"]
         # --prod-ai names an installed opponent (e.g. stock BARb) that keeps its
         # own default options: the test build's AI options are not passed to it.
         prod_ai = getattr(args, "prod_ai", None)
@@ -979,6 +979,7 @@ def add_script_args(p):
     p.add_argument("--ai-option", action="append", help="key=value in every test AI's [OPTIONS], e.g. profile=experimental_hard")
     p.add_argument("--engine", help="engine folder name under the install's engine/ (default: the one the lobby used last)")
     p.add_argument("--bonus", default=None, help="handicap percent for team 0 only (e.g. 50); benchmarks run at 0")
+    p.add_argument("--bonus-all", default=None, help="handicap percent for every AI team, both sides alike (e.g. 55)")
     p.add_argument("--extra-widget", action="append", help="an extra LuaUI widget to stage into the playtest write dir (repeatable)")
     p.add_argument("--lean-render", action="store_true", help="reduce graphics memory in this isolated write directory")
     p.add_argument("--headless", action="store_true", help="spring-headless.exe: no window; widgets, speed and [Playtest] lines still work; screenshots are blank 187-byte PNGs")
