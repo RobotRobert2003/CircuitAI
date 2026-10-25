@@ -159,9 +159,6 @@ namespace SeaFactories {
                 if (combat !is null) return combat;
             }
         }
-        if (!advanced && !SeaCombat::Active() && Global::RoleSettings::Sea::UseDynamicFactoryProduction) {
-            IUnitTask@ task=FactoryProduction::MakeTask(yard); if (task !is null) return task;
-        }
         if (!advanced && Global::RoleSettings::Sea::EnableEarlyRezSub) {
             CCircuitDef@ rez=ai.GetCircuitDef(side=="armada" ? "armrecl" : side=="cortex" ? "correcl" : "legnavyrezsub");
             if (rez !is null && EconomyHelpers::ShouldBuildT1ResurrectionSub(aiEconomyMgr.metal.income,

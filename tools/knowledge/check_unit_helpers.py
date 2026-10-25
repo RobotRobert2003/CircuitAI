@@ -64,8 +64,6 @@ def main():
     # 1. unknown / unreachable ids across all scripts (comments stripped)
     for f in glob.glob(os.path.join(ROOT, "data", "script", "src", "**", "*.as"), recursive=True):
         rel = os.path.relpath(f, ROOT).replace("\\", "/")
-        if "/systems/production/factory_configs/" in rel:
-            continue  # dead code path (UseDynamicFactoryProduction = false everywhere)
         s = re.sub(r"//[^\n]*", "", io.open(f, encoding="utf-8", errors="replace").read())
         for uid in sorted(set(ids_in(s))):
             if uid not in U:

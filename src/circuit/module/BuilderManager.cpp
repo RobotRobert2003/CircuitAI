@@ -1220,6 +1220,7 @@ bool CBuilderManager::SetCommanderCombatOption(const std::string& name,float val
 float CBuilderManager::GetCommanderEnergyReserve() const { return circuit->GetCommanderControl()->GetReserve(); }
 float CBuilderManager::GetCommanderEnergyDeficit() const { return circuit->GetCommanderControl()->GetDeficit(); }
 int CBuilderManager::GetCommanderOperation() const { return circuit->GetCommanderControl()->GetOperation(); }
+std::string CBuilderManager::DescribeCommanderFront(int id) const { return circuit->GetCommanderControl()->DescribeFront(id); }
 IUnitTask* CBuilderManager::CommanderFrontWork(CCircuitUnit* unit,int kind,CCircuitDef* def,float radius) {
     return circuit->GetCommanderControl()->FrontWork(unit,kind,def,radius);
 }

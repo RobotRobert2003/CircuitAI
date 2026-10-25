@@ -12,9 +12,9 @@ namespace RoleSettings {
             bool TheatresEnabled = false;      // experimental_balanced switches it on
             float TheatreSeconds = -1.0f;      // sea and race-won spots: -1 the land window, 0 the whole game
             float HomeRadius = 900.0f;         // rule 1: every role owns the land spots this close to its start
-            float LaneMergeRadius = 450.0f;    // lane partition: a route joins a lane this close to its spine
-            float LaneMergeShare = 0.6f;       //   for this share of its cells
-            float LaneBandRadius = 1200.0f;    //   a cluster this close to a spine is a lane cluster
+            float LaneMergeRadius = 450.0f;    // retired by D-358 (the partition is the field's corridor table); accepted, ignored
+            float LaneMergeShare = 0.6f;       //   retired by D-358; accepted, ignored
+            float LaneBandRadius = 1200.0f;    //   a cluster this close to its corridor's centre line is a lane cluster (D-358)
             bool FrontLaneSpots = true;        // roles that claim lane clusters inside the window
             bool SupportLaneSpots = true;
             bool TacticalLaneSpots = false;

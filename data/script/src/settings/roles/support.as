@@ -47,6 +47,11 @@ namespace Support {
             float AdvancedSolarEnergyIncomeMinimum = 600.0f;
             // Stop building advanced solars if above this energy income level
             float AdvancedSolarEnergyIncomeMaximum = 1000.0f;
+            // D-364: SUPPORT scales energy with ordinary fusions, one per shortfall, and
+            // offers an advanced fusion only once the 10-second minimum energy income
+            // reaches this. TECH goes to the advanced fusion on its metal gate instead;
+            // SUPPORT keeps that metal on T2 combat units. 0 removes the gate.
+            float AdvancedFusionEnergyIncome = 4000.0f;
 
             // Legacy ladder only (ExperimentalBuild=false). The shared opening
             // uses TECH's map-aware T2 recipe instead of these admission gates.

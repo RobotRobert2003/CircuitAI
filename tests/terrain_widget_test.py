@@ -34,6 +34,8 @@ class TerrainWidgetTest(unittest.TestCase):
               "boundary|1|cliff|0|1|16|32|70|0,0;32,0\\n"..
               "site|0|resources|Metal cluster|64|64|31|-1|Resource location|Terrain-derived\\n"..
               "passage|0|1|32|32,32;64,32\\n"..
+              "corridor|2|0|Central|128|96|64|64|128|0|1|0|0|1|128|0,64,96;128,64,96\\n"..
+              "corridorcells|0|2*12;-1*4\\nclearance|0|6*12;0*4\\n"..
               "cells|0*16\\nground|3*12;6*4\\naccess|31*12;16*4\\nend|1\\n"
             VFS={RAW=1,FileExists=function() return true end,LoadFile=function() return fixture end}
             io={open=function() return {read=function() return fixture end,close=function() end} end}
@@ -63,6 +65,33 @@ class TerrainWidgetTest(unittest.TestCase):
         for k,v in values.items(): data[k]=v
         self.api.Config(data)
         self.ready()
+
+    def test_background_data_load_does_not_enable_terrain_view(self):
+        self.api=self.lua.execute(self.chunk)
+        for _ in range(100): self.api.Update(True)
+        self.assertTrue(self.api.Snapshot()['loaded'])
+        self.assertFalse(self.api.Mode())
+        self.assertEqual(self.api.Model()['corridorRevision'],'124')
+        self.api.SetMode(True);self.ready()
+
+    def test_uint64_revision_is_exact_without_wide_number_arithmetic(self):
+        self.lua.execute('fixture=string.gsub(fixture,"|123\\n","|12739436875266741977\\n",1)')
+        self.api=self.lua.execute(self.chunk);self.api.SetMode(True);self.ready()
+        self.assertEqual(self.api.Model()['corridorRevision'],'90684476')
+        for fingerprint in (0,1,1000000006,1000000007,2147483647,18446744073709551615):
+            fixture=self.lua.globals().fixture
+            self.lua.globals().fixture=fixture.replace(fixture.splitlines()[0],
+                'barbfield|1|Fixture|4|4|32|1|0|'+str(fingerprint),1)
+            self.api=self.lua.execute(self.chunk);self.api.SetMode(True);self.ready()
+            self.assertEqual(self.api.Model()['corridorRevision'],str(fingerprint%1000000007+1))
+
+
+    def test_corridor_metadata_and_rasters(self):
+        m=self.api.Model()
+        self.assertEqual(m['corridors'][2]['width'],96)
+        self.assertEqual(m['corridors'][2]['spine'][2][1],128)
+        self.assertEqual(m['corridorRuns'][0][2][2],-1)
+        self.assertEqual(m['clearanceRuns'][0][1][3],12)
 
     def test_no_seam_fallback_and_debug_is_explicit(self):
         self.assertNotIn('boundary:0',self.ids())
@@ -152,6 +181,9 @@ class TerrainWidgetTest(unittest.TestCase):
 
     def test_large_rle_records_yield_without_partial_publication(self):
         self.lua.execute('''
+          -- Advance the fake wall clock past a slice on each timer read.
+          -- Publication must remain atomic even when a record spans slices.
+          local clock=0;Spring.GetTimer=function()clock=clock+.003;return clock end
           Game.mapSizeX=1024;Game.mapSizeZ=1024
           fixture="barbfield|1|Fixture|32|32|32|1|0|123\\nexperience|2|initial-map\\n"..
             "cells|"..string.rep("0*1;",1024).."\\nground|"..string.rep("3*1;",1024)..

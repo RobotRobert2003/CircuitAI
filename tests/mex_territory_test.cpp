@@ -1,6 +1,6 @@
 // D-352: the engine-free mex territory rules (resource/MexTerritory.h): the
 // theatre mask, the four ownership rules, the race, the post-window openings,
-// value per second and the deterministic lane partition on synthetic grids.
+// value per second and the lane partition over a synthetic corridor table (D-358).
 #include "resource/MexTerritory.h"
 
 #include <cmath>
@@ -10,7 +10,6 @@
 
 using namespace circuit::mex_territory;
 namespace lanes = circuit::mex_lanes;
-using circuit::mex_navigation::DistancesMulti;
 
 static void Require(bool value, const char* message) {
     if (!value) throw std::runtime_error(message);
@@ -177,43 +176,58 @@ static void TestValue() {
     Require(Value(2.f, 0.f, Unreachable, 65.f, 12.f, 30.f) == 0.f, "unreachable is worthless");
 }
 
-// A 24 x 16 isthmus: a wall at x = 12 with gaps at rows 3-4 and 11-12.
+// D-358: the lane partition over a corridor table. A synthetic table with two
+// bot corridors (north and south) and one specialist crack on a 64 x 48 cell
+// grid of 32 elmos; starts and clusters are assigned by the cell they stand
+// on (nearest open cell within six), a cluster off the band is nobody's lane
+// cluster, and progress past the midpoint seen from our side is forward.
+static circuit::field::SModel SyntheticTable() {
+    using namespace circuit::field;
+    SModel m;
+    m.gw = 64; m.gh = 48; m.cell = 32;
+    SSide a; a.allyTeam = 0; a.label = {400.f, 768.f};
+    SSide b; b.allyTeam = 1; b.label = {1650.f, 768.f};
+    m.sides = {a, b};
+    auto corridor = [&](int id, float z, float narrowest, bool specialist) {
+        SCorridor c; c.id = id; c.cls = C_BOT; c.routes = 1; c.specialist = specialist; c.narrowest = narrowest; c.meanWidth = narrowest;
+        c.centre = {{200.f, z}, {1024.f, z}, {1848.f, z}}; c.width = {narrowest, narrowest, narrowest};
+        c.length = 1648.f; c.choke = {1024.f, z}; c.chokeIndex = 1; c.name = "test";
+        return c;
+    };
+    m.corridors = {corridor(0, 400.f, 500.f, false), corridor(1, 1100.f, 600.f, false), corridor(2, 760.f, 32.f, true)};
+    m.corridorOf[C_BOT].assign(std::size_t(m.gw) * m.gh, -1);
+    for (int z = 0; z < m.gh; ++z) for (int x = 0; x < m.gw; ++x) {
+        const float ez = (z + 0.5f) * 32.f;
+        std::int16_t owner = -1;
+        if (ez < 720.f) owner = 0; else if (ez >= 800.f) owner = 1; else if (x % 8 == 0) owner = 2;   // a dashed crack between them
+        if (x == 32 && ez >= 700.f && ez < 820.f) owner = -1;   // a closed column of cells in the middle
+        m.corridorOf[C_BOT][std::size_t(z) * m.gw + x] = owner;
+    }
+    return m;
+}
+
 static void TestPartition() {
-    const int w = 24, h = 16; const float pitch = 64.f;
-    auto passable = [&](int i) { const int x = i % w, z = i / w; return x != 12 || z == 3 || z == 4 || z == 11 || z == 12; };
-    auto cost = [&](int a, int b) { return pitch * std::hypot(float(a % w - b % w), float(a / w - b / w)); };
-    std::vector<std::pair<int, float>> enemySeeds, ourSeeds;
-    for (int z = 0; z < h; ++z) enemySeeds.emplace_back(z * w + 22, 0.f);
-    const std::vector<int> starts = { 4 * w + 2, 12 * w + 2, 7 * w + 2 };
-    for (int s : starts) ourSeeds.emplace_back(s, 0.f);
-    const auto enemy = DistancesMulti(w, h, enemySeeds, passable, cost);
-    const auto ours = DistancesMulti(w, h, ourSeeds, passable, cost);
-    std::vector<std::pair<float, float>> centres = { {12.5f * pitch, 4.5f * pitch}, {15.5f * pitch, 11.5f * pitch}, {5.5f * pitch, 4.5f * pitch}, {5.5f * pitch, 15.5f * pitch} };
-    std::vector<int> cells = { 4 * w + 12, 11 * w + 15, 4 * w + 5, 15 * w + 5 };
-    lanes::Settings settings; settings.mergeRadius = 450.f; settings.mergeShare = 0.6f; settings.bandRadius = 200.f;
-    const auto p = lanes::Build(w, h, pitch, starts, enemy, ours, passable, centres, cells, settings);
-    Require(p.lanes.size() == 2, "two gaps give two lanes");
-    Require(p.startLane[0] == 0 && p.startLane[1] == 1, "each outer start founds its own lane");
-    Require(p.startLane[2] == 0, "the middle start (nearer the top gap) merges into the first lane");
-    Require(p.lanes[0].members.size() == 2 && p.lanes[1].members.size() == 1, "membership follows the merge");
-    Require(p.lanes[0].choke >= 0 && p.lanes[0].choke % w == 12, "the choke is the gap");
-    Require(p.lanes[0].midpoint >= 0 && std::abs(p.lanes[0].midpoint % w - 12) <= 1, "the midpoint is the terrain halfway mark");
-    Require(p.clusterLane[0] == 0 && !p.clusterForward[0], "the gap cluster belongs to the first lane and is not forward");
-    Require(p.clusterLane[1] == 1 && p.clusterForward[1], "a cluster past the second lane's midpoint is forward");
-    Require(p.clusterLane[2] == 0 && !p.clusterForward[2], "a home-side cluster near the spine is a lane cluster");
-    Require(p.clusterLane[3] == -1, "a cluster beyond the band belongs to no lane");
-    const auto again = lanes::Build(w, h, pitch, starts, enemy, ours, passable, centres, cells, settings);
-    Require(again.lanes[0].spine == p.lanes[0].spine && again.clusterLane == p.clusterLane, "the partition is a function of its inputs");
-    // An L-shaped enemy box (south edge) bends the routes without any mirror assumption.
-    std::vector<std::pair<int, float>> south;
-    for (int x = 8; x < w; ++x) south.emplace_back(15 * w + x, 0.f);
-    auto open = [](int) { return true; };
-    const auto enemyS = DistancesMulti(w, h, south, open, cost);
-    const auto oursS = DistancesMulti(w, h, ourSeeds, open, cost);
-    const auto q = lanes::Build(w, h, pitch, starts, enemyS, oursS, open, {}, {}, settings);
-    Require(!q.lanes.empty() && q.lanes[0].spine.back() / w == 15, "routes end at the south box");
-    const int last = q.lanes[0].spine.back();
-    Require(last % w >= 8, "the route bends to the adjacent box instead of a mirrored point");
+    const auto m = SyntheticTable();
+    // starts: two in the north corridor (one on the closed column, snapped), one in the south, one on the crack
+    const std::vector<std::pair<float, float>> starts = { {300.f, 300.f}, {1040.f, 740.f}, {300.f, 1200.f}, {264.f, 760.f} };
+    const std::vector<std::pair<float, float>> clusters = { {800.f, 300.f}, {1500.f, 1300.f}, {800.f, 1900.f}, {1700.f, 200.f} };
+    const auto p = lanes::FromCorridors(m, circuit::field::C_BOT, 0, starts, clusters, 400.f);
+    Require(p.lanes.size() == 2, "the specialist crack is not a lane; the two wide corridors are");
+    Require(p.lanes[0].corridor == 0 && p.lanes[1].corridor == 1, "lanes keep the table's order");
+    Require(p.startLane[0] == 0 && p.startLane[2] == 1, "a start belongs to the corridor owning its cell");
+    Require(p.startLane[1] == 0, "a start on a closed cell snaps to the nearest open one");
+    Require(p.startLane[3] == -1, "a start on the crack has no lane");
+    Require(p.lanes[0].members.size() == 2 && p.lanes[1].members.size() == 1, "membership follows the table");
+    Require(p.lanes[0].width == 500.f && p.lanes[1].width == 600.f, "a lane's width is its corridor's narrowest point");
+    Require(p.clusterLane[0] == 0 && !p.clusterForward[0], "a cluster near the north centre, before the midpoint");
+    Require(p.clusterLane[1] == 1 && p.clusterForward[1], "a cluster in the south corridor past the midpoint is forward");
+    Require(p.clusterLane[2] == -1, "a cluster beyond the band belongs to no lane");
+    Require(p.clusterLane[3] == 0 && p.clusterForward[3], "a far north cluster is forward from side 0");
+    const auto q = lanes::FromCorridors(m, circuit::field::C_BOT, 1, starts, clusters, 400.f);
+    Require(q.clusterLane[3] == 0 && !q.clusterForward[3], "seen from side 1 the same cluster is home ground");
+    const auto again = lanes::FromCorridors(m, circuit::field::C_BOT, 0, starts, clusters, 400.f);
+    Require(again.startLane == p.startLane && again.clusterLane == p.clusterLane, "the partition is a function of its inputs");
+    Require(lanes::FromCorridors(m, circuit::field::C_VEH, 0, starts, clusters, 400.f).lanes.empty(), "a class without corridors has no lanes");
 }
 
 int main() {
@@ -223,6 +237,6 @@ int main() {
         std::cerr << "mex_territory_test: FAIL " << e.what() << "\n";
         return 1;
     }
-    std::cout << "mex_territory_test: PASS mask, home, sea, lanes, race, openings, balance, value, partition\n";
+    std::cout << "mex_territory_test: PASS mask, home, sea, lanes, race, openings, balance, value, corridor partition\n";
     return 0;
 }

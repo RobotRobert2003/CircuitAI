@@ -501,8 +501,13 @@ private:
 	std::vector<SMexResolved> mexResolved;
 	std::vector<int> mexSpotCluster;
 	std::vector<int> mexLaneTeams;        // claim team per lane-partition start index
+	// D-358: the partition over the field's corridor table of the own claim's
+	// ground class; rebuilt when the table arrives or the claims change.
 	mex_lanes::Partition mexLanes;
-	mex_lanes::Settings mexLaneSettings;
+	std::shared_ptr<const field::SModel> mexField;   // the table the partition was built from (null: none yet)
+	int mexLaneClass = -1;                // field class of the own ground claim
+	int mexLaneSide = -1;                 // this team's side index in the table
+	float mexLaneBandRadius = 1200.f;     // a cluster this close to a corridor centre is a lane cluster
 	bool mexTheatresEnabled = false;
 	bool mexTerritoryDirty = true;
 	bool mexResolvedLandWindow = false, mexResolvedTheatreWindow = false;
@@ -518,6 +523,7 @@ private:
 	void EnsureMexEnemySeeds();
 	void RebuildMexTerritory();
 	int MexSpotIndex(const springai::AIFloat3& pos) const;
+	const field::SCorridor* MexLaneCorridor(int lane) const;   // D-358: the corridor a lane is, null when none
 	const SMexResolved* MexResolvedAt(const springai::AIFloat3& pos);
 };
 

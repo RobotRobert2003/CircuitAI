@@ -26,6 +26,10 @@ public:
     float GetReserve() const { return reserve; }
     float GetDeficit() const;
     int GetOperation() const { return operation; }
+    // Read-only cached decision state. No callbacks, census or replanning;
+    // O(log commanders), called only by the strategic snapshot publisher.
+    std::string DescribeFront(int id) const;
+
     bool ReceiveProjectiles(const char* message);
     IUnitTask* FrontWork(CCircuitUnit* unit,int kind,CCircuitDef* buildDef,float radius);
     bool CanStartRadar(CCircuitUnit* unit);

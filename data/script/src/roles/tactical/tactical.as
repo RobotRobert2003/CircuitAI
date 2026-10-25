@@ -7,7 +7,6 @@
 #include "../../helpers/objectives/objective_helpers.as"
 #include "../../helpers/objectives/objective_executor.as"
 #include "../../types/strategic_objectives.as"
-#include "../../systems/production/factory_production.as"
 #include "../../helpers/construction/sea_constructor_helpers.as"
 
 namespace RoleTactical {
@@ -67,14 +66,6 @@ namespace RoleTactical {
 
 		// Enable tactical constructor for Tactical role
 		Builder::SetTacticalEnabled(true);
-
-		// Initialize dynamic factory production system if enabled
-		if (Global::RoleSettings::Tactical::UseDynamicFactoryProduction) {
-			FactoryProduction::Initialize();
-			GenericHelpers::LogUtil("[TACTICAL] Dynamic factory production system initialized", 2);
-		} else {
-			GenericHelpers::LogUtil("[TACTICAL] Dynamic factory production disabled; using legacy logic", 2);
-		}
 	}
 
 	void Tactical_ApplyStartLimits() {
@@ -163,15 +154,6 @@ namespace RoleTactical {
 						TaskS::Recruit(Task::RecruitType::BUILDPOWER, Task::Priority::HIGH, ctorDef2, pos2, 64.f)
 					);
 				}
-			}
-
-			// Dynamic production system for hover factories
-			if (Global::RoleSettings::Tactical::UseDynamicFactoryProduction) {
-				IUnitTask@ dynamicTask = FactoryProduction::MakeTask(u);
-				if (dynamicTask !is null) {
-					return dynamicTask;
-				}
-				GenericHelpers::LogUtil("[TACTICAL] Dynamic production returned null for '" + facName + "', falling back to default", 3);
 			}
 		}
 

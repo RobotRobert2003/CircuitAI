@@ -31,6 +31,17 @@
 #include <sstream>
 
 namespace circuit {
+std::string CCommanderControl::DescribeFront(int id) const {
+    const auto it=commanders.find(id);
+    if(it==commanders.end())return "";
+    const auto& s=it->second;
+    return std::to_string(s.frontFrame)+","+std::to_string(int(s.mode))+","+
+        std::to_string(s.pushScreens)+","+std::to_string(s.pushScreenProgress)+","+
+        std::to_string(s.pushBound)+","+std::to_string(s.pushGoalProgress)+","+
+        std::to_string(s.pushHome?1:0)+","+std::to_string(s.front.x)+","+
+        std::to_string(s.front.z)+","+std::to_string(s.workTask?1:0);
+}
+
 using springai::AIFloat3;
 using commander::Point;
 static Point P(const AIFloat3& p) { return {p.x,p.z}; }

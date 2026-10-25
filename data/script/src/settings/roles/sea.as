@@ -472,11 +472,6 @@ namespace Sea {
             float RequiredMetalCurrentForT2Shipyard = 800.0f;
             int MaxT2Shipyards = 1;
 
-            /******************** DYNAMIC FACTORY PRODUCTION ********************/
-            // Toggle for role-based dynamic factory production system (replaces factory.json logic)
-            // When enabled, uses threat-driven unit selection with tier scaling
-            bool UseDynamicFactoryProduction = false;
-
             /******************** SEA FACTORY OUTPUT TARGETS ********************/
             // Maintain at least this many T2 destroyers; when below, enqueue in batches
             int MinT2DestroyerCount = 5;

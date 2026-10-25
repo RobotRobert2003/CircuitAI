@@ -19,13 +19,6 @@ namespace SupportAssistProbe {
             valid = valid && definition.maxThisUnit == 0 && !definition.IsAvailable(ai.frame);
         }
         const string assistant = UnitHelpers::GetFastAssistBots(Global::AISettings::Side)[0];
-        const string lab = UnitHelpers::GetT2BotLabForSide(Global::AISettings::Side);
-        FactoryProduction::FactoryConfig@ configuration;
-        valid = valid && FactoryProduction::factoryConfigs.get(lab, @configuration) && configuration !is null;
-        if (configuration !is null) {
-            for (uint index = 0; index < configuration.roles.length(); ++index)
-                valid = valid && configuration.GetUnitsForRole(configuration.roles[index]).find(assistant) < 0;
-        }
         CCircuitDef@ definition = ai.GetCircuitDef(assistant);
         const int original = definition.maxThisUnit;
         Global::Map::MergedUnitLimits.set(assistant, 1);
@@ -34,7 +27,7 @@ namespace SupportAssistProbe {
         Global::Map::MergedUnitLimits.delete(assistant);
         SupportProduction::ApplyLimits();
         valid = valid && definition.maxThisUnit == original;
-        GenericHelpers::LogUtil("[SupportAssistTest] " + (valid ? "PASS" : "FAIL") + " caps_roster_and_map_limit", 1);
+        GenericHelpers::LogUtil("[SupportAssistTest] " + (valid ? "PASS" : "FAIL") + " caps_and_map_limit", 1);
     }
     bool Handle(const string& in message) {
         if (message != "support-assist-probe|setup") return false;

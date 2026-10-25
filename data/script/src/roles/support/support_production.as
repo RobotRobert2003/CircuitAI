@@ -40,27 +40,6 @@ namespace SupportProduction {
         }
         ApplyLimits();
     }
-    void ConfigureCombat() {
-        // The registry is private to this AI and rebuilt by Initialize on role
-        // entry. Remove only assist bots from this instance's random combat
-        // lottery; their one-at-a-time BUILDPOWER admission below owns them.
-        // Startup O(roster entries * 3); no other role's tables are changed.
-        array<string>@ factories = FactoryProduction::factoryConfigs.getKeys();
-        for (uint factoryIndex = 0; factoryIndex < factories.length(); ++factoryIndex) {
-            FactoryProduction::FactoryConfig@ configuration;
-            if (!FactoryProduction::factoryConfigs.get(factories[factoryIndex], @configuration) || configuration is null) continue;
-            for (uint roleIndex = 0; roleIndex < configuration.roles.length(); ++roleIndex) {
-                const string role = configuration.roles[roleIndex];
-                array<string> units = configuration.GetUnitsForRole(role);
-                for (int index = int(units.length()) - 1; index >= 0; --index) {
-                    for (uint assistantIndex = 0; assistantIndex < assistants.length(); ++assistantIndex) {
-                        if (units[index] == assistants[assistantIndex].GetName()) { units.removeAt(index); break; }
-                    }
-                }
-                configuration.unitsByRole.set(role, units);
-            }
-        }
-    }
     IUnitTask@ AssistTask(CCircuitUnit@ factory) {
         // Existing definition counts include frames; pending is unstarted
         // native recruits only. Re-read per ask so simultaneous factories see

@@ -11,6 +11,7 @@
  */
 
 #include "terrain/field/FieldAnalysis.h"
+#include "terrain/field/FieldCorridors.h"
 #include "terrain/field/FieldGrid.h"
 #include "terrain/field/FieldLandmarks.h"
 
@@ -86,6 +87,7 @@ private:
 	void BuildLandings();
 	void BuildAvenues();
 	void BuildKeyTerrain();
+	void BuildCorridorTable();
 	void Finish();
 
 	// helpers
@@ -1278,6 +1280,16 @@ void Context::BuildKeyTerrain()
 
 // ---------------------------------------------------------------- finish
 
+// D-358: the corridor planner (FieldCorridors.cpp) over this context's grid,
+// sides and heights. Needs two sides; synthetic halves still give two.
+void Context::BuildCorridorTable()
+{
+	SCorridorContext ctx;
+	ctx.g = g; ctx.cell = cell; ctx.sideSeeds = &sideSeeds; ctx.hMean = &hMean;
+	for (int s = 0; s < 2 && s < Count(m.sides); ++s) ctx.sideLabel[s] = m.sides[s].label;
+	BuildCorridors(in, ctx, st, cancel, m);
+}
+
 void Context::Finish()
 {
 	m.regionOf = regionOf;
@@ -1308,7 +1320,11 @@ void Context::Finish()
 		h = Fnv1a(h, &ch.endB.x, sizeof(ch.endB.x));
 		h = Fnv1a(h, &ch.endB.z, sizeof(ch.endB.z));
 	}
-	const int counts[] = {Count(m.theatres), Count(m.regions), Count(m.boundaries), Count(m.chokes), Count(m.avenues), Count(m.landings)};
+	for (const SCorridor& cr : m.corridors) {
+		h = Fnv1a(h, &cr.cls, sizeof(cr.cls)); h = Fnv1a(h, &cr.narrowest, sizeof(cr.narrowest)); h = Fnv1a(h, &cr.length, sizeof(cr.length));
+		for (const SPoint& p : cr.centre) { h = Fnv1a(h, &p.x, sizeof(p.x)); h = Fnv1a(h, &p.z, sizeof(p.z)); }
+	}
+	const int counts[] = {Count(m.theatres), Count(m.regions), Count(m.boundaries), Count(m.chokes), Count(m.avenues), Count(m.landings), Count(m.corridors)};
 	h = Fnv1a(h, counts, sizeof(counts));
 	m.fingerprint = h;
 	for (int c = 0; c < g.Size(); ++c) {
@@ -1319,6 +1335,24 @@ void Context::Finish()
 	}
 	for (const SAvenue& av : m.avenues) {
 		if (av.spine.size() < 2) { m.checkFailures.push_back("an avenue has no spine"); break; }
+	}
+	for (const SCorridor& cr : m.corridors) {
+		if (cr.centre.size() < 2 || cr.width.size() != cr.centre.size()) { m.checkFailures.push_back("a corridor has no centre line"); break; }
+		if (!(cr.length > 0.f) || cr.narrowest < 0.f) { m.checkFailures.push_back("a corridor has no length or a negative width"); break; }
+		if (cr.lane < 0 || cr.lanes < 1 || cr.lane >= cr.lanes) { m.checkFailures.push_back("a lane index is outside its passage's lane count"); break; }
+	}
+	// D-360: a passage's lanes are consecutive records in lateral order, so the
+	// seats (CorridorsOrdered) and the mex partition see them side by side.
+	for (std::size_t i = 1; i < m.corridors.size(); ++i) {
+		const SCorridor& a = m.corridors[i - 1]; const SCorridor& b = m.corridors[i];
+		if (b.lanes > 1 && b.lane > 0 && (a.cls != b.cls || a.lanes != b.lanes || a.lane + 1 != b.lane || !(a.lateral < b.lateral))) {
+			m.checkFailures.push_back("a passage's lanes are not consecutive in lateral order"); break;
+		}
+	}
+	for (int k = 0; k < _CLASSES_; ++k) {
+		for (std::int16_t o : m.corridorOf[k]) {
+			if (o >= 0 && (o >= Count(m.corridors) || m.corridors[o].cls != k)) { m.checkFailures.push_back("a corridor cell names a corridor of another class"); k = _CLASSES_; break; }
+		}
 	}
 }
 
@@ -1340,6 +1374,7 @@ void Context::Run()
 	stage(m.timings.landingsMs, &Context::BuildLandings);
 	stage(m.timings.avenuesMs, &Context::BuildAvenues);
 	stage(m.timings.keyMs, &Context::BuildKeyTerrain);
+	stage(m.timings.corridorsMs, &Context::BuildCorridorTable);
 	Finish();
 	m.timings.totalMs = Ms(t0);
 	// Part B1 (positions, openings, landmarks) on the same worker, after the

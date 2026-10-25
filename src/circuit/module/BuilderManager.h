@@ -310,6 +310,7 @@ public:
     float GetCommanderEnergyReserve() const;
     float GetCommanderEnergyDeficit() const;
     int GetCommanderOperation() const;
+    std::string DescribeCommanderFront(int id) const;
     IUnitTask* CommanderFrontWork(CCircuitUnit* unit,int kind,CCircuitDef* def,float radius);
 	void AddBuildPower(CCircuitUnit* unit);
 	void DelBuildPower(CCircuitUnit* unit);

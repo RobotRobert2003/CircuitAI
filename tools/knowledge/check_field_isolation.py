@@ -11,6 +11,10 @@ read it in Parts A and B. This check greps:
 
 Exit 0 when clean, 1 with one line per finding. Relaxations for Part C are
 decisions: add the file here and record why in decisions.md.
+
+3. (D-358) every native file outside terrain/field/ and the allowed set for a
+   per-class slope or wade-depth constant: passability is defined once, in
+   field::FinePassability.
 """
 import glob
 import io
@@ -27,6 +31,17 @@ NATIVE_ALLOWED = {
     os.path.normpath("src/circuit/util/GameAttribute.cpp"),
     os.path.normpath("src/circuit/CircuitAI.cpp"),
     os.path.normpath("src/circuit/script/InitScript.cpp"),
+    # D-358 (Part C, one consumer per change): the corridor table's readers
+    os.path.normpath("src/circuit/resource/MexTerritory.h"),      # mex_lanes::FromCorridors
+    os.path.normpath("src/circuit/module/MexOwnership.cpp"),      # the partition and the lane accessors
+    os.path.normpath("src/circuit/terrain/BattleLanes.cpp"),      # BuildPass (FinePassability) and the Corridor* queries
+}
+# D-358: passability is defined once (terrain/field/FieldCorridors.h). No other
+# native file may spell the movedef slope or depth limits for a class.
+PASSABILITY_PATTERN = re.compile(r"\bSLOPE_(TANK|BOT|HOVER)\b|\bWADE_DEPTH\b|\bBA_WADE_DEPTH\b|\bBA_SHIP_DEPTH\b")
+PASSABILITY_ALLOWED = {
+    os.path.normpath("src/circuit/terrain/TerrainData.cpp"),   # the sector areas read the movedefs themselves, by design
+    os.path.normpath("src/circuit/terrain/BattleAnalysis.cpp"), # the water-body and beach rules keep their depth constants until phase 5
 }
 NATIVE_PATTERN = re.compile(r'#include\s+"terrain/(FieldService\.h|field/)|GetFieldService\(\)')
 SCRIPT_PATTERN = re.compile(r"\baiField\b")
@@ -48,6 +63,15 @@ def main():
         for number, line in enumerate(read(path).splitlines(), 1):
             if NATIVE_PATTERN.search(line):
                 findings.append("%s:%d reads the field service (Part A keeps it out of behaviour)" % (rel.replace(os.sep, "/"), number))
+    for path in sorted(glob.glob(os.path.join(ROOT, "src", "circuit", "**", "*.*"), recursive=True)):
+        if not path.endswith((".cpp", ".h", ".hpp")):
+            continue
+        rel = os.path.normpath(os.path.relpath(path, ROOT))
+        if rel in PASSABILITY_ALLOWED or rel.startswith(os.path.normpath("src/circuit/terrain/field") + os.sep):
+            continue
+        for number, line in enumerate(read(path).splitlines(), 1):
+            if PASSABILITY_PATTERN.search(line):
+                findings.append("%s:%d defines a class passability limit outside terrain/field/ (D-358: FinePassability is the one definition)" % (rel.replace(os.sep, "/"), number))
     for path in sorted(glob.glob(os.path.join(ROOT, "data", "script", "src", "**", "*.as"), recursive=True)):
         rel = os.path.normpath(os.path.relpath(path, ROOT))
         if rel.startswith(os.path.normpath("data/script/src/systems/presentation") + os.sep):
