@@ -481,7 +481,7 @@
 	"armsnipe": {
 		"role": ["anti_heavy"],
 		"attribute": ["ranged", "ret_hold"],
-		"ranged": {"target_mode": "precision", "advance_unknown_radar": true, "range_fraction": 0.94, "spacing": 112, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true, "cloak_on_reload": true},
+		"ranged": {"target_mode": "precision", "advance_unknown_radar": true, "range_fraction": 0.94, "spacing": 112, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true, "cloak_on_reload": true, "max_waypoints": 2, "move_floor_seconds": 0.5},
 	},
 	"armamph": {
 		"role": ["raider", "anti_air"]
@@ -571,7 +571,7 @@
 		"role": ["anti_heavy"],
 		"retreat": 0.65,
 		"attribute": ["artillery", "ranged"],
-		"ranged": {"target_mode": "precision", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 256, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true},
+		"ranged": {"target_mode": "precision", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 256, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": true, "move_floor_seconds": 1},
 	},
 	"armmart": {
 		"role": ["artillery"],
@@ -792,7 +792,7 @@
 	"cormort": {
 		"role": ["artillery"],
 		"attribute": ["skirmish", "ranged"],
-		"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false},
+		"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "prefer_heavy": false, "move_floor_seconds": 1},
 	},
 	"corhrk": {
 		"role": ["artillery"]

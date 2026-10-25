@@ -1557,7 +1557,7 @@
 			"armsnipe": {
 				"role": ["anti_heavy"],
 				"attribute": ["ranged", "ret_hold"],
-				"ranged": {"target_mode": "precision", "advance_unknown_radar": true, "range_fraction": 0.94, "spacing": 112, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": true, "cloak_on_reload": true},
+				"ranged": {"target_mode": "precision", "advance_unknown_radar": true, "range_fraction": 0.94, "spacing": 112, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": true, "cloak_on_reload": true, "max_waypoints": 2, "move_floor_seconds": 0.5},
 				"retreat": 0.95,
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
@@ -1690,7 +1690,7 @@
 			"armmanni": {
 				"role": ["anti_heavy", "assault"],
 				"attribute": ["artillery", "siege", "ranged"],
-				"ranged": {"hold_fireline": true, "target_mode": "precision", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 256, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": true, "assist_radius": 3500, "assist_margin": 150, "assist_screen": true},
+				"ranged": {"hold_fireline": true, "target_mode": "precision", "advance_unknown_radar": false, "range_fraction": 0.94, "spacing": 256, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": true, "assist_radius": 3500, "assist_margin": 150, "assist_screen": true, "move_floor_seconds": 1},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0,
 					"vs": { "spam": 0}
 				},
@@ -2071,7 +2071,7 @@
 			"cormort": {
 				"role": ["artillery"],
 				"attribute":["skirmish", "siege", "ranged"],
-				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false, "max_waypoints": 4},
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 96, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false, "max_waypoints": 4, "move_floor_seconds": 1},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
