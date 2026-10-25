@@ -179,6 +179,7 @@ public:
 	bool LagAllowMove();
 	bool LagAllowTarget();
 	bool LagAllowTurret();
+	bool LagIdleBuilder();
 	// Commander snipe (D-352): a scouted enemy commander in range replaces the
 	// priority list; the unit keeps its move and other orders. -1 releases.
 	void SetCommanderTarget(int commId, int frame);

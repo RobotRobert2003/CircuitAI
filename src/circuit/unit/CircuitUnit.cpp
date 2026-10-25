@@ -407,10 +407,20 @@ bool CCircuitUnit::LagAllowMove()
 	// Waypoints and follow-up legs queued in the same frame belong to the
 	// order that passed. Checked when the order is sent, so a path that lands
 	// later than its decision cannot slip under the floor.
-	if (now != lagMoveFrame && now - lagMoveFrame < load.moveFloor) { ++load.movesDropped; return false; }
+	// An idle builder is never held: builder tasks wait for the next idle event,
+	// which an already idle unit never sends (playtest: air constructors stood
+	// 60 s). Busy builders and army units are re-asked by their tasks.
+	if (now != lagMoveFrame && now - lagMoveFrame < load.moveFloor && !LagIdleBuilder()) { ++load.movesDropped; return false; }
 	lagMoveFrame = now;
 	++load.moves;
 	return true;
+}
+
+bool CCircuitUnit::LagIdleBuilder()
+{
+	// One engine call, only for an order that would otherwise be held.
+	if (!circuitDef->IsBuilder() && !circuitDef->IsAbleToAssist() && !circuitDef->IsAbleToRepair() && !circuitDef->IsAbleToReclaim()) return false;
+	return manager->GetCircuit()->GetUnitAPI()->GetCMDQueueSize(id) == 0;
 }
 
 bool CCircuitUnit::LagAllowTarget()
@@ -430,7 +440,7 @@ bool CCircuitUnit::LagAllowTurret()
 	if (manager == nullptr || circuitDef->GetLagClass() != CCircuitDef::LagClass::TURRET) return true;
 	lagload::State& load = lagload::Get();
 	const int now = manager->GetCircuit()->GetLastFrame();
-	if (now != lagTurretFrame && now - lagTurretFrame < load.turretFloor) { ++load.turretDropped; return false; }
+	if (now != lagTurretFrame && now - lagTurretFrame < load.turretFloor && !LagIdleBuilder()) { ++load.turretDropped; return false; }
 	lagTurretFrame = now;
 	++load.turret;
 	return true;
