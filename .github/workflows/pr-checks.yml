@@ -48,9 +48,9 @@ jobs:
         id: list
         run: |
           git fetch -q origin "$BASE_REF"
-          all="$(tools/ci/changed_files.sh "origin/$BASE_REF" all)"
-          cpp="$(tools/ci/changed_files.sh "origin/$BASE_REF" cpp)"
-          as="$(tools/ci/changed_files.sh "origin/$BASE_REF" angelscript)"
+          all="$(bash tools/ci/changed_files.sh "origin/$BASE_REF" all)"
+          cpp="$(bash tools/ci/changed_files.sh "origin/$BASE_REF" cpp)"
+          as="$(bash tools/ci/changed_files.sh "origin/$BASE_REF" angelscript)"
           count() { printf '%s\n' "$1" | sed '/^$/d' | wc -l; }
           echo "cpp=$([ -n "$cpp" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "angelscript=$([ -n "$as" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
@@ -86,7 +86,7 @@ jobs:
       - name: Lint the changed C++ files
         run: |
           git fetch -q origin "$BASE_REF"
-          tools/ci/lint_cpp.sh "origin/$BASE_REF"
+          bash tools/ci/lint_cpp.sh "origin/$BASE_REF"
 
   lint-angelscript:
     name: Lint AngelScript (changed files)
