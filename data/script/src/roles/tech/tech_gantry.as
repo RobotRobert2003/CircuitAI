@@ -48,6 +48,9 @@ namespace TechGantry {
             Global::RoleSettings::Tech::GantryFundingSeconds,
             Global::RoleSettings::Tech::GantryFundingShare, 0.0f);
     }
+    // owner, 2026-10-25: the t3rush early check funds the gantry alone, not the gantry
+    // plus its first T3 unit (played: "bank 4156/37400 metal" held the order 2-3 min past 175)
+    bool FundsOpeningUnit() { return TechPlan::plan != "t3rush"; }
     bool Ready(CCircuitDef@ factory, CCircuitUnit@ builder) {
         if (builder is null || factory is null || !builder.circuitDef.CanBuild(factory)) return false;
         CCircuitDef@ reactor = ai.GetCircuitDef(TechChain::DefFor("afus"));
@@ -57,7 +60,7 @@ namespace TechGantry {
             metalWindow.Ready(ai.frame, Global::RoleSettings::Tech::EarlyGantryMaximumSampleGapSeconds * SECOND),
             metalWindow.Mean(), Global::RoleSettings::Tech::EarlyGantryMetalIncome,
             TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0,
-            TechHeavyRush::Pending(), Funded(factory, true), power,
+            TechHeavyRush::Pending(), Funded(factory, FundsOpeningUnit()), power,
             Global::RoleSettings::Tech::GantryMinimumBuilderPower);
     }
     // What Funded() weighed, for a waiting line
@@ -82,7 +85,7 @@ namespace TechGantry {
             return "income " + int(metalWindow.Mean()) + " of " + int(Global::RoleSettings::Tech::EarlyGantryMetalIncome);
         if (TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0) return "a nuke commitment";
         if (TechHeavyRush::Pending()) return "a heavy rush pending";
-        if (!Funded(factory, true)) return "funding (" + FundingNote(factory, true) + ")";
+        if (!Funded(factory, FundsOpeningUnit())) return "funding (" + FundingNote(factory, FundsOpeningUnit()) + ")";
         if (builder.circuitDef.GetBuildSpeed() < Global::RoleSettings::Tech::GantryMinimumBuilderPower)
             return builder.circuitDef.GetName() + " build power " + int(builder.circuitDef.GetBuildSpeed())
                 + " under " + int(Global::RoleSettings::Tech::GantryMinimumBuilderPower);
@@ -394,7 +397,7 @@ namespace TechGantry {
         if (!definition.IsAvailable(ai.frame)) return Null("gantry cap " + definition.maxThisUnit + " reached (count " + definition.count + ")");
         // The early phase rechecks funding at the actual order; support work
         // can have consumed the initial budget since cluster activation.
-        if (cluster.earlyGantry && (!Funded(definition, true)
+        if (cluster.earlyGantry && (!Funded(definition, FundsOpeningUnit())
             || !ReachableBattlefield(cluster.pos, cluster.facing)
             || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending())) return Null("early admission: funding, battlefield path or a rush commitment");
         IUnitTask@ task = TechFactories::OrderPinned(builder, Task::BuildType::FACTORY, definition,
@@ -464,6 +467,7 @@ namespace TechHeavyChoice {
     const string MassBaseKey = "tech.heavy.mass.base";
     const string MassClosedKey = "tech.heavy.mass.closed";
     int lateFrame = -1;          // persisted: the frame the late latch closed the Marauder window
+    int rushAdmitUntil = -1;     // the t3rush opening (RoleTech::Tech_T3RushProduce) ordered a Marauder-class unit until this frame
     int massOpen = -1, massBase = 0, massClosed = -1;   // persisted: the optional single late mass batch
     bool loaded = false;
     array<string> cached;        // reused candidate list; rebuilt only when side or terrain changes
@@ -597,6 +601,7 @@ namespace TechHeavyChoice {
         // cancelled at the latch; one factory pass is well under 30 s).
         if (created >= 0 && created < lateFrame + 30 * SECOND) return;
         if (MassAdmitted(created)) return;
+        if (created >= 0 && created <= rushAdmitUntil) return;   // owner, 2026-10-25: the t3rush opening goes first, latch or not
         Invariants::Violation("INV-198", name, "late TECH gantry " + producer.circuitDef.GetName() + " produced Marauder-class "
             + name + " " + unit.id + " created=" + created + " late=" + lateFrame);
     }
