@@ -855,7 +855,8 @@ namespace RoleFront {
         array<string> gantries = UnitHelpers::GetAllGantries();
         // Front::EcoLadder: no native gantry; the ladder raises the allowance. Played (h25):
         // native gantries at stage 3, and a native order that never framed blocking the ladder's
-        int gantryCap = (!FrontEcoLadder::On() && metalIncome >= Global::RoleSettings::Front::MetalIncomeForGantry) ? 1 : 0;
+        // Front::DirectGantry: Front_TryLadderGantry orders it, so no native gantry either
+        int gantryCap = (!FrontEcoLadder::On() && !Global::RoleSettings::Front::DirectGantry && metalIncome >= Global::RoleSettings::Front::MetalIncomeForGantry) ? 1 : 0;
         if (g_frontGantryAllowance > gantryCap) gantryCap = g_frontGantryAllowance;   // never below what the ladder raised
         UnitHelpers::BatchApplyUnitCaps(gantries, gantryCap);
     }
@@ -975,8 +976,22 @@ namespace RoleFront {
         }
         return false;
     }
+    // The gantry's metal income: the ladder's (Front::EcoLadderGantryMetalIncome) or, without the ladder,
+    // Front::MetalIncomeForGantry (owner, 2026-10-25: 225 in every profile)
+    float Front_GantryMetalIncome() {
+        return FrontEcoLadder::On() ? Global::RoleSettings::Front::EcoLadderGantryMetalIncome : Global::RoleSettings::Front::MetalIncomeForGantry;
+    }
+    // Owner (2026-10-25): every FRONT orders its gantry once metal income passes the gate. With the ladder,
+    // at its gantry step, or before it once income is there (a FRONT at +225 whose advanced fusion never
+    // stood waited for good); without it (Front::DirectGantry), the same order by our T2 constructors in place
+    // of the native factory switch, which wanted the gantry's cost in the bank or 1.2x it per factory in army
     IUnitTask@ Front_TryLadderGantry(CCircuitUnit@ u) {
-        if (!FrontEcoLadder::On() || FrontEcoLadder::Stage() != FrontEcoLadder::S_GANTRY || !FrontEcoLadder::IsLadderT2(u)) return null;
+        if (!FrontEcoLadder::IsLadderT2(u)) return null;
+        if (FrontEcoLadder::On()) {
+            const int stage = FrontEcoLadder::Stage();
+            if (stage > FrontEcoLadder::S_GANTRY) return null;
+            if (stage < FrontEcoLadder::S_GANTRY && Economy::GetMinMetalIncomeLast10s() < Front_GantryMetalIncome()) return null;
+        } else if (!Global::RoleSettings::Front::DirectGantry) return null;
         const string side = Global::AISettings::Side;
         CCircuitDef@ gantry = ai.GetCircuitDef(UnitHelpers::GetLandGantryForSide(side));
         if (gantry is null || !u.circuitDef.CanBuild(gantry)) return null;
@@ -1004,8 +1019,8 @@ namespace RoleFront {
         } else g_frontStaleGantrySince = -1;
         if (ai.frame < g_frontLadderGantryRetry) return null;
         const float mi = Economy::GetMinMetalIncomeLast10s();
-        if (mi < Global::RoleSettings::Front::EcoLadderGantryMetalIncome)
-            return Front_LadderGantryHeld("metal income +" + int(mi) + " of " + int(Global::RoleSettings::Front::EcoLadderGantryMetalIncome)
+        if (mi < Front_GantryMetalIncome())
+            return Front_LadderGantryHeld("metal income +" + int(mi) + " of " + int(Front_GantryMetalIncome())
                 + " | advanced fusions " + FrontEcoLadder::AdvFusions() + "/" + FrontEcoLadder::AdvFusionsTotal());
         if (g_frontGantryAllowance < 1) g_frontGantryAllowance = 1;
         UnitHelpers::BatchApplyUnitCaps(UnitHelpers::GetAllGantries(), g_frontGantryAllowance);

@@ -81,7 +81,7 @@ namespace Main {
         Global::Military::NoTelchines = true;
         Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion = true;
         Global::RoleSettings::Front::EcoLadder = true;
-        Global::RoleSettings::Front::EcoLadderGantryMetalIncome = 175.0f;   // owner, 2026-10-18 (150 in src)
+        Global::RoleSettings::Front::EcoLadderGantryMetalIncome = 225.0f;   // owner, 2026-10-25 (175 from 2026-10-18)
         Global::RoleSettings::Front::EcoLadderGantryAfterAdvFusions = 1;
         Global::RoleSettings::Front::EcoLadderLaterAdvFusionAtStart = true;
         Global::RoleSettings::Front::SpawnFactoryEnabled = true;

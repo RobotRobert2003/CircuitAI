@@ -8,7 +8,7 @@
 //   4. an advanced fusion
 //   5. a second advanced fusion; the fusions are reclaimed as it builds (their metal pays for it)
 //   6. more advanced fusions, one after another, while metal income is under
-//      Front::EcoLadderGantryMetalIncome (150 in src, 175 in experimental_balanced); the gantry waits for that income
+//      Front::EcoLadderGantryMetalIncome (225); the gantry waits for that income, and is ordered at it from any stage
 //      (roles/front/front.as Front_TryLadderGantry); none while the gantry is going up. Once the
 //      gantry is framed, its Front::EcoLadderGantryNanos caretaker turrets are ordered, one at a time
 //   7. the gantry stands: the rest of its turrets

@@ -95,7 +95,10 @@ namespace Front {
 
             // Economy Scaling Limits
             float MetalIncomePerLab = 35.0f;
-            float MetalIncomeForGantry = 175.0f;
+            float MetalIncomeForGantry = 225.0f;   // owner, 2026-10-25 (175 before)
+            // Owner (2026-10-25): without the eco ladder, the T2 constructors order the gantry themselves at
+            // MetalIncomeForGantry (roles/front/front.as Front_TryLadderGantry), not the native factory switch
+            bool DirectGantry = true;
             // Owner (2026-10-16): once a fusion stands FRONT reclaims its winds and solars, those within
             // ReclaimNearFactoryRadius of a factory first (played: Fatboys boxed in by advanced solars and
             // winds round the labs), advanced solars too at ReclaimAdvSolarMargin or with an advanced fusion.
@@ -144,7 +147,7 @@ namespace Front {
             float RecoveryMexRadius = 2500.0f;           // mex spots retaken within this of the start (then of the worker)
             int RecoveryMinT1Constructors = 3;           // the T1 factory makes this many constructors first
             bool EcoLadderLaterAdvFusionAtStart = false;  // second and later advanced fusions tried at the start before the eco anchor
-            float EcoLadderGantryMetalIncome = 150.0f;    // the gantry waits for this metal income (owner, 2026-10-16)
+            float EcoLadderGantryMetalIncome = 225.0f;    // the gantry waits for this metal income (owner, 2026-10-16; 225 since 2026-10-25)
             float EcoLadderFusionReclaimMargin = 1.0f;    // income without the fusion covers the pull (always once the second advanced fusion stands)
             float EcoLadderAnchorBack = 400.0f;           // eco this far behind the start, away from the map centre
             int EcoLadderMetalStorages = 2;               // from the first advanced fusion, while storage is under a fusion's cost plus the spare
