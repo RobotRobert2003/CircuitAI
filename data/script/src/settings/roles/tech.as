@@ -240,6 +240,13 @@ namespace Tech {
             int GantryAssistSeconds = 60;
             int GantryMaximumTaskBuilders = 2;
             int GantryLogIntervalSeconds = 30;
+            // owner, 2026-10-24: the t3rush gantry is ordered once funded, without the
+            // FrontT3TurretsFirst block standing first; the turrets go up beside its frame
+            bool T3RushGantryWithoutTurrets = true;
+            int GantrySupportParallel = 4;          // gantry turret orders in flight at once (air constructors take them)
+            int GantrySupportNoFrameSeconds = 30;   // a support order with a worker but no frame this long stops holding the fallback
+            int GantrySupportSlotRestSeconds = 10;  // a support order that died with no frame: its slot rests this long
+            int GantrySupportSlotMaxFails = 3;      // and is given up after this many such deaths (played: 157 orders on one slot)
             // D-287 (owner): Marauder-class units (armmar, corshiva, legjav) only in
             // the early T3 window. Late = game time OR 10 s minimum metal income,
             // latched once (never un-latches, persisted). Late gantries build the

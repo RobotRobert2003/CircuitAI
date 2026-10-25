@@ -92,7 +92,14 @@ namespace TechFactories {
         int gantryCompletedTurrets = 0;
         bool gantryFallback = false;
         bool earlyGantry = false; // budget/path checks apply only to this optional admission
-        IUnitTask@ gantrySupportTask; // native owns its command/recovery lifecycle
+        // The gantry block's turret orders in flight, up to GantrySupportParallel
+        // (owner, 2026-10-24: the air constructors drop them side by side). Native
+        // owns each task's command/recovery lifecycle; a dead task is pruned.
+        array<IUnitTask@> supportTasks;
+        array<int> supportSlots;     // each task's slot
+        array<int> supportFrames;    // each task's order frame
+        dictionary supportSlotFails; // slot id -> orders that died there with no turret frame
+        dictionary supportSlotRest;  // slot id -> frame it may be ordered again
         IUnitTask@ labTask;          // the factory's order while it lives (builders join it)
         IUnitTask@ refillTask;       // a lost turret's order while it lives (builders join it)
         int refillFrame = -100000;   // the last lost turret order
