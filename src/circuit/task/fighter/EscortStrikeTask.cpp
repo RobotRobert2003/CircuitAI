@@ -14,8 +14,12 @@
 #include "CircuitAI.h"
 #include "util/Utils.h"
 
+#include "AISCommands.h"
 #include "Log.h"
 #include "UnitDef.h"
+#include "Unit.h"
+#include "Command.h"
+#include "Sim/Units/CommandAI/Command.h"
 
 #include <algorithm>
 #include <climits>
@@ -38,6 +42,7 @@ CEscortStrikeTask::CEscortStrikeTask(ITaskModule* mgr)
 		, strikesIssued(0)
 		, shotsFired(0)
 		, targetsDestroyed(0)
+		, nextGuardCheck(0)
 {
 }
 
@@ -64,6 +69,7 @@ void CEscortStrikeTask::RemoveAssignee(CCircuitUnit* unit)
 	if (!unit->IsDead()) {
 		// Back to the def's own states for whatever task takes it next.
 		unit->TrySetFireState(unit->GetCircuitDef()->GetFireState());
+		unit->TrySetMoveState(unit->GetCircuitDef()->GetMoveState());
 		unit->TrySetIdleMode(1);
 	}
 	if (units.empty()) {
@@ -82,8 +88,14 @@ void CEscortStrikeTask::Start(CCircuitUnit* unit)
 {
 	// Fly while waiting; hold fire so a nuclear payload never drops on an
 	// incidental contact. An explicit ATTACK still fires (as in CAirWaveTask).
+	// Hold position too: the engine's air GUARD (CAirCAI::ExecuteGuard) pushes
+	// an internal ATTACK on whatever last shot the guarded bomber (flak, a
+	// fighter), whatever the fire state, unless the move state is HOLDPOS and
+	// the attacker is outside the weapon's reach (2026-10-25: Liches left the
+	// guard for the flak that shot their bomber and died without firing).
 	unit->TrySetIdleMode(0);
 	unit->TrySetFireState(CCircuitDef::FireType::HOLD);
+	unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
 	const int frame = manager->GetCircuit()->GetLastFrame();
 	CCircuitUnit* vip = ResolveVip(frame);
 	if (vip != nullptr) {
@@ -172,6 +184,34 @@ void CEscortStrikeTask::GuardVip(CCircuitUnit* unit, CCircuitUnit* vip, int fram
 }
 
 /*
+ * Once a second: a guarding member whose queue the engine fronted with its own
+ * ATTACK (the guard's response to the bomber's attacker, within weapon reach)
+ * gets its GUARD again, so only a roster target in sight breaks the guard.
+ * O(members) command reads; the wrapper vectors are freed at once.
+ */
+void CEscortStrikeTask::CheckGuards(CCircuitUnit* vip, int frame)
+{
+	CCircuitAI* circuit = manager->GetCircuit();
+	for (CCircuitUnit* unit : units) {
+		const int id = unit->GetId();
+		if (unit->IsDead() || strikes.count(id) != 0) continue;
+		auto guard = guarding.find(id);
+		if (guard == guarding.end() || guard->second != vip->GetId()) continue;
+		int front = -1;
+		TRY_UNIT(circuit, unit,
+			std::vector<springai::Command*> commands = unit->GetUnit()->GetCurrentCommands();
+			if (!commands.empty()) front = commands.front()->GetId();
+			utils::free_clear(commands);
+		)
+		if (front != CMD_ATTACK) continue;
+		circuit->LOG("ESCORT: team=%i guard broken unit=%i by engine attack: guard vip=%i again", circuit->GetTeamId(), id,
+				vip->GetId());
+		guard->second = -1;
+		GuardVip(unit, vip, frame);  // rate-limited; otherwise the next update
+	}
+}
+
+/*
  * One pass over the known enemies per update, before any member looks: keeps
  * only allowed defs that a striker could take. O(enemies); the per-member pick
  * below is O(members x candidates), and candidates are a handful of roster defs.
@@ -213,10 +253,8 @@ bool CEscortStrikeTask::TryStrike(CCircuitUnit* unit, int frame)
 	int bestId = -1;
 	for (const SCandidate& candidate : candidates) {
 		CEnemyInfo* enemy = candidate.enemy;
-		CCircuitDef* def = enemy->GetCircuitDef();
 		const float distance = pos.SqDistance2D(enemy->GetPos());
-		if (!escort_strike::StrikeCandidate(candidate.priority, enemy->IsInLOS(), !def->IsMobile() && !def->IsAbleToFly(),
-				distance, strikeRadius)) continue;
+		if (!escort_strike::StrikeCandidate(candidate.priority, enemy->IsInLOS(), distance, strikeRadius)) continue;
 		const int enemyId = enemy->GetId();
 		if (!escort_strike::HasStrikeRoom(StrikersOn(enemyId), perTarget)) continue;
 		if (escort_strike::BetterStrike(candidate.priority, distance, enemyId, bestPriority, bestDistance, bestId)) {
@@ -225,25 +263,61 @@ bool CEscortStrikeTask::TryStrike(CCircuitUnit* unit, int frame)
 	}
 	if (best == nullptr) return false;
 	CCircuitAI* circuit = manager->GetCircuit();
-	// A structure out of sight is still where it was seen: bomb the spot.
-	const bool ground = !best->IsInLOS();
-	unit->Attack(best, ground, frame + attackFrames, false);
-	strikes[id] = {bestId, frame + attackFrames, false};
+	// The target is in sight (StrikeCandidate): take the unit itself.
+	unit->Attack(best, false, frame + attackFrames, false);
+	strikes[id] = {bestId, frame + attackFrames, false, false, best->GetPos()};
 	guarding[id] = -1;  // the ATTACK replaced the GUARD
 	lastOrder[id] = frame;
 	++strikesIssued;
 	circuit->LOG("ESCORT: team=%i strike unit=%i target=%s(%i) priority=%.1f distance=%.0f radius=%.0f vip=%i los=%i strikers=%i",
 			circuit->GetTeamId(), id, best->GetCircuitDef()->GetDef()->GetName(), bestId, bestPriority, std::sqrt(bestDistance),
-			strikeRadius, vipId, int(!ground), StrikersOn(bestId));
+			strikeRadius, vipId, int(best->IsInLOS()), StrikersOn(bestId));
 	return true;
 }
 
+/*
+ * Once per strike per update: O(1) enemy lookup, an order only when the target
+ * leaves or re-enters sight (never twice inside ESCORT_ORDER_GAP).
+ */
+void CEscortStrikeTask::FollowTarget(CCircuitUnit* unit, SStrike& strike, int frame)
+{
+	CCircuitAI* circuit = manager->GetCircuit();
+	CEnemyInfo* target = circuit->GetEnemyInfo(strike.targetId);
+	if (target == nullptr || target->GetUnit() == nullptr || unit->IsDead()) return;
+	const bool visible = target->IsInLOS();
+	if (visible) {
+		strike.lastSeen = target->GetPos();
+	}
+	const bool toGround = escort_strike::NeedsGroundStrike(strike.ground, visible);
+	if (!toGround && !escort_strike::NeedsUnitStrike(strike.ground, visible)) return;
+	const int id = unit->GetId();
+	auto last = lastOrder.find(id);
+	if (last != lastOrder.end() && !escort_strike::OrderAllowed(last->second, frame, ESCORT_ORDER_GAP)) return;
+	if (toGround) {
+		// Out of sight: bomb where it was last seen, not a radar dot or an engine guess.
+		TRY_UNIT(circuit, unit,
+			unit->CmdAttackGround(strike.lastSeen, UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY, strike.until);
+		)
+	} else {
+		unit->Attack(target, false, strike.until, false);
+	}
+	strike.ground = toGround;
+	lastOrder[id] = frame;
+	circuit->LOG("ESCORT: team=%i strike follow unit=%i target=%i %s at=%.0f,%.0f", circuit->GetTeamId(), id,
+			strike.targetId, toGround ? "ground (out of sight)" : "unit (in sight)", strike.lastSeen.x, strike.lastSeen.z);
+}
+
+/*
+ * Dead, dying or forgotten. A target out of sight (even one whose last seen
+ * spot is in sight and empty: hidden) is not gone: the strike bombs that spot
+ * (FollowTarget) and ends on idle or timeout.
+ */
 bool CEscortStrikeTask::IsTargetGone(int targetId) const
 {
 	CEnemyInfo* target = manager->GetCircuit()->GetEnemyInfo(targetId);
 	if (target == nullptr || target->GetUnit() == nullptr) return true;
 	const CEnemyUnit* data = target->GetData();
-	return data->IsDead() || data->IsDying() || target->IsHidden();
+	return data->IsDead() || data->IsDying();
 }
 
 void CEscortStrikeTask::EndStrike(int unitId, const char* reason)
@@ -253,8 +327,9 @@ void CEscortStrikeTask::EndStrike(int unitId, const char* reason)
 	CCircuitAI* circuit = manager->GetCircuit();
 	const bool gone = IsTargetGone(it->second.targetId);
 	if (gone && it->second.fired) ++targetsDestroyed;
-	circuit->LOG("ESCORT: team=%i strike over unit=%i target=%i reason=%s fired=%i targetGone=%i",
-			circuit->GetTeamId(), unitId, it->second.targetId, reason, int(it->second.fired), int(gone));
+	circuit->LOG("ESCORT: team=%i strike over unit=%i target=%i reason=%s fired=%i targetGone=%i ground=%i",
+			circuit->GetTeamId(), unitId, it->second.targetId, reason, int(it->second.fired), int(gone),
+			int(it->second.ground));
 	strikes.erase(it);
 	guarding[unitId] = -1;  // rejoin the escort
 }
@@ -275,8 +350,19 @@ void CEscortStrikeTask::Update()
 	for (int unitId : over) {
 		EndStrike(unitId, frame >= strikes[unitId].until ? "timeout" : "target gone");
 	}
+	// Standing strikes follow their target in and out of sight.
+	for (auto& strike : strikes) {
+		CCircuitUnit* striker = circuit->GetTeamUnit(strike.first);
+		if (striker != nullptr && units.count(striker) != 0) {
+			FollowTarget(striker, strike.second, frame);
+		}
+	}
 
 	CCircuitUnit* vip = ResolveVip(frame);
+	if (vip != nullptr && frame >= nextGuardCheck) {
+		nextGuardCheck = frame + FRAMES_PER_SEC;
+		CheckGuards(vip, frame);
+	}
 	if (strikes.size() < units.size()) {
 		CollectCandidates();
 	}

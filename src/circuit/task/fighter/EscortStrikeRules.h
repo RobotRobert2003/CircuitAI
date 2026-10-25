@@ -9,12 +9,25 @@
 
 namespace circuit::escort_strike {
 
-// A known contact a striker may break off for: an allowed def (priority > 0)
-// within reach, seen now or a structure (a structure does not move away).
-inline bool StrikeCandidate(float priority, bool visible, bool stationary, float distanceSq, float radius)
+// A contact a striker may break off for: an allowed def (priority > 0) within
+// reach and in sight now. A radar dot or a structure only remembered keeps the
+// striker on its guard (owner 2026-10-25: they broke off before seeing one).
+inline bool StrikeCandidate(float priority, bool visible, float distanceSq, float radius)
 {
-	return priority > 0.f && (visible || stationary) && radius > 0.f
+	return priority > 0.f && visible && radius > 0.f
 		&& distanceSq >= 0.f && distanceSq <= radius * radius;
+}
+
+// A strike follows its target by unit while it is in sight; once it drops out
+// of sight it bombs the spot where it was last seen (one ATTACK ground), and
+// takes the unit again if it is seen again.
+inline bool NeedsGroundStrike(bool groundOrder, bool visible)
+{
+	return !groundOrder && !visible;
+}
+inline bool NeedsUnitStrike(bool groundOrder, bool visible)
+{
+	return groundOrder && visible;
 }
 
 // Highest priority first, then nearest, then the lower id (deterministic).

@@ -8,14 +8,22 @@ int main()
 	using namespace circuit::escort_strike;
 	// 600 elmos: a third of the T2 bombers' 1800 in-flight radius.
 	const float r = 600.f;
-	assert(StrikeCandidate(1.f, true, true, 600.f * 600.f, r));
-	assert(StrikeCandidate(1.f, true, false, 100.f, r));       // a visible mobile anti-nuke
-	assert(StrikeCandidate(1.f, false, true, 100.f, r));       // a structure seen before
-	assert(!StrikeCandidate(1.f, false, false, 100.f, r));     // a radar dot that moves
-	assert(!StrikeCandidate(1.f, true, true, 601.f * 601.f, r));
-	assert(!StrikeCandidate(0.f, true, true, 100.f, r));       // not on the roster
-	assert(!StrikeCandidate(1.f, true, true, 100.f, 0.f));     // disabled
-	assert(!StrikeCandidate(1.f, true, true, -1.f, r));
+	assert(StrikeCandidate(1.f, true, 600.f * 600.f, r));
+	assert(StrikeCandidate(1.f, true, 100.f, r));              // in sight
+	assert(!StrikeCandidate(1.f, false, 100.f, r));            // a structure seen before: keep guarding
+	assert(!StrikeCandidate(1.f, true, 601.f * 601.f, r));
+	assert(!StrikeCandidate(0.f, true, 100.f, r));             // not on the roster
+	assert(!StrikeCandidate(1.f, true, 100.f, 0.f));           // disabled
+	assert(!StrikeCandidate(1.f, true, -1.f, r));
+
+	// A strike on the unit turns to its last seen spot when it leaves sight,
+	// and back to the unit when it is seen again; nothing while it stays.
+	assert(!NeedsGroundStrike(false, true));
+	assert(NeedsGroundStrike(false, false));
+	assert(!NeedsGroundStrike(true, false));
+	assert(!NeedsUnitStrike(false, true));
+	assert(NeedsUnitStrike(true, true));
+	assert(!NeedsUnitStrike(true, false));
 
 	// Tier first: a shield 590 away beats a factory 10 away.
 	assert(BetterStrike(3200000.f, 590.f * 590.f, 9, 1.f, 100.f, 4));

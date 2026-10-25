@@ -5,14 +5,17 @@
  * own (the Armada Liches with a T2 bomber raid; AirLiches:: in
  * data/script/src/systems/air/air_liches.as). Every member guards one living
  * escort target (the vip), picked from the unit ids script supplies; when the
- * vip dies the members guard the nearest living one. A member breaks off with
- * one ATTACK the moment an allowed target is within the strike radius of it,
- * and rejoins the escort when that target is gone or the order expires.
+ * vip dies the members guard the nearest living one. A member stays on its
+ * guard until an allowed target is in sight within the strike radius of it,
+ * then breaks off with one ATTACK on that unit; when the target drops out of
+ * sight it bombs the spot where it was last seen (ATTACK ground), and it
+ * rejoins the escort when the target is gone or the order expires.
  * Script owns the roster and its weights, the radius, the strikers per target
  * and the attack time; this task owns the orders. Decisions that need no
  * engine are in EscortStrikeRules.h.
  *
- * Orders: one GUARD per member per escort change, one ATTACK per strike.
+ * Orders: one GUARD per member per escort change, one ATTACK per strike and
+ * one more each time its target leaves or re-enters sight.
  * Nothing is re-issued while a member's order stands (lag fix, 2026-10-23).
  * Every unit and enemy is held by id and resolved at the point of use.
  */
@@ -67,6 +70,8 @@ private:
 		int targetId;
 		int until;
 		bool fired;
+		bool ground;                       // the standing ATTACK is on lastSeen, not the unit
+		springai::AIFloat3 lastSeen;       // the target's position when last in sight
 	};
 	struct SCandidate {
 		CEnemyInfo* enemy;
@@ -77,7 +82,9 @@ private:
 	void CollectCandidates();
 	bool TryStrike(CCircuitUnit* unit, int frame);
 	void GuardVip(CCircuitUnit* unit, CCircuitUnit* vip, int frame);
+	void CheckGuards(CCircuitUnit* vip, int frame);
 	bool IsTargetGone(int targetId) const;
+	void FollowTarget(CCircuitUnit* unit, SStrike& strike, int frame);
 	void EndStrike(int unitId, const char* reason);
 	int StrikersOn(int targetId) const;
 
@@ -95,6 +102,7 @@ private:
 	int strikesIssued;
 	int shotsFired;
 	int targetsDestroyed;
+	int nextGuardCheck;                    // frame of the next engine-attack check on the guards
 };
 
 } // namespace circuit

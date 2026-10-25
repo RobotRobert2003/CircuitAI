@@ -31,13 +31,18 @@ EscortStrikeTask.*, not the bombers' CAirWaveTask) that:
     the wave's own fighters cover them because they stay over the wave;
   - when that bomber dies, guards the living wave bomber nearest the Liches
     (one GUARD per Liche again);
-  - breaks a Liche off with one ATTACK the moment a roster target is within
-    StrikeRadius() of it: a third of the T2 bombers' StrikeImmediateRadius
-    (1800 -> 600; a homing missile needs no run-up and hits close targets
-    easily). At most LicheStrikersPerTarget Liches take one target; the rest
-    keep guarding and take the next one;
-  - puts the Liche back on its guard when the target is gone or the ATTACK
-    has run LicheStrikeSeconds;
+  - keeps every Liche on its guard until a roster target is IN SIGHT within
+    StrikeRadius() of it (a third of the T2 bombers' StrikeImmediateRadius,
+    1800 -> 600), then breaks it off at once with one ATTACK on that unit.
+    A radar dot or a structure only remembered does not break the guard
+    (owner 2026-10-25: they split off before they had found a target). At
+    most LicheStrikersPerTarget Liches take one target; the rest keep
+    guarding and take the next one;
+  - if the target drops out of sight during the strike, bombs the spot where
+    it was last seen (one ATTACK ground), and takes the unit again if it is
+    seen again;
+  - puts the Liche back on its guard when the target is dead, the ATTACK has
+    finished or it has run LicheStrikeSeconds;
   - sends a Liche home (idle -> MakeTask -> staged and held for the next wave)
     when no wave bomber is left alive.
 Every unit and enemy is held natively by id and resolved at use; no order is
@@ -54,8 +59,7 @@ not enter):
   4 geothermal    geothermals, Prude
   5 gantries      all T3 gantries
   6 T2 factories  advanced air, vehicle, bot and sea plants
-A structure counts once seen (it does not move); a mobile anti-nuke only while
-in sight.
+A target counts only while in sight, structures included.
 
 ******************************************************************************/
 namespace AirLiches {
