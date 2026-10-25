@@ -1,0 +1,17 @@
+{
+  "_doc": "D-358: SUPPORT's T2 bot lab recruits through the native selector (factory.json weights) after the opening group. Stage widgets/support_progress.lua. Twenty game minutes on Supreme Isthmus, one faction per run. Read the finished= lines afterwards: a T2 combat bot other than the opening unit proves the native roster is in use, and the fast assist bots must never exceed MaxFastAssistBots.",
+  "stop_minute": 20,
+  "expect": [
+    {"key":"layout-sequence","pattern":"SUPPORT\\]\\[Build\\] shared layout","by_minute":1},
+    {"key":"t2-objective","pattern":"Chain\\] objective t2 ","by_minute":1},
+    {"key":"advanced-factory","pattern":"SUPPORT\\]\\[Phase\\] T2 combat production online","by_minute":12},
+    {"key":"combat-released","pattern":"SUPPORT\\]\\[Phase\\] home upgrades complete; combat released","by_minute":16},
+    {"key":"opening-produced","pattern":"SupportEvidence\\] finished=(armfast|corpyro|legstr) ","by_minute":16,"scope":"any"},
+    {"key":"combat-engaged","pattern":"SupportEvidence\\] damage=(armfast|corpyro|legstr) ","by_minute":20,"scope":"any"}
+  ],
+  "forbid": [
+    {"key":"runtime","pattern":"SCRIPT CRASH|: ERR\\s+:|has crashed|Lib exception","scope":"any"},
+    {"key":"invariant","pattern":"\\[INVARIANT\\]","scope":"any"},
+    {"key":"wrong-objective","pattern":"Chain\\] objective (nuke|gantry|titan|afus)","scope":"any"}
+  ]
+}

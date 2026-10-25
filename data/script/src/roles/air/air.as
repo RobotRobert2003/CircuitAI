@@ -6,8 +6,6 @@
 #include "../../types/role_config.as"
 #include "../../global.as"
 #include "../../types/terrain.as"
-// Dynamic factory production
-#include "../../systems/production/factory_production.as"
 // T2 bomber waves
 #include "../../systems/air/air_waves.as"
 #include "air_rules.as"
@@ -347,14 +345,6 @@ namespace RoleAir {
         Air_ApplyStartLimits();
         AirWaves::Init();
 
-        // Initialize dynamic factory production system for AIR role when enabled
-        if (Global::RoleSettings::Air::UseDynamicFactoryProduction) {
-            FactoryProduction::Initialize();
-            GenericHelpers::LogUtil("[AIR] Dynamic factory production system initialized", 2);
-        } else {
-            GenericHelpers::LogUtil("[AIR] Dynamic factory production disabled; using legacy factory selection", 2);
-        }
-
         // Log all strategic objectives with distance from start
         ObjectiveHelpers::LogAllObjectivesFromStart(AiRole::AIR, "AIR");
     }
@@ -563,16 +553,6 @@ namespace RoleAir {
                     return gunshipOpener;
                 }
             }
-
-            if (combatProductionReady && Global::RoleSettings::Air::UseDynamicFactoryProduction) {
-                GenericHelpers::LogUtil("[AIR][FactoryProduction] T1 plant '" + fname + "' side=" + side + " metalIncome=" + metalIncome, 4);
-                IUnitTask@ dynTaskT1 = FactoryProduction::MakeTask(u);
-                if (dynTaskT1 !is null) {
-                    return dynTaskT1;
-                }
-                GenericHelpers::LogUtil("[AIR] Dynamic factory production returned null for '" + fname + "', using default", 3);
-            }
-
         }
 
         // If T2 plant: ensure advanced constructor targets, then apply T2-specific strategy
@@ -631,17 +611,6 @@ namespace RoleAir {
                 if (waveTask !is null) {
                     return waveTask;
                 }
-            }
-
-            // Dynamic selection runs after bounded strategic quotas so it cannot
-            // make constructor or heavy-air policy unreachable.
-            if (Air_IsCombatProductionReady(metalIncome, energyIncome)
-                && Global::RoleSettings::Air::UseDynamicFactoryProduction) {
-                IUnitTask@ dynTaskT2 = FactoryProduction::MakeTask(u);
-                if (dynTaskT2 !is null) {
-                    return dynTaskT2;
-                }
-                GenericHelpers::LogUtil("[AIR] Dynamic factory production returned null for '" + fname + "', using default", 3);
             }
         }
         // If T2 plant but no specific action above, do NOT enqueue T1 construction aircraft here to avoid blocking advanced queues.

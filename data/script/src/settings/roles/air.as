@@ -208,12 +208,6 @@ namespace Air {
             float MilitaryRaidMinPower = 1.0f;
             float MilitaryRaidAvgPower = 1.0f;
 
-            /******************** DYNAMIC FACTORY PRODUCTION ********************/
-            // Toggle for role-based dynamic factory production system for AIR role.
-            // When enabled, AIR factories (T1/T2 aircraft plants, gantries that
-            // produce aircraft, etc.) delegate unit selection to
-            // FactoryProduction::MakeTask using threat-aware scoring.
-            bool UseDynamicFactoryProduction = false;
             /******************** AIR DYNAMIC QUOTA SETTINGS ********************/
             // Enemy surface cost multiplier used to determine when AIR is underpowered.
             // If our estimated army metal cost is below enemySurfaceCostPerPlayer * multiplier,
@@ -309,7 +303,7 @@ namespace Air {
             float LateAFUSMetalIncome = 60.0f;
             float LateAFUSMetalCurrent = 6000.0f;
             // Then T3: a gantry once this rich. Gantry production is
-            // FactoryProduction's business (EnqueueGantrySignatureBatch).
+            // manager/factory.as's business (EnqueueGantrySignatureBatch).
             float LateGantryMetalIncome = 60.0f;
             float LateGantryMetalCurrent = 6000.0f;
 
