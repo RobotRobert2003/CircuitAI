@@ -39,11 +39,11 @@ namespace HellasBasin {
 		StartSpot(AIFloat3( 7531, 0,  8739), AiRole::FRONT, false), // P9  front
 		StartSpot(AIFloat3( 7667, 0,  7654), AiRole::FRONT, false), // P10 front
 		StartSpot(AIFloat3( 8370, 0,  8565), AiRole::FRONT, false), // P11 front
-		StartSpot(AIFloat3( 8495, 0,  8007), AiRole::SEA,   false), // P12 sea
+		StartSpot(AIFloat3( 8495, 0,  8007), AiRole::SUPPORT, false), // P12 SUPPORT (owner 2026-10-25; was sea)
 		StartSpot(AIFloat3( 7389, 0, 11250), AiRole::SEA,   false), // P13 sea
 		StartSpot(AIFloat3( 9553, 0, 11008), AiRole::TECH,  false), // P14 tech
 		StartSpot(AIFloat3(11411, 0, 10397), AiRole::AIR,   false), // P15 air
-		StartSpot(AIFloat3(11274, 0,  7312), AiRole::SEA,   false) // P16 sea
+		StartSpot(AIFloat3(11274, 0,  7312), AiRole::TACTICAL, false) // P16 TACTICAL (owner 2026-10-25; was sea)
 	};
 
 	// Base per-map unit limits
