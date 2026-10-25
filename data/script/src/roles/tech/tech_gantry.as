@@ -30,7 +30,11 @@ namespace TechGantry {
         // the other branch's ten-unit composition or override amphibious policy.
         return ai.GetCircuitDef(UnitHelpers::GetGantrySignatureUnitForSide(Global::AISettings::Side));
     }
-    bool Funded(CCircuitDef@ factory, bool includeOpeningUnit) {
+    // D-364: `grossIncome` funds on the 10-second minimum metal income itself. The
+    // default subtracts the current usage, which a TECH spending its income never
+    // clears (at +1,000 metal and +1,000 usage the net is 0), so the gantry the
+    // income step made due could only be funded by a bank above its whole cost.
+    bool Funded(CCircuitDef@ factory, bool includeOpeningUnit, bool grossIncome = false) {
         if (factory is null) return false;
         float metalCost = factory.costM, energyCost = factory.costE;
         if (includeOpeningUnit) {
@@ -38,8 +42,8 @@ namespace TechGantry {
             if (opening is null || !factory.CanBuild(opening)) return false;
             metalCost += opening.costM; energyCost += opening.costE;
         }
-        const float metalIncome = AiMax(0.0f, Economy::GetMinMetalIncomeLast10s()
-            - TeamEconomy::OwnMetal(TeamEconomy::USAGE));
+        const float metalIncome = grossIncome ? Economy::GetMinMetalIncomeLast10s()
+            : AiMax(0.0f, Economy::GetMinMetalIncomeLast10s() - TeamEconomy::OwnMetal(TeamEconomy::USAGE));
         const float availableEnergy = HeavyRushMath::AvailableEnergy(
             Economy::GetMinEnergyIncomeLast10s(), TeamEconomy::OwnEnergy(TeamEconomy::USAGE),
             ai.GetTeamRulesParam("mmUse", 0.0f), Global::RoleSettings::Tech::GantryEnergyReserve);
@@ -170,8 +174,22 @@ namespace TechGantry {
         }
         if (frame !is null) supportFrame = true;
         bool fallback = false;
+        bool stepFunded = false;
         string turretWhy = "";
-        if (completed < required) {
+        // D-364 (owner): a gantry the income step made due (one per
+        // GantryScaleMetalStep) is ordered as soon as it is funded on that income and
+        // this builder can build it; its turret block keeps filling behind it
+        // (gantry.support, lab.front) and the turrets assist the frame. Played: the
+        // T2 constructors that run gantry.scale cannot build the T1 turret, so the
+        // ten-turret prerequisite fell to one T1 worker, and D-281's 90 s fallback
+        // was held by that worker's order for eight minutes while the bank sat full
+        // at +1,100 metal (3 of 10 turrets). The early D-281 cluster keeps its
+        // turrets-first budget rule.
+        if (completed < required && !cluster.earlyGantry && builder.circuitDef.CanBuild(definition)
+            && builder.circuitDef.GetBuildSpeed() >= Global::RoleSettings::Tech::GantryMinimumBuilderPower
+            && Funded(definition, false, true)) {
+            stepFunded = true;
+        } else if (completed < required) {
             if (frame !is null) {
                 if (SafeWorker(builder, frame.GetPos(ai.frame)))
                     return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame,
@@ -250,10 +268,11 @@ namespace TechGantry {
             || !ReachableBattlefield(cluster.pos, cluster.facing)
             || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending())) return Null("early admission: funding, battlefield path or a rush commitment");
         IUnitTask@ task = TechFactories::OrderPinned(builder, Task::BuildType::FACTORY, definition,
-            cluster.labRes, fallback ? "gantry (funded missing-turret-builder fallback)" : "gantry (supported cluster)");
+            cluster.labRes, stepFunded ? "gantry (funded by the income step, " + completed + " of " + required + " turrets stand; D-364)"
+            : fallback ? "gantry (funded missing-turret-builder fallback)" : "gantry (supported cluster)");
         if (task !is null) {
             @cluster.labTask = task; cluster.orderedFrame = ai.frame;
-            cluster.gantryFallback = fallback;
+            cluster.gantryFallback = fallback || stepFunded;   // INV-045's recorded exceptions
             return task;
         }
         return Null("gantry slot " + cluster.labRes + " refused (state " + aiTerrainMgr.GetReservationState(cluster.labRes) + ")");
@@ -292,7 +311,8 @@ namespace TechGantry {
         return false;
     }
     IUnitTask@ SupportWork(CCircuitUnit@ builder) {
-        if (!RecoveryEnabled() || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending()) return null;
+        // D-364: the heavy rush no longer holds the open gantry cluster's turrets either
+        if (!RecoveryEnabled() || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0) return null;
         TechFactories::Cluster@ cluster = TechFactories::ExistingGantry();
         if (cluster is null) return null;
         return Work(cluster, ai.GetCircuitDef(cluster.defName), builder);
@@ -521,7 +541,12 @@ namespace TechGantryScale {
         lastHave = have; lastOpen = openClusters; lastTurretProgress = AiMax(lastTurretProgress, turretProgress);
         const bool energyOk = Global::RoleSettings::Tech::GantryScaleEnergyFloor <= 0.0f
             || Economy::GetMinEnergyIncomeLast10s() >= Global::RoleSettings::Tech::GantryScaleEnergyFloor;
-        const bool blocked = TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending();
+        // D-364: only the nuke commitment blocks the step gantry (the chain on its
+        // silo, then the bounded first-stockpile window). The heavy rush used to
+        // block it too, and its finite batch waits for FRONT recipients it may never
+        // get: played, a T3-plan TECH with the heavy strategy rolled sat at a full
+        // bank from +560 to +600 metal for twenty minutes, `blocked=rush`, no gantry.
+        const bool blocked = TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0;
         // Hysteresis: the high-water target never cancels work; a new order also
         // needs the income to hold (have + 1) x step x share right now.
         // A map limit on the gantry is the ceiling of what can be due.
