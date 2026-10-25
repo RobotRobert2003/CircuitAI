@@ -581,8 +581,42 @@ namespace Spam {
             if (end.x < 0.0f) { valid.resize(0); return valid; }
             valid.insertLast(end);
         }
+        if (corner && RimFinish(valid, d, from, key, raw[raw.length() - 1])) return valid;
         if (corner) AppendEnemyCorner(valid, d, from, key);
         return valid;
+    }
+
+    // Owner, 2026-10-25: the lane's end moves to where its own line (the sideways
+    // place of `lanePoint`) meets the enemy's back edge of the playable rim, and the
+    // lane then jackknifes along that edge (EdgeLanes::RimEnds). Waypoints at or past
+    // the new end along the team axis are dropped. False (route unchanged) when the
+    // rim has no back edge: AppendEnemyCorner's rectangle corners then apply.
+    // Cost: O(rim samples) per route rebuild; the rim itself is cached.
+    dictionary rimLogged;      // factory id string -> the last end/turn logged
+    bool RimFinish(array<AIFloat3>@ route, CCircuitDef@ d, const AIFloat3 &in from, const string &in key, const AIFloat3 &in lanePoint)
+    {
+        if (!Global::Spam::EnemyCornerEnabled || route is null || route.length() == 0) return false;
+        AIFloat3 end, turn, s, e;
+        if (!EdgeLanes::Ends(s, e) || !EdgeLanes::RimEnds(d, from, lanePoint, 0, key, end, turn)) return false;
+        const float ax = e.x - s.x, az = e.z - s.z;
+        const float endAlong = (end.x - s.x) * ax + (end.z - s.z) * az;
+        const AIFloat3 last = route[route.length() - 1];
+        while (route.length() > 0) {
+            const AIFloat3 q = route[route.length() - 1];
+            if ((q.x - s.x) * ax + (q.z - s.z) * az < endAlong && MapHelpers::SqDist(q, end) > 400.0f * 400.0f) break;
+            route.removeLast();
+        }
+        route.insertLast(end);
+        if (turn.x >= 0.0f) route.insertLast(turn);
+        const AIFloat3 c = (turn.x >= 0.0f) ? turn : end;
+        const string text = "" + int(end.x) + "," + int(end.z) + "|" + int(c.x) + "," + int(c.z);
+        string was = "";
+        if (key.length() == 0 || !rimLogged.get(key, was) || was != text) {
+            if (key.length() > 0) rimLogged.set(key, text);
+            GenericHelpers::LogUtil("[Spam] lane " + (key.length() > 0 ? key : "edge") + " ends at (" + int(end.x) + "," + int(end.z)
+                + "); enemy corner (" + int(c.x) + "," + int(c.z) + ") on the playable rim (was (" + int(last.x) + "," + int(last.z) + "))", 1);
+        }
+        return true;
     }
 
     // Owner, 2026-10-24: every spam lane ends with one more point, the enemy team's
@@ -934,6 +968,8 @@ namespace Spam {
         laneByFactory.delete(key);
         spreadByFactory.delete(key);
         cornerPick.delete(key);
+        rimLogged.delete(key);
+        EdgeLanes::rimTurn.delete(key);
         for (int i = 0; i < 2; ++i) { cornerX.delete(key + "|" + i); cornerZ.delete(key + "|" + i); }
         repeatTask.delete(key);
         factoryVersion.delete(key);
