@@ -85,6 +85,14 @@ namespace Air {
             int T1SupportCap = 16;
             float TransitionMinEnergy = 1200.0f;
             int TransitionEarliestSeconds = 8 * 60;
+            // D-368: the first-lab saving hold (transition.save) ends while the metal bank
+            // is floating and holds the funded lab's remaining cost plus this fraction of
+            // storage besides: what the hold protects is banked and the rest overflows.
+            // Played before the change: 7,300 of 7,300 metal for three minutes at +99
+            // while the builders reclaimed winds and waited, the lab five minutes in frame.
+            float TransitionBankFreeFraction = 0.25f;
+            // INV-239: a metal bank full this long before the first advanced plant stands.
+            int TransitionOverflowSeconds = 120;
             int HomeFighterFloor = 6;
             int HomeFighterCeiling = 60;
             int OpeningAirConstructors = 3;

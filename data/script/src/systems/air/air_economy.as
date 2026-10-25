@@ -287,6 +287,7 @@ namespace AirEconomy {
             Invariants::Violation("INV-073", "AIR", "native nano planner enabled while AIR owns production support");
         metal = Economy::GetMinMetalIncomeLast10s(); energy = Economy::GetMinEnergyIncomeLast10s();
         bankM = aiEconomyMgr.metal.current; bankE = aiEconomyMgr.energy.current;
+        WatchTransitionOverflow();   // INV-239 (D-368), on last second's plant count
         const bool bad = aiEconomyMgr.isEnergyStalling && bankE < aiEconomyMgr.energy.storage * 0.3f;
         badSamples = bad ? badSamples + 1 : 0;
         goodSamples = !bad && bankE > aiEconomyMgr.energy.storage * 0.45f ? goodSamples + 1 : 0;
@@ -385,6 +386,28 @@ namespace AirEconomy {
         return plant !is null && (BankedLab(plant) || Economy::GetMinEnergyIncomeLast10s() >= Global::RoleSettings::Air::TransitionMinEnergy)
             && ProductionMath::LabIncomeReady(Economy::GetMinMetalIncomeLast10s(),
             Economy::IncomeWindowReady(), Global::RoleSettings::Air::TransitionMinMetal, aiEconomyMgr.metal.current, plant.costM);
+    }
+    // D-368: the saving hold is pointless once the bank is floating and holds the
+    // funded lab's remaining cost plus TransitionBankFreeFraction of storage: the
+    // reserve the hold protects is banked, and everything above it overflows.
+    bool BankBeyondLab()
+    {
+        if (MetalEconomy::Active() || !MetalFloating()) return false;
+        return bankM - AirBuild::LabReserve(false)
+            >= aiEconomyMgr.metal.storage * Global::RoleSettings::Air::TransitionBankFreeFraction;
+    }
+    int bankFullSince = -1;        // INV-239: the frame the metal bank became full, -1 while it is not
+    int overflowLogged = -100000;
+    void WatchTransitionOverflow()
+    {
+        if (!aiEconomyMgr.isMetalFull) { bankFullSince = -1; return; }
+        if (bankFullSince < 0) bankFullSince = ai.frame;
+        if (t2 > 0 || MetalEconomy::Active() || recovery
+            || ai.frame - bankFullSince < Global::RoleSettings::Air::TransitionOverflowSeconds * SECOND
+            || ai.frame - overflowLogged < 60 * SECOND) return;
+        overflowLogged = ai.frame;
+        Invariants::Violation("INV-239", "AIR", "metal bank full " + int((ai.frame - bankFullSince) / SECOND)
+            + " s before the first advanced plant stands (savingLab=" + SavingForFirstLab() + ")");
     }
     bool SavingForFirstLab()
     {

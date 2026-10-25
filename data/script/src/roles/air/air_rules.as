@@ -85,7 +85,11 @@ namespace AirRules {
                 if (t !is null) return AirBuild::Record(t, "transition.support", u);
                 @t = AirBuild::Assist(u);
                 if (t !is null) return AirBuild::Record(t, "transition.finish", u);
-                return AirBuild::Record(aiBuilderMgr.Enqueue(TaskB::Wait(3 * SECOND)), "transition.save", u);
+                // D-368: the hold only while the bank is under the lab's reserve and the
+                // free fraction; a floating bank falls through to the ordinary rules
+                // (support, conversion, shared growth, the first fusion) and spends.
+                if (!AirEconomy::BankBeyondLab())
+                    return AirBuild::Record(aiBuilderMgr.Enqueue(TaskB::Wait(3 * SECOND)), "transition.save", u);
             }
         }
         { // One funded support decision, before shared growth/assistance.

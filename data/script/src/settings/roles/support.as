@@ -59,7 +59,19 @@ namespace Support {
             float MinimumEnergyIncomeForT2Lab = 550.0f;
             float RequiredMetalCurrentForT2Lab = 800.0f;
 
-            int MaxT2BotLabs = 1;
+            // D-367: SUPPORT adds T2 bot labs as its income grows: the second once the
+            // 10-second minimum metal income reaches T2LabSecondMetalIncome, another per
+            // T2LabMetalIncomeStep over it, up to MaxT2BotLabs (the legacy ladder reads the
+            // cap too). An extra lab is ordered only while the metal bank is ahead
+            // (TechBuild::MetalAhead: full for PowerAheadSeconds, or rising), so it spends
+            // a surplus and never the budget of a frame going up; an open cluster is
+            // finished whatever the bank. Played before the change: one lab and 21
+            // builders held a 15,850 metal bank full from minute 14 to 40 at +145..+207.
+            // INV-240 watches a bank full for T2LabOverflowSeconds under the wanted count.
+            int MaxT2BotLabs = 4;
+            float T2LabSecondMetalIncome = 80.0f;
+            float T2LabMetalIncomeStep = 60.0f;
+            int T2LabOverflowSeconds = 120;
 
             /******************** BUILDER CAP LIMITS ********************/
             // Hard caps for T1/T2 land builders used when computing income-based limits
