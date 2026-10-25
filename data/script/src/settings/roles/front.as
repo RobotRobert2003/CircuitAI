@@ -261,10 +261,14 @@ namespace Front {
             // cap is raised by the turrets still missing. 0: off here; experimental_balanced sets 6 (the
             // Armada and Legion T2 labs' caretaker in factory.json). Log [FRONT][LabNano].
             int T2FactoryNanos = 0;
+            int T2FactoryNanosMax = 0;                 // rising to this as the metal bank nears overflow (experimental_balanced 14)
+            float T2FactoryNanoBankLow = 0.5f;         // ... from this share of metal storage (none extra)
+            float T2FactoryNanoBankHigh = 0.9f;        // ... to this one (all of them)
             int T2FactoryNanoParallel = 3;
             float T2FactoryNanoStartProgress = 0.0f;   // the lab frame's build progress before the first turret
             float T2FactoryNanoRadius = 400.0f;        // a turret this near (and nearer than any other factory) is the lab's
-            float T2FactoryNanoReach = 2500.0f;        // constructors this near the lab are asked
+            float T2FactoryNanoReach = 2500.0f;        // idle, guarding or assisting constructors this near the lab are asked
+            float T2FactoryNanoTakeRadius = 1200.0f;   // ... and ones walking to an unframed build this near
             int T2FactoryNanoScanSeconds = 2;          // turret count refresh while a lab is short
         }
 }

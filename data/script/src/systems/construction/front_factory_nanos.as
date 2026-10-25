@@ -7,9 +7,13 @@
 // ordered there. Turrets of every source count, each attributed to its nearest factory, so a T1 lab's
 // turrets next door are not taken for the T2 lab's. At most Front::T2FactoryNanoParallel of our orders
 // are open at once; past that an asker helps a turret frame at the lab (the native repair task is one
-// per frame, shared). Only constructors already asking for work get one: nothing is reassigned,
-// re-issued or cancelled. An order that dies unbuilt holds that lab for FailHoldSeconds times the
-// failures in a row (to 120 s), so a lab with no site does not churn orders. Front_IncomeNanoLimits
+// per frame, shared). Only constructors that are idle, guarding, patrolling or assisting are taken, and
+// within Front::T2FactoryNanoTakeRadius ones walking to a build not yet framed (Takeable);
+// native re-evaluates busy builders by asking for a task and swaps when the kind differs, so a
+// constructor on one of our turrets is handed the same task back and one on its own build is left
+// alone. An order nobody is on goes to the next asker, and is dropped the second time it is left. An
+// order that dies unbuilt holds that lab for FailHoldSeconds times the failures in a row (to 120 s),
+// so a lab with no site does not churn orders. Front_IncomeNanoLimits
 // raises the turret cap by the turrets still to be framed (Cap), so the energy cap neither refuses an
 // order nor makes one unbuildable halfway.
 // Cost: one owned-unit scan every Front::T2FactoryNanoScanSeconds while a lab is short (then nanos x
@@ -33,9 +37,11 @@ namespace FrontFactoryNanos {
     array<int> holdUntil;            // per lab id below: no new order before this frame
     array<int> holdLab;
     array<int> fails;
-    // Our turret orders not yet removed, and the lab each is for
+    // Our turret orders not yet removed, and the lab each is for; our repair tasks on turret frames
     array<IUnitTask@> orders;
     array<int> orderLab;
+    array<int> orderGiven;           // constructors each order has been handed to
+    array<IUnitTask@> helps;
     int missing = 0;                 // turrets still to be framed over all labs (Cap)
     int lastScan = -100000;
     int lastLabCount = -1;
@@ -47,7 +53,7 @@ namespace FrontFactoryNanos {
     void Reset() {
         labIds.resize(0); labPos.resize(0); standing.resize(0); framed.resize(0);
         holdUntil.resize(0); holdLab.resize(0); fails.resize(0);
-        orders.resize(0); orderLab.resize(0);
+        orders.resize(0); orderLab.resize(0); orderGiven.resize(0); helps.resize(0);
         missing = 0; lastScan = -100000; lastLabCount = -1;
         labDefs.resize(0); @nanoDef = null;
     }
@@ -62,6 +68,22 @@ namespace FrontFactoryNanos {
             CCircuitDef@ d = ai.GetCircuitDef(names[i]);
             if (d !is null) labDefs.insertLast(d);
         }
+    }
+
+    // Turrets wanted per lab: Front::T2FactoryNanos, rising to Front::T2FactoryNanosMax as the metal bank
+    // nears overflow (owner, 2026-10-25: "start with 6 ... increasing this to 14 based on how close to
+    // metal overflow we are"): none extra at T2FactoryNanoBankLow of storage, all of them at
+    // T2FactoryNanoBankHigh. Like AIR's rich bank (Air::BankRichMetal sets T2ExpansionSupport) and
+    // TECH's MetalAhead turrets, banked metal becomes build power. Read per ask; standing turrets are
+    // never removed when the bank falls, only no new ones are ordered.
+    int Want() {
+        const int base = Global::RoleSettings::Front::T2FactoryNanos;
+        const int top = AiMax(base, Global::RoleSettings::Front::T2FactoryNanosMax);
+        const float lo = Global::RoleSettings::Front::T2FactoryNanoBankLow, hi = Global::RoleSettings::Front::T2FactoryNanoBankHigh;
+        if (top <= base || aiEconomyMgr.metal.storage <= 0.0f || hi <= lo) return base;
+        const float fill = aiEconomyMgr.metal.current / aiEconomyMgr.metal.storage;
+        const float f = AiMax(0.0f, AiMin(1.0f, (fill - lo) / (hi - lo)));
+        return base + int(float(top - base) * f + 0.5f);
     }
 
     int LabCount() {
@@ -125,8 +147,8 @@ namespace FrontFactoryNanos {
             if (scanNanos[n].GetBuildProgress() < 1.0f) framed[best]++; else standing[best]++;
         }
         for (int i = int(orders.length()) - 1; i >= 0; --i)
-            if (orders[i] is null || orders[i].IsDead()) { orders.removeAt(i); orderLab.removeAt(i); }
-        const int want = Global::RoleSettings::Front::T2FactoryNanos;
+            if (orders[i] is null || orders[i].IsDead()) { orders.removeAt(i); orderLab.removeAt(i); orderGiven.removeAt(i); }
+        const int want = Want();
         missing = 0;
         for (uint i = 0; i < labIds.length(); ++i) missing += AiMax(0, want - standing[i] - framed[i]);
         lastLabCount = LabCount();
@@ -160,18 +182,54 @@ namespace FrontFactoryNanos {
                 GenericHelpers::LogUtil("[FRONT][LabNano] turret order for lab " + orderLab[i] + " ended unbuilt ("
                     + fails[h] + " in a row); next in " + (FailHoldSeconds * fails[h]) + " s", 1);
             }
-            orders.removeAt(i); orderLab.removeAt(i);
+            orders.removeAt(i); orderLab.removeAt(i); orderGiven.removeAt(i);
             return;
         }
     }
 
+    bool IsOurs(IUnitTask@ t) {
+        if (t is null || t.IsDead()) return false;
+        for (uint i = 0; i < orders.length(); ++i) if (orders[i] is t) return true;
+        for (uint i = 0; i < helps.length(); ++i) if (helps[i] is t) return true;
+        return false;
+    }
+    // A constructor we may take: idle, waiting, guarding, patrolling or assisting. Played (2026-10-25,
+    // first build): native re-evaluates busy builders by asking for a task and swaps when the kind
+    // differs, so taking any asker pulled constructors off their own builds.
+    bool Free(CCircuitUnit@ u) {
+        IUnitTask@ t = u.task;
+        if (t is null || t.IsDead()) return true;
+        if (t.GetType() == Task::Type::IDLE || t.GetType() == Task::Type::NIL || t.GetType() == Task::Type::WAIT) return true;
+        if (t.GetType() != Task::Type::BUILDER) return false;
+        IBuilderTask@ b = cast<IBuilderTask>(t);
+        if (b is null) return false;
+        const Task::BuildType bt = Task::BuildType(b.GetBuildType());
+        return bt == Task::BuildType::GUARD || bt == Task::BuildType::PATROL || bt == Task::BuildType::WAIT || bt == Task::BuildType::REPAIR;
+    }
+    // ... or, within Front::T2FactoryNanoTakeRadius of the lab, one walking to a build not yet framed
+    // (never a factory or a turret). Played (2026-10-25, second build): with only idle constructors taken,
+    // the eco kept every T1 constructor busy while the lab was a frame, and its turrets waited for it to
+    // stand. The build it leaves stays queued for the next constructor; nothing is cancelled.
+    bool Takeable(CCircuitUnit@ u) {
+        IBuilderTask@ b = cast<IBuilderTask>(u.task);
+        if (b is null || b.IsDead() || b.target !is null) return false;
+        const Task::BuildType bt = Task::BuildType(b.GetBuildType());
+        return bt < Task::BuildType::REPAIR && bt != Task::BuildType::FACTORY && bt != Task::BuildType::NANO;
+    }
+
     IUnitTask@ Work(CCircuitUnit@ u) {
         if (!On() || u is null || u.circuitDef is null || FrontRecovery::Active()) return null;
+        // A re-evaluation of a constructor on one of our turrets: the same task, so native keeps it (a new
+        // order here was left queued with nobody on it, and a repair from another rung swapped it away)
+        if (IsOurs(u.task)) return u.task;
         if (UnitHelpers::IsCommander(u.circuitDef) || UnitHelpers::GetConstructorTier(u.circuitDef) != 1) return null;
+        const bool free = Free(u);
+        if (!free && !Takeable(u)) return null;
         Refresh();
         if (nanoDef is null || missing <= 0 || !u.circuitDef.CanBuild(nanoDef)) return null;
-        const int want = Global::RoleSettings::Front::T2FactoryNanos;
-        const float reach = Global::RoleSettings::Front::T2FactoryNanoReach;
+        for (int i = int(helps.length()) - 1; i >= 0; --i) if (helps[i] is null || helps[i].IsDead()) helps.removeAt(i);
+        const int want = Want();
+        const float reach = free ? Global::RoleSettings::Front::T2FactoryNanoReach : Global::RoleSettings::Front::T2FactoryNanoTakeRadius;
         const AIFloat3 wp = u.GetPos(ai.frame);
         // the lab within reach furthest from its complement (the first framed on a tie)
         int pick = -1, need = 0;
@@ -186,10 +244,24 @@ namespace FrontFactoryNanos {
         CCircuitUnit@ lab = ai.GetTeamUnit(labIds[pick]);
         const AIFloat3 at = labPos[pick];
         const int h = HoldIndex(lab.id);
+        // an order of ours nobody is on (its builder died or fell back): this constructor takes it;
+        // one left a second time is dropped (TaskRemoved holds the lab), so a site nobody can build
+        // does not hand the same order round every constructor
+        for (uint i = 0; i < orders.length(); ++i) {
+            if (orderLab[i] != lab.id || orders[i] is null || orders[i].IsDead()) continue;
+            array<CCircuitUnit@>@ on = orders[i].GetUnits();
+            if (on !is null && on.length() > 0) continue;
+            if (orderGiven[i] >= 2) { aiBuilderMgr.AbortTask(orders[i]); return null; }
+            orderGiven[i]++;
+            return orders[i];
+        }
         if (Live() >= Global::RoleSettings::Front::T2FactoryNanoParallel || ai.frame < holdUntil[h]) {
             // no new order: help a turret frame at this lab, if one is going up
             CCircuitUnit@ frame = aiBuilderMgr.FindUnfinishedNear(at, Global::RoleSettings::Front::T2FactoryNanoRadius, nanoDef);
-            return frame is null ? null : aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame, HelpTimeoutSeconds * SECOND));
+            if (frame is null) return null;
+            IUnitTask@ r = aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame, HelpTimeoutSeconds * SECOND));
+            if (r !is null && helps.findByRef(r) < 0) helps.insertLast(r);
+            return r;
         }
         // the energy cap is raised by Cap at the next economy update; until then by one for this order
         if (nanoDef.maxThisUnit >= 0 && nanoDef.count >= nanoDef.maxThisUnit) nanoDef.maxThisUnit = nanoDef.count + 1;
@@ -206,7 +278,7 @@ namespace FrontFactoryNanos {
             }
             return null;
         }
-        orders.insertLast(t); orderLab.insertLast(lab.id);
+        orders.insertLast(t); orderLab.insertLast(lab.id); orderGiven.insertLast(1);
         Builder::MarkNanoEnqueued();
         Factory::_SetNanoCount(lab, Factory::_GetNanoCount(lab) + 1);   // Front_TryBuildNano's per-factory count
         GenericHelpers::LogUtil("[FRONT][LabNano] turret " + (Committed(pick)) + "/" + want + " for " + lab.circuitDef.GetName() + " " + lab.id
