@@ -226,11 +226,11 @@ namespace TechGantry {
             SupportForget(cluster, uint(index));
             if (slot < 0 || aiTerrainMgr.GetReservationState(slot) != 0) continue;   // consumed (built) or held by another order
             const string key = "" + slot;
-            int fails = 0;
+            int64 fails = 0;   // dictionary integers are int64: an int out never matches (played: a slot released on its first death)
             cluster.supportSlotFails.get(key, fails);
             ++fails;
             cluster.supportSlotFails.set(key, fails);
-            cluster.supportSlotRest.set(key, ai.frame + Global::RoleSettings::Tech::GantrySupportSlotRestSeconds * SECOND);
+            cluster.supportSlotRest.set(key, int64(ai.frame + Global::RoleSettings::Tech::GantrySupportSlotRestSeconds * SECOND));
             if (fails >= Global::RoleSettings::Tech::GantrySupportSlotMaxFails) {
                 aiTerrainMgr.ReleaseReservation(slot);
                 GenericHelpers::LogUtil("[TECH][Gantry] turret slot " + slot + " given up: " + fails + " orders died there with no frame", 1);
@@ -291,9 +291,9 @@ namespace TechGantry {
         if (Layout::TurretsCapped()) { why = "turret cap: " + Layout::TurretsInFlight() + " in flight"; return null; }
         const int slot = aiTerrainMgr.NextSlotAny(cluster.nanoGroup, builder.GetPos(ai.frame));
         if (slot < 0) { why = "no free turret slot in group " + cluster.nanoGroup; return null; }
-        int rest = 0;
+        int64 rest = 0;
         if (cluster.supportSlotRest.get("" + slot, rest) && ai.frame < rest) {
-            why = "turret slot " + slot + " rests " + ((rest - ai.frame) / SECOND + 1) + " s after a lost order";
+            why = "turret slot " + slot + " rests " + int((rest - ai.frame) / SECOND + 1) + " s after a lost order";
             return null;
         }
         const AIFloat3 position = aiTerrainMgr.GetReservationPos(slot);
