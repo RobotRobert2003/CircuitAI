@@ -98,6 +98,12 @@ namespace Spam {
     // asks every few seconds produces one line, not hundreds.
     dictionary rejectByFactory;    // factory id string -> last reason logged
     int lastIdleReportFrame = -1;
+    // owner, 2026-10-25: the gate must hold ActivateHoldSeconds before spam
+    // turns on; a paused TECH pump draws on the bank, idle it is reclaimed
+    int fundedSinceFrame = -1;     // frame the inactive gate last became funded, -1 not funded
+    int lastFundedLogFrame = -100000;
+    dictionary pumpLabs;           // TECH factory id that ran a repeat -> frame idle since paused, -1 busy
+    array<int> retiredPumps;       // pumps retired for idling, until gone (rule lab.spam.reclaim)
 
     bool IsEnabled()
     {
@@ -165,7 +171,8 @@ namespace Spam {
         // The once-a-second policy census owns cancellation; ongoing units keep
         // their MOVE route. Only abort a task still owned by this controller.
         MaintainFactories(funded && aiBuilderMgr.GetWorkerCount() >= Global::Spam::MinWorkers);
-        if (!IsEnabled()) { active = false; return; }
+        TendPausedPumps();
+        if (!IsEnabled()) { active = false; fundedSinceFrame = -1; return; }
         if (!active) {
             if (mi < Global::Spam::MinMetalIncome || ei < Global::Spam::MinEnergyIncome) {
                 // Dedicated pressure needs a mature, funded economy; no fusion
@@ -180,7 +187,15 @@ namespace Spam {
                         + " ei=" + int(ei) + "/" + int(Global::Spam::MinEnergyIncome), 1);
                 }
             }
-            if (funded) {
+            if (!funded) { fundedSinceFrame = -1; return; }
+            if (fundedSinceFrame < 0) {
+                fundedSinceFrame = ai.frame;
+                if (ai.frame - lastFundedLogFrame >= MINUTE) lastFundedLogFrame = ai.frame;
+                if (lastFundedLogFrame == ai.frame) GenericHelpers::LogUtil("[Spam] Funded: mi=" + int(mi) + " ei=" + int(ei) + "; on if it holds "
+                    + int(Global::Spam::ActivateHoldSeconds) + " s", 1);
+            }
+            if (ai.frame - fundedSinceFrame >= int(Global::Spam::ActivateHoldSeconds * SECOND)) {
+                fundedSinceFrame = -1;
                 active = true;
                 activeSinceFrame = ai.frame;
                 _EnsureFocus();
@@ -875,7 +890,8 @@ namespace Spam {
         IUnitTask@ edge = EdgeLanes::FactoryMakeTask(factory);
         if (edge !is null) return edge;
         if (EdgeLanes::IsEdgeLab(factory)) return null;
-        if (!active || factory is null || factory.circuitDef is null) return null;
+        if (!active) return PausedPumpTask(factory);
+        if (factory is null || factory.circuitDef is null) return null;
         const string unitName = SpamUnitFor(factory.circuitDef);
         if (unitName.length() == 0) {
             // Not a spam factory. Expected for every T2/T3/air/sea factory, so
@@ -905,8 +921,70 @@ namespace Spam {
         IUnitTask@ task = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::FIREPOWER,
             Task::Priority::NORMAL, d, factory.GetPos(ai.frame), 64.f, true));
         repeatTask.set("" + factory.id, @task);
+        if (Global::AISettings::Role == AiRole::TECH) pumpLabs.set("" + factory.id, int(-1));
         GenericHelpers::LogUtil("[Spam] repeat factory=" + factory.id + " unit=" + unitName, 1);
         return task;
+    }
+
+    // owner, 2026-10-25: a TECH pump while spam is paused. TECH's own rows make
+    // no combat unit under its +200 combat gate, so the lab stood idle (played:
+    // Mescaline, 6 units and then nothing). From a bank over PausedMinMetalBank
+    // it makes its unit one at a time; they still run its lane.
+    IUnitTask@ PausedPumpTask(CCircuitUnit@ factory)
+    {
+        if (factory is null || factory.circuitDef is null || !pumpLabs.exists("" + factory.id)
+            || Lifecycle::IsRetiring(factory) || aiEconomyMgr.isEnergyEmpty
+            || aiEconomyMgr.metal.current < Global::Spam::PausedMinMetalBank
+            || aiBuilderMgr.GetWorkerCount() < Global::Spam::MinWorkers) return null;
+        // TECH's T1 constructor floor comes first (Tech_FactoryAiMakeTask)
+        if (UnitDefHelpers::SumUnitDefCounts(UnitHelpers::GetAllT1BotConstructors())
+            < Global::RoleSettings::Tech::MinimumT1ConstructorBots) return null;
+        CCircuitDef@ d = ai.GetCircuitDef(SpamUnitFor(factory.circuitDef));
+        if (d is null) return null;
+        if (d.maxThisUnit < d.count + 50) d.maxThisUnit = d.count + 50;
+        if (!d.IsAvailable(ai.frame)) return null;
+        IUnitTask@ pending = aiFactoryMgr.GetPendingFactoryTask(factory);
+        if (pending !is null) return pending;
+        GenericHelpers::LogUtil("[Spam] paused: factory=" + factory.id + " makes one " + d.GetName()
+            + " from the bank (" + int(aiEconomyMgr.metal.current) + ")", 2);
+        return aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::FIREPOWER,
+            Task::Priority::NORMAL, d, factory.GetPos(ai.frame), 64.f));
+    }
+
+    // owner, 2026-10-25: a paused TECH pump idle PausedIdleRetireSeconds is
+    // retired; rule lab.spam.reclaim takes it back. Its cluster rebuilds it
+    // when spam is on again (TechFactories::Work through BuilderMakeTask).
+    void TendPausedPumps()
+    {
+        for (int i = int(retiredPumps.length()) - 1; i >= 0; --i)
+            if (ai.GetTeamUnit(retiredPumps[i]) is null) retiredPumps.removeAt(i);
+        if (pumpLabs.getSize() == 0) return;
+        array<string>@ keys = pumpLabs.getKeys();
+        for (uint i = 0; i < keys.length(); ++i) {
+            CCircuitUnit@ f = ai.GetTeamUnit(int(parseInt(keys[i])));
+            if (f is null || Lifecycle::IsRetiring(f)) { pumpLabs.delete(keys[i]); continue; }
+            int since = -1;
+            pumpLabs.get(keys[i], since);
+            const bool busy = active || (f.task !is null && f.task.GetType() == int(Task::Type::FACTORY));
+            if (busy) { if (since >= 0) pumpLabs.set(keys[i], int(-1)); continue; }
+            if (since < 0) { pumpLabs.set(keys[i], ai.frame); continue; }
+            if (ai.frame - since < int(Global::Spam::PausedIdleRetireSeconds * SECOND)) continue;
+            pumpLabs.delete(keys[i]);
+            if (f.task !is null && f.task.GetType() == int(Task::Type::WAIT)) aiFactoryMgr.AbortTask(f.task);
+            Lifecycle::Retire(f, "spam paused and the lab idle " + ((ai.frame - since) / SECOND)
+                + " s: reclaimed (owner, 2026-10-25)");
+            retiredPumps.insertLast(f.id);
+        }
+    }
+
+    // A retired idle pump still standing, for rule lab.spam.reclaim; null if none.
+    CCircuitUnit@ RetiredPump()
+    {
+        for (uint i = 0; i < retiredPumps.length(); ++i) {
+            CCircuitUnit@ f = ai.GetTeamUnit(retiredPumps[i]);
+            if (f !is null && Lifecycle::IsRetiring(f)) return f;
+        }
+        return null;
     }
 
     // Military::AiMakeTask asks here first. Spam units join their factory's route
@@ -1056,6 +1134,7 @@ namespace Spam {
         for (int i = 0; i < 2; ++i) { cornerX.delete(key + "|" + i); cornerZ.delete(key + "|" + i); }
         repeatTask.delete(key);
         factoryVersion.delete(key);
+        pumpLabs.delete(key);
     }
 
     void OnTaskRemoved(IUnitTask@ task)

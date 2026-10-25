@@ -219,6 +219,7 @@ namespace TechRules {
     bool FirstTurretStands(Ctx@ c){ return aiBuilderMgr.GetStaticBuildPowerNear(Layout::BaseCentre(), Global::RoleSettings::Tech::EcoBuildPowerRadius) > 0.0f; }
 
     bool BaseFactoryToGo(Ctx@ c)  { return TechFactories::BaseLandFactory() !is null; }   // D-114
+    bool SpamLabToGo(Ctx@ c)      { return Spam::RetiredPump() !is null; }             // owner, 2026-10-25
     bool FrontClusterOpen(Ctx@ c) { return TechFactories::OpenAbove(2) || TechFactories::RefillWanted(1, 3); }   // D-114
     bool LandCon(Ctx@ c)          { return TechForward::IsLand(c.u); }        // D-109: a bot, not an air constructor
     bool T1LandReleased(Ctx@ c)   { return TechForward::T1Released(); }       // D-109
@@ -261,6 +262,7 @@ namespace TechRules {
     IUnitTask@ DoFlankFactory(Ctx@ c) { return TechFlank::Work(c.u); }
     IUnitTask@ DoAirFlexible(Ctx@ c)    { return TechBuild::AirFlexible(c.u); }    // D-107
     IUnitTask@ DoBaseFactoryReclaim(Ctx@ c) { return TechFactories::ReclaimBaseFactory(c.u); }   // D-114
+    IUnitTask@ DoSpamLabReclaim(Ctx@ c)     { return TechFactories::ReclaimSpamLab(c.u); }       // owner, 2026-10-25
     IUnitTask@ DoFrontCluster(Ctx@ c)       { return TechFactories::OpenWork(c.u); }            // D-114
     IUnitTask@ DoHarbourSea(Ctx@ c)     { return TechHarbour::SeaTask(c.u); }       // D-121
     IUnitTask@ DoHarbourYard(Ctx@ c)    { return TechHarbour::LandTask(c.u); }      // D-121
@@ -506,6 +508,7 @@ namespace TechRules {
         table.insertLast(Rule("lab.t1.reclaim",    MOBILE,       W1(@IntoT2), @DoReclaimT1Lab, "the advanced lab is under way: every builder in range reclaims the T1 lab"));
         table.insertLast(Rule("lab.t2.reclaim",     MOBILE,       W1(@T2LabRetiring), @DoReclaimT2Lab, "D-078: the advanced lab is retiring (an advanced fusion is under construction, the bank has room): every builder reclaims it, turrets in range join"));
         table.insertLast(Rule("lab.base.reclaim",   MOBILE,       W1(@BaseFactoryToGo), @DoBaseFactoryReclaim, "D-114: with 3 land factories on the map the base's land factories are retired and reclaimed; their ground goes back to the economy"));
+        table.insertLast(Rule("lab.spam.reclaim",   MOBILE,       W1(@SpamLabToGo), @DoSpamLabReclaim, "owner, 2026-10-25: spam is paused and a spam lab stood idle PausedIdleRetireSeconds: builders within PausedReclaimRadius reclaim it"));
         table.insertLast(Rule("lab.front",          CONSTRUCTORS, W1(@FrontClusterOpen), @DoFrontCluster, "D-114: a front cluster's lost turret; an open T2 or T3 front factory cluster: its turrets, help on one going up, then its factory"));
         table.insertLast(Rule("energy.reclaim",     MOBILE,       W2(@EnergyReclaimable, @NotStalling), @DoEnergyReclaim, "D-077: a fusion stands and energy income without the T1 sources covers the pull by ReclaimT1EnergyMargin: reclaim winds and solars nearest the base centre; advanced solars at ReclaimAdvSolarMargin; an advanced fusion reclaims all"));
         // D-105 (owner's rule): T1 constructors add build power before assisting a

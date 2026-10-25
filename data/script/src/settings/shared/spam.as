@@ -21,6 +21,17 @@ namespace Spam {
         float MinEnergyIncome = 1500.0f;
         // ... and either falling under this fraction of its threshold deactivates
         float ReleaseFraction = 0.7f;
+        // owner, 2026-10-25: the gate holds this long before spam turns on
+        // (played: Mescaline TECH turned on at +65 from wind-turbine reclaim,
+        // real income +40 to +50; its new lab made 6 units and stood idle)
+        float ActivateHoldSeconds = 60.0f;
+        // owner, 2026-10-25: while spam is paused, a TECH spam lab keeps making
+        // its unit one at a time from a bank over PausedMinMetalBank; idle
+        // PausedIdleRetireSeconds, it is retired and builders within
+        // PausedReclaimRadius reclaim it (its cluster rebuilds it once spam is on)
+        float PausedMinMetalBank = 1000.0f;
+        float PausedIdleRetireSeconds = 180.0f;
+        float PausedReclaimRadius = 2000.0f;
         // Destination lies this far past the focus along our line of approach
         float BehindEnemyDistance = 2500.0f;
         // Sideways offset between the lanes of different factories

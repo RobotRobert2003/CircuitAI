@@ -1100,6 +1100,18 @@ namespace TechFactories {
         if (t !is null) { TechReclaim::Track(f, t, "lab.base"); TechBuild::PullTurrets(f); }
         return t;
     }
+    // owner, 2026-10-25: a spam lab retired for idling while spam is paused
+    // (Spam::TendPausedPumps) goes back to the bank
+    IUnitTask@ ReclaimSpamLab(CCircuitUnit@ u)
+    {
+        CCircuitUnit@ f = Spam::RetiredPump();
+        if (f is null || f is u) return null;
+        if (MapHelpers::SqDist(u.GetPos(ai.frame), f.GetPos(ai.frame)) > Sq(Global::Spam::PausedReclaimRadius)) return null;
+        if (!TechReclaim::Allowed(f, "lab.spam")) return null;
+        IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Reclaim(Task::Priority::HIGH, f, 180 * SECOND));
+        if (t !is null) { TechReclaim::Track(f, t, "lab.spam"); TechBuild::PullTurrets(f); }
+        return t;
+    }
     // the base's planned factory footprints (the pair's slots, the advanced lab's)
     // go back to the pool: economic ground from now on
     void ReleaseBaseFactoryGround()
