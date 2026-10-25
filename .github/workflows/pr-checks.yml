@@ -1,0 +1,166 @@
+# SMRTBARb pull request checks (D-363). Every pull request into smrt-test or
+# smrt-prod gets, beside the two platform builds in smrtbarb-release.yml:
+#
+#   Changed files                    what the PR touches, grouped (C++, AngelScript, tests)
+#   Lint C++ (changed files)         git diff --check + cppcheck on the changed src/ C++ only
+#   Lint AngelScript (changed files) includes, brackets, line endings on the changed .as,
+#                                    then the script/registration parity and field-isolation checkers
+#   C++ tests                        every tests/*_test.cpp, compiled with the runner's g++
+#   AngelScript tests                every tests/*_tests.as through the bundled AngelScript engine
+#   Summary                          one table of the results above
+#
+# The two lint jobs run only when a file of their kind changed; the test jobs
+# always run. Findings are GitHub annotations on the changed lines plus a table
+# in each job's summary, so the result reads without opening a log.
+# Scripts: tools/ci/changed_files.sh, tools/ci/lint_cpp.sh,
+# tools/ci/lint_angelscript.py, tools/run_native_tests.sh --host.
+name: PR checks
+
+on:
+  pull_request:
+    branches: [smrt-test, smrt-prod]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # the base the changed-file lists are computed against (workflow_dispatch has no base_ref)
+  BASE_REF: ${{ github.base_ref || 'smrt-test' }}
+
+jobs:
+  changes:
+    name: Changed files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cpp: ${{ steps.list.outputs.cpp }}
+      angelscript: ${{ steps.list.outputs.angelscript }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: List the changed files
+        id: list
+        run: |
+          git fetch -q origin "$BASE_REF"
+          all="$(tools/ci/changed_files.sh "origin/$BASE_REF" all)"
+          cpp="$(tools/ci/changed_files.sh "origin/$BASE_REF" cpp)"
+          as="$(tools/ci/changed_files.sh "origin/$BASE_REF" angelscript)"
+          count() { printf '%s\n' "$1" | sed '/^$/d' | wc -l; }
+          echo "cpp=$([ -n "$cpp" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "angelscript=$([ -n "$as" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Changed files against \`$BASE_REF\`"
+            echo
+            echo "| Kind | Files | Check |"
+            echo "|---|---|---|"
+            echo "| C++ (src/AIExport.*, src/circuit/) | $(count "$cpp") | $([ -n "$cpp" ] && echo 'Lint C++ runs' || echo 'Lint C++ skipped') |"
+            echo "| AngelScript (data/script/) | $(count "$as") | $([ -n "$as" ] && echo 'Lint AngelScript runs' || echo 'Lint AngelScript skipped') |"
+            echo "| all | $(count "$all") | C++ and AngelScript tests always run |"
+            echo
+            echo "<details><summary>Every changed file</summary>"
+            echo
+            printf '%s\n' "$all" | sed '/^$/d; s/^/- `/; s/$/`/'
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "C++: $(count "$cpp") file(s); AngelScript: $(count "$as") file(s); all: $(count "$all")"
+
+  lint-cpp:
+    name: Lint C++ (changed files)
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install cppcheck
+        run: sudo apt-get update -q && sudo apt-get install -y -q cppcheck
+      - name: Lint the changed C++ files
+        run: |
+          git fetch -q origin "$BASE_REF"
+          tools/ci/lint_cpp.sh "origin/$BASE_REF"
+
+  lint-angelscript:
+    name: Lint AngelScript (changed files)
+    needs: changes
+    if: needs.changes.outputs.angelscript == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Lint the changed scripts and the script graph
+        run: |
+          git fetch -q origin "$BASE_REF"
+          python3 tools/ci/lint_angelscript.py "origin/$BASE_REF"
+
+  test-cpp:
+    name: C++ tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run tests/*_test.cpp
+        run: bash tools/run_native_tests.sh --host --only cpp
+
+  test-angelscript:
+    name: AngelScript tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the AngelScript engine and run tests/*_tests.as
+        run: bash tools/run_native_tests.sh --host --only as
+
+  summary:
+    name: Summary
+    needs: [changes, lint-cpp, lint-angelscript, test-cpp, test-angelscript]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: One table of every check
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          LINT_CPP: ${{ needs.lint-cpp.result }}
+          LINT_AS: ${{ needs.lint-angelscript.result }}
+          TEST_CPP: ${{ needs.test-cpp.result }}
+          TEST_AS: ${{ needs.test-angelscript.result }}
+        run: |
+          word() {   # a result word the reader does not have to decode
+            case "$1" in
+              success) echo "✅ passed" ;;
+              failure) echo "❌ failed" ;;
+              cancelled) echo "⚪ cancelled" ;;
+              skipped) echo "⚪ skipped (nothing of this kind changed)" ;;
+              *) echo "$1" ;;
+            esac
+          }
+          {
+            echo "### PR checks"
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Changed files | $(word "$CHANGES") |"
+            echo "| Lint C++ (changed files) | $(word "$LINT_CPP") |"
+            echo "| Lint AngelScript (changed files) | $(word "$LINT_AS") |"
+            echo "| C++ tests | $(word "$TEST_CPP") |"
+            echo "| AngelScript tests | $(word "$TEST_AS") |"
+            echo
+            echo "The Windows and Linux builds are the \`build (...)\` checks of the release workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
+          bad=0
+          for r in "$CHANGES" "$LINT_CPP" "$LINT_AS" "$TEST_CPP" "$TEST_AS"; do
+            case "$r" in failure|cancelled) bad=1 ;; esac
+          done
+          [ "$bad" -eq 0 ] || { echo "::error title=PR checks::a check failed; see the table in this job's summary"; exit 1; }
+          echo "all checks passed or were skipped for lack of changes"
