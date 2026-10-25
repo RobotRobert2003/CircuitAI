@@ -1166,6 +1166,7 @@ CRecruitTask* CFactoryManager::Enqueue(const TaskS::SRecruitTask& ti)
 	CRecruitTask* task = new CRecruitTask(this, ti.priority, ti.buildDef, ti.position, ti.type, ti.radius);
 	task->SetRepeat(ti.repeat);
 	factoryTasks.push_back(task);
+	if (ti.repeat) ++repeatTaskCount;
     RefreshPendingRecruit(task); // visible to the synchronous TaskAdded script
 	updateTasks.push_back(task);
 	TaskAdded(task);
@@ -1210,6 +1211,7 @@ void CFactoryManager::DequeueTask(IUnitTask* task, bool done)
                     pendingRecruits.Erase(static_cast<CRecruitTask*>(task));
 					auto it = std::find(factoryTasks.begin(), factoryTasks.end(), task);
 					if (it != factoryTasks.end()) {
+						if ((*it)->IsRepeat()) --repeatTaskCount;
 						factoryTasks.erase(it);
 					}
 					unfinishedUnits.erase(static_cast<CRecruitTask*>(task)->GetTarget());

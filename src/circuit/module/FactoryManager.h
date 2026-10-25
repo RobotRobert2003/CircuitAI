@@ -172,7 +172,10 @@ public:
 	float GetNewFacModE() const { return newFacModE; }
 	float GetFacModM() const { return facModM; }
 	float GetFacModE() const { return facModE; }
-	bool CanEnqueueTask() const { return factoryTasks.size() < factories.size() * 2; }
+	// Owner (2026-10-25): spam and edge-lane labs hold one repeat recruit each; those
+	// standing orders don't count against the 2-per-factory cap, so a gantry is not
+	// held idle by them. O(1): the repeat count is kept at Enqueue/DequeueTask.
+	bool CanEnqueueTask() const { return factoryTasks.size() - repeatTaskCount < factories.size() * 2; }
 	const std::vector<CRecruitTask*>& GetTasks() const { return factoryTasks; }
     int GetPendingRecruitCount(const CCircuitDef* def) const;
     void RefreshPendingRecruit(CRecruitTask* task);
@@ -245,6 +248,7 @@ private:
 
 	std::map<CAllyUnit*, IBuilderTask*> unfinishedUnits;
 	std::vector<CRecruitTask*> factoryTasks;  // order matters
+	size_t repeatTaskCount = 0;  // repeat recruits in factoryTasks (spam labs)
     DefinitionCounts<CRecruitTask*> pendingRecruits;
 	float metalRequire;
 	float energyRequire;
