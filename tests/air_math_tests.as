@@ -190,3 +190,14 @@ void test_naval_sector_halo_keeps_nearby_friendly_formation() { Check(AirMath::N
 void test_naval_sector_excludes_remote_support() { Check(!AirMath::NavalSectorContains(3100.0f*3100,3000)); }
 void test_naval_sector_includes_boundary() { Check(AirMath::NavalSectorContains(9000000,3000)); }
 void test_naval_sector_rejects_invalid_distance() { Check(!AirMath::NavalSectorContains(-1,3000)); }
+void test_first_plant_waits_for_opening_support() { Check(!AirMath::FirstPlantAllowed(false,1,2,false,false)); }
+void test_first_plant_waits_while_energy_floats_and_a_converter_fits() { Check(!AirMath::FirstPlantAllowed(false,2,2,true,true)); }
+void test_first_plant_proceeds_when_no_converter_can_take_the_float() { Check(AirMath::FirstPlantAllowed(false,2,2,true,false)); }
+void test_first_plant_proceeds_with_support_and_used_energy() { Check(AirMath::FirstPlantAllowed(false,2,2,false,true)); }
+void test_later_plants_ignore_the_opening_gate() { Check(AirMath::FirstPlantAllowed(true,0,2,true,true)); }
+void test_energy_floats_at_the_fraction_with_income_over_pull() { Check(AirMath::EnergyFloating(7400,7500,600,300,.85f)); }
+void test_energy_below_the_fraction_is_not_floating() { Check(!AirMath::EnergyFloating(6000,7500,600,300,.85f)); }
+void test_energy_draining_is_not_floating() { Check(!AirMath::EnergyFloating(7400,7500,300,600,.85f)); }
+void test_floating_energy_adds_one_converter_over_the_plan() { Check(AirMath::FloatingConverterTarget(true,1,1,600,70)==2); }
+void test_floating_converters_are_bounded_by_the_income() { Check(AirMath::FloatingConverterTarget(true,1,8,600,70)==8); }
+void test_no_float_keeps_the_demand_target() { Check(AirMath::FloatingConverterTarget(false,3,1,600,70)==3); }

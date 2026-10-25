@@ -29,7 +29,12 @@ namespace Air {
             int T2NanoSoftLimit = 20;
             int T2ExpansionSupport = 20; // completed turrets per existing T2 air lab; banked metal cannot bypass
             int T1NanoLimit = 5;
-            int OpeningNanoCount = 2; // completed support near the first T1 plant before the opening raid
+            int OpeningNanoCount = 2; // completed support near the first T1 plant before the opening raid, and before the first T2 plant (D-365)
+            // D-365 (owner): the first advanced plant waits while the energy bank sits at
+            // this fraction of storage with income over pull and a converter can still be
+            // placed (transition.convert spends it first); converters keep coming one over
+            // the plan while the energy floats, bounded by income / ConverterDraw.
+            float FloatingEnergyFraction = 0.85f;
             bool T1OpeningRaidEnabled = true;
             int T1OpeningBomberMin = 1;
             int T1OpeningBomberMax = 10;

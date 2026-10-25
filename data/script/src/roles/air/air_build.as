@@ -621,6 +621,11 @@ namespace AirBuild {
         }
         if (advanced) {
             if (!AirEconomy::Transition(d) && !FirstLabFunded(u, d)) return null;
+            // D-365 (owner): the first advanced plant comes after at least OpeningNanoCount
+            // turrets at the starter and after the floating energy is converting. Played
+            // before the change: two minutes at 7,400 of 7,500 energy with one converter,
+            // then the plant; in the owner's 8v8 the plant came before any turret.
+            if (count == 0 && AirEconomy::t2 == 0 && !MetalEconomy::Active() && !FirstPlantAllowed()) return null;
             if (!AirEconomy::ExistingT2SupportReady()) return null;
             if (!AirMath::BayAllowed(count, Global::RoleSettings::Air::MaxProductionBays)) return null;
             if (!AirEconomy::BankedLab(d) && count > 0 && (AirEconomy::stableSince < 0 || !ProductionMath::CapacityReady(count, (Global::RoleSettings::Air::MaxProductionBays <= 0 ? count + 1 : Global::RoleSettings::Air::MaxProductionBays),
@@ -648,6 +653,9 @@ namespace AirBuild {
             + " window=" + Economy::IncomeWindowReady() + " bank=" + int(aiEconomyMgr.metal.current)
             + " cost=" + int(d.costM) + " reason=" + (AirEconomy::BankedLab(d) ? "bank" : AirEconomy::Transition(d) ? "income" : "funded-first"), 1);
         IUnitTask@ order = AirLayout::Pinned(Task::BuildType::FACTORY, Task::Priority::HIGH, d, bay.slot);
+        if (order !is null && advanced && count == 0 && AirEconomy::t2 == 0 && !MetalEconomy::Active() && !FirstPlantAllowed())
+            Invariants::Violation("INV-240", "AIR", "first advanced plant ordered with " + AirEconomy::OpeningNanoCompleted() + " of "
+                + AirEconomy::OpeningNanoTarget() + " opening turrets and energy " + (AirEconomy::EnergyFloating() ? "floating" : "in use"));
         if (order !is null && advanced && count == 0 && Global::RoleSettings::Air::FundFirstLab)
             @fundedFirstLab = order;
         // Native claims protect queued work; frame adoption commits the bay.
@@ -657,6 +665,26 @@ namespace AirBuild {
     {
         return !MetalEconomy::Active() && IsReactor(d);
     }
+    // D-365: the first-plant gate, logged once per 30 s while it holds
+    int firstPlantGateLog = -100000;
+    bool ConverterPossible()
+    {
+        CCircuitDef@ conv = ai.GetCircuitDef(UnitHelpers::GetEnergyConverterNameForSide(Global::AISettings::Side));
+        return conv !is null && conv.IsAvailable(ai.frame)
+            && aiBuilderMgr.GetQueuedBuildCount(int(Task::BuildType::CONVERT), conv) < Global::RoleSettings::Air::ConverterParallel;
+    }
+    bool FirstPlantAllowed()
+    {
+        const bool allowed = AirMath::FirstPlantAllowed(AirEconomy::t2 > 0, AirEconomy::OpeningNanoCompleted(),
+            AirEconomy::OpeningNanoTarget(), AirEconomy::EnergyFloating(), ConverterPossible());
+        if (!allowed && ai.frame - firstPlantGateLog >= 30 * SECOND) {
+            firstPlantGateLog = ai.frame;
+            GenericHelpers::LogUtil("[AIR][LabGate] first plant waits: opening turrets " + AirEconomy::OpeningNanoCompleted() + "/"
+                + AirEconomy::OpeningNanoTarget() + ", energy " + int(AirEconomy::bankE) + "/" + int(aiEconomyMgr.energy.storage)
+                + (AirEconomy::EnergyFloating() ? " floating (+" + int(AirEconomy::energy) + " over pull " + int(aiEconomyMgr.energy.pull) + ")" : " in use"), 1);
+        }
+        return allowed;
+    }
     IUnitTask@ Convert(CCircuitUnit@ u)
     {
         if (AirEconomy::recovery || AirEconomy::MexesReady()
@@ -664,8 +692,13 @@ namespace AirBuild {
         CCircuitDef@ d = ai.GetCircuitDef(UnitHelpers::GetEnergyConverterNameForSide(UnitHelpers::GetSideForUnitName(u.circuitDef.GetName())));
         if (!Can(u, d)) return null;
         const int queued = aiBuilderMgr.GetQueuedBuildCount(int(Task::BuildType::CONVERT), d);
-        const int target = ProductionMath::ConverterTarget(AirEconomy::energy, AirEconomy::demandE,
-            Global::RoleSettings::Air::ConverterEnergyReserve, Global::RoleSettings::Air::ConverterDraw);
+        // D-365: floating energy wants one converter over the plan whatever the aircraft
+        // demand says, bounded by income / ConverterDraw (played: 7,400 of 7,500 energy
+        // for two minutes at +600 with one converter, the demand target satisfied).
+        const int target = AirMath::FloatingConverterTarget(AirEconomy::EnergyFloating(),
+            ProductionMath::ConverterTarget(AirEconomy::energy, AirEconomy::demandE,
+                Global::RoleSettings::Air::ConverterEnergyReserve, Global::RoleSettings::Air::ConverterDraw),
+            d.count + queued, AirEconomy::energy, Global::RoleSettings::Air::ConverterDraw);
         if (!ProductionMath::ConverterMayQueue(target, d.count + queued, queued,
                 Global::RoleSettings::Air::ConverterParallel)) return null;
         return AirLayout::Place(u, d, Task::BuildType::CONVERT, Task::Priority::NORMAL);

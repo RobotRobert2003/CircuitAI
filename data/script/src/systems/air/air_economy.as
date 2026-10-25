@@ -461,6 +461,11 @@ namespace AirEconomy {
         return AirWorkforce::mobile + AirWorkforce::arriving + AirWorkforce::shortage;
     }
     bool MetalFloating() { return ProductionMath::MetalFloating(aiEconomyMgr.metal.current, aiEconomyMgr.metal.storage); }
+    // D-365: energy a converter could still turn into metal (the once-per-second sample)
+    bool EnergyFloating() {
+        return AirMath::EnergyFloating(bankE, aiEconomyMgr.energy.storage, energy, aiEconomyMgr.energy.pull,
+            Global::RoleSettings::Air::FloatingEnergyFraction);
+    }
     int ConstructorTarget(CCircuitDef@ d, bool advanced)
     {
         return AirWorkforce::ConstructorTarget(d, advanced);

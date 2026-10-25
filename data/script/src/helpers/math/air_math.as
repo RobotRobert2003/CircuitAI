@@ -267,4 +267,27 @@ namespace AirMath {
     bool NavalRelease(int ready, int target, int age, int deadline, bool routeReady) {
         return routeReady && ready > Zero && target > Zero && (ready >= target || (deadline > Zero && age >= deadline));
     }
+    // D-365 (owner): the first advanced plant waits for the starter's opening
+    // support (completed turrets against the opening goal) and for the energy to
+    // be in use: a bank at `fraction` of storage with income over pull is energy
+    // a converter could still turn into metal, so while one can be placed the
+    // plant waits. Later plants never read this gate.
+    bool EnergyFloating(float bank, float storage, float income, float pull, float fraction) {
+        return Valid(bank) && Valid(storage) && Valid(income) && Valid(pull) && Valid(fraction)
+            && storage > ZeroValue && fraction > ZeroValue && bank >= storage * fraction && income > pull;
+    }
+    bool FirstPlantAllowed(bool anyAdvancedPlant, int supportCompleted, int supportWanted, bool energyFloating, bool converterPossible) {
+        if (anyAdvancedPlant) return true;
+        return supportCompleted >= supportWanted && !(energyFloating && converterPossible);
+    }
+    // D-365: while the energy floats the converter target is one more than planned,
+    // bounded by what the income can feed (`draw` per converter); otherwise the
+    // demand-based target stands.
+    int FloatingConverterTarget(bool floating, int baseTarget, int planned, float income, float draw) {
+        if (!floating || !Valid(income) || !Valid(draw) || draw <= ZeroValue || planned < Zero) return baseTarget;
+        const int feedable = int(income / draw);
+        const int wanted = planned + One;
+        const int bounded = wanted > feedable ? feedable : wanted;
+        return bounded > baseTarget ? bounded : baseTarget;
+    }
 }

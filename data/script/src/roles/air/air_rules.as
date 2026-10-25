@@ -76,6 +76,11 @@ namespace AirRules {
         // First access precedes discretionary shared economy/its assists.
         // Later factories retain the twenty-turret gate and capacity policy.
         if (AirEconomy::t2 == 0) {
+            // D-365: floating energy becomes metal before the first advanced plant
+            if (AirEconomy::EnergyFloating()) {
+                @t = AirBuild::Convert(u);
+                if (t !is null) return AirBuild::Record(t, "transition.convert", u);
+            }
             @t = AirBuild::Factory(u, true);
             if (t !is null) return AirBuild::Record(t, "transition.bay", u);
             if (AirEconomy::SavingForFirstLab()) {
