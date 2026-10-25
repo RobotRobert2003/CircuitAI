@@ -26,6 +26,12 @@ from the centre of our team's starts to the centre of the enemy team's starts;
             (Spam::AppendEnemyCorner, owner 2026-10-24): the lane is an L.
             Left out when no playable ground is found near it
 
+Owner, 2026-10-25: with Global::Spam::RimEnabled the rallies come from the
+playable rim instead (Rim, RimEnds): the rim on the lane's side at the two
+shares (left out where that side has none, e.g. sea), the end of the enemy's
+back edge on the lane's side, then the jackknife to the back edge's other end.
+The rectangle points above remain the fallback when no back edge is found.
+
 Each point is pulled inward from the edge (map corner toward the centre) until
 it stands in the spam unit's own movement area reachable from its lab: the
 same test Spam uses for its routes (CanTraverse), so a rally point is never on
@@ -104,16 +110,22 @@ namespace EdgeLanes {
         return AIFloat3(x / n, 0.0f, z / n);
     }
 
-    // Our team's centre S, the enemy's centre E; false without an enemy.
-    bool Ends(AIFloat3 &out s, AIFloat3 &out e)
+    // Our team's starts and the enemy's
+    void Starts(array<AIFloat3> &out ours, array<AIFloat3> &out theirs)
     {
-        array<AIFloat3> ours = Lanes::ScriptStarts(false);
+        ours = Lanes::ScriptStarts(false);
         if (ours.length() == 0) {
             ours.insertLast(Global::Map::StartPos);
             array<Team::Roster::Entry@>@ allies = Team::Roster::All();
             for (uint i = 0; i < allies.length(); ++i) ours.insertLast(allies[i].startPos);
         }
-        array<AIFloat3> theirs = Lanes::EnemyStarts();
+        theirs = Lanes::EnemyStarts();
+    }
+    // Our team's centre S, the enemy's centre E; false without an enemy.
+    bool Ends(AIFloat3 &out s, AIFloat3 &out e)
+    {
+        array<AIFloat3> ours, theirs;
+        Starts(ours, theirs);
         s = Centre(ours);
         e = (theirs.length() > 0) ? Centre(theirs) : Spam::_MirrorOfStart();
         return MapHelpers::SqDist(s, e) > 1.0f;
@@ -185,12 +197,175 @@ namespace EdgeLanes {
         }
         return PullIn(d, from, AIFloat3(cx[best], 0.0f, cz[best]), AIFloat3(w * 0.5f, 0.0f, h * 0.5f));
     }
-    // The lane's three rally points from `from`; empty when one has no playable point
+    // ---------------------------------------------------------------- the playable rim
+    // Owner, 2026-10-25: on diagonal maps the rectangle's corners are sea, cliff or our
+    // own side (Supreme Isthmus sent every lane's last leg beside our own TACTICAL
+    // start; Sulphur Springs' 45-degree axis picked the empty right edge). Lanes now
+    // end on the enemy's back edge of the playable rim and jackknife along it.
+    // The rim: the map edge clockwise from the top-left corner, one sample every
+    // RimStep, each pulled straight in (128 elmos a step, at most RimDepth) to the
+    // first Playable point; a sample with none is a gap (x < 0). Cost: one build per
+    // spam def and 1024-elmo lab cell, at most 4 * (size / RimStep) * (RimDepth / 128
+    // + 1) cached area lookups (~2,500 on a 12288 map), cached for the game; every
+    // later lane rebuild reads it, O(samples).
+    dictionary rimByKey;   // def name | lab cell -> array<AIFloat3>@
+    array<AIFloat3>@ Rim(CCircuitDef@ d, const AIFloat3 &in from)
+    {
+        const string key = d.GetName() + "|" + int(from.x / 1024.0f) + "," + int(from.z / 1024.0f);
+        array<AIFloat3>@ rim = null;
+        if (rimByKey.get(key, @rim) && rim !is null) return rim;
+        @rim = array<AIFloat3>();
+        const float m = Global::Spam::EdgeMargin;
+        const float w = float(AiTerrainWidth()), h = float(AiTerrainHeight());
+        const float step = AiMax(64.0f, Global::Spam::RimStep);
+        const int depth = int(Global::Spam::RimDepth / 128.0f);
+        // top (inward +z), right (-x), bottom (-z), left (+x)
+        const array<float> x0 = { m, w - m, w - m, m }, z0 = { m, m, h - m, h - m };
+        const array<float> dx = { 1.0f, 0.0f, -1.0f, 0.0f }, dz = { 0.0f, 1.0f, 0.0f, -1.0f };
+        const array<float> ix = { 0.0f, -1.0f, 0.0f, 1.0f }, iz = { 1.0f, 0.0f, -1.0f, 0.0f };
+        int found = 0;
+        for (int e = 0; e < 4; ++e) {
+            const float len = (dx[e] != 0) ? (w - 2.0f * m) : (h - 2.0f * m);
+            const int n = int(len / step);
+            for (int k = 0; k < n; ++k) {
+                const float x = x0[e] + dx[e] * float(k) * step, z = z0[e] + dz[e] * float(k) * step;
+                AIFloat3 got(-1.0f, 0.0f, -1.0f);
+                for (int j = 0; j <= depth; ++j) {
+                    const AIFloat3 q(x + ix[e] * float(j) * 128.0f, 0.0f, z + iz[e] * float(j) * 128.0f);
+                    if (Playable(d, from, q)) { got = q; ++found; break; }
+                }
+                rim.insertLast(got);
+            }
+        }
+        rimByKey.set(key, @rim);
+        GenericHelpers::LogUtil("[EdgeLanes] playable rim for " + key + ": " + found + " of " + rim.length() + " samples", 1);
+        return rim;
+    }
+    float Median(array<float> v)
+    {
+        if (v.length() == 0) return 0.0f;
+        v.sortAsc();
+        return v[v.length() / 2];
+    }
+    float NearestSq(const AIFloat3 &in p, const array<AIFloat3> &in ps)
+    {
+        float best = 1.0e30f;
+        for (uint i = 0; i < ps.length(); ++i) best = AiMin(best, MapHelpers::SqDist(p, ps[i]));
+        return best;
+    }
+    dictionary rimTurn;    // lane key -> +1 / -1, the random side for a lane ending mid-back
+    // The lane's end on the enemy's back edge and its jackknife along it (turn.x < 0:
+    // none). `toward`: a point on the lane's own line (sideways place); or, with
+    // `sideSign` != 0, the end of the back edge furthest on that side (edge lanes).
+    // False when no back edge is found (the caller keeps the rectangle logic).
+    bool RimEnds(CCircuitDef@ d, const AIFloat3 &in from, const AIFloat3 &in toward, int sideSign,
+        const string &in key, AIFloat3 &out end, AIFloat3 &out turn)
+    {
+        end = AIFloat3(-1.0f, 0.0f, -1.0f); turn = end;
+        if (!Global::Spam::RimEnabled || d is null) return false;
+        array<AIFloat3> ours, theirs;
+        Starts(ours, theirs);
+        if (theirs.length() == 0) return false;
+        const AIFloat3 s0 = Centre(ours), e0 = Centre(theirs);
+        if (MapHelpers::SqDist(s0, e0) <= 1.0f) return false;
+        float ax, az, nx, nz;
+        Axis(s0, e0, ax, az, nx, nz);
+        array<float> ea, es;
+        for (uint i = 0; i < theirs.length(); ++i) {
+            ea.insertLast((theirs[i].x - s0.x) * ax + (theirs[i].z - s0.z) * az);
+            es.insertLast((theirs[i].x - s0.x) * nx + (theirs[i].z - s0.z) * nz);
+        }
+        const float backAlong = Median(ea), enemySide = Median(es);
+        const float reach = Global::Spam::RimBackReach * Global::Spam::RimBackReach;
+        array<AIFloat3>@ rim = Rim(d, from);
+        const int n = int(rim.length());
+        array<bool> back(n);
+        const float ts = (toward.x - s0.x) * nx + (toward.z - s0.z) * nz;
+        int i1 = -1;
+        float best = 1.0e30f;
+        for (int i = 0; i < n; ++i) {
+            const AIFloat3 p = rim[i];
+            back[i] = false;
+            if (p.x < 0.0f) continue;
+            const float al = (p.x - s0.x) * ax + (p.z - s0.z) * az;
+            if (al < backAlong) continue;
+            const float de = NearestSq(p, theirs);
+            if (de > reach || de >= NearestSq(p, ours)) continue;   // never an ally's ground
+            back[i] = true;
+            const float sd = (p.x - s0.x) * nx + (p.z - s0.z) * nz;
+            // where the lane's line meets the back (a little deeper wins), or its far end on the lane's side
+            const float score = (sideSign != 0) ? -sd * float(sideSign) : abs(sd - ts) - 0.25f * al;
+            if (score < best) { best = score; i1 = i; }
+        }
+        if (i1 < 0) return false;
+        end = rim[i1];
+        // follow the rim both ways through the back, over short gaps; the far end on the other side
+        array<int> ends = { i1, i1 };
+        for (int k = 0; k < 2; ++k) {
+            const int dir = (k == 0) ? 1 : -1;
+            int j = i1, gap = 0;
+            for (int c = 0; c < n; ++c) {
+                j = (j + dir + n) % n;
+                if (back[j]) { ends[k] = j; gap = 0; }
+                else if (rim[j].x < 0.0f && gap < Global::Spam::RimGapSamples) ++gap;
+                else break;
+            }
+        }
+        int t = sideSign;
+        if (t == 0) {
+            const float off = (end.x - s0.x) * nx + (end.z - s0.z) * nz - enemySide;
+            if (abs(off) > 800.0f) t = (off > 0.0f) ? 1 : -1;
+            else if (key.length() == 0 || !rimTurn.get(key, t)) {
+                t = (AiRandom(0, 1) == 0) ? -1 : 1;   // ends mid-back: either way, kept per lane
+                if (key.length() > 0) rimTurn.set(key, t);
+            }
+        }
+        int i2 = ends[0];
+        const float sd0 = (rim[ends[0]].x - s0.x) * nx + (rim[ends[0]].z - s0.z) * nz;
+        const float sd1 = (rim[ends[1]].x - s0.x) * nx + (rim[ends[1]].z - s0.z) * nz;
+        if (sd1 * float(t) < sd0 * float(t)) i2 = ends[1];
+        if (MapHelpers::SqDist(rim[i2], end) > 400.0f * 400.0f) turn = rim[i2];
+        return true;
+    }
+    // The rim on side `s` at `share` of the axis, the furthest out; x < 0 when none
+    AIFloat3 RimSide(CCircuitDef@ d, const AIFloat3 &in from, const AIFloat3 &in s0, const AIFloat3 &in e0, int s, float share)
+    {
+        float ax, az, nx, nz;
+        Axis(s0, e0, ax, az, nx, nz);
+        const float t = share * sqrt(MapHelpers::SqDist(s0, e0));
+        array<AIFloat3>@ rim = Rim(d, from);
+        AIFloat3 r(-1.0f, 0.0f, -1.0f);
+        float best = 0.0f;
+        for (uint i = 0; i < rim.length(); ++i) {
+            const AIFloat3 p = rim[i];
+            if (p.x < 0.0f || abs((p.x - s0.x) * ax + (p.z - s0.z) * az - t) > 700.0f) continue;
+            const float sd = ((p.x - s0.x) * nx + (p.z - s0.z) * nz) * float(s);
+            if (sd > best) { best = sd; r = p; }
+        }
+        return r;
+    }
+
+    // The lane's rally points from `from`; empty when one has no playable point
     array<AIFloat3> Rally(CCircuitDef@ d, const AIFloat3 &in from)
     {
         array<AIFloat3> r;
         AIFloat3 s0, e0;
         if (lane == 0 || d is null || !Ends(s0, e0)) return r;
+        // owner, 2026-10-25: the playable rim on the lane's side, then the end of the
+        // enemy's back edge on that side, then the jackknife to its other end
+        AIFloat3 end, turn;
+        if (RimEnds(d, from, from, lane, "", end, turn)) {
+            const float ax = e0.x - s0.x, az = e0.z - s0.z;
+            const float endAlong = (end.x - s0.x) * ax + (end.z - s0.z) * az;
+            const array<float> shares = { Global::Spam::EdgeFirstShare, Global::Spam::EdgeSecondShare };
+            for (uint i = 0; i < shares.length(); ++i) {
+                const AIFloat3 q = RimSide(d, from, s0, e0, lane, shares[i]);
+                if (q.x >= 0.0f && (q.x - s0.x) * ax + (q.z - s0.z) * az < endAlong) r.insertLast(q);
+            }
+            r.insertLast(end);
+            if (turn.x >= 0.0f) r.insertLast(turn);
+            return r;
+        }
         const AIFloat3 r1 = EdgePoint(d, from, s0, e0, lane, Global::Spam::EdgeFirstShare);
         const AIFloat3 r2 = EdgePoint(d, from, s0, e0, lane, Global::Spam::EdgeSecondShare);
         const AIFloat3 r3 = CornerPoint(d, from, s0, e0, lane);
@@ -281,7 +456,7 @@ namespace EdgeLanes {
     bool IsReleased(CCircuitUnit@ u) { return u !is null && released.exists("" + u.id); }
     void ReleaseArrived(CCircuitUnit@ lab)
     {
-        if (lab is null || rally.length() < 3 || ai.frame - releaseFrame < 2 * SECOND) return;
+        if (lab is null || rally.length() == 0 || ai.frame - releaseFrame < 2 * SECOND) return;
         releaseFrame = ai.frame;
         CRouteTask@ task = null;
         if (!Spam::routeByFactory.get("" + lab.id, @task) || task is null || task.IsDead()) return;
@@ -309,7 +484,7 @@ namespace EdgeLanes {
     int reportFrame = -1;
     void Report(CCircuitUnit@ lab)
     {
-        if (lab is null || rally.length() < 3 || ai.frame - reportFrame < MINUTE) return;
+        if (lab is null || rally.length() == 0 || ai.frame - reportFrame < MINUTE) return;
         reportFrame = ai.frame;
         CRouteTask@ task = null;
         if (!Spam::routeByFactory.get("" + lab.id, @task) || task is null || task.IsDead()) return;
@@ -443,8 +618,7 @@ namespace EdgeLanes {
                 turretSite = TurretSites(lab, nano, p, f);
                 rally = r;
                 GenericHelpers::LogUtil("[EdgeLanes] " + Name(lane) + " lane lab site (" + int(p.x) + "," + int(p.z) + ") facing " + f
-                    + " (pass " + (pass + 1) + "); rally (" + int(r[0].x) + "," + int(r[0].z) + ") -> (" + int(r[1].x) + "," + int(r[1].z) + ") -> corner ("
-                    + int(r[2].x) + "," + int(r[2].z) + ")" + (r.length() > 3 ? " -> enemy corner (" + int(r[3].x) + "," + int(r[3].z) + ")" : ""), 1);
+                    + " (pass " + (pass + 1) + "); rally" + Spam::RouteText(r), 1);
                 return true;
             }
         }

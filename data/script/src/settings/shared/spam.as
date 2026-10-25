@@ -73,6 +73,18 @@ namespace Spam {
         // back edge's length from its middle takes either corner at random (kept per lane).
         bool EnemyCornerEnabled = true;
         float CornerMiddleShare = 0.15f;
+        // owner, 2026-10-25 (diagonal maps: Supreme Isthmus, Sulphur Springs, Thermal
+        // Shock): lanes end on the enemy's back edge of the PLAYABLE rim, not the map
+        // rectangle, then jackknife along it (EdgeLanes::RimEnds). The rim is the map
+        // edge pulled straight in, up to RimDepth, to ground the spam unit can reach;
+        // the back edge is the rim behind the median enemy start, nearer an enemy start
+        // than any allied one and within RimBackReach of an enemy start. The walk along
+        // it steps over RimGapSamples unplayable samples. Off: the rectangle corners.
+        bool RimEnabled = true;
+        float RimStep = 256.0f;
+        float RimDepth = 1536.0f;
+        float RimBackReach = 2000.0f;
+        int RimGapSamples = 3;
         dictionary UnitByFactory = {
             {"armlab", "armpw"},   {"corlab", "corak"},    {"leglab", "leggob"},
             {"armvp", "armflash"}, {"corvp", "corgator"},  {"legvp", "leghades"}
