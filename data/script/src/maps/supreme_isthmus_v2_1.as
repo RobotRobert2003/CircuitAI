@@ -1,4 +1,5 @@
 // Supreme Isthmus v2.1 map data & role / start spot + config consolidation (refactored 2025-09)
+// 2026-10-25: matches only "Supreme Isthmus v2.1" (spots = the lobby maps JSON P1-P16); v1.7 has its own file, supreme_isthmus_v1_7.as.
 #include "../define.as"
 #include "../types/start_spot.as"
 #include "../types/map_config.as"
@@ -41,7 +42,7 @@ namespace SupremeIsthmus {
 
 	MapConfig MakeConfig()
 	{
-		MapConfig result = MapConfig("Supreme Isthmus", getMapUnitLimits(), spots, getFactoryWeights());
+		MapConfig result = MapConfig("Supreme Isthmus v2.1", getMapUnitLimits(), spots, getFactoryWeights());
 		// TECH opens on every mex within the default 2000 elmos (D-063); the
 		// tech starts here have room for four turret rows in the box.
 		result.TechLayoutNanoRows = 4;

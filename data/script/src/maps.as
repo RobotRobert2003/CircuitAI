@@ -5,7 +5,8 @@
 #include "maps/default_map_config.as"
 #include "maps/swirly_rock.as"
 #include "maps/all_that_glitters.as"
-#include "maps/supreme_isthmus.as"
+#include "maps/supreme_isthmus_v2_1.as"
+#include "maps/supreme_isthmus_v1_7.as"
 #include "maps/eight_horses.as"
 #include "maps/flats_and_forests.as"
 #include "maps/glacial_gap.as"
@@ -91,8 +92,10 @@ namespace Maps {
         
 		// Initialize per-map extras (objectives, etc.) before registration
 		SupremeIsthmus::registerObjectives();
+		SupremeIsthmus17::registerObjectives();
 
 		mapManager.RegisterMapConfig(SupremeIsthmus::config);
+		mapManager.RegisterMapConfig(SupremeIsthmus17::config);
 		mapManager.RegisterMapConfig(PinewoodDerby::config);
 		mapManager.RegisterMapConfig(AllThatGlitters::config);
         mapManager.RegisterMapConfig(EightHorses::config);
