@@ -912,16 +912,6 @@
       "name": "RetiringNear"
     },
     {
-      "file": "data/script/src/systems/production/factory_production.as",
-      "kind": "function",
-      "name": "QueueUnitByName"
-    },
-    {
-      "file": "data/script/src/systems/production/factory_production.as",
-      "kind": "function",
-      "name": "QueueUnitDef"
-    },
-    {
       "file": "data/script/src/systems/team/roster.as",
       "kind": "function",
       "name": "Nearest"

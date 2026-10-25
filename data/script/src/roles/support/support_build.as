@@ -1,7 +1,6 @@
 // SUPPORT shares geometry and construction mechanisms with TECH, not its
 // post-T2 strategy. One bounded sequence per builder ask; no global unit scan.
 #include "../tech/tech.as"
-#include "../../systems/production/factory_production.as"
 #include "../../helpers/construction/owned_economy_helpers.as"
 #include "support_production.as"
 
@@ -15,6 +14,7 @@ namespace SupportBuild {
     int giftFrame = -1;
     int lastForwardOrder = -100000;
     int lastDeferredMexes = -1;
+    int afusGateLogged = -1;   // D-359: -1 unknown, else the last logged allowAdvancedFusion; one line per transition
 
     AIFloat3 HomeUpgradePosition(CCircuitUnit@ worker, CCircuitDef@ advanced) {
         AIFloat3 result(-1.0f, 0.0f, -1.0f);
@@ -190,6 +190,7 @@ namespace SupportBuild {
         giftFrame = -1;
         lastForwardOrder = -100000;
         lastDeferredMexes = -1;
+        afusGateLogged = -1;
         TechBuild::throwawayDecided = false;
         TechBuild::throwawayLabId = -1;
         aiBuilderMgr.recoverConstruction = true;
@@ -202,8 +203,6 @@ namespace SupportBuild {
         Layout::Plan(Global::AISettings::Side, true);
         // Explicit objective: profile TECH strategy dice cannot change SUPPORT.
         TechChain::Init("t2");
-        FactoryProduction::Initialize();
-        SupportProduction::ConfigureCombat();
         GenericHelpers::LogUtil("[SUPPORT][Build] shared layout and T2 opening enabled", 1);
     }
 
@@ -276,13 +275,17 @@ namespace SupportBuild {
         }
         IUnitTask@ assistant = SupportProduction::AssistTask(unit);
         if (assistant !is null) return assistant;
-        IUnitTask@ production = FactoryProduction::MakeTask(unit);
+        // The native selector (factory.json weights) picks the combat unit; the
+        // script role tables it replaced were retired (D-358).
+        IUnitTask@ production = aiFactoryMgr.DefaultMakeTask(unit);
+        // CRecruitTask is an IBuilderTask; a native wait task casts to null and
+        // is not counted, which is correct.
         IBuilderTask@ recruit = cast<IBuilderTask>(production);
-        // D-293: count a lottery batch as combat by role, not by workertime. A combat unit with
+        // D-293: count a recruit as combat by role, not by workertime. A combat unit with
         // build speed (leginfestor, workertime 100) never advanced combatBatches and so delayed
         // the next legaceb admission. CFactoryManager's constructor adds the BUILDER role bit to
         // every mobile unit with build options before ReadConfig adds the JSON roles, so
-        // legack, legaceb and legdecom still do not count. Cost: one mask test per lottery batch.
+        // legack, legaceb and legdecom still do not count. Cost: one mask test per recruit.
         if (recruit !is null && recruit.buildDef !is null
             && !recruit.buildDef.IsRoleAny(Unit::Role::BUILDER.mask))
             SupportProduction::CombatBatch();
@@ -338,6 +341,15 @@ namespace SupportBuild {
             Economy::GetMinMetalIncomeLast10s(), Economy::GetMinEnergyIncomeLast10s());
         state.allowConverters = !TechBuild::MetalFullLong();
         state.allowReactors = economyReady;
+        // D-359: ordinary fusions scale the energy linearly, one per shortfall; the
+        // advanced fusion waits for the energy-income gate so metal stays on combat.
+        const float afusGate = Global::RoleSettings::Support::AdvancedFusionEnergyIncome;
+        state.allowAdvancedFusion = afusGate <= 0.0f || state.eIncome >= afusGate;
+        if (state.builderIsT2 && (state.allowAdvancedFusion ? 1 : 0) != afusGateLogged) {
+            afusGateLogged = state.allowAdvancedFusion ? 1 : 0;
+            GenericHelpers::LogUtil("[SUPPORT][Eco] advanced fusion " + (state.allowAdvancedFusion ? "allowed" : "withheld")
+                + ": energy income " + int(state.eIncome) + " against gate " + int(afusGate), 1);
+        }
         if (economyReady) {
             @task = aiBuilderMgr.FindQueuedTask(unit, int(Task::BuildType::DEFENCE));
             if (task !is null) return task;
@@ -346,6 +358,8 @@ namespace SupportBuild {
         }
         string reason;
         const string key = EcoPlanner::Decide(state, reason);
+        if (key == "afus" && !state.allowAdvancedFusion)
+            Invariants::Violation("INV-237", "afus-gate", "SUPPORT chose an advanced fusion under its energy-income gate");
         if (key.length() > 0) {
             @task = EcoPlanner::Enqueue(key, unit);
             if (task !is null) return task;

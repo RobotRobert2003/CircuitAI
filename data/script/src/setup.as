@@ -272,10 +272,10 @@ namespace Setup {
 		CheckModOptions();
 		aiEconomyMgr.SetMexOwnership(Global::RoleSettings::MexOwnershipEnabled,
 			Global::RoleSettings::MexOwnershipSeconds);
-		// Role masks used by Military's threat/cost caches. FactoryProduction owns
-		// the table but only builds it when a role enables dynamic production, and
-		// no role does; without this every cached enemy threat and cost stays 0.
-		FactoryProduction::BuildRoleCaches();
+		// Role indices used by Military's threat/cost caches. Built once here,
+		// before any role runs; without this every cached enemy threat and cost
+		// stays 0 (KI-201's history, D-002).
+		Military::BuildRoleCaches();
 		// Wave policy defaults for every role; a role overrides in its Init.
 		aiMilitaryMgr.quota.attackWait = Global::Military::AttackWaitSeconds;
 		aiMilitaryMgr.quota.attackScale = Global::Military::AttackScale;
