@@ -506,7 +506,7 @@ namespace TechHeavyChoice {
         return Global::Map::LandLocked
             || StrategicSites::assaultBeaches >= Global::RoleSettings::Tech::HeavyAmphibiousMinBeaches;
     }
-    string Terrain() { return Amphibious() ? "amphibious" : "land"; }
+    string Terrain() { return (StrategicSites::Moated() ? "moated " : "") + (Amphibious() ? "amphibious" : "land"); }
     bool IsMarauderClass(const string& in name) {
         return name == "armmar" || name == "corshiva" || name == "legjav";
     }
@@ -539,7 +539,9 @@ namespace TechHeavyChoice {
     // the other. Each must still pass the gantry's CanBuild and the cap (a map
     // cap such as armthor = 0 falls through to the next) in EnqueueGantryBatchFrom.
     array<string>@ Candidates(const string& in side) {
-        const int terrain = Amphibious() ? 1 : 0;
+        // a set HeavyPair<Side> splits on the moat (no land route to the enemy), the
+        // terrain pair on the amphibious test
+        const int terrain = HasPair(side) ? (StrategicSites::Moated() ? 1 : 0) : (Amphibious() ? 1 : 0);
         if (terrain != cachedTerrain || side != cachedSide) {
             cachedTerrain = terrain; cachedSide = side;
             string land = Global::RoleSettings::Tech::HeavyLandArmada, amph = Global::RoleSettings::Tech::HeavyAmphArmada;
@@ -550,11 +552,12 @@ namespace TechHeavyChoice {
             else if (side == "legion") pair = Global::RoleSettings::Tech::HeavyPairLegion;
             cached.resize(0);
             if (pair.length() > 0) {
-                // HeavyPair<Side> (owner, 2026-10-26): the same pair on every map
+                // HeavyPair<Side> (owner, 2026-10-26): the pair on a map with a land route; a
+                // moated start builds only the pair's first unit (Titan, Juggernaut, Sol Invictus)
                 for (uint i = 0; i < pair.length(); ++i) {
                     if (pair[i].length() == 0 || cached.find(pair[i]) >= 0) continue;
-                    if (terrain == 1 && Global::RoleSettings::Tech::HeavyPairLandOnly.find(pair[i]) >= 0) continue;   // owner, 2026-10-26
                     cached.insertLast(pair[i]);
+                    if (terrain == 1) break;
                 }
             } else {
                 const string first = terrain == 1 ? amph : land, second = terrain == 1 ? land : amph;

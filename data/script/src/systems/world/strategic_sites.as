@@ -11,6 +11,27 @@ namespace StrategicSites {
     // D-287: assault (use == 1) beach fronts of the last survey. Read-only for
     // consumers (TechHeavyChoice); counted once per survey, O(beaches).
     int assaultBeaches = 0;
+    // Moated (owner, 2026-10-26): our start has no land route to ANY enemy start - the
+    // water between has no crossing shallow enough for a land-only heavy (MoatProbe,
+    // Thor), so only amphibious, hover, naval and air units can reach the enemy. A
+    // narrow isthmus or a ford is not a moat. -1 = not surveyed yet, 0 = land route,
+    // 1 = moated. The map file's landLocked flag always counts as moated.
+    const string MoatProbe = "armthor";
+    int moated = -1;
+    int moatReachable = 0, moatEnemies = 0;
+    bool Moated() { return Global::Map::LandLocked || moated == 1; }
+    void Moat(const array<AIFloat3>& in theirs) {
+        CCircuitDef@ probe = ai.GetCircuitDef(MoatProbe);
+        if (probe is null || theirs.length() == 0) return;   // stays unsurveyed
+        moatEnemies = int(theirs.length());
+        moatReachable = 0;
+        for (uint i = 0; i < theirs.length(); ++i)
+            if (aiTerrainMgr.CanTraverse(probe, Global::Map::StartPos, theirs[i])) ++moatReachable;
+        moated = moatReachable == 0 ? 1 : 0;
+        GenericHelpers::LogUtil("[Strategic] moat: start (" + int(Global::Map::StartPos.x) + ", " + int(Global::Map::StartPos.z)
+            + ") " + (Moated() ? "MOATED" : "land route") + " - " + MoatProbe + " reaches " + moatReachable + " of " + moatEnemies
+            + " enemy starts" + (Global::Map::LandLocked ? " (map flag landLocked)" : ""), 1);
+    }
 
     int LandAt(const AIFloat3& in p) {
         const int x = int(p.x) / 64, z = int(p.z) / 64;
@@ -162,7 +183,7 @@ namespace StrategicSites {
         for (uint i=0;i<beaches.length();++i) if (beaches[i].use==1) ++assaultBeaches;
     }
     void Analyse(const array<AIFloat3>& in ours, const array<AIFloat3>& in theirs) {
-        Islands(ours,theirs); Geothermal(ours,theirs); Beaches(ours,theirs);
+        Islands(ours,theirs); Geothermal(ours,theirs); Beaches(ours,theirs); Moat(theirs);
         GenericHelpers::LogUtil("[Strategic] survey: " + geos.length() + " geos, " + islands.length() + " air-first islands, " + beaches.length() + " beach fronts (" + assaultBeaches + " assault); advisory only",1);
     }
 }
