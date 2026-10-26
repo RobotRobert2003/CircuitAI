@@ -23,9 +23,11 @@ this program (owner, 2026-10-26):
           measured the way TECH's layout measures its turret box (flat x
           buildable fraction, LayoutBoxMaxSlope) over the cannon, the turret
           block on one side and the storage strip on the other, and must hold
-          the cannon's footprint and MinTurrets (16) turrets: each footprint is
-          reserved through the layout reservations. TECH keeps the
-          reservations and pins its orders to them; FRONT runs no layout, so
+          the cannon's footprint and MinTurrets (16) turrets out of the block
+          and its TurretSpareRows, centre out: each footprint is reserved
+          through the layout reservations. The storages reserve where they can
+          and never refuse a site; the rest are ordered at their spots. TECH
+          keeps the reservations and pins its orders to them; FRONT runs no layout, so
           its reservations are taken only for the search and its orders go to
           the same spots unpinned.
   crews   taken off every other task (Builder AiMakeTask asks here first):
@@ -116,8 +118,6 @@ namespace LolCannon {
     // the fire roster: def id -> tier 1..6, 0 none
     array<int> tierByDef;
     bool rosterReady = false;
-    // Why the tried sites of the last search failed: cannon refused, turrets short (best count), storages short.
-    int gunRefused = 0, turretsShort = 0, storesShort = 0, bestTurrets = 0;
 
     // the report (owner, 2026-10-26): "[LolCannon] REPORT" lines for the playtest analysis
     int orderFrame = -1;             // the cannon's first order
@@ -362,40 +362,57 @@ namespace LolCannon {
         for (uint i = 0; i < ids.length(); ++i) if (ids[i] >= 0) aiTerrainMgr.ReleaseReservation(ids[i]);
     }
 
-    // Reserve one footprint per position; -1 where refused. Returns the reserved count.
-    int ReserveEach(CCircuitDef@ d, const array<AIFloat3> &in at, int f, array<int>@ ids)
+    // The first `want` candidates that reserve, in order; with `fill`, refused ones
+    // (id -1, ordered unpinned) make up the count. Returns the reserved count.
+    int Pick(CCircuitDef@ d, const array<AIFloat3> &in cand, int f, int want, bool fill, array<AIFloat3>@ pos, array<int>@ ids)
     {
-        int n = 0;
-        ids.resize(0);
-        for (uint i = 0; i < at.length(); ++i) {
-            const int id = aiTerrainMgr.CanReserveBuilding(d, at[i], f) ? aiTerrainMgr.ReserveBuilding(d, at[i], f) : -1;
-            ids.insertLast(id);
-            if (id >= 0) ++n;
+        pos.resize(0); ids.resize(0);
+        array<AIFloat3> refused;
+        for (uint i = 0; i < cand.length() && int(pos.length()) < want; ++i) {
+            const int id = aiTerrainMgr.CanReserveBuilding(d, cand[i], f) ? aiTerrainMgr.ReserveBuilding(d, cand[i], f) : -1;
+            if (id >= 0) { pos.insertLast(aiTerrainMgr.GetReservationPos(id)); ids.insertLast(id); }
+            else refused.insertLast(cand[i]);
         }
+        const int n = int(pos.length());
+        for (uint i = 0; fill && i < refused.length() && int(pos.length()) < want; ++i) { pos.insertLast(refused[i]); ids.insertLast(-1); }
         return n;
     }
 
-    // The cannon at gp facing f, the turret block on side `hand` (+1/-1), the strip on the
-    // other: positions only.
+    array<AIFloat3> First(const array<AIFloat3> &in a, int n)
+    {
+        array<AIFloat3> r;
+        for (uint i = 0; i < a.length() && int(r.length()) < n; ++i) r.insertLast(a[i]);
+        return r;
+    }
+
+    int TurretsWanted() { return AiMax(Global::LolCannon::MinTurrets, Global::LolCannon::TurretCols * Global::LolCannon::TurretRows); }
+
+    // The cannon at gp facing f: the turret block's candidate slots on side `hand`
+    // (+1/-1) and the storage strip's on the other, each centre out, spare rows last.
     void Slots(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in gp, int f, float hand,
         array<AIFloat3> &out turrets, array<AIFloat3> &out stores, AIFloat3 &out block, AIFloat3 &out strip)
     {
         const AIFloat3 fwd = Layout::Fwd(f), side = Layout::Side(f);
         const float gunHalf = float(Layout::Across(gun, f)) * SQUARE_SIZE * 0.5f;
-        const int cols = Global::LolCannon::TurretCols, rows = Global::LolCannon::TurretRows;
+        const int cols = Global::LolCannon::TurretCols, rows = Global::LolCannon::TurretRows + AiMax(0, Global::LolCannon::TurretSpareRows);
         const float nA = LolCannonMath::Pitch(Layout::Across(nano, f)), nL = LolCannonMath::Pitch(Layout::Along(nano, f));
         block = At(gp, side, hand * (gunHalf + 16.0f + float(cols) * nA * 0.5f), fwd, 0.0f);
         turrets.resize(0);
-        for (int r = 0; r < rows; ++r)
+        for (int i = 0; i < rows; ++i) {
+            const int r = LolCannonMath::CentreOut(i, rows);
             for (int c = 0; c < cols; ++c)
                 turrets.insertLast(At(block, side, LolCannonMath::Offset(c, cols, nA), fwd, LolCannonMath::Offset(r, rows, nL)));
-        const int sc = Global::LolCannon::StorageCols, sr = LolCannonMath::Rows(StoresNeeded(), sc);
+        }
+        const int sc = Global::LolCannon::StorageCols;
+        const int sr = LolCannonMath::Rows(StoresNeeded(), sc) + AiMax(0, Global::LolCannon::StorageSpareRows);
         const float sA = LolCannonMath::Pitch(Layout::Across(st, f)), sL = LolCannonMath::Pitch(Layout::Along(st, f));
         strip = At(gp, side, -hand * (gunHalf + 16.0f + float(sc) * sA * 0.5f), fwd, 0.0f);
         stores.resize(0);
-        for (int r = 0; r < sr; ++r)
-            for (int c = 0; c < sc && int(stores.length()) < StoresNeeded(); ++c)
+        for (int i = 0; i < sr; ++i) {
+            const int r = LolCannonMath::CentreOut(i, sr);
+            for (int c = 0; c < sc; ++c)
                 stores.insertLast(At(strip, side, LolCannonMath::Offset(c, sc, sA), fwd, LolCannonMath::Offset(r, sr, sL)));
+        }
     }
 
     // TECH's box measure over the cannon, its block and its strip.
@@ -412,29 +429,31 @@ namespace LolCannon {
             * aiTerrainMgr.BuildableFraction(nano, p, halfAcross, halfAlong, f);
     }
 
-    // One candidate: the cannon, every turret and every storage reserved, either hand. On
-    // success the slots are kept (TECH) or read and released (FRONT, keep false).
+    // why the last search found nothing (the "no site" line)
+    int refusedGun = 0, shortTurrets = 0, bestTurrets = 0;
+    int storesReserved = 0;          // of the site found
+
+    // One candidate: the cannon and MinTurrets turrets reserved, either hand; the
+    // storages reserve where they can and never refuse the site. On success the
+    // slots are kept (TECH) or read and released (FRONT, keep false).
     bool TrySite(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in p, int f, bool keep)
     {
-        if (!aiTerrainMgr.CanReserveBuilding(gun, p, f)) { ++gunRefused; return false; }
-        const int id = aiTerrainMgr.ReserveBuilding(gun, p, f);
-        if (id < 0) { ++gunRefused; return false; }
+        const int id = aiTerrainMgr.CanReserveBuilding(gun, p, f) ? aiTerrainMgr.ReserveBuilding(gun, p, f) : -1;
+        if (id < 0) { ++refusedGun; return false; }
         const AIFloat3 gp = aiTerrainMgr.GetReservationPos(id);
         for (int h = 0; h < 2; ++h) {
-            array<AIFloat3> tp, sp;
-            AIFloat3 bc, sc;
-            Slots(gun, nano, st, gp, f, (h == 0) ? 1.0f : -1.0f, tp, sp, bc, sc);
+            array<AIFloat3> tc, sc, tp, sp;
+            AIFloat3 bc, stc;
+            Slots(gun, nano, st, gp, f, (h == 0) ? 1.0f : -1.0f, tc, sc, bc, stc);
             array<int> tr, sr;
-            const int turrets = ReserveEach(nano, tp, f, tr);
-            const int stores = (turrets >= Global::LolCannon::MinTurrets) ? ReserveEach(st, sp, f, sr) : 0;
-            bestTurrets = AiMax(bestTurrets, turrets);
-            if (turrets < Global::LolCannon::MinTurrets) ++turretsShort;
-            else if (stores < int(sp.length())) ++storesShort;
-            if (turrets < Global::LolCannon::MinTurrets || stores < int(sp.length())) {
-                ReleaseAll(tr); ReleaseAll(sr);
+            const int turrets = Pick(nano, tc, f, TurretsWanted(), false, tp, tr);
+            if (turrets < Global::LolCannon::MinTurrets) {
+                bestTurrets = AiMax(bestTurrets, turrets);
+                ReleaseAll(tr);
                 continue;
             }
-            site = gp; facing = f; blockCentre = bc; stripCentre = sc;
+            storesReserved = Pick(st, sc, f, StoresNeeded(), true, sp, sr);
+            site = gp; facing = f; blockCentre = bc; stripCentre = stc;
             turretPos = tp; storePos = sp;
             if (keep) { gunRes = id; turretRes = tr; storeRes = sr; }
             else {
@@ -446,6 +465,7 @@ namespace LolCannon {
             }
             return true;
         }
+        ++shortTurrets;
         aiTerrainMgr.ReleaseReservation(id);
         return false;
     }
@@ -494,7 +514,7 @@ namespace LolCannon {
             return false;
         }
         int scored = 0, tried = 0;
-        gunRefused = 0; turretsShort = 0; storesShort = 0; bestTurrets = 0;
+        refusedGun = 0; shortTurrets = 0; bestTurrets = 0;
         bool found = false;
         for (uint i = 0; i < best.length() && !found; ++i) {
             if (aiTerrainMgr.IsZoneAlly(best[i])) continue;
@@ -506,15 +526,16 @@ namespace LolCannon {
             if (found)
                 GenericHelpers::LogUtil("[LolCannon] site for " + gun.GetName() + " (range " + int(range) + ") at (" + int(site.x) + ", " + int(site.z)
                     + "), facing " + facing + ", " + int(sqrt(bestD[i])) + " from home, ground " + int(score * 100.0f) + "%; "
-                    + turretPos.length() + " turrets and " + storePos.length() + " " + st.GetName() + " beside it"
+                    + turretPos.length() + " turrets and " + storePos.length() + " " + st.GetName() + " beside it ("
+                    + storesReserved + " storage slots reserved)"
                     + (layoutOn ? " (reserved)" : " (FRONT: unpinned)"), 1);
         }
         if (!layoutOn) aiTerrainMgr.SetLayoutEnabled(false);
         if (!found)
             GenericHelpers::LogUtil("[LolCannon] no site for " + gun.GetName() + " (range " + int(range) + ") just inside reach of "
                 + starts.length() + " enemy start(s): " + best.length() + " candidates, " + scored + " scored, " + tried
-                + " tried (cannon refused " + gunRefused + ", turrets short " + turretsShort + " hands, best " + bestTurrets + "/"
-                + Global::LolCannon::MinTurrets + ", storages short " + storesShort + " hands); retry in 30 s", 1);
+                + " tried (cannon refused " + refusedGun + ", turrets short " + shortTurrets + ", best " + bestTurrets + "/"
+                + Global::LolCannon::MinTurrets + "); retry in 30 s", 1);
         return found;
     }
 
@@ -816,8 +837,9 @@ namespace LolCannon {
         for (uint i = 0; i < doneSites.length(); ++i) {
             if (aiBuilderMgr.FindOwnNear(doneSites[i], 96.0f, gun) !is null) continue;
             site = doneSites[i]; facing = doneFacings[i];
-            array<AIFloat3> tp, sp;
-            Slots(gun, nano, st, site, facing, 1.0f, tp, sp, blockCentre, stripCentre);
+            array<AIFloat3> tc, sc;
+            Slots(gun, nano, st, site, facing, 1.0f, tc, sc, blockCentre, stripCentre);
+            const array<AIFloat3> tp = First(tc, TurretsWanted()), sp = First(sc, StoresNeeded());
             turretPos = tp; storePos = sp;
             gunRes = -1; turretRes.resize(0); storeRes.resize(0);
             for (uint k = 0; k < tp.length(); ++k) turretRes.insertLast(-1);

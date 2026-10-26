@@ -40,3 +40,12 @@ void test_crew_fill_order() {
     Check(LolCannonMath::CrewFor(false, 0, 0, 5, 50, 50) == -1);
     Check(LolCannonMath::CrewFor(true, 1, 5, 5, 50, 50) == -1);
 }
+void test_centre_out_rows() {
+    array<int> six = {2, 3, 1, 4, 0, 5};
+    for (int i = 0; i < 6; ++i) Check(LolCannonMath::CentreOut(i, 6) == six[i]);
+    array<int> five = {2, 3, 1, 4, 0};
+    for (int i = 0; i < 5; ++i) Check(LolCannonMath::CentreOut(i, 5) == five[i]);
+    Check(LolCannonMath::CentreOut(0, 1) == 0);
+    Check(LolCannonMath::CentreOut(1, 1) == -1);
+    Check(LolCannonMath::CentreOut(0, 0) == -1);
+}

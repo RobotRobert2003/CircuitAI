@@ -39,6 +39,14 @@ namespace LolCannonMath {
         if (cols < 1) cols = 1;
         return (count + cols - 1) / cols;
     }
+    // Row (or column) i of n in centre-out order: n 6 gives 2, 3, 1, 4, 0, 5. Spare
+    // slots round a block are tried after the ones nearest the cannon's middle.
+    int CentreOut(int i, int n)
+    {
+        if (n <= 0 || i < 0 || i >= n) return -1;
+        const int mid = (n - 1) / 2;
+        return (i % 2 == 0) ? mid - i / 2 : mid + (i + 1) / 2;
+    }
     // Crew kind a free air constructor joins: 0 starter, 1 air crew, 2 storage crew,
     // -1 none. T2 constructors fill the starter, then the storage crew, then the
     // air crew; a T1 one only the air crew.

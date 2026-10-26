@@ -22,18 +22,24 @@ namespace LolCannon {
     float SiteRangeMarginMax = 650.0f;
     float SiteRangeStep = 125.0f;
     int SiteAngles = 64;            // candidates per ring
-    int SiteProbes = 40;            // candidates whose footprint is actually tried, nearest our base first
+    int SiteProbes = 96;            // candidates whose footprint is actually tried, nearest our base first
     float SiteMinScore = 0.7f;
     // the construction turret block beside the cannon (cols x rows, across x along)
     int TurretCols = 4;
     int TurretRows = 4;
     int MinTurrets = 16;
+    // spare rows round the block, tried after the middle ones (centre out): a
+    // site holds when any MinTurrets of the (rows + spare) x cols slots reserve
+    int TurretSpareRows = 2;
     int TurretsAtOnce = 8;          // turret orders in flight at once (the crew helps the rest)
     // advanced (hardened) energy storages, in a narrow strip two wide on the
     // other side of the cannon (armuwadves / coruwadves; legadvestore for the Starfall)
     int Storages = 6;
     int LegionStorages = 8;
     int StorageCols = 2;
+    // spare rows round the strip; the storages never gate the site: the ones
+    // that do not reserve are ordered at their spots unpinned
+    int StorageSpareRows = 2;
     // the crews. One T2 air constructor orders the cannon; AirCrew air
     // constructors (T1 or T2) are taken off every other task, build the
     // turret block and then assist the cannon; StoreCrew T2 air constructors
