@@ -568,8 +568,11 @@ namespace TechHeavyChoice {
             cached.resize(0);
             if (pair.length() > 0) {
                 // HeavyPair<Side> (owner, 2026-10-26): the same pair on every map
-                for (uint i = 0; i < pair.length(); ++i)
-                    if (pair[i].length() > 0 && cached.find(pair[i]) < 0) cached.insertLast(pair[i]);
+                for (uint i = 0; i < pair.length(); ++i) {
+                    if (pair[i].length() == 0 || cached.find(pair[i]) >= 0) continue;
+                    if (terrain == 1 && Global::RoleSettings::Tech::HeavyPairLandOnly.find(pair[i]) >= 0) continue;   // owner, 2026-10-26
+                    cached.insertLast(pair[i]);
+                }
             } else {
                 const string first = terrain == 1 ? amph : land, second = terrain == 1 ? land : amph;
                 if (first.length() > 0) cached.insertLast(first);
