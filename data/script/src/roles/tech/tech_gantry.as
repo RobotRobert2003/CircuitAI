@@ -511,7 +511,7 @@ namespace TechHeavyChoice {
         return name == "armmar" || name == "corshiva" || name == "legjav";
     }
     // False only for a late TECH: AIR (which shares AmphibiousOps) is unchanged.
-    bool MarauderAllowed() { return !Late(); }
+    bool MarauderAllowed() { return !Late() && !HasPair(Global::AISettings::Side); }   // owner, 2026-10-26: a set pair from the first unit
 
     // 1 Hz from Tech_EconomyUpdate. O(1): one ring-buffer minimum read; does
     // nothing once latched (the latch never re-opens).
@@ -528,6 +528,13 @@ namespace TechHeavyChoice {
             + " assaultBeaches=" + StrategicSites::assaultBeaches + "; Marauder-class production closed", 1);
     }
 
+    // HeavyPair<Side> (owner, 2026-10-26): a fixed pair is set for this side
+    bool HasPair(const string& in side) {
+        if (!Enabled()) return false;
+        if (side == "cortex") return Global::RoleSettings::Tech::HeavyPairCortex.length() > 0;
+        if (side == "legion") return Global::RoleSettings::Tech::HeavyPairLegion.length() > 0;
+        return Global::RoleSettings::Tech::HeavyPairArmada.length() > 0;
+    }
     // Ordered candidates for this side and terrain: the preferred heavy, then
     // the other. Each must still pass the gantry's CanBuild and the cap (a map
     // cap such as armthor = 0 falls through to the next) in EnqueueGantryBatchFrom.
