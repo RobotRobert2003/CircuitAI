@@ -169,6 +169,25 @@ namespace AirMath {
             && energyBank + energyIncome * share * seconds >= committedEnergy + energyCost + OverflowEnergyReserve;
     }
     bool BayAllowed(int count, int ceiling) { return count >= Zero && (ceiling <= Zero || count < ceiling); }
+    // D-368: a plant's discretionary orders are funded while the bank holds the growth
+    // reserve, or while the team's pull stays within the production share of income.
+    bool ProductionFunded(float bank, float reserve, float pull, float income, float share) {
+        if (!Valid(bank) || !Valid(reserve) || !Valid(pull) || !Valid(income) || !Valid(share)) return false;
+        return bank >= reserve || pull <= income * share;
+    }
+    // D-368: advanced plants wanted at a metal income (SUPPORT's ladder, D-361): one, a
+    // second at `second`, another per `step` over it, capped at `maximum` (at least one).
+    int PlantsWanted(float income, float second, float step, int maximum) {
+        if (maximum < One) maximum = One;
+        if (!Valid(income) || !Valid(second) || second <= ZeroValue || income < second) return One;
+        int wanted = 2;
+        if (Valid(step) && step > ZeroValue) wanted += int((income - second) / step);
+        return wanted > maximum ? maximum : wanted;
+    }
+    // D-368: the next plant's bank test, a fraction of its cost (the frame drains the rest).
+    bool PlantBanked(float bank, float cost, float fraction) {
+        return Valid(bank) && Valid(cost) && cost > ZeroValue && Valid(fraction) && bank >= cost * fraction;
+    }
     int PlannedBays(int completed, int minimum) {
         if (completed < Zero) completed = Zero;
         if (completed >= MaximumIncrementableBayCount) return MaximumSignedInteger;
@@ -276,9 +295,18 @@ namespace AirMath {
         return Valid(bank) && Valid(storage) && Valid(income) && Valid(pull) && Valid(fraction)
             && storage > ZeroValue && fraction > ZeroValue && bank >= storage * fraction && income > pull;
     }
-    bool FirstPlantAllowed(bool anyAdvancedPlant, int supportCompleted, int supportWanted, bool energyFloating, bool converterPossible) {
+    // D-365: turrets still owed on the first plant's own bay before the plant (frames count)
+    int BayTurretsOwed(int finished, int framed, int wanted) {
+        if (wanted <= Zero || finished < Zero || framed < Zero) return Zero;
+        const int owed = wanted - finished - framed;
+        return owed > Zero ? owed : Zero;
+    }
+    // The energy half was dropped the same day: a plant held on "a converter can still
+    // be placed" deadlocked twice in 8v8s when the converters could not be placed or
+    // did not catch the income; floating energy now only drives converters.
+    bool FirstPlantAllowed(bool anyAdvancedPlant, int supportCompleted, int supportWanted) {
         if (anyAdvancedPlant) return true;
-        return supportCompleted >= supportWanted && !(energyFloating && converterPossible);
+        return supportCompleted >= supportWanted;
     }
     // D-365: while the energy floats the converter target is one more than planned,
     // bounded by what the income can feed (`draw` per converter); otherwise the

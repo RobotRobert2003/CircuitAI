@@ -4,6 +4,7 @@
 namespace AirGrowth {
     int lastLog = -100000;
     int lastBlockedLog = -100000;
+    int afusGateLogged = -1;   // D-366: -1 unknown, else the last logged allowAdvancedFusion; one line per transition
     IUnitTask@ AssistReactor(CCircuitUnit@ u)
     {
         // A flying worker can cross the home disc; the target still has to be
@@ -44,12 +45,23 @@ namespace AirGrowth {
         s.energyBuilding = AirBuild::ReactorPending() || reactor !is null;
         s.energyAssistable = reactor !is null;
         s.turretSlot = false;
+        // D-366 (owner): AIR scales like SUPPORT (D-359): ordinary fusions, converters
+        // alongside, until the energy-income gate; the advanced fusion only after it.
+        const float afusGate = Global::RoleSettings::Air::AdvancedFusionEnergyIncome;
+        s.allowAdvancedFusion = afusGate <= 0.0f || s.eIncome >= afusGate;
+        if (s.builderIsT2 && (s.allowAdvancedFusion ? 1 : 0) != afusGateLogged) {
+            afusGateLogged = s.allowAdvancedFusion ? 1 : 0;
+            GenericHelpers::LogUtil("[AIR][Eco] advanced fusion " + (s.allowAdvancedFusion ? "allowed" : "withheld")
+                + ": energy income " + int(s.eIncome) + " against gate " + int(afusGate), 1);
+        }
         string why;
         string key = EcoPlanner::Decide(s, why);
+        if (key == "afus" && !s.allowAdvancedFusion)
+            Invariants::Violation("INV-241", "afus-gate", "AIR chose an advanced fusion under its energy-income gate");
         // The growth goal outranks a full bank's ordinary 'no more energy' answer,
         // after surplus conversion/build power have had their shared decisions.
         if (key.length() == 0 && s.builderIsT2 && !AirEconomy::GrowthComplete() && !s.energyBuilding)
-            key = EcoPlanner::PickEnergy(s, why, "two-AFUS objective");
+            key = EcoPlanner::PickEnergy(s, why, "growth objective");   // ordinary fusions under the D-366 gate
         IUnitTask@ task = null;
         if (key == "nano") @task = AirBuild::Nano(u);
         else if (key == "assistnano") @task = AirBuild::Assist(u, false, ai.GetCircuitDef(UnitHelpers::GetT1NanoNameForSide(side)));
@@ -58,9 +70,21 @@ namespace AirGrowth {
             CCircuitDef@ d = EcoPlanner::DefOf(key);
             const bool big = key == "fusion" || key == "afus";
             const Task::BuildType kind = EcoPlanner::TypeOf(key);
-            if (AirBuild::Can(u, d) && (!big || AirEconomy::MexesReady())
-                && !AirBuild::Busy(d, kind) && (!big || !s.energyBuilding)
-                && (!(key == "t1conv" || key == "advconv") || !AirEconomy::MetalFloating()))
+            const bool converter = key == "t1conv" || key == "advconv";
+            // D-368: converters go ConverterParallel at a time (ordered or framed); one at a
+            // time left 12,000 of 16,000 energy floating at +3,800 for ten minutes while
+            // twenty builders idled (played). Reactors stay one at a time.
+            const bool open = converter
+                ? aiBuilderMgr.GetQueuedBuildCount(int(kind), d) + aiBuilderMgr.GetUnfinishedCount(d) < Global::RoleSettings::Air::ConverterParallel
+                : !AirBuild::Busy(d, kind);
+            // D-368: a reactor waits while the income wants a plant the bank does not yet
+            // hold (production.ladder runs first and needs PlantBankFraction of the cost;
+            // played: a fusion affordable on projected income took the bank every time
+            // and the second plant came ten minutes late). Converters and turrets go on.
+            if (big && AirEconomy::PlantUnbanked()) { why = "advanced plant wanted first, bank " + int(s.mCur) + " of " + int(AirEconomy::PlantBankWanted()); key = ""; }
+            else if (AirBuild::Can(u, d) && (!big || AirEconomy::MexesReady())
+                && open && (!big || !s.energyBuilding)
+                && (!converter || !AirEconomy::MetalFloating()))
                 @task = AirLayout::Place(u, d, kind, big ? Task::Priority::HIGH : Task::Priority::NORMAL, big);
         }
         if (task is null && reactor !is null) @task = AssistReactor(u);
@@ -68,13 +92,14 @@ namespace AirGrowth {
         // support already claimed by another worker). A full bank after the
         // bomber milestone must still permit funded, serial economic growth.
         if (task is null && s.builderIsT2 && AirEconomy::GrowthComplete() && AirEconomy::MexesReady()) {
-            CCircuitDef@ d = ai.GetCircuitDef(UnitHelpers::GetAdvFusionNameForSide(side));
+            // D-366: the overflow reactor is an ordinary fusion under the gate
+            CCircuitDef@ d = ai.GetCircuitDef(s.allowAdvancedFusion ? UnitHelpers::GetAdvFusionNameForSide(side) : UnitHelpers::GetFusionNameForSide(side));
             if (AirBuild::Can(u, d) && AirMath::OverflowGrowth(AirEconomy::MetalFloating(), AirEconomy::recovery,
                 s.energyBuilding || AirBuild::Busy(d, Task::BuildType::ENERGY), s.mCur, s.eCur, s.mIncome, s.eIncome,
                 AirBuild::Committed(false), AirBuild::Committed(true), d.costM, d.costE,
                 Global::RoleSettings::Air::ProductionIncomeShare, Global::RoleSettings::Air::OverflowGrowthSeconds)) {
                 @task = AirLayout::Place(u, d, Task::BuildType::ENERGY, Task::Priority::NORMAL, true);
-                if (task !is null) { key = "afus"; why = "funded surplus after production share and existing commitments"; }
+                if (task !is null) { key = s.allowAdvancedFusion ? "afus" : "fusion"; why = "funded surplus after production share and existing commitments"; }
             }
         }
         if (task !is null) {
