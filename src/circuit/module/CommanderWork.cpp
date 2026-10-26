@@ -389,6 +389,23 @@ float CCommanderControl::LaneMexAheadLimit(CCircuitUnit* unit,State& s,int frame
     return anchor.x<0?own:std::max(own,ai->GetBattle()->GetFrontLaneProgress(anchor));
 }
 
+// Use the same local window for selection and resumption. Generic front work
+// has a smaller margin/behind allowance and must not reject an already claimed
+// lane mex. Geometry only: no new census, callback or retained cache.
+bool CCommanderControl::LaneMexSiteAllowed(CCircuitUnit* unit,const AIFloat3& site) const {
+    const auto* battle=ai->GetBattle();
+    // The lane includes the approach from our start to the shared corridor.
+    // Group building territory need not include that approach. Mex ownership
+    // is already enforced by EconomyManager, before the spot is claimed.
+    if(battle->GetFrontLaneLength()<=0) return false;
+    const auto pos=unit->GetPos(ai->GetLastFrame());
+    const float reach=options.frontMexReach>0?options.frontMexReach:unit->GetCircuitDef()->GetBuildDistance();
+    const float behind=options.frontMexLos>0?unit->GetCircuitDef()->GetLosRadius():options.frontMexBehind;
+    return battle->GetFrontLaneDistance(site)<=battle->GetFrontLaneWidth()+reach
+        && (options.frontMexLos<=0 || site.SqDistance2D(pos)<=behind*behind)
+        && battle->GetFrontLaneProgress(site)>=battle->GetFrontLaneProgress(pos)-behind;
+}
+
 IUnitTask* CCommanderControl::LaneMexWork(CCircuitUnit* unit,State& s,CCircuitDef* turretDef,int frame) {
     const auto* battle=ai->GetBattle();
     if(battle->GetFrontLaneLength()<=0.f) return nullptr;

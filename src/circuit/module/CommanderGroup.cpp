@@ -82,6 +82,8 @@ bool CCommanderControl::CanResumeFrontTask(CCircuitUnit* unit,IUnitTask* task) c
     }
     if(groupArrived && ai->GetTeamUnit(groupUnit)
         && definition->GetId()==int(options.frontLineDef)) return false;
+    if(build->GetBuildType()==IBuilderTask::BuildType::MEX)
+        return LaneMexSiteAllowed(unit,at);
     const auto pos=unit->GetPos(ai->GetLastFrame());
     const auto* battle=ai->GetBattle();
     const float sight=unit->GetCircuitDef()->GetLosRadius();
@@ -93,11 +95,15 @@ bool CCommanderControl::CanResumeFrontTask(CCircuitUnit* unit,IUnitTask* task) c
     if(!GroupSiteAllowed(unit,at)) return false;
     auto* worker=ai->GetTeamUnit(groupUnit);
     const int defId=definition->GetId();
-    // A selected group's lateral defense or radar package is still local
-    // work even behind the ordinary mex window. Sight bounds the assistance;
-    // the group planner, not a trip back to base, owns the site's admission.
+    // GroupSiteAllowed already confines assistance to the assigned territory.
+    // Do not apply a centre-strip restriction: lateral defenses are intentional
+    // and the commander works from build range, not from the structure's site.
+    // Bound rearward travel while allowing that build reach at the boundary.
     if(worker && worker->GetTask()==task && (defId==groupNano || defId==groupDef
-        || defId==groupRadar || defId==groupJammer || defId==groupAA)) return true;
+        || defId==groupRadar || defId==groupJammer || defId==groupAA))
+        return at.SqDistance2D(pos)<=SQUARE(unit->GetCircuitDef()->GetBuildDistance())
+            || battle->GetFrontLaneProgress(at)>=battle->GetFrontLaneProgress(pos)
+                -options.frontWorkBehind-unit->GetCircuitDef()->GetBuildDistance();
     return battle->GetFrontLaneLength()>0
         && battle->GetFrontLaneDistance(at)<=battle->GetFrontLaneWidth()+unit->GetCircuitDef()->GetBuildDistance()
         && battle->GetFrontLaneProgress(at)>=battle->GetFrontLaneProgress(pos)-options.frontWorkBehind;
@@ -319,16 +325,9 @@ void CCommanderControl::UpdateCommanderGroup() {
         }
     }
     if(auto* task=GroupWork(unit); task && task!=unit->GetTask()) ai->GetBuilderManager()->AssignTask(unit,task);
-    // Join newly offered local work before deployment carries the commander
-    // outside sight. Reuse this one-second group tick; productive work and
-    // combat retain ownership. The AA/package regression covers this handoff.
-    if(commander) {
-        auto* moving=dynamic_cast<CCommanderTask*>(commander->GetTask());
-        const auto state=commanders.find(commander->GetId());
-        if(moving && state!=commanders.end() && state->second.deployed
-            && state->second.mode==Mode::SUPPORT) {
-            if(auto* assist=GroupAssist(commander)) ai->GetBuilderManager()->AssignTask(commander,assist);
-        }
-    }
+    // CommanderControl's existing front-work offer owns commander handoff:
+    // repair, mex, then group assistance. A second assignment here can race
+    // that ladder and pull a deploying commander away from an available mex.
+    // Only the constructor is scheduled by this tick; no duplicate local scans.
 }
 }

@@ -32,7 +32,7 @@ namespace AirWorkforce {
         fundedFrame = -1; fundedName = "";
     }
     float Horizon() { return AiMax(1.0f, Global::RoleSettings::Air::WorkforceHorizonSeconds); }
-    float ReserveM() {
+    float ReserveM(bool productionSupport = false) {
         // Save a concrete first-lab bank, while allowing an investment above it.
         CCircuitDef@ lab = ai.GetCircuitDef(UnitHelpers::GetT2AirPlantForSide(Global::AISettings::Side));
         // D-368: the production reserve (the first plant's cost, then the growth reserve
@@ -42,7 +42,10 @@ namespace AirWorkforce {
         // The starter's opening turrets are exempt: the first plant waits for them
         // (D-365), so a reserve that held them held the plant (played: a full bank for
         // six minutes, INV-239 five times, the plant at 16.4 instead of about 11).
-        const float production = AirEconomy::OpeningSupportNeeded() ? 0.0f : AirEconomy::ProductionReserve();
+        // Completed support now gates the next plant. Its turrets may spend that
+        // plant's discretionary reserve, retaining emergency and live-task funds.
+        const float production = AirEconomy::OpeningSupportNeeded()
+            || (productionSupport && AirEconomy::t2 > 0) ? 0.0f : AirEconomy::ProductionReserve();
         return AiMax(AiMax(Global::RoleSettings::Air::WorkforceReserveMetal + AirBuild::LabReserve(false), production),
             lab !is null && AirEconomy::SavingForFirstLab() ? AiMin(lab.costM, AirEconomy::bankM) : 0.0f);
     }
@@ -255,11 +258,11 @@ namespace AirWorkforce {
                 + " working=" + int(workingPower) + " shortage=" + int(shortage) + " reason=" + reason, 1);
         }
     }
-    bool Fund(CCircuitDef@ d, float power, float extraM = 0, float extraE = 0) {
+    bool Fund(CCircuitDef@ d, float power, float extraM = 0, float extraE = 0, bool productionSupport = false) {
         fundedFrame = -1; fundedName = "";
         if (d is null || power <= 0.0f) return false;
         const float seconds = AiMax(1.0f, d.GetBuildTime() / power);
-        const bool ready = BuildPowerMath::Funded(TeamEconomy::OwnMetal(TeamEconomy::CURRENT), ReserveM(), incomeM, usageM + admittedUsageM,
+        const bool ready = BuildPowerMath::Funded(TeamEconomy::OwnMetal(TeamEconomy::CURRENT), ReserveM(productionSupport), incomeM, usageM + admittedUsageM,
             committedM + admittedM, d.costM, seconds, extraM, Horizon())
             && BuildPowerMath::Funded(TeamEconomy::OwnEnergy(TeamEconomy::CURRENT), ReserveE(), incomeE, usageE + admittedUsageE,
             committedE + admittedE, d.costE, seconds, extraE, Horizon());

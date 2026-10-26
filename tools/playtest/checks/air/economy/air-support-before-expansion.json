@@ -1,0 +1,46 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {
+      "key": "support first",
+      "pattern": "\\[AIR\\]\\[Rule\\] overflow.production.support",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "full support bank",
+      "pattern": "\\[AIR\\]\\[Bay\\] \\d+ plant=\\d+ BP=\\d+ nanos=20\\+0/20",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "second plant after support",
+      "pattern": "\\[AIR\\]\\[LabGate\\].* plant=2 reason=",
+      "scope": "any",
+      "after_key": "full support bank",
+      "by_minute": 8
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    }
+  ]
+}

@@ -314,6 +314,7 @@ private:
     // D-357: the corridor mex sweep (WORK_MEX_LANE) and its dry probe (INV-235).
     IUnitTask* LaneMexWork(CCircuitUnit* unit,State& state,CCircuitDef* turretDef,int frame);
     bool LaneMexAvailable(CCircuitUnit* unit,State& state,int frame);
+    bool LaneMexSiteAllowed(CCircuitUnit* unit,const springai::AIFloat3& site) const;
     float LaneMexAheadLimit(CCircuitUnit* unit,State& state,int frame,float own);
     // D-356: the "then home" latch of the lane push.
     bool PushHome(CCircuitUnit* unit,State& state,int frame);

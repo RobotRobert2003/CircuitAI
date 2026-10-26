@@ -640,8 +640,8 @@ namespace AirBuild {
             if (!AirMath::BayAllowed(count, Global::RoleSettings::Air::MaxProductionBays)) return null;
             // D-368 (owner): later plants follow the income ladder (PlantsWanted, a full
             // bank admitting one more) with PlantBankFraction of the cost banked. The
-            // twenty-second spare-capacity window (CapacityReady) and the twenty-turret
-            // bank no longer gate them: played, one plant in 46 minutes at +50 metal.
+            // spare-capacity forecast is not an additional gate. Completed support
+            // above is required even when the bank can pay for another factory.
             if (count > 0) {
                 // a full bank holding the whole plant admits one more (played: a full 3,000
                 // bank at +60 reserved a third bay four minutes after the second plant)
@@ -987,7 +987,8 @@ namespace AirBuild {
     IUnitTask@ FloatingSupport(CCircuitUnit@ u)
     {
         if (!Global::RoleSettings::Air::FloatingSupportFirst || AirEconomy::t2 == 0
-            || AirEconomy::recovery || (!AirEconomy::MetalFloating() && !AirWorkforce::pressure)) return null;
+            || AirEconomy::recovery || (!AirEconomy::MetalFloating() && !AirWorkforce::pressure
+                && !AirEconomy::PlantWanted())) return null;
         IUnitTask@ queued = aiBuilderMgr.FindQueuedTask(u, int(Task::BuildType::NANO));
         if (queued !is null && projects.findByRef(queued) >= 0) return queued;
         IUnitTask@ task = Nano(u, false, true);
@@ -1043,7 +1044,7 @@ namespace AirBuild {
             const float power = AirEconomy::power[b] + float(AiMax(0, SupportCommitted(b) - AirEconomy::nanoCount[b])) * d.GetBuildSpeed();
             const float delta = AiMax(0.0f, ProductionMath::Rate(work, power + d.GetBuildSpeed(), Global::RoleSettings::Air::WarmFactoryGapSeconds)
                 - ProductionMath::Rate(work, power, Global::RoleSettings::Air::WarmFactoryGapSeconds));
-            if (!AirWorkforce::Fund(d, u.circuitDef.GetBuildSpeed(), delta * cm, delta * ce)) continue;
+            if (!AirWorkforce::Fund(d, u.circuitDef.GetBuildSpeed(), delta * cm, delta * ce, true)) continue;
             AirLayout::RepairSupport(b, d);
             for (uint s = 0; s < AirLayout::bays[b].nanos.length(); ++s) {
                 const int slot = AirLayout::bays[b].nanos[s];

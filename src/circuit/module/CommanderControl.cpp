@@ -989,7 +989,9 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         // Let the existing idle scheduler offer construction after arrival.
         // Only deployment yields; local combat observation never pauses.
         if(frame<s.frontYield) return false;
-        if(!options.frontReady || unit->GetHealthPercent()<options.recover
+        // Recovery is hysteresis for an actual withdrawal, not the minimum
+        // health for all front work. Otherwise 40-80% commanders idle forever.
+        if(!options.frontReady || (options.healthRetreatFraction>0?HealthRetreat(unit):unit->GetHealthPercent()<options.recover)
             || unit->GetTask()->GetType()==IUnitTask::Type::RETREAT) return false;
         // D-299: hold the last fallback line until its turret quota stands
         // (bounded by line_hold_seconds); the ladder offers that work.

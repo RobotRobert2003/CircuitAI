@@ -1,0 +1,98 @@
+{
+  "name": "air-support-before-expansion",
+  "storage_scenario": "air-support-expand",
+  "unit": "armaap",
+  "side": "armada",
+  "role": "AIR",
+  "description": "A banked AIR economy must complete twenty turrets around its standing T2 factory before ordering the next factory.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4000,
+    2800
+  ],
+  "photos": [
+    190,
+    235
+  ],
+  "min_spawn_spacing": 64,
+  "command_breakdown": true,
+  "hold_friendly": false,
+  "builders": true,
+  "production": true,
+  "start_metal": 6000,
+  "start_energy": 1000000,
+  "checks": "air-support-before-expansion",
+  "groups": [
+    {
+      "unit": "armaap",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3800,
+        4000
+      ],
+      "spacing": 700,
+      "columns": 2
+    },
+    {
+      "unit": "armca",
+      "count": 8,
+      "team": 0,
+      "position": [
+        4000,
+        3600
+      ]
+    },
+    {
+      "unit": "armafus",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        3400
+      ]
+    },
+    {
+      "unit": "armmoho",
+      "count": 8,
+      "team": 0,
+      "position": [
+        3000,
+        3000
+      ],
+      "spacing": 120,
+      "columns": 4
+    },
+    {
+      "unit": "armmstor",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3400,
+        3000
+      ]
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "enemy_role": "FRONT",
+  "modoptions": {
+    "multiplier_metalextraction": 10
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "stop_minute": 4,
+  "expect": [
+    {
+      "key": "health set",
+      "pattern": "health_fixture_applied unit=(?P<unit>\\d+) percent=60",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "build below recovery",
+      "pattern": "health_fixture_building_below_recovery unit=(?P<unit>\\d+)",
+      "scope": "any",
+      "by_minute": 3,
+      "after_key": "health set",
+      "same_as": "health set"
+    },
+    {
+      "key": "mex assigned",
+      "pattern": "\\[CommanderWork\\] unit=(?P<unit>\\d+) work=16 task=",
+      "scope": "any",
+      "by_minute": 3,
+      "after_key": "health set",
+      "same_as": "health set"
+    },
+    {
+      "key": "mex protected",
+      "pattern": "\\[CommanderFront\\] unit=(?P<unit>\\d+) mex_defended=",
+      "scope": "any",
+      "by_minute": 4,
+      "after_key": "mex assigned",
+      "same_as": "mex assigned"
+    },
+    {
+      "key": "lane advance",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=0(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 4
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fortification wait monopolises movement",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=(?:17|18) task=-1",
+      "scope": "any"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "name": "commander-front-mid-health",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "A FRONT commander held near 60% health continues lane mex and defense work with the normal balanced-profile work windows.",
+  "commander_overrides": {
+    "front_push_screen": 0
+  },
+  "map": "Proving Grounds v1.0",
+  "map_key": "proving",
+  "starts": [
+    [
+      2524,
+      4194
+    ],
+    [
+      11805,
+      10125
+    ]
+  ],
+  "camera": [
+    3600,
+    4800,
+    2900
+  ],
+  "photos": [
+    75,
+    130,
+    175
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "hold_friendly": true,
+  "groups": [
+    {
+      "unit": "armlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2400,
+        4000
+      ],
+      "after_seconds": 2
+    },
+    {
+      "unit": "armnanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2200,
+        4000
+      ],
+      "after_seconds": 3
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "checks": "commander-front-mid-health",
+  "commander_front_work": true,
+  "commander_initial": true,
+  "start_metal": 100000,
+  "commander_trace": true,
+  "coverage_probe": true,
+  "coverage_min_advance": 1000,
+  "storage_scenario": "commander-mid-health",
+  "commander_health_fixture": {
+    "after_seconds": 15,
+    "percent": 60,
+    "hold_seconds": 210
+  },
+  "start_energy": 1000000
+}
