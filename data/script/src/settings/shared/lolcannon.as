@@ -42,6 +42,9 @@ namespace LolCannon {
     // spare rows round the strip; the storages never gate the site: the ones
     // that do not reserve are ordered at their spots unpinned
     int StorageSpareRows = 2;
+    // storages still short when the cannon stands: the starter and storage crew
+    // stay on them up to this long before every crew is released (0: release at once)
+    int StoreFinishSeconds = 300;
     // the crews. One T2 air constructor orders the cannon; AirCrew air
     // constructors (T1 or T2) are taken off every other task, build the
     // turret block and then assist the cannon; StoreCrew T2 air constructors

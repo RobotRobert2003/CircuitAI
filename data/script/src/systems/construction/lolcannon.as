@@ -42,7 +42,8 @@ this program (owner, 2026-10-26):
           CrewRecruitBatch every CrewOrderSeconds. With no plant that makes a
           T2 air constructor, T2 ground constructors stand in for the starter
           and storage crews.
-  done    the crews are released, the cannon's fire is tiered (below) and the
+  done    the air crew is released (the starter and storage crew first finish
+          any storages still short, up to StoreFinishSeconds), the cannon's fire is tiered (below) and the
           AIR ally is asked for one scout sweep of ReconT1Scouts T1 scouts and
           ReconRadarScouts radar/sonar planes (team/lolcannon_recon.as). A
           lost cannon is rebuilt on its own site.
@@ -76,7 +77,7 @@ pass over the defs, CanBuild per constructor def x structure.
 ******************************************************************************/
 namespace LolCannon {
 
-    const int IDLE = 0, BUILD = 1;
+    const int IDLE = 0, BUILD = 1, STORES = 2;   // STORES: the cannon stands, its storage crew finishes the strip
     const int STARTER = 0, AIR = 1, STORE = 2;
     const array<string> CANNONS = { "armvulc", "corbuzz", "legstarfall" };
     const array<string> T2_GROUND = { "armack", "armacv", "corack", "coracv", "legack", "legacv" };
@@ -128,6 +129,7 @@ namespace LolCannon {
     int nextTick = 0;
     int nextPlan = 0;
     int nextGateLog = 0;
+    int storesUntil = 0;
     int nextLog = 0;
 
     bool Enabled() { return Global::LolCannon::Enabled; }
@@ -692,9 +694,14 @@ namespace LolCannon {
     //   storage: storages, then turrets, then the cannon
     IUnitTask@ BuilderTask(CCircuitUnit@ u)
     {
-        if (!Enabled() || phase != BUILD || u is null || u.circuitDef is null || crewOf.isEmpty()) return null;
+        if (!Enabled() || (phase != BUILD && phase != STORES) || u is null || u.circuitDef is null || crewOf.isEmpty()) return null;
         const int kind = CrewKind(u.id);
         if (kind < 0) return null;
+        if (phase == STORES) {
+            IUnitTask@ w = StoreWork(u);
+            if (w is null && u.circuitDef.CanBuild(Store())) storesUntil = ai.frame;   // nothing left this crew can do there
+            return (w is null) ? Wait(3) : w;
+        }
         IUnitTask@ t = null;
         if (kind == STARTER && (gunTask is null || gunTask.IsDead())) @t = CannonWork(u);
         if (t is null && kind == STORE) @t = StoreWork(u);
@@ -872,11 +879,50 @@ namespace LolCannon {
             doneSites.insertLast(site);
             doneFacings.insertLast(facing);
         }
-        ReleaseCrew(Gun().GetName() + " stands (" + built + " of " + Global::LolCannon::MetalIncomeGates.length() + ")");
         LolCannonRecon::Send(Global::LolCannon::ReconT1Scouts, Global::LolCannon::ReconRadarScouts);
-        phase = IDLE;
         rebuild = false;
+        const int stores = CountStanding(Store(), storePos, 32.0f);
+        if (stores < int(storePos.length()) && Global::LolCannon::StoreFinishSeconds > 0) {
+            // the storages are part of the order: the starter and storage crew stay on them
+            KeepOnly(STARTER, STORE, Gun().GetName() + " stands; " + stores + " of " + storePos.length() + " storages, the storage crew finishes them");
+            phase = STORES;
+            storesUntil = ai.frame + Global::LolCannon::StoreFinishSeconds * SECOND;
+            return;
+        }
+        ReleaseCrew(Gun().GetName() + " stands (" + built + " of " + Global::LolCannon::MetalIncomeGates.length() + ")");
+        phase = IDLE;
         nextPlan = ai.frame + 30 * SECOND;
+    }
+
+    // The storage phase: done when every storage stands or StoreFinishSeconds pass.
+    void FinishStores()
+    {
+        const int stores = CountStanding(Store(), storePos, 32.0f);
+        const bool done = stores >= int(storePos.length());
+        if (!done && ai.frame < storesUntil) return;
+        GenericHelpers::LogUtil("[LolCannon] REPORT storages " + stores + "/" + storePos.length() + " at=" + (ai.frame / SECOND) + "s"
+            + (done ? "" : " (gave up after " + Global::LolCannon::StoreFinishSeconds + " s)"), 1);
+        ReleaseCrew("storage strip " + (done ? "done" : "left short"));
+        phase = IDLE;
+        nextPlan = ai.frame + 30 * SECOND;
+    }
+
+    // Release every crew member but the two kinds given.
+    void KeepOnly(int a, int b, const string &in why)
+    {
+        array<string>@ keys = crewOf.getKeys();
+        int let = 0;
+        for (uint i = 0; i < keys.length(); ++i) {
+            int64 v = -1;
+            crewOf.get(keys[i], v);
+            const int kind = int(v);
+            if (kind == a || kind == b) continue;
+            crewOf.delete(keys[i]);
+            if (kind >= 0 && kind <= STORE && crewCount[kind] > 0) --crewCount[kind];
+            ++let;
+        }
+        recruitsAir.resize(0);
+        GenericHelpers::LogUtil("[LolCannon] " + let + " crew released, " + (crewCount[a] + crewCount[b]) + " kept: " + why, 1);
     }
 
     // A done site whose cannon is gone: rebuilt on the same spot, unpinned.
@@ -905,6 +951,10 @@ namespace LolCannon {
 
     void Advance()
     {
+        if (phase == STORES) {
+            FinishStores();
+            return;
+        }
         if (phase == IDLE) {
             if (CheckLost()) return;
             if (built >= int(Global::LolCannon::MetalIncomeGates.length()) || ai.frame < nextPlan) return;
