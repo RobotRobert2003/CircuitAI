@@ -181,6 +181,28 @@ static CScriptArray* CBattleAnalysis_GetDistributedRoute(CBattleAnalysis* battle
     for(asUINT i=0;i<array->GetSize();++i)*static_cast<AIFloat3*>(array->At(i))=points[i];
     return array;
 }
+// D-358: the field's corridor table for the front corridors (coverage_lanes.as).
+static CScriptArray* CBattleAnalysis_CorridorsForClass(CBattleAnalysis* battle,int cls,const AIFloat3& axisFrom,const AIFloat3& axisTo,float minWidth) {
+    auto* engine=asGetActiveContext()->GetEngine();
+    const auto ids=battle->CorridorsForClass(cls,axisFrom,axisTo,minWidth);
+    auto* array=CScriptArray::Create(engine->GetTypeInfoByDecl("array<int>"),static_cast<asUINT>(ids.size()));
+    for(asUINT i=0;i<array->GetSize();++i)*static_cast<int*>(array->At(i))=ids[i];
+    return array;
+}
+static CScriptArray* CBattleAnalysis_CorridorCentre(CBattleAnalysis* battle,int corridor,const AIFloat3& from,const AIFloat3& to) {
+    auto* cache=static_cast<CScriptManager::STypeInfoCache*>(asGetActiveContext()->GetEngine()->GetUserData());
+    const auto points=battle->CorridorCentre(corridor,from,to);
+    auto* array=CScriptArray::Create(cache->vec3Array,static_cast<asUINT>(points.size()));
+    for(asUINT i=0;i<array->GetSize();++i)*static_cast<AIFloat3*>(array->At(i))=points[i];
+    return array;
+}
+static CScriptArray* CBattleAnalysis_CorridorLink(CBattleAnalysis* battle,int corridor,const AIFloat3& from) {
+    auto* cache=static_cast<CScriptManager::STypeInfoCache*>(asGetActiveContext()->GetEngine()->GetUserData());
+    const auto points=battle->CorridorLink(corridor,from);
+    auto* array=CScriptArray::Create(cache->vec3Array,static_cast<asUINT>(points.size()));
+    for(asUINT i=0;i<array->GetSize();++i)*static_cast<AIFloat3*>(array->At(i))=points[i];
+    return array;
+}
 static bool CBattleAnalysis_SetFrontLane(CBattleAnalysis* battle,const CScriptArray* input,float width) {
     if(!input || input->GetSize()>4096)return false;
     std::vector<AIFloat3> points;points.reserve(input->GetSize());
@@ -1498,8 +1520,22 @@ void CInitScript::RegisterMgr()
     r = engine->RegisterObjectMethod("CBattleAnalysis", "array<AIFloat3>@ GetTerrainRoute(const AIFloat3& in, const AIFloat3& in, int, float, float, float, float)", asFUNCTION(CBattleAnalysis_GetTerrainRoute), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
     r=engine->RegisterObjectMethod("CBattleAnalysis","array<AIFloat3>@ GetDistributedRoute(const AIFloat3& in, const AIFloat3& in, const AIFloat3& in, const AIFloat3& in, int, float, int, float, float, float)",asFUNCTION(CBattleAnalysis_GetDistributedRoute),asCALL_CDECL_OBJFIRST);ASSERT(r>=0);
     r=engine->RegisterObjectMethod("CBattleAnalysis","bool SetFrontLane(const array<AIFloat3>@, float)",asFUNCTION(CBattleAnalysis_SetFrontLane),asCALL_CDECL_OBJFIRST);ASSERT(r>=0);
+    // D-358 corridor table (read-only; the field job publishes it a few seconds into the game)
+    r=engine->RegisterObjectMethod("CBattleAnalysis","int CorridorRevision() const",asMETHOD(CBattleAnalysis,CorridorRevision),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","array<int>@ CorridorsForClass(int, const AIFloat3& in, const AIFloat3& in, float) const",asFUNCTION(CBattleAnalysis_CorridorsForClass),asCALL_CDECL_OBJFIRST);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","array<AIFloat3>@ CorridorCentre(int, const AIFloat3& in, const AIFloat3& in) const",asFUNCTION(CBattleAnalysis_CorridorCentre),asCALL_CDECL_OBJFIRST);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","float CorridorWidth(int) const",asMETHOD(CBattleAnalysis,CorridorWidth),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","float CorridorLength(int) const",asMETHOD(CBattleAnalysis,CorridorLength),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","AIFloat3 CorridorChoke(int) const",asMETHOD(CBattleAnalysis,CorridorChoke),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","int CorridorAtPoint(int, const AIFloat3& in) const",asMETHOD(CBattleAnalysis,CorridorAtPoint),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","array<AIFloat3>@ CorridorLink(int, const AIFloat3& in) const",asFUNCTION(CBattleAnalysis_CorridorLink),asCALL_CDECL_OBJFIRST);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","bool CorridorOpen(int, const AIFloat3& in) const",asMETHOD(CBattleAnalysis,CorridorOpen),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","AIFloat3 CorridorPoint(int, float) const",asMETHOD(CBattleAnalysis,CorridorPoint),asCALL_THISCALL);ASSERT(r>=0);
     r=engine->RegisterObjectMethod("CBattleAnalysis","float GetFrontLaneLength() const",asMETHOD(CBattleAnalysis,GetFrontLaneLength),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","bool ArmyFrontLanesEnabled() const",asMETHOD(CBattleAnalysis,ArmyFrontLanesEnabled),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","void SetArmyFrontLanesEnabled(bool)",asMETHOD(CBattleAnalysis,SetArmyFrontLanesEnabled),asCALL_THISCALL);ASSERT(r>=0);
     r=engine->RegisterObjectMethod("CBattleAnalysis","float GetFrontLaneWidth() const",asMETHOD(CBattleAnalysis,GetFrontLaneWidth),asCALL_THISCALL);ASSERT(r>=0);
+    r=engine->RegisterObjectMethod("CBattleAnalysis","float GetFrontLaneProgress(const AIFloat3& in) const",asMETHOD(CBattleAnalysis,GetFrontLaneProgress),asCALL_THISCALL);ASSERT(r>=0);
     r=engine->RegisterObjectMethod("CBattleAnalysis","float GetFrontLaneDistance(const AIFloat3& in) const",asMETHOD(CBattleAnalysis,GetFrontLaneDistance),asCALL_THISCALL);ASSERT(r>=0);
     r=engine->RegisterObjectMethod("CBattleAnalysis","AIFloat3 GetFrontLaneGoal(const AIFloat3& in, float) const",asMETHOD(CBattleAnalysis,GetFrontLaneGoal),asCALL_THISCALL);ASSERT(r>=0);
     r=engine->RegisterObjectMethod("CBattleAnalysis","void SetFrontLaneOptions(float, float, float, bool)",asMETHOD(CBattleAnalysis,SetFrontLaneOptions),asCALL_THISCALL);ASSERT(r>=0);

@@ -25,6 +25,20 @@
 	"publish_file": true,         // write LuaUI/Config/BARb/field/map.txt once for the team-link widget
 	"dump_input": false,          // also write the input snapshot (field/input.bin) for the native replay (tests/field_analysis_test.exe <input.bin>)
 
+	// D-358 corridor planner (rjm.bar.docs/projects/circuitai/corridor-planner-proposal.md): per movement
+	// class, obstacles, obstacle-separated corridors between the two sides, a centre line and a width
+	// profile each; read by the mex partition, the FRONT corridors and the lane grid.
+	"corridors": {
+		"obstacle_min_share": 0.0005, // a closed 16-elmo component this share of the map's cells is an obstacle; smaller is a rock
+		"detour": 2.0,                // candidate routes up to this multiple of the shortest one
+		"max_routes": 12,             // candidate routes per class
+		"seam_blocked": 0.2,          // obstacles over this share of the seam between two neighbouring routes make two corridors (0.2: Glitters' and Salt Reef's lanes; 0.3 reads better on Glacial Gap)
+		"footprint_width": 64,        // a corridor narrower than this at its choke is specialist: no FRONT seat, no mex lane
+		"band": 384,                  // elmos around a found route penalised before the next search
+		"lane_spacing": 768,          // D-360: elmos between side-by-side lanes inside one passage; a passage holds round(extent / spacing) lanes, at most its narrowest extent / (spacing / 2)
+		"lane_max": 4                 // lanes a passage may hold at most; 1 keeps one lane per passage
+	},
+
 	// Part B1 (rjm.bar.docs/projects/circuitai/field-landmarks-proposal.md): one position
 	// per playing team, its job word and opening, and the strategic landmarks, written once
 	// to LuaUI/Config/BARb/field/landmarks.txt for the team-link Landmarks view. Shares are

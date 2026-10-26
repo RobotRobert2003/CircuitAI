@@ -9,6 +9,7 @@
 //       src/circuit/terrain/field/FieldAnalysis.cpp src/circuit/terrain/field/FieldEncode.cpp -o field_analysis_test.exe
 
 #include "circuit/terrain/field/FieldAnalysis.h"
+#include "circuit/terrain/field/FieldCorridors.h"
 #include "circuit/terrain/field/FieldEncode.h"
 #include "circuit/terrain/field/FieldGrid.h"
 #include "circuit/terrain/field/FieldLandmarks.h"
@@ -413,6 +414,8 @@ static int Replay(const char* dumpPath, const char* outPath, bool predict, const
 	}
 	for (const SChoke& c : m->chokes) std::printf("choke %d %d-%d at (%.0f,%.0f) width=%.0f\n", c.id, c.a, c.b, c.pos.x, c.pos.z, c.width);
 	for (const SAvenue& a : m->avenues) std::printf("avenue %d %s length=%.0f regions=%zu\n", a.id, a.name.c_str(), a.length, a.regions.size());
+	for (const SCorridor& c : m->corridors) std::printf("corridor %d cls=%d %s length=%.0f narrowest=%.0f at (%.0f,%.0f) mean=%.0f routes=%d specialist=%d vertices=%zu\n", c.id, c.cls, c.name.c_str(), c.length, c.narrowest, c.choke.x, c.choke.z, c.meanWidth, c.routes, c.specialist ? 1 : 0, c.centre.size());
+	std::printf("corridors: %zu, obstacles: %zu, corridors_ms=%.1f\n", m->corridors.size(), m->obstacles.size(), m->timings.corridorsMs);
 	for (const SLanding& l : m->landings) {
 		if (l.rank <= 3) std::printf("landing %d kind=%d side=%d rank=%d width=%.0f inland=%.0f at (%.0f,%.0f)\n", l.id, l.kind, l.side, l.rank, l.width, l.inland, l.mid.x, l.mid.z);
 	}
@@ -485,6 +488,192 @@ static void TestExperienceSemantics()
 	Require(CountBoundary(*m,B_RAMP)==0 && m->passages.empty(),"an open plain has no physical ramps or constrictions");
 }
 
+
+// D-358: the corridor planner. The isthmus gives one bot corridor whose centre
+// crosses the bridge; a plain with two mesa columns gives three bot corridors
+// (north, between the columns, south); the queries answer at the table's
+// resolution; the same input gives the same table.
+static SInput ObstacleField(bool columns = true)
+{
+	SInput in;
+	in.mapName = "Synthetic Obstacle Field";
+	in.mapWidth = 4096; in.mapHeight = 3072;
+	in.heightStride = in.mapWidth / 8; in.heightRows = in.mapHeight / 8;
+	in.slopeStride = in.mapWidth / 16; in.slopeRows = in.mapHeight / 16;
+	in.height.assign((std::size_t)in.heightStride * in.heightRows, 40.f);
+	in.slope.assign((std::size_t)in.slopeStride * in.slopeRows, 0.f);
+	// two mesa columns at x 1700..2000 and 2300..2600 from z 600 to 2472, each with a
+	// 600-elmo gap in the middle (z 1236..1836): open bands north and south of them
+	auto mesa = [&](float x, float z) {
+		const bool column = (x >= 1700.f && x < 2000.f) || (x >= 2300.f && x < 2600.f);
+		return columns && column && z >= 600.f && z < 2472.f && !(z >= 1236.f && z < 1836.f);
+	};
+	for (int z = 0; z < in.slopeRows; ++z) for (int x = 0; x < in.slopeStride; ++x) {
+		if (mesa(x * 16.f + 8.f, z * 16.f + 8.f)) in.slope[(std::size_t)z * in.slopeStride + x] = SlopeValue(75.f);
+	}
+	SBoxInput west; west.allyTeam = 0; west.left = 200.f; west.right = 900.f; west.top = 400.f; west.bottom = 2600.f;
+	SBoxInput east; east.allyTeam = 1; east.left = 3200.f; east.right = 3900.f; east.top = 400.f; east.bottom = 2600.f;
+	in.boxes = {west, east};
+	for (int t = 0; t < 4; ++t) { STeamInput ti; ti.team = t; ti.allyTeam = t < 2 ? 0 : 1; in.teams.push_back(ti); }
+	return in;
+}
+
+// Does the polyline pass through the rectangle? Sampled every 16 elmos along
+// each segment: the centre is simplified, so a straight run across the
+// rectangle may have no vertex inside it.
+static bool PolylineVisits(const Polyline& line, float x0, float x1, float z0, float z1)
+{
+	for (std::size_t i = 1; i < line.size(); ++i) {
+		const SPoint& a = line[i - 1]; const SPoint& b = line[i];
+		const float len = std::hypot(b.x - a.x, b.z - a.z);
+		const int steps = std::max(1, (int)(len / 16.f));
+		for (int k = 0; k <= steps; ++k) {
+			const float t = (float)k / steps, x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t;
+			if (x >= x0 && x < x1 && z >= z0 && z < z1) return true;
+		}
+	}
+	return false;
+}
+
+static int CorridorCount(const SModel& m, int cls)
+{
+	int n = 0;
+	for (const SCorridor& c : m.corridors) if (c.cls == cls) ++n;
+	return n;
+}
+// Passages: lanes of one passage (D-360) count once.
+static int PassageCount(const SModel& m, int cls)
+{
+	int n = 0;
+	for (const SCorridor& c : m.corridors) if (c.cls == cls && c.lane == 0) ++n;
+	return n;
+}
+
+static void TestCorridors()
+{
+	SSettings st;
+	// the isthmus: every land class crosses by the bridge, ships have no corridor between the land boxes
+	{
+		const SInput in = Synthetic();
+		auto m = Analyse(in, st, nullptr);
+		for (const std::string& f : m->checkFailures) std::printf("field_analysis_test: check failed: %s\n", f.c_str());
+		Require(m->checkFailures.empty(), "corridor checks pass on the isthmus");
+		Require(CorridorCount(*m, C_BOT) >= 1, "the isthmus has a bot corridor");
+		const SCorridor* bridge = nullptr;
+		for (const SCorridor& c : m->corridors) if (c.cls == C_BOT && !c.specialist) { bridge = &c; break; }
+		Require(bridge != nullptr, "a bot corridor wide enough for a formation");
+		Require(PolylineVisits(bridge->centre, 1800.f, 2300.f, 1300.f, 1800.f), "the bot corridor's centre crosses the bridge");
+		Require(bridge->narrowest > 0.f && bridge->narrowest <= 600.f, "the narrowest point is the bridge's width (500 elmos of land)");
+		Require(bridge->choke.x >= 1700.f && bridge->choke.x < 2400.f, "the choke lies on the bridge");
+		Require(bridge->length > 2000.f, "the corridor runs from box to box");
+		Require(bridge->width.size() == bridge->centre.size(), "a width per centre vertex");
+		Require(CorridorAt(*m, C_BOT, 500.f, 2200.f) == bridge->id, "the west box's land belongs to the bridge corridor");
+		Require(CorridorAt(*m, C_BOT, 2048.f, 500.f, 0) == -1, "sea cells belong to no bot corridor");
+		Require(CorridorAt(*m, C_SHIP, 2048.f, 500.f) == -1, "no ship corridor between two land boxes");
+		float d = 0.f;
+		const float pw = CorridorProgress(*bridge, 500.f, 2200.f, &d), pe = CorridorProgress(*bridge, 3600.f, 1800.f, &d);
+		Require(pw < 0.35f && pe > 0.65f, "progress runs from side 0 (west) to side 1 (east)");
+		Require(CorridorProgressFrom(*bridge, 1, 500.f, 2200.f) > 0.65f, "seen from side 1 the west end is far");
+		const SPoint mid = CorridorPoint(*bridge, 0.5f);
+		Require(mid.x > 1200.f && mid.x < 3000.f, "the midpoint lies in the middle third");
+		const auto ordered = CorridorsOrdered(*m, C_BOT, {500.f, 2200.f}, {3600.f, 1800.f}, 0.f);
+		Require(!ordered.empty() && ordered.front() == bridge->id, "the ordered list names the bridge");
+		// D-359: the approach legs are routed over the corridor's open cells
+		int v = -1;
+		const auto leg = RouteToCentre(*m, C_BOT, {300.f, 2900.f}, *bridge, &v);
+		Require(!leg.empty() && v >= 0 && v < (int)bridge->centre.size(), "a route from the west box's far corner reaches a centre vertex");
+		for (const SPoint& p : leg) Require(CorridorAt(*m, C_BOT, p.x, p.z, 0) >= 0, "every leg point stands on open ground");
+		for (std::size_t i = 1; i < leg.size(); ++i) {
+			const int cx = (int)(leg[i].x / m->cell), cz = (int)(leg[i].z / m->cell);
+			Require(m->clearanceOf[C_BOT][(std::size_t)cz * m->gw + cx] > 0, "a leg keeps off cells with a closed 16-elmo quarter after its first");
+		}
+		for (std::size_t i = 1; i < leg.size(); ++i) {
+			const float len = std::hypot(leg[i].x - leg[i - 1].x, leg[i].z - leg[i - 1].z);
+			const int steps = std::max(1, (int)(len / 16.f));
+			for (int k = 0; k <= steps; ++k) {
+				const float t = (float)k / steps;
+				Require(CorridorAt(*m, C_BOT, leg[i - 1].x + (leg[i].x - leg[i - 1].x) * t, leg[i - 1].z + (leg[i].z - leg[i - 1].z) * t, 0) >= 0,
+					"no leg segment crosses closed ground");
+			}
+		}
+		const SPoint reached = bridge->centre[(std::size_t)v];
+		Require(std::hypot(leg.back().x - reached.x, leg.back().z - reached.z) <= 1.5f * 32.f, "the leg ends at the vertex it reached");
+		int none = -1;
+		Require(RouteToCentre(*m, C_BOT, {2048.f, 300.f}, *bridge, &none, 2).empty() && none == -1, "from the open sea, far from land, no route");
+		Require(RouteToCentre(*m, C_SHIP, {300.f, 2900.f}, *bridge, &none).empty(), "a ship has no route to a bot corridor");
+		const std::string text = Encode(*m, st, 1, 1);
+		Require(text.find("\ncorridor|") != std::string::npos, "corridor record");
+        Require(text.find("\ncorridorcells|1|") != std::string::npos, "bot ownership raster exported");
+        Require(text.find("\nclearance|1|") != std::string::npos, "bot conservative clearance exported");
+		Require(Summary(*m).find("corridors") != std::string::npos, "summary counts corridors");
+	}
+	// the open field (D-360): one passage about 2,700 elmos wide holds lanes side by side
+	{
+		const SInput in = ObstacleField(false);
+		auto m = Analyse(in, st, nullptr);
+		for (const std::string& f : m->checkFailures) std::printf("field_analysis_test: check failed: %s\n", f.c_str());
+		Require(m->checkFailures.empty(), "corridor checks pass on the open field");
+		const auto ordered = CorridorsOrdered(*m, C_BOT, {500.f, 1536.f}, {3600.f, 1536.f}, 0.f);
+		Require(ordered.size() == (std::size_t)st.laneMax, "the open field holds lane_max bot lanes");
+		for (std::size_t i = 0; i < ordered.size(); ++i) {
+			const SCorridor& c = m->corridors[ordered[i]];
+			Require(c.lanes == st.laneMax && c.extent > 2 * st.laneSpacing, "every lane records its passage's lane count and extent");
+			Require(c.name.find(" lane ") != std::string::npos, "a lane is named after its passage");
+			if (i > 0) {
+				const SPoint a = CorridorPoint(m->corridors[ordered[i - 1]], 0.5f), b = CorridorPoint(c, 0.5f);
+				Require(std::abs(b.z - a.z) >= 0.5f * st.laneSpacing, "lanes are at least half a spacing apart");
+			}
+			for (const SPoint& p : c.centre) Require(CorridorAt(*m, C_BOT, p.x, p.z, 0) == c.id, "a lane's centre runs over its own cells");
+		}
+		SSettings one = st; one.laneMax = 1;
+		Require(CorridorCount(*Analyse(in, one, nullptr), C_BOT) == 1, "lane_max 1 keeps one lane per passage");
+	}
+	// the obstacle field: three bot corridors at the default wall share, ordered north to south on a west-east axis
+	{
+		const SInput in = ObstacleField();
+		auto m = Analyse(in, st, nullptr);
+		for (const std::string& f : m->checkFailures) std::printf("field_analysis_test: check failed: %s\n", f.c_str());
+		Require(m->checkFailures.empty(), "corridor checks pass on the obstacle field");
+		std::printf("field_analysis_test: obstacle field: %s\n", Summary(*m).c_str());
+		Require(!m->obstacles.empty(), "the mesa columns are obstacles");
+		const int bots = CorridorCount(*m, C_BOT);
+		Require(bots == 3, "two mesa columns give three bot corridors (north, the gap, south)");
+		const auto ordered = CorridorsOrdered(*m, C_BOT, {500.f, 1536.f}, {3600.f, 1536.f}, 0.f);
+		Require(ordered.size() == 3, "all three are wide enough");
+		const SCorridor& north = m->corridors[ordered[0]];
+		const SCorridor& gap = m->corridors[ordered[1]];
+		const SCorridor& south = m->corridors[ordered[2]];
+		Require(CorridorPoint(north, 0.5f).z < 700.f && CorridorPoint(south, 0.5f).z >= 2372.f, "the outer corridors pass outside the columns");
+		Require(CorridorPoint(gap, 0.5f).z >= 1200.f && CorridorPoint(gap, 0.5f).z < 1900.f, "the middle corridor threads the gap");
+		Require(gap.narrowest > 400.f && gap.narrowest < 700.f, "the gap corridor's narrowest point is the 600-elmo gap");
+		Require(CorridorAt(*m, C_BOT, 2150.f, 1536.f) == gap.id, "the cell between the columns belongs to the gap corridor");
+		Require(CorridorAt(*m, C_BOT, 2150.f, 400.f) == north.id, "north of the columns is the north corridor");
+		Require(CorridorCount(*m, C_VEH) == 3, "vehicles see the same three corridors");
+		SSettings merged = st; merged.seamBlocked = 0.9f;
+		auto one = Analyse(in, merged, nullptr);
+		Require(PassageCount(*one, C_BOT) == 1, "a wall share nothing reaches merges every route into one passage");
+		Require(CorridorCount(*one, C_BOT) >= 2, "that passage, as wide as the map, holds lanes side by side");
+		auto again = Analyse(in, st, nullptr);
+		Require(again->fingerprint == m->fingerprint && again->corridorOf[C_BOT] == m->corridorOf[C_BOT], "the table is a function of its inputs");
+	}
+	// the fine passability itself: one 16-elmo sample a cell, the movedef limits
+	{
+		SFinePass fine;
+		std::vector<float> slope = {0.f, SlopeValue(30.f), SlopeValue(45.f), 0.f};
+		std::vector<float> height(4 * 2 * 2, 10.f);
+		for (int i = 0; i < 4; ++i) height[i] = height[i + 8] = -30.f;   // cells 0 and 1: deep water (-30)
+		FinePassability(slope, 4, 1, height, 8, 2, false, fine);
+		Require(fine.g.gw == 4 && fine.g.gh == 1, "one 16-elmo cell per slope sample");
+		Require(!fine.Pass(C_VEH, 0) && fine.Pass(C_HOVER, 0) && fine.Pass(C_SHIP, 0) && fine.Pass(C_AMPH, 0), "30 deep: ships, hovers and amphibious, no vehicle");
+		Require(!fine.Pass(C_VEH, 2) && fine.Pass(C_BOT, 2) && !fine.Pass(C_HOVER, 2) && fine.Pass(C_ALLT, 2), "45 degrees: bots and all-terrain only");
+		Require(fine.Pass(C_VEH, 3) && fine.Pass(C_BOT, 3) && !fine.Pass(C_SHIP, 3), "flat land: every land class, no ship");
+		SFinePass lava;
+		FinePassability(slope, 4, 1, height, 8, 2, true, lava);
+		Require(!lava.Pass(C_AMPH, 0) && lava.Pass(C_HOVER, 0) && lava.Pass(C_SHIP, 0), "harmful water: no amphibious, hovers still float");
+	}
+	std::printf("field_analysis_test: corridors ok\n");
+}
+
 int main(int argc, char** argv)
 {
 	if (argc > 1) {
@@ -507,6 +696,7 @@ int main(int argc, char** argv)
 		TestCancel();
 		TestNoBoxes();
 		TestMarks();
+		TestCorridors();
 	} catch (const std::exception& e) {
 		std::cerr << "field_analysis_test FAILED: " << e.what() << "\n";
 		return 1;

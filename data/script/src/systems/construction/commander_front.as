@@ -1,10 +1,13 @@
+#include "front_support.as"
 // FRONT duty is offered before default economy can enqueue a base job.
 // Only task offers mutate native structure ownership; combat can preempt them.
 namespace CommanderFront {
     bool wasReady=false;
     const array<string> nanos={"armnanotc","cornanotc","legnanotc","armnanotcplat","cornanotcplat","legnanotcplat"};
     bool Ready() {
-        if(Global::AISettings::Role!=AiRole::FRONT || aiFactoryMgr.GetFactoryCount()<1) return false;
+        if(Global::AISettings::Role!=AiRole::FRONT) return false;
+        if(wasReady && aiSetupMgr.ConfigFloat("commander/combat/front_persistent",0.f)>0.f) return true;
+        if(aiFactoryMgr.GetFactoryCount()<1) return false;
         for(uint i=0;i<nanos.length();++i) {
             CCircuitDef@ def=ai.GetCircuitDef(nanos[i]);
             if(def !is null && def.count-aiBuilderMgr.GetUnfinishedCount(def)>=1) return true;
@@ -12,6 +15,7 @@ namespace CommanderFront {
         return false;
     }
     void Update() {
+        FrontSupport::Update();
         const bool ready=Ready();
         aiBuilderMgr.SetCommanderCombatOption("front_ready",ready?1.f:0.f);
         if(ready!=wasReady) {
@@ -27,7 +31,7 @@ namespace CommanderFront {
     const int WORK_ASSIST=0, WORK_MEX=1, WORK_RADAR_SPACING=2, WORK_LASER=3, WORK_PATROL=4;
     const int WORK_LINE=5, WORK_REPAIR_DEFENCE=6, WORK_REPAIR_UNITS=7, WORK_RECLAIM=8;
     const int WORK_TIMED=9, WORK_RADAR=10, WORK_FACTORY=11, WORK_BASE=12, WORK_MEX_LOS=13, WORK_ADVANCE=14, WORK_HOLD=15;
-    const int WORK_MEX_LANE=16;
+    const int WORK_MEX_LANE=16, WORK_TERRITORY_LINE=17, WORK_MEX_DEFENCE=18;
     // D-356: the order of the rungs is profile policy, commander.json
     // commander/combat/front_ladder (a comma list of the names in Rung), read
     // once and again only when the string changes. The default is the meta's
@@ -65,10 +69,14 @@ namespace CommanderFront {
     // every rung natively.
     IUnitTask@ Rung(CCircuitUnit@ unit,const string &in name,CCircuitDef@ laser,CCircuitDef@ aa,CCircuitDef@ radar) {
         const bool work=Global::Commander::Work;
+        if(name=="repair_combat") return aiBuilderMgr.CommanderFrontWork(unit,21,null,0.f);
+        if(name=="mex_defence") return aiBuilderMgr.CommanderFrontWork(unit,WORK_MEX_DEFENCE,laser,0.f);
+        if(name=="territory_line") return aiBuilderMgr.CommanderFrontWork(unit,WORK_TERRITORY_LINE,laser,0.f);
         if(name=="mex_lane") return aiBuilderMgr.CommanderFrontWork(unit,WORK_MEX_LANE,laser,0.f);
         if(name=="advance") return aiBuilderMgr.CommanderFrontWork(unit,WORK_ADVANCE,null,0.f);
         if(name=="hold") return aiBuilderMgr.CommanderFrontWork(unit,WORK_HOLD,null,
             aiSetupMgr.ConfigFloat("commander/combat/front_hold_seconds",10.f));
+        if(name=="support_group") return aiBuilderMgr.CommanderFrontWork(unit,20,null,0.f);
         if(name=="assist") return aiBuilderMgr.CommanderFrontWork(unit,WORK_ASSIST,null,Global::Commander::FrontRadius);
         if(name=="mex") return aiBuilderMgr.CommanderFrontWork(unit,WORK_MEX,null,Global::Commander::FrontRadius);
         if(name=="laser") return aiBuilderMgr.CommanderFrontWork(unit,WORK_LASER,laser,Global::Commander::FrontLaserSpacing);
@@ -97,12 +105,17 @@ namespace CommanderFront {
         // Roles choose the order, definitions and spacing.
         const string side=UnitHelpers::GetSideForUnitName(unit.circuitDef.GetName());
         CCircuitDef@ laser=Def("line_unit",UnitHelpers::GetStaticLLTNameForSide(side));
+        aiBuilderMgr.SetCommanderCombatOption("front_line_def",laser is null?-1.f:float(laser.id));
         CCircuitDef@ aa=Def("timed_aa_unit",UnitHelpers::GetStaticAALightNameForSide(side));
+        aiBuilderMgr.SetCommanderCombatOption("front_mex_aa",
+            aa !is null && aiSetupMgr.ConfigFloat("commander/combat/front_mex_aa_enabled",0.f)>0.f?float(aa.id):-1.f);
         CCircuitDef@ radar=ai.GetCircuitDef(UnitHelpers::GetStaticRadarNameForSide(side));
         for(uint i=0;i<ladder.length();++i) {
             IUnitTask@ task=Rung(unit,ladder[i],laser,aa,radar);
             if(task !is null) return task;
         }
+        if(aiSetupMgr.ConfigFloat("commander/combat/front_persistent",0.f)>0.f)
+            return Rung(unit,"hold",laser,aa,radar);
         return null;
     }
 }

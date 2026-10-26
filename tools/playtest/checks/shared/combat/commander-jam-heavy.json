@@ -1,0 +1,47 @@
+{
+  "stop_minute": 1,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].* loaded",
+      "scope": "any",
+      "by_minute": 0.4
+    },
+    {
+      "key": "jam-shot",
+      "pattern": "\\[CommanderJam\\] unit=(?P<unit>\\d+) target=\\d+ action=fire",
+      "scope": "any",
+      "by_minute": 0.92
+    },
+    {
+      "key": "weapon",
+      "pattern": "\\[RangedArena\\].*shot id=(?P<unit>\\d+) unit=armcom .*weaponName=.*(dgun|disintegrator)",
+      "scope": "any",
+      "by_minute": 0.92,
+      "same_as": "jam-shot"
+    },
+    {
+      "key": "kill",
+      "pattern": "\\[RangedArena\\].*death id=\\d+ team=1 unit=armbull",
+      "scope": "any",
+      "by_minute": 1
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    }
+  ]
+}

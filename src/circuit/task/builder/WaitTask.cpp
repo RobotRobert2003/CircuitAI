@@ -9,6 +9,7 @@
 #include "task/RetreatTask.h"
 #include "module/BuilderManager.h"
 #include "CircuitAI.h"
+#include "module/CommanderControl.h"
 #include "util/Utils.h"
 
 namespace circuit {
@@ -26,6 +27,7 @@ CBWaitTask::~CBWaitTask()
 
 void CBWaitTask::OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+    if(manager->GetCircuit()->GetCommanderControl()->Jammed(unit)) return;
 	if (isHold) {
 		return;  // D-110: the ferry owns this unit until the drop-off
 	}

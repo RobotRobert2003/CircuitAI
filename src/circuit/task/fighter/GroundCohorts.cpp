@@ -146,7 +146,7 @@ const CRangedWorld::CohortPlan& CRangedWorld::PlanIndependentCohort(CCircuitUnit
         // close defensive fire. Published grid lookup is O(1), with no scan or
         // callback added per target (D-354 coverage-lane regression).
         auto* battle=circuit->GetBattle();
-        if(battle->GetFrontLaneLength()>0.f && battle->GetFrontLaneDistance(c.pos)>battle->GetFrontLaneWidth()
+        if(battle->ArmyFrontLanesEnabled() && battle->GetFrontLaneLength()>0.f && battle->GetFrontLaneDistance(c.pos)>battle->GetFrontLaneWidth()
             && distance>SQUARE(def->GetMaxRange()+battle->GetFrontLaneRangeSlack()))return;
         if(engagedAllies) distance=.4f*distance+.6f*alliedFront.SqDistance2D(c.pos);
         if(c.id==g.target) distance/=policy.targetHysteresis;

@@ -1,5 +1,5 @@
 {
-  "_doc": "D-358: SUPPORT's T2 bot lab recruits through the native selector (factory.json weights) after the opening group. Stage widgets/support_progress.lua. Twenty game minutes on Supreme Isthmus, one faction per run. Read the finished= lines afterwards: a T2 combat bot other than the opening unit proves the native roster is in use, and the fast assist bots must never exceed MaxFastAssistBots.",
+  "_doc": "D-363: SUPPORT's T2 bot lab recruits through the native selector (factory.json weights) after the opening group. Stage widgets/support_progress.lua. Twenty game minutes on Supreme Isthmus, one faction per run. Read the finished= lines afterwards: a T2 combat bot other than the opening unit proves the native roster is in use, and the fast assist bots must never exceed MaxFastAssistBots.",
   "stop_minute": 20,
   "expect": [
     {"key":"layout-sequence","pattern":"SUPPORT\\]\\[Build\\] shared layout","by_minute":1},

@@ -129,6 +129,10 @@ namespace Factory {
 		// constructor donations/recovery and spam. Checking only in the TECH
 		// delegate allowed these earlier providers to restart a retired lab.
 		if (Lifecycle::IsRetiring(u)) return null;
+        if(Global::AISettings::Role==AiRole::FRONT) {
+            IUnitTask@ front=FrontSupport::Recruit(u);
+            if(front !is null) return front;
+        }
 		IUnitTask@ recovery = Team::Recovery::FactoryMakeTask(u);
 		if (recovery !is null) return recovery;
 		if (SeaFactories::Hold(u)) return aiFactoryMgr.Enqueue(TaskS::Wait(true, SECOND));

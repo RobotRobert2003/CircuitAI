@@ -305,11 +305,13 @@ public:
 
 	float GetGoalExecTime() const { return goalExecTime; }
 	unsigned int GetWorkerCount() const { return workers.size(); }
+    IUnitTask* EnqueueFrontFollow(CCircuitUnit* leader,float radius);
     CCommanderTask* EnqueueCommander(IUnitTask* previous);
     bool SetCommanderCombatOption(const std::string& name,float value);
     float GetCommanderEnergyReserve() const;
     float GetCommanderEnergyDeficit() const;
     int GetCommanderOperation() const;
+    std::string DescribeCommanderFront(int id) const;
     IUnitTask* CommanderFrontWork(CCircuitUnit* unit,int kind,CCircuitDef* def,float radius);
 	void AddBuildPower(CCircuitUnit* unit);
 	void DelBuildPower(CCircuitUnit* unit);

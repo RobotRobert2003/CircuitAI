@@ -27,7 +27,7 @@ local INJECT_FALLBACK = 9 * 60 * FPS   -- inject at the first T1 lab + 6 min, el
 local INJECT_DELAY = 6 * 60 * FPS
 -- 3 advanced fusions clear the energy gate; CONVERTERS adds ~10.4 M/s each. 0 keeps the
 -- metal income near the activation gate, so LabsWanted stays at one pump while the
--- role may own two labs (the D-360 case); 12 lifts it to two or three pumps.
+-- role may own two labs (the D-366 case); 12 lifts it to two or three pumps.
 local CONVERTERS = 0
 
 local LABS = { armlab = true, corlab = true, leglab = true, armvp = true, corvp = true, legvp = true }

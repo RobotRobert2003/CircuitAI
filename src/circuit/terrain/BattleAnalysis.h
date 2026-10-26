@@ -167,6 +167,28 @@ public:
     std::vector<springai::AIFloat3> GetDistributedRoute(const springai::AIFloat3& from,
         const springai::AIFloat3& to,const springai::AIFloat3& axisFrom,const springai::AIFloat3& axisTo,
         int cls,float share,int seats,float tolerance,float spacingWeight,float resourceWeight);
+    // D-358: the field's corridor table for the front corridors (coverage_lanes.as).
+    // CorridorRevision is 0 until the table exists and changes when it arrives;
+    // CorridorsForClass lists a lane class's corridors at least minWidth wide in
+    // lateral order along the given axis; CorridorCentre is a corridor's centre
+    // line clipped between the projections of from and to, from first; the
+    // scalars read the record. All O(corridors) or O(centre vertices).
+    int CorridorRevision() const;
+    std::vector<int> CorridorsForClass(int cls,const springai::AIFloat3& axisFrom,const springai::AIFloat3& axisTo,float minWidth) const;
+    std::vector<springai::AIFloat3> CorridorCentre(int corridor,const springai::AIFloat3& from,const springai::AIFloat3& to) const;
+    float CorridorWidth(int corridor) const;
+    float CorridorLength(int corridor) const;
+    springai::AIFloat3 CorridorChoke(int corridor) const;
+    int CorridorAtPoint(int cls,const springai::AIFloat3& p) const;
+    // D-359: the routed approach from a point to a corridor's centre (the fork of
+    // an assisting seat: from, the field-grid leg, the centre vertex reached), and
+    // whether the exact field cell under p is open and connected for the class
+    // (INV-237 samples lane segments with it; no snapping). CorridorCentre's two
+    // legs are routed the same way, so no published lane crosses a mesa.
+    std::vector<springai::AIFloat3> CorridorLink(int corridor,const springai::AIFloat3& from) const;
+    bool CorridorOpen(int cls,const springai::AIFloat3& p) const;
+    // D-361: the point at a progress (0..1 from side 0) along a corridor's centre; (-1, 0, -1) when none.
+    springai::AIFloat3 CorridorPoint(int corridor,float progress) const;
     bool SetFrontLane(const std::vector<springai::AIFloat3>& points,float halfWidth);
     float GetFrontLaneLength() const {return frontLanePath.Length();}
     float GetFrontLaneWidth() const {return frontLaneWidth;}
@@ -187,6 +209,10 @@ public:
     float GetFrontLaneRangeSlack() const {return frontLaneRangeSlack;}
     float GetFrontLaneBaseRadius() const {return frontLaneBaseRadius;}
     bool FrontLaneDefendFollows() const {return frontLaneDefendFollows;}
+    // Inspection rollout: commanders alone consume the new front corridor.
+    // Future army adoption is an explicit script opt-in, independent of data publication.
+    bool ArmyFrontLanesEnabled() const {return armyFrontLanesEnabled;}
+    void SetArmyFrontLanesEnabled(bool enabled) {armyFrontLanesEnabled=enabled;}
     // D-357: 2D distance from p to the nearest enemy lane end (an enemy start);
     // +inf when none is known. O(enemy starts), used per candidate mex spot.
     float EnemyEndDistance(const springai::AIFloat3& p) const {
@@ -409,7 +435,7 @@ private:
     Grid frontLaneDistance;
     float frontLaneWidth=0.f;
     float frontLaneAdvance=512.f,frontLaneRangeSlack=256.f,frontLaneBaseRadius=1200.f;
-    bool frontLaneDefendFollows=false;
+    bool frontLaneDefendFollows=false, armyFrontLanesEnabled=false;
 };
 
 } // namespace circuit

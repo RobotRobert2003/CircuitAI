@@ -511,7 +511,7 @@ namespace AirBuild {
             if (t !is null) return Record(t, "transition.support", u);
             @t = Assist(u, false, null, true);
             if (t !is null) return Record(t, "transition.finish", u);
-            if (!AirEconomy::BankBeyondLab()) {   // D-362: no hold on a floating bank
+            if (!AirEconomy::BankBeyondLab()) {   // D-368: no hold on a floating bank
                 u.CmdStop();
                 return Record(aiBuilderMgr.Enqueue(TaskB::Wait(3 * SECOND)), "transition.save", u);
             }
@@ -710,7 +710,7 @@ namespace AirBuild {
         if (order !is null && advanced && !MetalEconomy::Active()
             && ((count == 0 && AirEconomy::t2 == 0 && !FirstPlantAllowed())
                 || AirMath::BayTurretsOwed(BayTurrets(bay, false), 0, Global::RoleSettings::Air::FirstPlantBayTurrets) > 0))
-            Invariants::Violation("INV-240", "AIR", "advanced plant " + (count + 1) + " ordered with " + BayTurrets(bay, false) + " of "
+            Invariants::Violation("INV-244", "AIR", "advanced plant " + (count + 1) + " ordered with " + BayTurrets(bay, false) + " of "
                 + Global::RoleSettings::Air::FirstPlantBayTurrets + " bay turrets standing (" + BayTurrets(bay, true) + " framed or standing)");
         if (order !is null && advanced && count == 0 && Global::RoleSettings::Air::FundFirstLab)
             @fundedFirstLab = order;

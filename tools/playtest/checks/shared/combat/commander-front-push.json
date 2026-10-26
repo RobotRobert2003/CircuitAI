@@ -18,6 +18,26 @@
       "pattern": "\\[CommanderFront\\] unit=\\d+ lane_mex ",
       "scope": "any",
       "by_minute": 6
+    },
+    {
+      "key": "mex fortified",
+      "pattern": "\\[CommanderFront\\] unit=\\d+ mex_defended=\\d+",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "second line planned",
+      "pattern": "\\[CommanderFront\\] unit=(?P<unit>\\d+) territory_line corridor=\\d+ progress=[1-9]\\d{3,} sites=",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "second line completed",
+      "pattern": "\\[CommanderFront\\] unit=(?P<unit>\\d+) territory_complete",
+      "scope": "any",
+      "by_minute": 6,
+      "after_key": "second line planned",
+      "same_as": "second line planned"
     }
   ],
   "forbid": [

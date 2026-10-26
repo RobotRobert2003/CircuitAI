@@ -1,3 +1,4 @@
+#include "task/builder/FrontFollowTask.h"
 /*
  * BuilderManager.cpp
  *
@@ -606,6 +607,12 @@ int CBuilderManager::UnitFinished(CCircuitUnit* unit)
 	}
 	auto iter = unfinishedUnits.find(unit);
 	if (iter != unfinishedUnits.end()) {
+        // Completion event, before DoneTask releases/reassigns the builders.
+        // O(assigned builders), no new world scan or recurring callback.
+        if (iter->second->GetBuildType()==IBuilderTask::BuildType::MEX) {
+            for (auto* worker : iter->second->GetAssignees())
+                circuit->GetCommanderControl()->MexFinished(worker,unit);
+        }
 		DoneTask(iter->second);
 	}
 	for (IBuilderTask* task : staleOwners) {
@@ -1210,6 +1217,10 @@ IUnitTask* CBuilderManager::FindMatchingGuard(CCircuitUnit* unit, const TaskB::S
 		? current : nullptr;
 }
 
+IUnitTask* CBuilderManager::EnqueueFrontFollow(CCircuitUnit* leader,float radius) {
+    auto* task=new CFrontFollowTask(this,leader->GetId(),radius);
+    updateTasks.push_back(task); lastEnqueued=task; TaskAdded(task); return task;
+}
 CCommanderTask* CBuilderManager::EnqueueCommander(IUnitTask* previous) {
     auto* task=new CCommanderTask(this,previous);
     updateTasks.push_back(task); lastEnqueued=task; TaskAdded(task); return task;
@@ -1220,6 +1231,7 @@ bool CBuilderManager::SetCommanderCombatOption(const std::string& name,float val
 float CBuilderManager::GetCommanderEnergyReserve() const { return circuit->GetCommanderControl()->GetReserve(); }
 float CBuilderManager::GetCommanderEnergyDeficit() const { return circuit->GetCommanderControl()->GetDeficit(); }
 int CBuilderManager::GetCommanderOperation() const { return circuit->GetCommanderControl()->GetOperation(); }
+std::string CBuilderManager::DescribeCommanderFront(int id) const { return circuit->GetCommanderControl()->DescribeFront(id); }
 IUnitTask* CBuilderManager::CommanderFrontWork(CCircuitUnit* unit,int kind,CCircuitDef* def,float radius) {
     return circuit->GetCommanderControl()->FrontWork(unit,kind,def,radius);
 }

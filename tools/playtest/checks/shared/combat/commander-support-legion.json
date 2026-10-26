@@ -1,0 +1,87 @@
+{
+  "stop_minute": 6,
+  "expect": [
+    {
+      "key": "member",
+      "pattern": "\\[FrontSupport\\] member=\\d+ side=legion",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "owned power bootstrap",
+      "pattern": "\\[FrontSupport\\] unit=\\d+ build=legnanotc bootstrap=1",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "upgraded defense",
+      "pattern": "\\[FrontSupport\\] unit=\\d+ defence=legmg powered=1",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "commander assists",
+      "pattern": "\\[FrontSupport\\] commander=\\d+ assist=\\d+",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "radar",
+      "pattern": "\\[FrontSupport\\] unit=\\d+ build=legrad bootstrap=0",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "jammer",
+      "pattern": "\\[FrontSupport\\] unit=\\d+ build=legjam bootstrap=0",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "finished forward package",
+      "pattern": "front_support_finished nano=[1-9]\\d* defence=[1-9]\\d* radar=[1-9]\\d* jammer=[1-9]\\d*",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "continues lane advance",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=0",
+      "scope": "any",
+      "after_minute": 4,
+      "by_minute": 6
+    },
+    {
+      "key": "observed spaced forward defenses",
+      "pattern": "front_spacing_observed turrets=([2-9]|[1-9]\\d+)",
+      "scope": "any",
+      "by_minute": 6
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "front turret crowding",
+      "pattern": "front_spacing_violation",
+      "scope": "any"
+    }
+  ]
+}

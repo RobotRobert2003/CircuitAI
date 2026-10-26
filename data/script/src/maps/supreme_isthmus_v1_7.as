@@ -14,22 +14,22 @@ namespace SupremeIsthmus17 {
 	// landLocked heuristic (initial): none flagged yet on this map; future pass may mark
 	// isolated peninsulas requiring hover/amph first. Pass false for all for now.
     StartSpot@[] spots = {
-    	StartSpot(AIFloat3(  711, 0,  7218), AiRole::TACTICAL, false), // P1 (sea)
-    	StartSpot(AIFloat3(  837, 0, 10407), AiRole::TECH, false), // P2 (tech)
+	StartSpot(AIFloat3(  711, 0,  7218), AiRole::TACTICAL, false), // P1 (sea)
+	StartSpot(AIFloat3(  837, 0, 10407), AiRole::TECH, false), // P2 (tech)
         StartSpot(AIFloat3( 2155, 0, 11747), AiRole::AIR, false), // P3 (air)
         StartSpot(AIFloat3( 2513, 0,  7983), AiRole::FRONT, false), // P4 (front)
         StartSpot(AIFloat3( 4595, 0,  7440), AiRole::FRONT, false), // P5 (front)
         StartSpot(AIFloat3( 4997, 0,  8570), AiRole::FRONT, false), // P6 (front)
 		StartSpot(AIFloat3( 4000, 0,  9300), AiRole::SUPPORT, false),   // P7 (front/tech -> SUPPORT)
-    	StartSpot(AIFloat3( 4814, 0, 11077), AiRole::SEA, false),   // P8 (sea)
-    	StartSpot(AIFloat3(11579, 0,  5063), AiRole::TACTICAL, false),   // P9 (sea)
-    	StartSpot(AIFloat3(11456, 0,  1901), AiRole::TECH, false),   // P10 (tech)
+	StartSpot(AIFloat3( 4814, 0, 11077), AiRole::SEA, false),   // P8 (sea)
+	StartSpot(AIFloat3(11579, 0,  5063), AiRole::TACTICAL, false),   // P9 (sea)
+	StartSpot(AIFloat3(11456, 0,  1901), AiRole::TECH, false),   // P10 (tech)
         StartSpot(AIFloat3(10129, 0,   541), AiRole::AIR, false),   // P11 (air)
         StartSpot(AIFloat3( 9764, 0,  4339), AiRole::FRONT, false), // P12 (front)
         StartSpot(AIFloat3( 7729, 0,  4835), AiRole::FRONT, false), // P13 (front)
         StartSpot(AIFloat3( 7292, 0,  3727), AiRole::FRONT, false), // P14 (front)
 		StartSpot(AIFloat3( 7600, 0,  2500), AiRole::SUPPORT, false),   // P15 (front/tech -> SUPPORT; 2026-10-25 moved from the mapinfo start 8300,3100: no mex within 787 there, so the start guesser stacked AIs on it)
-    	StartSpot(AIFloat3( 7492, 0,  1220), AiRole::SEA, false)    // P16 (sea)
+	StartSpot(AIFloat3( 7492, 0,  1220), AiRole::SEA, false)    // P16 (sea)
     };
 
 	// Base per-map unit limits
@@ -219,23 +219,23 @@ namespace SupremeIsthmus17 {
 		root.set("FRONT", @frontRole);
 
 		// AIR role
-		dictionary airArm; airArm.set("armap",3); 
-		dictionary airCor; airCor.set("corap",3); 
+		dictionary airArm; airArm.set("armap",3);
+		dictionary airCor; airCor.set("corap",3);
 		dictionary airLeg; airLeg.set("legap",3);
 
 		dictionary airRole; airRole.set("armada", @airArm); airRole.set("cortex", @airCor); airRole.set("legion", @airLeg);
 		root.set("AIR", @airRole);
 
 		// SEA role
-		dictionary seaArm; seaArm.set("armsy",4); 
-		dictionary seaCor; seaCor.set("corsy",4); 
+		dictionary seaArm; seaArm.set("armsy",4);
+		dictionary seaCor; seaCor.set("corsy",4);
 		dictionary seaLeg; seaLeg.set("legsy",4);
 
 		dictionary seaRole; seaRole.set("armada", @seaArm); seaRole.set("cortex", @seaCor); seaRole.set("legion", @seaLeg);
 		root.set("SEA", @seaRole);
 
 		// HOVER_SEA role
-		dictionary hoverSeaArm; hoverSeaArm.set("armhp",4); 
+		dictionary hoverSeaArm; hoverSeaArm.set("armhp",4);
 		dictionary hoverSeaCor; hoverSeaCor.set("corhp",4);
 		dictionary hoverSeaLeg; hoverSeaLeg.set("leghp",4);
 
@@ -248,8 +248,8 @@ namespace SupremeIsthmus17 {
 		dictionary techLeg; techLeg.set("leglab",4);
 
 		dictionary techRole; techRole.set("armada", @techArm); techRole.set("cortex", @techCor); techRole.set("legion", @techLeg);
-		
-		root.set("TECH", @techRole); 
+
+		root.set("TECH", @techRole);
 
 		// SUPPORT roles
 		dictionary frontTechHybridArm; frontTechHybridArm.set("armlab",4);
@@ -263,4 +263,4 @@ namespace SupremeIsthmus17 {
 		return root;
 	}
 
-} 
+}

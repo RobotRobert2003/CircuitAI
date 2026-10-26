@@ -1,0 +1,51 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "retreat",
+      "pattern": "\\[Commander\\].*cloak_energy_retreat",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "physical withdrawal",
+      "pattern": "energy_retreat_moved",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "active jammer",
+      "pattern": "energy_retreat_jammer_active",
+      "scope": "any",
+      "by_minute": 0.45
+    },
+    {
+      "key": "safe recovery holds position",
+      "pattern": "energy_recovery_stationary",
+      "scope": "any",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "safe recovery wandering",
+      "pattern": "ERROR energy_recovery_wandering",
+      "scope": "any"
+    }
+  ]
+}

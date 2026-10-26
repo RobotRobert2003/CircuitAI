@@ -5,8 +5,8 @@
 // (tests/mex_territory_test.cpp) and the same on every allied AI.
 //
 //   mex_territory::Resolve  one spot: theatre mask, rule, owner, race times
-//   mex_lanes::Build        the deterministic lane partition from the ground
-//                           distance fields of both sides and the metal clusters
+//   (D-358) the lane partition is the field's corridor table
+//                           (terrain/field/FieldCorridors.h); MexOwnership.cpp maps it
 //
 // Nothing here reads engine state, threat, time of day or per-AI data: the
 // inputs are broadcast roster claims, start boxes and the terrain grid, so
@@ -14,12 +14,12 @@
 // See ../../../../rjm.bar.docs/projects/circuitai/mex-theatres-proposal.md.
 
 #include "resource/MexNavigation.h"
+#include "terrain/field/FieldCorridors.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <queue>
 #include <utility>
 #include <vector>
 
@@ -254,136 +254,54 @@ inline std::vector<int> BalanceSea(const std::vector<std::vector<std::pair<int, 
 }
 }  // namespace circuit::mex_territory
 
+// D-358: the lane partition is the field's corridor table. A lane is one
+// corridor of the claimants' ground class; a start belongs to the corridor
+// owning its cell (nearest open cell within a few cells); a metal cluster is a
+// lane cluster when its centre lies within bandRadius of that corridor's
+// centre line, and forward when its progress from our side passes the
+// midpoint. Deterministic: the table is a function of the map, the starts
+// come in team-id order. O(starts + clusters x corridor vertices).
 namespace circuit::mex_lanes {
 using mex_navigation::Unreachable;
-
-struct Settings {
-    float mergeRadius = 450.f;   // a route joins a lane when this close to its spine
-    float mergeShare = 0.6f;     // for this share of its cells
-    float bandRadius = 1200.f;   // a cluster this close to a spine is a lane cluster
-};
 struct Lane {
-    std::vector<int> spine;      // cells from the founding start to the enemy source
-    std::vector<int> members;    // indices into the start list
-    int midpoint = -1;           // first spine cell where our distance exceeds the enemy's
-    int choke = -1;              // narrowest spine cell in the middle third
-    float width = Unreachable;   // clearance at the choke, elmos
+    int corridor = -1;               // index into SModel::corridors
+    std::vector<int> members;        // indices into the start list
+    float width = Unreachable;       // the corridor's narrowest point, elmos
 };
 struct Partition {
     std::vector<Lane> lanes;
-    std::vector<int> startLane;      // per start: its lane, -1 when it has no route
+    std::vector<int> startLane;      // per start: its lane, -1 when none
     std::vector<int> clusterLane;    // per cluster: its lane, -1 when none
-    std::vector<char> clusterForward;// per cluster: past its lane's midpoint
+    std::vector<char> clusterForward;// per cluster: past the midpoint seen from our side
 };
-
-// Distance to the nearest impassable or border cell, four-neighbour BFS in
-// cells; O(G). The lane solver's Clearance does the same over its own grid.
-template<class Passable>
-std::vector<int> Clearance(int width, int height, Passable passable) {
-    std::vector<int> out(std::size_t(width) * height, -1);
-    std::queue<int> pending;
-    for (int z = 0; z < height; ++z) for (int x = 0; x < width; ++x) {
-        const int i = z * width + x;
-        if (!passable(i)) { out[i] = 0; pending.push(i); continue; }
-        if (x == 0 || z == 0 || x == width - 1 || z == height - 1) { out[i] = 1; pending.push(i); }
-    }
-    while (!pending.empty()) {
-        const int i = pending.front(); pending.pop();
-        const int x = i % width, z = i / width;
-        const int next[4] = { x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, z > 0 ? i - width : -1, z < height - 1 ? i + width : -1 };
-        for (int n : next) if (n >= 0 && out[n] < 0) { out[n] = out[i] + 1; pending.push(n); }
-    }
-    return out;
-}
-
-// Steepest descent of the enemy field from a start cell to an enemy source
-// (a cell at distance 0). Ties go to the lower cell index, so the route is a
-// function of the grid alone. Empty when the start cannot reach the enemy.
-template<class Passable>
-std::vector<int> Route(int width, int height, int start, const std::vector<float>& enemy, Passable passable) {
-    std::vector<int> route;
-    if (start < 0 || start >= width * height || !std::isfinite(enemy[start])) return route;
-    int cell = start;
-    route.push_back(cell);
-    const std::size_t limit = std::size_t(width) * height;
-    while (enemy[cell] > 0.f && route.size() < limit) {
-        const int x = cell % width, z = cell / width;
-        int best = -1; float bestValue = enemy[cell];
-        for (int dz = -1; dz <= 1; ++dz) for (int dx = -1; dx <= 1; ++dx) {
-            const int nx = x + dx, nz = z + dz;
-            if ((!dx && !dz) || nx < 0 || nz < 0 || nx >= width || nz >= height) continue;
-            const int next = nz * width + nx;
-            if (!passable(next) || (dx && dz && (!passable(z*width+nx) || !passable(nz*width+x)))) continue;
-            if (enemy[next] < bestValue || (enemy[next] == bestValue && best >= 0 && next < best)) { bestValue = enemy[next]; best = next; }
-        }
-        if (best < 0) break;
-        cell = best;
-        route.push_back(cell);
-    }
-    return route;
-}
-
-// The partition: one route per start in the given (team-id) order, merged by
-// proximity, each lane with its midpoint and choke, each cluster assigned whole.
-// enemy/ours: multi-source fields from the enemy sources and from every start.
-template<class Passable>
-Partition Build(int width, int height, float pitch, const std::vector<int>& starts,
-        const std::vector<float>& enemy, const std::vector<float>& ours, Passable passable,
-        const std::vector<std::pair<float, float>>& clusterCentres, const std::vector<int>& clusterCells,
-        const Settings& settings) {
+inline Partition FromCorridors(const field::SModel& m, int cls, int side,
+        const std::vector<std::pair<float, float>>& starts,
+        const std::vector<std::pair<float, float>>& clusterCentres, float bandRadius) {
     Partition out;
     out.startLane.assign(starts.size(), -1);
-    const auto centre = [&](int cell) {
-        return std::pair<float, float>{ (float(cell % width) + 0.5f) * pitch, (float(cell / width) + 0.5f) * pitch }; };
-    const auto distance2D = [](std::pair<float, float> a, std::pair<float, float> b) {
-        return std::sqrt((a.first - b.first) * (a.first - b.first) + (a.second - b.second) * (a.second - b.second)); };
-    const auto nearSpine = [&](const Lane& lane, std::pair<float, float> p, float radius) {
-        for (int c : lane.spine) if (distance2D(centre(c), p) <= radius) return true;
-        return false; };
-    for (std::size_t s = 0; s < starts.size(); ++s) {
-        const auto route = Route(width, height, starts[s], enemy, passable);
-        if (route.size() < 2) continue;
-        int joined = -1;
-        for (std::size_t l = 0; l < out.lanes.size() && joined < 0; ++l) {
-            std::size_t close = 0;  // not "near": a Windows macro in the engine headers
-            for (int c : route) if (nearSpine(out.lanes[l], centre(c), settings.mergeRadius)) ++close;
-            if (float(close) >= settings.mergeShare * float(route.size())) joined = int(l);
-        }
-        if (joined < 0) { Lane lane; lane.spine = route; out.lanes.push_back(std::move(lane)); joined = int(out.lanes.size()) - 1; }
-        out.lanes[joined].members.push_back(int(s));
-        out.startLane[s] = joined;
+    std::vector<int> laneOf(m.corridors.size(), -1);
+    for (std::size_t c = 0; c < m.corridors.size(); ++c) {
+        if (m.corridors[c].cls != cls || m.corridors[c].specialist) continue;
+        Lane lane; lane.corridor = int(c); lane.width = m.corridors[c].narrowest;
+        laneOf[c] = int(out.lanes.size());
+        out.lanes.push_back(std::move(lane));
     }
-    const auto clearance = Clearance(width, height, passable);
-    for (auto& lane : out.lanes) {
-        for (std::size_t i = 0; i < lane.spine.size(); ++i) {
-            const int c = lane.spine[i];
-            if (std::isfinite(ours[c]) && std::isfinite(enemy[c]) && ours[c] >= enemy[c]) { lane.midpoint = c; break; }
-        }
-        if (lane.midpoint < 0) lane.midpoint = lane.spine.back();
-        const std::size_t n = lane.spine.size();
-        int best = -1;
-        for (std::size_t i = n / 3; i <= 2 * n / 3 && i < n; ++i) {
-            const int c = lane.spine[i];
-            if (best < 0 || clearance[c] < clearance[best]) best = c;
-        }
-        lane.choke = best < 0 ? lane.midpoint : best;
-        lane.width = lane.choke >= 0 ? float(clearance[lane.choke]) * pitch : Unreachable;
+    for (std::size_t s = 0; s < starts.size(); ++s) {
+        const int corridor = field::CorridorAt(m, cls, starts[s].first, starts[s].second, 6);
+        if (corridor < 0 || laneOf[corridor] < 0) continue;
+        out.startLane[s] = laneOf[corridor];
+        out.lanes[laneOf[corridor]].members.push_back(int(s));
     }
     out.clusterLane.assign(clusterCentres.size(), -1);
     out.clusterForward.assign(clusterCentres.size(), 0);
-    for (std::size_t c = 0; c < clusterCentres.size(); ++c) {
-        int best = -1; float bestDistance = settings.bandRadius;
-        for (std::size_t l = 0; l < out.lanes.size(); ++l) {
-            for (int cell : out.lanes[l].spine) {
-                const float d = distance2D(centre(cell), clusterCentres[c]);
-                if (d < bestDistance || (d == bestDistance && best >= 0 && int(l) < best)) { bestDistance = d; best = int(l); }
-            }
-        }
-        out.clusterLane[c] = best;
-        if (best < 0) continue;
-        const int cell = c < clusterCells.size() ? clusterCells[c] : -1;
-        if (cell >= 0 && cell < width * height && std::isfinite(ours[cell]) && std::isfinite(enemy[cell]) && ours[cell] > enemy[cell])
-            out.clusterForward[c] = 1;
+    for (std::size_t k = 0; k < clusterCentres.size(); ++k) {
+        const int corridor = field::CorridorAt(m, cls, clusterCentres[k].first, clusterCentres[k].second, 6);
+        if (corridor < 0 || laneOf[corridor] < 0) continue;
+        float distance = 0.f;
+        const float progress = field::CorridorProgressFrom(m.corridors[corridor], side, clusterCentres[k].first, clusterCentres[k].second, &distance);
+        if (distance > bandRadius) continue;
+        out.clusterLane[k] = laneOf[corridor];
+        out.clusterForward[k] = progress > 0.5f ? 1 : 0;
     }
     return out;
 }

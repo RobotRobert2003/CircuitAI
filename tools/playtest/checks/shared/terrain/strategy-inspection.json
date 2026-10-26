@@ -1,0 +1,47 @@
+{
+  "_doc": "Rendered correctness only: stage gui_barb_team_link.lua and strategy_watch.lua. Validates received corridor assignment and all four UI modes; screenshots require human inspection. No performance claim.",
+  "stop_minute": 4,
+  "expect": [
+    {
+      "key": "assigned",
+      "pattern": "\\[CoverageLane\\] front assigned",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "geometry",
+      "pattern": "\\[StrategyCheck\\] PASS geometry terrain=[1-9][0-9]* dynamic=[1-9]",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "received",
+      "pattern": "\\[StrategyCheck\\] PASS loaded",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "views",
+      "pattern": "\\[StrategyCheck\\] PASS screenshots",
+      "scope": "any",
+      "by_minute": 4
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "widget",
+      "pattern": "Error in.*(strategy|team_link)|\\[StrategyCheck\\] FAIL|\\[BARb strategy\\]",
+      "scope": "any"
+    }
+  ]
+}

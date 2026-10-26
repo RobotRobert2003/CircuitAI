@@ -1,1 +1,1 @@
-{"coverage":{"enabled":true,"tolerance":0.2,"spacing_weight":32,"resource_weight":2,"half_width":384,"advance":512,"range_slack":256,"base_radius":1200,"defend_follows_lane":false,"claim":true}}
+{"coverage":{"enabled":true,"tolerance":0.2,"spacing_weight":32,"resource_weight":2,"half_width":384,"min_width":64,"advance":512,"range_slack":256,"base_radius":1200,"defend_follows_lane":false,"claim":true,"assist_enabled":true,"assist_threat":3,"assist_ahead":1200,"assist_seconds":90}}

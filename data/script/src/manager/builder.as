@@ -1990,6 +1990,12 @@ namespace Builder {
 		if (Team::Ferry::IsGift(u.id)) return Team::Ferry::GiftTask(u);
 		if (Team::Recovery::IsGift(u.id))
 			return aiBuilderMgr.Enqueue(TaskB::Wait(2 * SECOND));
+        // FRONT ownership precedes generic edge/spam/economy providers and
+        // tracking gates. Otherwise they can bypass the role's front ladder.
+        if(Global::AISettings::Role==AiRole::FRONT) {
+            IUnitTask@ front=UnitHelpers::IsCommander(u.circuitDef)?CommanderFront::Work(u):FrontSupport::Work(u);
+            if(front !is null) return front;
+        }
 		IUnitTask@ t = null;
 		GenericHelpers::LogUtil("[BUILDER] AiMakeTask called for builder id=" + u.id, 4);
 		// Finish what you started (D-050). Native re-evaluates a builder's task

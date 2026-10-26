@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""D-363: lint the AngelScript files a pull request changed, then the two whole-graph
+"""D-369: lint the AngelScript files a pull request changed, then the two whole-graph
 checks that need no game and no external checkout.
 
 Per changed file under data/script/:

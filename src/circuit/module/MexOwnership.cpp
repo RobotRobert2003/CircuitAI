@@ -160,6 +160,8 @@ bool CEconomyManager::IsMexExpansionAllowed(const AIFloat3& pos, bool allyAware)
 #include "task/builder/BuilderTask.h"
 #include "resource/MetalManager.h"
 #include "util/Utils.h"
+#include "terrain/FieldService.h"
+#include "util/GameAttribute.h"
 
 #include <limits>
 #include <sstream>
@@ -178,11 +180,28 @@ void CEconomyManager::SetMexTheatres(bool enabled, float theatreSeconds, float h
     mexTerritoryDirty = true;
 }
 
+// D-358: the partition is the field's corridor table, so the merge radius and
+// share that shaped the old proximity merge are retired (accepted and ignored,
+// the registered signature kept); the band radius still bounds a lane cluster.
 void CEconomyManager::SetMexLaneSettings(float mergeRadius, float mergeShare, float bandRadius) {
-    if (std::isfinite(mergeRadius)) mexLaneSettings.mergeRadius = std::clamp(mergeRadius, 0.f, 8192.f);
-    if (std::isfinite(mergeShare)) mexLaneSettings.mergeShare = std::clamp(mergeShare, 0.f, 1.f);
-    if (std::isfinite(bandRadius)) mexLaneSettings.bandRadius = std::clamp(bandRadius, 0.f, 8192.f);
+    (void)mergeRadius; (void)mergeShare;
+    if (std::isfinite(bandRadius)) mexLaneBandRadius = std::clamp(bandRadius, 0.f, 8192.f);
     mexTerritoryDirty = true;
+}
+
+// The field class a constructor definition moves in: hovers, ships (water
+// under them), amphibious (dives), all-terrain, bots, vehicles; -1 aircraft.
+static int FieldClassOfDef(CCircuitAI* circuit, int definition) {
+    auto* def = circuit->GetCircuitDefSafe(definition);
+    if (def == nullptr || def->IsAbleToFly()) return -1;
+    auto* mt = circuit->GetTerrainManager()->GetMobileTypeById(def->GetMobileId());
+    if (mt == nullptr) return -1;
+    if (mt->canHover) return field::C_HOVER;
+    if (mt->maxElevation < 0.f) return field::C_SHIP;
+    if (mt->minElevation < -1000.f) return field::C_AMPH;
+    if (mt->maxSlope > 0.8f) return field::C_ALLT;
+    if (mt->maxSlope > 0.2f) return field::C_BOT;
+    return field::C_VEH;
 }
 
 bool CEconomyManager::IsMexTheatreWindow() const {
@@ -468,14 +487,17 @@ void CEconomyManager::RebuildMexTerritory() {
     const auto& clusters = metalMgr->GetClusters();
     const bool landWindow = IsMexOwnershipActive();
     const bool theatreWindow = IsMexTheatreWindow();
+    // D-358: the corridor table arrives from the field job a few seconds into
+    // the game; a new table rebuilds the partition once.
+    std::shared_ptr<const field::SModel> fieldModel = circuit->GetGameAttribute()->GetFieldService().GetModel();
     if (!mexTerritoryDirty && mexResolvedRevision == data->heightRevision && mexResolved.size() == spots.size()
-        && mexResolvedClusters == clusters.size() && mexResolvedLandWindow == landWindow && mexResolvedTheatreWindow == theatreWindow) return;
+        && mexResolvedClusters == clusters.size() && mexResolvedLandWindow == landWindow && mexResolvedTheatreWindow == theatreWindow
+        && mexField == fieldModel) return;
     mexTerritoryDirty = false;
     mexResolvedRevision = data->heightRevision;
     mexResolvedClusters = clusters.size();
     mexResolvedLandWindow = landWindow;
     mexResolvedTheatreWindow = theatreWindow;
-    const int width = terrain->GetSectorXSize(), height = terrain->GetSectorZSize();
     const float pitch = float(terrain->GetConvertStoP());
     // Own claim: the roster announces it like any ally's; until then the commander walks.
     const int ownTeam = circuit->GetTeamId();
@@ -510,48 +532,35 @@ void CEconomyManager::RebuildMexTerritory() {
     for (auto& enemy : mexEnemies) {
         if (enemy.field.revision != data->heightRevision || enemy.field.distance.empty()) BuildMexField(enemy.field, enemy.definition, mexEnemySeeds);
     }
-    // The lane partition over the ground class of our own claim (every ally
-    // announces the same T1 constructor class, so the grid is the same).
+    // D-358: the lane partition is the field's corridor table of our own ground
+    // class (every ally announces the same T1 constructor class, so the table is
+    // the same); until the table exists no spot is a lane cluster and rule 2
+    // falls back to the walk. O(starts + clusters x corridor vertices).
     mexLanes = mex_lanes::Partition();
     mexLaneTeams.clear();
+    mexField = fieldModel;
+    mexLaneClass = -1;
+    mexLaneSide = -1;
     mexSpotCluster.assign(spots.size(), -1);
     for (std::size_t c = 0; c < clusters.size(); ++c) for (int i : clusters[c].idxSpots) if (i >= 0 && std::size_t(i) < spots.size()) mexSpotCluster[i] = int(c);
     {
         const auto& own = mexClaims.at(ownTeam);
-        auto* def = circuit->GetCircuitDefSafe(own.groundDef);
-        const int mobile = def && !def->IsAbleToFly() ? def->GetMobileId() : -1;
-        const SMexEnemy* enemyGround = nullptr;
-        for (const auto& enemy : mexEnemies) {
-            auto* edef = circuit->GetCircuitDefSafe(enemy.definition);
-            if (edef && !edef->IsAbleToFly() && edef->GetMobileId() == mobile) { enemyGround = &enemy; break; }
-        }
-        if (mobile >= 0 && std::size_t(mobile) < data->mobileType.size() && enemyGround != nullptr && !clusters.empty()) {
-            const auto& sectors = data->mobileType[mobile].sector;
-            const auto passable = [&](int i) { return sectors[i].area != nullptr; };
-            const auto cost = [&](int a, int b) {
-                const auto& p = data->sector[a].position; const auto& q = data->sector[b].position;
-                return std::sqrt(p.SqDistance(q)); };
-            std::vector<int> starts;
-            std::vector<std::pair<int, float>> ourSeeds;
+        mexLaneClass = FieldClassOfDef(circuit, own.groundDef);
+        if (mexField != nullptr && mexLaneClass >= 0 && !clusters.empty()) {
+            mexLaneSide = field::SideOfAllyTeam(*mexField, circuit->GetAllyTeamId());
+            if (mexLaneSide < 0 && mexField->sides.size() >= 2) {
+                // synthetic sides (no start boxes): ours is the one nearer our start
+                const auto& l0 = mexField->sides[0].label; const auto& l1 = mexField->sides[1].label;
+                const float d0 = std::hypot(own.start.x - l0.x, own.start.z - l0.z), d1 = std::hypot(own.start.x - l1.x, own.start.z - l1.z);
+                mexLaneSide = d1 < d0 ? 1 : 0;
+            }
+            std::vector<std::pair<float, float>> starts, centres;
             for (auto& [team, claim] : mexClaims) {
                 mexLaneTeams.push_back(team);
-                starts.push_back(claim.ground.seed);
-                ourSeeds.emplace_back(claim.ground.seed, claim.ground.initial);
+                starts.emplace_back(claim.start.x, claim.start.z);
             }
-            const auto ours = mex_navigation::DistancesMulti(width, height, ourSeeds, passable, cost);
-            std::vector<std::pair<float, float>> centres;
-            std::vector<int> cells;
-            for (const auto& cluster : clusters) {
-                centres.emplace_back(cluster.weightCentr.x, cluster.weightCentr.z);
-                int cell = -1; float best = std::numeric_limits<float>::max();
-                for (int i : cluster.idxSpots) {
-                    if (i < 0 || std::size_t(i) >= spots.size()) continue;
-                    const float d = spots[i].position.SqDistance2D(cluster.weightCentr);
-                    if (d < best) { best = d; cell = terrain->GetSectorIndex(spots[i].position); }
-                }
-                cells.push_back(cell);
-            }
-            mexLanes = mex_lanes::Build(width, height, pitch, starts, enemyGround->field.distance, ours, passable, centres, cells, mexLaneSettings);
+            for (const auto& cluster : clusters) centres.emplace_back(cluster.weightCentr.x, cluster.weightCentr.z);
+            mexLanes = mex_lanes::FromCorridors(*mexField, mexLaneClass, std::max(0, mexLaneSide), starts, centres, mexLaneBandRadius);
             for (std::size_t s = 0; s < mexLaneTeams.size(); ++s) mexClaims[mexLaneTeams[s]].lane = mexLanes.startLane[s];
         } else {
             for (auto& [team, claim] : mexClaims) claim.lane = -1;
@@ -698,7 +707,7 @@ int CEconomyManager::MexLane(const AIFloat3& pos) { const auto* r = MexResolvedA
 float CEconomyManager::MexLaneWidth(int lane) {
     if (!mexTheatresEnabled) return 0.f;
     RebuildMexTerritory();
-    return lane >= 0 && std::size_t(lane) < mexLanes.lanes.size() ? mexLanes.lanes[lane].width : 0.f;
+    return lane >= 0 && std::size_t(lane) < mexLanes.lanes.size() && std::isfinite(mexLanes.lanes[lane].width) ? mexLanes.lanes[lane].width : 0.f;
 }
 bool CEconomyManager::MexLaneMember(int lane, int team) {
     if (!mexTheatresEnabled) return false;
@@ -706,29 +715,39 @@ bool CEconomyManager::MexLaneMember(int lane, int team) {
     auto it = mexClaims.find(team);
     return it != mexClaims.end() && it->second.lane == lane && lane >= 0;
 }
-static AIFloat3 SectorPos(CCircuitAI* circuit, int cell) {
+// D-358: lane geometry comes from the corridor the lane is; heights from the terrain.
+static AIFloat3 FieldPos(CCircuitAI* circuit, field::SPoint p) {
     const auto* data = circuit->GetTerrainManager()->GetAreaData();
-    return cell >= 0 && std::size_t(cell) < data->sector.size() ? data->sector[cell].position : AIFloat3(-1.f, 0.f, -1.f);
+    return AIFloat3(p.x, data->GetElevationAt(p.x, p.z), p.z);
+}
+const field::SCorridor* CEconomyManager::MexLaneCorridor(int lane) const {
+    if (mexField == nullptr || lane < 0 || std::size_t(lane) >= mexLanes.lanes.size()) return nullptr;
+    const int c = mexLanes.lanes[lane].corridor;
+    return c >= 0 && std::size_t(c) < mexField->corridors.size() ? &mexField->corridors[c] : nullptr;
 }
 AIFloat3 CEconomyManager::MexLaneChoke(int lane) {
     if (!mexTheatresEnabled) return AIFloat3(-1.f, 0.f, -1.f);
     RebuildMexTerritory();
-    return lane >= 0 && std::size_t(lane) < mexLanes.lanes.size() ? SectorPos(circuit, mexLanes.lanes[lane].choke) : AIFloat3(-1.f, 0.f, -1.f);
+    const auto* c = MexLaneCorridor(lane);
+    return c != nullptr ? FieldPos(circuit, c->choke) : AIFloat3(-1.f, 0.f, -1.f);
 }
 AIFloat3 CEconomyManager::MexLaneMidpoint(int lane) {
     if (!mexTheatresEnabled) return AIFloat3(-1.f, 0.f, -1.f);
     RebuildMexTerritory();
-    return lane >= 0 && std::size_t(lane) < mexLanes.lanes.size() ? SectorPos(circuit, mexLanes.lanes[lane].midpoint) : AIFloat3(-1.f, 0.f, -1.f);
+    const auto* c = MexLaneCorridor(lane);
+    return c != nullptr ? FieldPos(circuit, field::CorridorPoint(*c, 0.5f)) : AIFloat3(-1.f, 0.f, -1.f);
 }
+// The centre line from our side's end to the enemy's, every `step` vertices.
 std::vector<AIFloat3> CEconomyManager::MexLaneSpine(int lane, int step) {
     std::vector<AIFloat3> out;
     if (!mexTheatresEnabled) return out;
     RebuildMexTerritory();
-    if (lane < 0 || std::size_t(lane) >= mexLanes.lanes.size()) return out;
-    const auto& spine = mexLanes.lanes[lane].spine;
+    const auto* c = MexLaneCorridor(lane);
+    if (c == nullptr || c->centre.empty()) return out;
     const std::size_t stride = std::size_t(std::max(1, step));
-    for (std::size_t i = 0; i < spine.size(); i += stride) out.push_back(SectorPos(circuit, spine[i]));
-    if (!spine.empty() && (spine.size() - 1) % stride != 0) out.push_back(SectorPos(circuit, spine.back()));
+    const std::size_t n = c->centre.size();
+    for (std::size_t i = 0; i < n; i += stride) out.push_back(FieldPos(circuit, c->centre[mexLaneSide == 1 ? n - 1 - i : i]));
+    if ((n - 1) % stride != 0) out.push_back(FieldPos(circuit, c->centre[mexLaneSide == 1 ? 0 : n - 1]));
     return out;
 }
 
@@ -749,7 +768,7 @@ std::string CEconomyManager::DescribeMexTerritory() {
     }
     for (std::size_t l = 0; l < mexLanes.lanes.size(); ++l) {
         const auto& lane = mexLanes.lanes[l];
-        const AIFloat3 mid = SectorPos(circuit, lane.midpoint), choke = SectorPos(circuit, lane.choke);
+        const AIFloat3 mid = MexLaneMidpoint(int(l)), choke = MexLaneChoke(int(l));
         text << ";L," << l << ',' << int(mid.x) << ',' << int(mid.z) << ',' << int(choke.x) << ',' << int(choke.z) << ',' << int(std::isfinite(lane.width) ? lane.width : -1.f) << ',';
         for (std::size_t m = 0; m < lane.members.size(); ++m) {
             if (m) text << '+';
@@ -787,14 +806,18 @@ void CEconomyManager::DumpMexTerritory(const char* why) {
             fdef ? fdef->GetDef()->GetName() : "-", finite(claim.combat), claim.readyFrame, claim.secureSeconds, claim.lane, claim.anchor.x, claim.anchor.z);
     }
     circuit->LOG("[MexTerritory] team=%i frame=%i enemySeeds=%i", circuit->GetTeamId(), circuit->GetLastFrame(), int(mexEnemySeeds.size()));
+    circuit->LOG("[MexTerritory] team=%i frame=%i corridorTable=%s class=%i side=%i corridors=%i band=%.0f",
+        circuit->GetTeamId(), circuit->GetLastFrame(), mexField ? "ready" : "none", mexLaneClass, mexLaneSide,
+        mexField ? int(mexField->corridors.size()) : 0, mexLaneBandRadius);
     for (std::size_t l = 0; l < mexLanes.lanes.size(); ++l) {
         const auto& lane = mexLanes.lanes[l];
-        const AIFloat3 mid = SectorPos(circuit, lane.midpoint), choke = SectorPos(circuit, lane.choke);
+        const auto* c = MexLaneCorridor(int(l));
+        const AIFloat3 mid = MexLaneMidpoint(int(l)), choke = MexLaneChoke(int(l));
         std::string members;
         for (int m : lane.members) members += (members.empty() ? "" : "+") + std::to_string(m < int(mexLaneTeams.size()) ? mexLaneTeams[m] : -1);
-        circuit->LOG("[MexTerritory] team=%i frame=%i lane=%i members=%s cells=%i midpoint=%.0f:%.0f choke=%.0f:%.0f width=%.0f",
-            circuit->GetTeamId(), circuit->GetLastFrame(), int(l), members.c_str(), int(lane.spine.size()),
-            mid.x, mid.z, choke.x, choke.z, std::isfinite(lane.width) ? lane.width : -1.f);
+        circuit->LOG("[MexTerritory] team=%i frame=%i lane=%i corridor=%i name=%s members=%s vertices=%i length=%.0f midpoint=%.0f:%.0f choke=%.0f:%.0f width=%.0f",
+            circuit->GetTeamId(), circuit->GetLastFrame(), int(l), lane.corridor, c ? c->name.c_str() : "-", members.c_str(),
+            c ? int(c->centre.size()) : 0, c ? c->length : 0.f, mid.x, mid.z, choke.x, choke.z, std::isfinite(lane.width) ? lane.width : -1.f);
     }
 }
 }  // namespace circuit

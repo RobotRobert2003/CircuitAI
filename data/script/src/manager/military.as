@@ -60,7 +60,7 @@ namespace Military {
         const AIFloat3 pos = u.GetPos(ai.frame);
         // D-354/D-356: the corridor goal; coverage/advance is read once by
         // CoverageLanes::Load, not per objective query.
-        if(Global::AISettings::Role==AiRole::FRONT && aiBattle.GetFrontLaneLength()>0.f) {
+        if(Global::AISettings::Role==AiRole::FRONT && aiBattle.ArmyFrontLanesEnabled() && aiBattle.GetFrontLaneLength()>0.f) {
             CoverageLanes::Load();
             return aiBattle.GetFrontLaneGoal(pos,CoverageLanes::advance);
         }

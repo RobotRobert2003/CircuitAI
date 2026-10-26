@@ -141,6 +141,16 @@ struct SSettings {
 	float seaReach = 0.f;              // elmos; 0 = a fifth of the map diagonal
 	float pondMaxShare = 0.025f;
 	float standoffDepths[3] = {8.f, 15.f, 30.f};
+	// D-358 corridor planner (field.json "corridors"; corridor-planner-proposal.md).
+	float obstacleMinShare = 0.0005f;   // a closed 16-elmo component this share of the cells is an obstacle, smaller is a rock
+	float corridorDetour = 2.f;         // candidate routes up to this multiple of the shortest
+	int corridorMax = 12;               // candidate routes per class
+	float seamBlocked = 0.2f;           // obstacles over this share of the seam between two neighbouring routes make two corridors
+	float footprintWidth = 64.f;        // a corridor narrower than this at its choke is specialist (no seat, no mex lane)
+	float corridorBand = 384.f;         // elmos around a found route penalised before the next search
+	// D-360: a passage wider than one lane holds lanes side by side (front coverage).
+	float laneSpacing = 768.f;          // elmos between lanes inside one passage; lanes = round(extent / spacing), capped by the narrowest extent / (spacing / 2)
+	int laneMax = 4;                    // lanes a passage may hold at most (1 disables the split)
 	SMarkSettings marks;
 };
 
@@ -187,6 +197,32 @@ struct SAvenue {
 	std::vector<int> regions, crossings;
 	Polyline spine;
 	std::vector<float> spineWidth;
+};
+
+// D-358: an obstacle is a closed component of the 16-elmo passability of a
+// class at least obstacleMinShare of the cells (mesas, ridges, lakes, lava).
+struct SObstacle {
+	int id = 0, cls = C_BOT, cells = 0;
+	SPoint centre;
+};
+
+// D-358: a corridor is a class of routes between the two sides that no obstacle
+// separates: neighbouring candidate routes with a wall between them (obstacles
+// over seamBlocked of the seam) are different corridors. The centre runs from
+// side 0 to side 1 down the middle of the corridor's free space; width is twice
+// the 16-elmo clearance at each vertex, in elmos.
+struct SCorridor {
+	int id = 0, cls = C_VEH, routes = 0;
+	bool specialist = false;            // narrowest point under footprintWidth
+	std::string name;
+	float length = 0.f, narrowest = 0.f, meanWidth = 0.f;
+	float lateral = 0.f;                // signed offset of the centre's middle from the sides' axis, elmos
+	SPoint choke;
+	int chokeIndex = -1;                // vertex of the narrowest point in the middle 60 percent
+	int lane = 0, lanes = 1;            // D-360: this lane's index among its passage's lanes, negative lateral side first
+	float extent = 0.f;                 // D-360: the passage's lateral extent (median over progress bins of the 5..95 percentile spread), elmos
+	Polyline centre;
+	std::vector<float> width;
 };
 
 struct SLanding {
@@ -259,7 +295,7 @@ struct SMark {
 
 struct STimings {
 	double gridMs = 0, mobilityMs = 0, sidesMs = 0, theatresMs = 0, regionsMs = 0,
-		   boundariesMs = 0, landingsMs = 0, avenuesMs = 0, keyMs = 0, totalMs = 0;
+		   boundariesMs = 0, landingsMs = 0, avenuesMs = 0, keyMs = 0, corridorsMs = 0, totalMs = 0;
 	double positionsMs = 0, territoryMs = 0, labelsMs = 0, marksMs = 0, marksTotalMs = 0;
 };
 
@@ -277,6 +313,16 @@ struct SModel {
 	std::vector<SSide> sides;           // index = side index; allyTeam inside
 	std::vector<Polyline> contact;
 	std::vector<SKey> keys;
+	// D-358: the corridor table per movement class and, per class, the corridor
+	// that owns each open cell (-1 closed or no corridor). Read by the mex
+	// partition, the front corridors and the lane grid through FieldCorridors.h.
+	std::vector<SObstacle> obstacles;
+	std::vector<SCorridor> corridors;
+	std::vector<std::int16_t> corridorOf[_CLASSES_];
+	// D-362: per class and field cell, the smallest clearance of its 16-elmo cells (thirds of a
+	// 16-elmo cell, 0 when one of them is closed, capped at 255): the routed legs and the
+	// INV-237 check keep off cells that are only partly passable.
+	std::vector<unsigned char> clearanceOf[_CLASSES_];
 	std::vector<int> regionOf;          // per cell
 	std::vector<int> sideOf;            // per cell, side index
 	std::vector<unsigned char> groundOf;   // per cell, Ground (D-326)

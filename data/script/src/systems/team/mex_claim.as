@@ -351,6 +351,8 @@ namespace MexClaim {
     {
         if (!Enabled()) return;
         aiEconomyMgr.SetMexTheatres(true, Global::RoleSettings::MexClaim::TheatreSeconds, HomeRadius());
+        // D-358: the lane partition is the field's corridor table; only the band
+        // radius is still read (merge radius and share are retired, see KI-668).
         aiEconomyMgr.SetMexLaneSettings(Global::RoleSettings::MexClaim::LaneMergeRadius,
             Global::RoleSettings::MexClaim::LaneMergeShare, Global::RoleSettings::MexClaim::LaneBandRadius);
     }

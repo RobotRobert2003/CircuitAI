@@ -1,6 +1,6 @@
 # CI scripts
 
-The scripts behind `.github/workflows/pr-checks.yml` (D-363), runnable locally
+The scripts behind `.github/workflows/pr-checks.yml` (D-369), runnable locally
 against any base:
 
 | Script | What it does |

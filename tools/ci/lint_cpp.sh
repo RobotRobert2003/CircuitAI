@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D-363: lint the C++ files a pull request changed, nothing else. Two checks:
+# D-369: lint the C++ files a pull request changed, nothing else. Two checks:
 #   1. whitespace errors on the changed lines (git diff --check: trailing spaces,
 #      space-before-tab, missing final newline);
 #   2. cppcheck over each changed file (warning, performance and portability

@@ -1,5 +1,5 @@
 {
-  "_doc": "D-359: SUPPORT scales energy with ordinary fusions and withholds the advanced fusion until its 10-second minimum energy income reaches Support::AdvancedFusionEnergyIncome (4000). Stage widgets/support_progress.lua. Thirty game minutes on Supreme Isthmus. Afterwards read the finished= lines: ordinary fusions should appear, an advanced fusion only after an 'advanced fusion allowed' line, and INV-237 never.",
+  "_doc": "D-364: SUPPORT scales energy with ordinary fusions and withholds the advanced fusion until its 10-second minimum energy income reaches Support::AdvancedFusionEnergyIncome (4000). Stage widgets/support_progress.lua. Thirty game minutes on Supreme Isthmus. Afterwards read the finished= lines: ordinary fusions should appear, an advanced fusion only after an 'advanced fusion allowed' line, and INV-239 never.",
   "stop_minute": 30,
   "expect": [
     {"key":"layout-sequence","pattern":"SUPPORT\\]\\[Build\\] shared layout","by_minute":1},

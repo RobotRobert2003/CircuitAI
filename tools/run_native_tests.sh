@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D-094 / D-363: compile and run the standalone native unit tests (tests/*_test.cpp)
+# D-094 / D-369: compile and run the standalone native unit tests (tests/*_test.cpp)
 # and the AngelScript helper suites (tests/*_tests.as, run by production_math_test
 # through the bundled AngelScript engine). Exit 0 when every test passes.
 #
@@ -36,11 +36,11 @@ OUT="${TMPDIR:-${TEMP:-/tmp}}/circuit-native-tests"
 mkdir -p "$OUT"
 
 # The C++ tests, each a single translation unit, plus the extra sources a few need.
-tests=(mex_navigation_test mex_territory_test transport_definition_test commander_combat_test callback_buffer_test resurrection_claim_test reservation_claim_test task_reference_test dormant_task_chain_test economy_index_test route_command_test reservation_candidates_test construction_recovery_test guard_command_test target_preference_test layout_ranking_test base_layout_geometry_test allied_reservations_test local_reservations_test lane_solver_test strategic_targeting_test terrain_route_test air_geometry_test metal_field_test enemy_reclaim_policy_test naval_geometry_test air_safety_test widget_state_test ranged_geometry_test ground_cohort_test local_rush_test water_survey_test field_analysis_test)
+tests=(mex_navigation_test mex_territory_test transport_definition_test commander_combat_test callback_buffer_test resurrection_claim_test reservation_claim_test task_reference_test dormant_task_chain_test economy_index_test route_command_test reservation_candidates_test construction_recovery_test guard_command_test target_preference_test layout_ranking_test base_layout_geometry_test allied_reservations_test local_reservations_test lane_solver_test lane_raster_test strategic_targeting_test terrain_route_test air_geometry_test metal_field_test enemy_reclaim_policy_test naval_geometry_test air_safety_test widget_state_test ranged_geometry_test ground_cohort_test local_rush_test water_survey_test field_analysis_test)
 extra_sources() {
 	case "$1" in
 		lane_solver_test|terrain_route_test) echo "src/circuit/terrain/LaneSolver.cpp" ;;
-		field_analysis_test) echo "src/circuit/terrain/field/FieldAnalysis.cpp src/circuit/terrain/field/FieldEncode.cpp src/circuit/terrain/field/FieldLandmarks.cpp src/circuit/terrain/field/FieldSettings.cpp src/lib/json/jsoncpp.cpp" ;;
+		field_analysis_test) echo "src/circuit/terrain/field/FieldAnalysis.cpp src/circuit/terrain/field/FieldCorridors.cpp src/circuit/terrain/field/FieldEncode.cpp src/circuit/terrain/field/FieldLandmarks.cpp src/circuit/terrain/field/FieldSettings.cpp src/lib/json/jsoncpp.cpp" ;;
 	esac
 }
 # The AngelScript suites: policy script, its tests, runner flags.

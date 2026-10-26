@@ -46,6 +46,7 @@ public:
 
 private:
 	void Recovered(CCircuitUnit* unit);
+    bool HoldInJam(CCircuitUnit* unit);
 	// D-346: forward repair point checks; arrival radius in elmos.
 	bool HoldValid(CCircuitUnit* unit, int frame);
 	static constexpr float HOLD_RADIUS = 128.f;

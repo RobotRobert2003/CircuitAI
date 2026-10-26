@@ -3,8 +3,11 @@
   "unit": "armcom",
   "side": "armada",
   "role": "FRONT",
-  "description": "Post-opener FRONT commander progresses beyond the old 3200-elmo anchor within its lane without a friendly screen (front_push_screen overridden to 0: the unscreened mechanism; balanced policy requires one corridor screen), taking the corridor's metal on the way (D-357).",
-  "commander_overrides": {"front_push_screen": 0},
+  "description": "Post-opener FRONT commander captures and fortifies corridor mexes, completes successive cross-territory LLT lines, and advances beyond the old 3200-elmo anchor without returning to base assist (D-371). Explicit blocking-mode compatibility case (front_fortify_advance=0).",
+  "commander_overrides": {
+    "front_push_screen": 0,
+    "front_fortify_advance": 0
+  },
   "map": "Proving Grounds v1.0",
   "map_key": "proving",
   "starts": [

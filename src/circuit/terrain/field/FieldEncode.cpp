@@ -174,6 +174,28 @@ std::string Encode(const SModel& m, const SSettings& st, std::uint64_t seq, int 
 		if (k.avenue >= 0) Num(out, k.avenue); else out += '-';
 		out += '\n';
 	}
+	// D-358: obstacles and corridors (additive records; the widget ignores kinds it does not know)
+	//   obstacle|<id>|<cls>|<cells>|<x>|<z>
+	//   corridor|<id>|<cls>|<name>|<length>|<narrowest>|<chokeX>|<chokeZ>|<meanWidth>|<specialist>|<routes>|<lateral>|<lane>|<lanes>|<extent>|x,z,w;x,z,w;...
+	for (const SObstacle& o : m.obstacles) {
+		out += "obstacle|"; Num(out, o.id); out += '|'; Num(out, o.cls); out += '|'; Num(out, o.cells); out += '|';
+		Num(out, o.centre.x); out += '|'; Num(out, o.centre.z); out += '\n';
+	}
+	for (const SCorridor& c : m.corridors) {
+		out += "corridor|"; Num(out, c.id); out += '|'; Num(out, c.cls); out += '|'; out += Clean(c.name); out += '|';
+		Num(out, c.length); out += '|'; Num(out, c.narrowest); out += '|'; Num(out, c.choke.x); out += '|'; Num(out, c.choke.z); out += '|';
+		Num(out, c.meanWidth); out += '|'; Num(out, c.specialist ? 1 : 0); out += '|'; Num(out, c.routes); out += '|'; Num(out, c.lateral); out += '|'; Num(out, c.lane); out += '|'; Num(out, c.lanes); out += '|'; Num(out, c.extent); out += '|';
+		for (std::size_t i = 0; i < c.centre.size(); ++i) {
+			if (i) out += ';';
+			Num(out, c.centre[i].x); out += ','; Num(out, c.centre[i].z); out += ','; Num(out, i < c.width.size() ? c.width[i] : 0.f);
+		}
+		out += '\n';
+	}
+	for (int cls=0; cls<_CLASSES_; ++cls) {
+        if (m.corridorOf[cls].empty()) continue;
+        out += "corridorcells|"+std::to_string(cls)+"|"+RunLength(std::vector<int>(m.corridorOf[cls].begin(),m.corridorOf[cls].end()))+"\n";
+        out += "clearance|"+std::to_string(cls)+"|"+RunLength(std::vector<int>(m.clearanceOf[cls].begin(),m.clearanceOf[cls].end()))+"\n";
+    }
 	out += "cells|" + RunLength(m.regionOf) + "\n";
 	// D-326: ground class per cell, same run-length form as the region ids
 	out += "ground|" + RunLength(std::vector<int>(m.groundOf.begin(), m.groundOf.end())) + "\n";
@@ -239,11 +261,15 @@ std::string Summary(const SModel& m)
 	}
 	int sides = (int)m.sides.size();
 	for (const SLanding& l : m.landings) if (sides >= 2 && l.rank == 1) ++assault;
-	char buf[512];
+	int corridorsByClass[_CLASSES_] = {0, 0, 0, 0, 0, 0, 0};
+	for (const SCorridor& c : m.corridors) if (c.cls >= 0 && c.cls < _CLASSES_) ++corridorsByClass[c.cls];
+	char buf[768];
 	std::snprintf(buf, sizeof(buf), "%d theatres (%d land, %d seas, %d ponds), %d regions, %d crossings, %d barriers, %d chokes, "
-		"%d landings (%d first-ranked), %d avenues, %d key terrain, %d sides",
+		"%d landings (%d first-ranked), %d avenues, %d key terrain, %d sides, %d corridors (vehicle %d, bot %d, amphibious %d, hover %d, all-terrain %d, ship %d), %d obstacles",
 		(int)m.theatres.size(), land, seas, ponds, (int)m.regions.size(), crossings, barriers, (int)m.chokes.size(),
-		(int)m.landings.size(), assault, (int)m.avenues.size(), (int)m.keys.size(), sides);
+		(int)m.landings.size(), assault, (int)m.avenues.size(), (int)m.keys.size(), sides, (int)m.corridors.size(),
+		corridorsByClass[C_VEH], corridorsByClass[C_BOT], corridorsByClass[C_AMPH], corridorsByClass[C_HOVER], corridorsByClass[C_ALLT], corridorsByClass[C_SHIP],
+		(int)m.obstacles.size());
 	return buf;
 }
 

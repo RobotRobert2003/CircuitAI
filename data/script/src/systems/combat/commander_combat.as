@@ -82,6 +82,34 @@ namespace CommanderCombat {
             Option("front_push_ahead",0.f);
             // D-356 push bound and end; D-357 corridor mex sweep. JSON supplies the
             // policy; the fallbacks equal the native defaults (legacy behaviour).
+            Option("front_persistent",0.f);
+            Option("front_radar_spacing",500.f);
+            Option("front_mex_los",0.f);
+            Option("cloak_energy_retreat",0.f);
+            Option("cloak_retreat_distance",600.f);
+            Option("front_support_mex_priority",3.f);
+            Option("front_support_radar_priority",2.f);
+            Option("front_support_line_priority",1.f);
+            Option("front_mex_defence",0.f);
+            Option("front_line_enabled",0.f);
+            Option("front_line_fog",1000.f);
+            Option("front_fortify_bank",.5f);
+            Option("front_fortify_priority",1.f);
+            Option("front_fortify_advance",0.f);
+            Option("front_line_spacing",1.5f);
+            Option("front_defence_spacing",.5f);
+            aiBuilderMgr.SetCommanderCombatOption("front_defence_definition",-1.f);
+            array<string>@ defenceNames=aiSetupMgr.ConfigString("commander/combat/front_defence_definitions",
+                "armllt,corllt,leglht,armbeamer,corhllt,legmg").split(",");
+            for(uint i=0;i<defenceNames.length();++i) {
+                CCircuitDef@ defence=ai.GetCircuitDef(defenceNames[i]);
+                if(defence !is null) aiBuilderMgr.SetCommanderCombatOption("front_defence_definition",float(defence.id));
+            }
+            Option("front_line_depth",800.f);
+            Option("front_mex_offset",160.f);
+            Option("front_work_behind",400.f);
+            Option("jam_safe",0.f);
+            Option("jam_heavy_cost",900.f);
             Option("front_push_screen",0.f);
             Option("front_push_until_seconds",0.f);
             Option("front_push_home_riot",0.f);
@@ -96,6 +124,7 @@ namespace CommanderCombat {
             Option("front_radius",Global::Commander::FrontRadius);
             Option("front_threat",Global::Commander::FrontThreat);
             Option("front_recovery",Global::Commander::FrontRecovery?1.f:0.f);
+            Option("front_repair_combat",0.f);
             Option("front_mex_seconds",Global::Commander::FrontMexSeconds);
             Option("front_stall_seconds",Global::Commander::FrontStallSeconds);
             Option("front_detour_seconds",0.f);

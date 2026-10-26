@@ -271,7 +271,7 @@ void CAttackTask::FindTarget()
 	// groups within range slack of the leader or base radius of home are
 	// always eligible. Both margins come from coverage.json.
 	const auto* battle=circuit->GetBattle();
-	const bool corridor=!cdef->IsAbleToFly() && battle->GetFrontLaneLength()>0.f;
+	const bool corridor=!cdef->IsAbleToFly() && battle->ArmyFrontLanesEnabled() && battle->GetFrontLaneLength()>0.f;
 	const float rangeSlackSq=SQUARE(highestRange+battle->GetFrontLaneRangeSlack());
 	const float baseRadiusSq=SQUARE(battle->GetFrontLaneBaseRadius());
 	for (unsigned i = 0; i < groups.size(); ++i) {

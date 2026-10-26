@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D-363: the files a pull request adds, changes or renames, one path per line,
+# D-369: the files a pull request adds, changes or renames, one path per line,
 # against a base ref (`origin/smrt-test` on the CI runner). Deleted files are
 # left out: a linter has nothing to read there.
 #

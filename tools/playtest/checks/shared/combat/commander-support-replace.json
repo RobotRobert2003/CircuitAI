@@ -1,0 +1,106 @@
+{
+  "stop_minute": 6,
+  "expect": [
+    {
+      "key": "constructor removal",
+      "pattern": "fixture_units_removed unit=armck count=[1-9]\\d*",
+      "scope": "any",
+      "by_minute": 2.6
+    },
+    {
+      "key": "member",
+      "pattern": "\\[FrontSupport\\] member=(?P<worker>\\d+) side=armada",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "initial member dies",
+      "pattern": "death id=(?P<worker>\\d+) team=0 unit=armck",
+      "scope": "any",
+      "same_as": "member",
+      "after_key": "constructor removal",
+      "by_minute": 2.7
+    },
+    {
+      "key": "owned power bootstrap",
+      "pattern": "\\[FrontSupport\\] unit=\\d+ build=armnanotc bootstrap=1",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "upgraded defense",
+      "pattern": "\\[FrontSupport\\] unit=\\d+ defence=armbeamer powered=1",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "commander assists",
+      "pattern": "\\[FrontSupport\\] commander=\\d+ assist=\\d+",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "radar",
+      "pattern": "\\[FrontSupport\\] unit=\\d+ build=armrad bootstrap=0",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "jammer",
+      "pattern": "\\[FrontSupport\\] unit=\\d+ build=armjamt bootstrap=0",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "replacement member",
+      "pattern": "\\[FrontSupport\\] member=(?P<worker>\\d+) side=armada",
+      "scope": "any",
+      "after_minute": 2.5,
+      "by_minute": 6,
+      "after_key": "constructor removal"
+    },
+    {
+      "key": "finished forward package",
+      "pattern": "front_support_finished nano=[1-9]\\d* defence=[1-9]\\d* radar=[1-9]\\d* jammer=[1-9]\\d*",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "continues lane advance",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=0",
+      "scope": "any",
+      "after_minute": 4,
+      "by_minute": 6
+    },
+    {
+      "key": "assists replacement",
+      "pattern": "\\[FrontSupport\\] commander=\\d+ assist=(?P<worker>\\d+)",
+      "scope": "any",
+      "after_key": "initial member dies",
+      "by_minute": 6,
+      "after_minute": 2.5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    }
+  ]
+}

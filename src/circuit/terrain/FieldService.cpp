@@ -127,6 +127,18 @@ bool CFieldService::ReadSettings(CCircuitAI* circuit)
 	settings.avenueMax = f.get("avenue_max", settings.avenueMax).asInt();
 	settings.seaReach = f.get("sea_reach", settings.seaReach).asFloat();
 	settings.pondMaxShare = f.get("pond_max_share", settings.pondMaxShare).asFloat();
+	// D-358: the corridor planner's levers (field.json "corridors")
+	const Json::Value& cr = f["corridors"];
+	if (cr.isObject()) {
+		settings.obstacleMinShare = std::clamp(cr.get("obstacle_min_share", settings.obstacleMinShare).asFloat(), 0.f, 0.1f);
+		settings.corridorDetour = std::clamp(cr.get("detour", settings.corridorDetour).asFloat(), 1.f, 8.f);
+		settings.corridorMax = std::clamp(cr.get("max_routes", settings.corridorMax).asInt(), 1, 32);
+		settings.seamBlocked = std::clamp(cr.get("seam_blocked", settings.seamBlocked).asFloat(), 0.f, 1.f);
+		settings.footprintWidth = std::clamp(cr.get("footprint_width", settings.footprintWidth).asFloat(), 0.f, 1024.f);
+		settings.corridorBand = std::clamp(cr.get("band", settings.corridorBand).asFloat(), 16.f, 4096.f);
+		settings.laneSpacing = std::clamp(cr.get("lane_spacing", settings.laneSpacing).asFloat(), 128.f, 4096.f);
+		settings.laneMax = std::clamp(cr.get("lane_max", settings.laneMax).asInt(), 1, 8);
+	}
 	ReadMarkSettings(*root, settings.marks);
 	publishFile = f.get("publish_file", true).asBool();
 	dumpInput = f.get("dump_input", false).asBool();
@@ -306,11 +318,11 @@ void CFieldService::Complete(CCircuitAI* circuit)
 	summary = Summary(*model);
 	for (const std::string& f : model->checkFailures) circuit->LOG("FIELD: check failed: %s", f.c_str());
 	const STimings& t = model->timings;
-	circuit->LOG("FIELD_PERF owner=%i team=%i cells=%i capture_ms=%.1f queue_ms=%.1f analyse_ms=%.1f grid=%.1f mobility=%.1f sides=%.1f theatres=%.1f regions=%.1f boundaries=%.1f landings=%.1f avenues=%.1f key=%.1f theatres=%i regions=%i boundaries=%i chokes=%i avenues=%i landings=%i fingerprint=%llu",
+	circuit->LOG("FIELD_PERF owner=%i team=%i cells=%i capture_ms=%.1f queue_ms=%.1f analyse_ms=%.1f grid=%.1f mobility=%.1f sides=%.1f theatres=%.1f regions=%.1f boundaries=%.1f landings=%.1f avenues=%.1f key=%.1f corridors_ms=%.1f theatres=%i regions=%i boundaries=%i chokes=%i avenues=%i landings=%i corridors=%i obstacles=%i fingerprint=%llu",
 		ownerTeam, circuit->GetTeamId(), model->gw * model->gh, captureMs, result->queueMs, result->analyseMs,
-		t.gridMs, t.mobilityMs, t.sidesMs, t.theatresMs, t.regionsMs, t.boundariesMs, t.landingsMs, t.avenuesMs, t.keyMs,
+		t.gridMs, t.mobilityMs, t.sidesMs, t.theatresMs, t.regionsMs, t.boundariesMs, t.landingsMs, t.avenuesMs, t.keyMs, t.corridorsMs,
 		(int)model->theatres.size(), (int)model->regions.size(), (int)model->boundaries.size(), (int)model->chokes.size(),
-		(int)model->avenues.size(), (int)model->landings.size(), static_cast<unsigned long long>(model->fingerprint));
+		(int)model->avenues.size(), (int)model->landings.size(), (int)model->corridors.size(), (int)model->obstacles.size(), static_cast<unsigned long long>(model->fingerprint));
 	circuit->LOG("[Field] summary: %s", summary.c_str());
 	if (model->marksBuilt) {
 		for (const std::string& f : model->marksFailures) circuit->LOG("MARKS: check failed: %s", f.c_str());

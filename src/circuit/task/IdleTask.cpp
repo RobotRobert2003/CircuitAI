@@ -10,6 +10,7 @@
 #include "module/TaskModule.h"
 #include "unit/CircuitUnit.h"
 #include "CircuitAI.h"
+#include "module/CommanderControl.h"
 #include "util/Utils.h"
 
 #include <vector>
@@ -111,6 +112,7 @@ void CIdleTask::OnUnitIdle(CCircuitUnit* unit)
 
 void CIdleTask::OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+    if(manager->GetCircuit()->GetCommanderControl()->Jammed(unit)) return;
 	const float healthPerc = unit->GetHealthPercent();
 	if (healthPerc < unit->GetCircuitDef()->GetRetreat()) {
 		CRetreatTask* task = manager->EnqueueRetreat();

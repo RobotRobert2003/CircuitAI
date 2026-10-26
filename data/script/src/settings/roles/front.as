@@ -89,7 +89,7 @@ namespace Front {
             float MetalIncomePerT2Builder = 40.0f;
 
             // Misc Logic Settings
-            int RaiderOpenerCount = 10;
+            int RaiderOpenerCount = 6;
             // Opt-in profile policy: retain the first scout, then choose tanks.
             float VehicleTankOpenerChance = 0.0f;
             int VehicleTankGatherSeconds = 300; // release a disrupted/incomplete batch

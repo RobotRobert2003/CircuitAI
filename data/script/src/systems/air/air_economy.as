@@ -297,8 +297,8 @@ namespace AirEconomy {
             Invariants::Violation("INV-073", "AIR", "native nano planner enabled while AIR owns production support");
         metal = Economy::GetMinMetalIncomeLast10s(); energy = Economy::GetMinEnergyIncomeLast10s();
         bankM = aiEconomyMgr.metal.current; bankE = aiEconomyMgr.energy.current;
-        WatchTransitionOverflow();   // INV-239 (D-362), on last second's plant count
-        WatchPlantOverflow();        // INV-243 (D-368), on last second's plant count
+        WatchTransitionOverflow();   // INV-239 (D-368), on last second's plant count
+        WatchPlantOverflow();        // INV-243 (upstream AIR PR #32), on last second's plant count
         const bool bad = aiEconomyMgr.isEnergyStalling && bankE < aiEconomyMgr.energy.storage * 0.3f;
         badSamples = bad ? badSamples + 1 : 0;
         goodSamples = !bad && bankE > aiEconomyMgr.energy.storage * 0.45f ? goodSamples + 1 : 0;
@@ -398,7 +398,7 @@ namespace AirEconomy {
             && ProductionMath::LabIncomeReady(Economy::GetMinMetalIncomeLast10s(),
             Economy::IncomeWindowReady(), Global::RoleSettings::Air::TransitionMinMetal, aiEconomyMgr.metal.current, plant.costM);
     }
-    // D-362: the saving hold is pointless once the bank is floating and holds the
+    // D-368: the saving hold is pointless once the bank is floating and holds the
     // funded lab's remaining cost plus TransitionBankFreeFraction of storage: the
     // reserve the hold protects is banked, and everything above it overflows.
     bool BankBeyondLab()

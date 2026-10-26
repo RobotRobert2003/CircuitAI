@@ -11,7 +11,13 @@
 #include "module/EconomyManager.h"
 #include "unit/action/TravelAction.h"
 #include "CircuitAI.h"
+#include "module/CommanderControl.h"
 #include "util/Utils.h"
+#include "spring/CustomCommand.h"
+#include "spring/SpringCallback.h"
+#include "spring/SpringUnit.h"
+#include "Log.h"
+#include <array>
 
 namespace circuit {
 
@@ -37,6 +43,13 @@ bool CBRepairTask::CanAssignTo(CCircuitUnit* unit) const
 	if (unit->GetCircuitDef()->IsRoleComm() && unit->GetId() != invitedCommander) {
 		return false;
 	}
+	if(IsStationaryCommander(unit)) {
+        auto* ai=manager->GetCircuit();auto* ally=ai->GetFriendlyUnit(targetId);
+        return ally && ally->GetId()!=unit->GetId() && unit->GetCircuitDef()->IsAbleToRepair()
+            && !ally->GetUnit()->IsBeingBuilt()
+            && ally->GetPos(ai->GetLastFrame()).SqDistance(unit->GetPos(ai->GetLastFrame()))
+                <=SQUARE(unit->GetCircuitDef()->GetBuildDistance());
+    }
 	return IRepairTask::CanAssignTo(unit);
 }
 
@@ -46,6 +59,36 @@ void CBRepairTask::Start(CCircuitUnit* unit)
 	if (targetId != -1) {
 		Update(unit);
 	}
+}
+
+// Engine repair-with-area rejects a target outside this fixed local disc
+// before MoveInBuildRange. AI positions are model midpoints, whereas the
+// engine repair-area check uses base positions: retain a 32-elmo inset rather
+// than pinning an exact midpoint (which repeatedly cancelled every order).
+// No travel action is activated; shared ordinary repair assignees are unchanged.
+void CBRepairTask::UpdateStationary(CCircuitUnit* unit)
+{
+    auto* ai=manager->GetCircuit();
+    auto* ally=ai->GetFriendlyUnit(targetId);
+    const int frame=ai->GetLastFrame();
+    const auto here=unit->GetPos(frame);
+    const float reach=unit->GetCircuitDef()->GetBuildDistance()-32.f;
+    if(!ally || ally->GetUnit()->IsBeingBuilt()
+        || ally->GetUnit()->GetHealth()>=ally->GetUnit()->GetMaxHealth()
+        || here.SqDistance(ally->GetPos(frame))>reach*reach
+        || static_cast<CBuilderManager*>(manager)->IsReclaimUnit(ally)) {
+        TRY_UNIT(ai,unit,unit->CmdStop();)
+        RemoveAssignee(unit);return;
+    }
+    if(ai->GetUnitAPI()->GetCMDQueueSize(unit->GetId())>0
+        && unit->GetTaskState()==CCircuitUnit::ETaskState::EXECUTE) return;
+    std::array<float,5> params={float(targetId),here.x,here.y,here.z,reach-100.f};
+    TRY_UNIT(ai,unit,
+        unit->CmdStop();
+        SendCustomCommand(ai->GetSkirmishAIId(),unit->GetId(),40,params,0,frame+30*FRAMES_PER_SEC);
+    )
+    unit->SetTaskState(CCircuitUnit::ETaskState::EXECUTE);
+    ai->LOG("[CommanderRepair] unit=%i target=%i stationary=1",unit->GetId(),targetId);
 }
 
 void CBRepairTask::OnUnitIdle(CCircuitUnit* unit)
@@ -70,6 +113,7 @@ void CBRepairTask::OnUnitIdle(CCircuitUnit* unit)
 
 void CBRepairTask::OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+    if(manager->GetCircuit()->GetCommanderControl()->Jammed(unit)) return;
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
 	CCircuitDef* cdef = unit->GetCircuitDef();

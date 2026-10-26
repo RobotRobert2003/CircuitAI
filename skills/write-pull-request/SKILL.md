@@ -1,9 +1,9 @@
 ---
 name: write-pull-request
-description: 'Write the title and description of a CircuitAI pull request so a maintainer can read it in two minutes and merge with confidence. Use whenever the user asks to open, update or describe a pull request. Produces a short lead, one table per area with a verification column, a performance table when runtime code changed, a docs line and an honest limits line; sourced from the branch, the decision record, playtest results and CI, never from memory.'
+description: 'Write the title and description of a CircuitAI pull request so a maintainer can read it in two minutes and merge with confidence. Use whenever the user asks to open, update or describe a pull request. Produces a short lead, one table per area with a verification column, one short code sample per feature cut from the source at the head, a performance table when runtime code changed, a docs line and an honest limits line; sourced from the branch, the decision record, playtest results and CI, never from memory.'
 compatibility: 'Needs the branch checked out, the gh CLI authenticated against the fork, and read access to ../rjm.bar.docs/projects/circuitai for decisions, invariants and known issues.'
 metadata:
-  version: '1.0.0'
+  version: '1.1.0'
 ---
 
 # Write a pull request
@@ -18,9 +18,15 @@ is still open, without scrolling through commits or files. Everything else
 The model for this skill is
 [the behaviour fix batch, PR #9](references/example-batch-pr.md), which the owner
 accepted as "detailed, beautified and user friendly" while "concise and non
-verbose". Read that example once before writing a batch PR. Two earlier
-descriptions show what to avoid: PR #2 buried every number in prose and ran to
-five screens, and PRs #5 to #8 had no body at all.
+verbose". Read that example once before writing a batch PR.
+[The commander lane batch, PR #26](references/example-samples-pr.md) adds the
+form the owner asked for on 2026-10-24 and called "good looking": under each
+table a short code sample per row, cut from the source at the head, showing
+how the mechanism works and which lever controls it. Use that form by default
+for any batch that changes native or script rules, and whenever the user asks
+for code samples. Two earlier descriptions show what to avoid: PR #2 buried
+every number in prose and ran to five screens, and PRs #5 to #8 had no body at
+all.
 
 ## When to use
 
@@ -62,6 +68,12 @@ must trace to one of them.
 7. **Docs location.** If the documentation lives in another checkout or branch
    (it currently does: `rjm.bar.docs`, branch `circuitai-docs-reconstructed`),
    name it, because the reviewer cannot see it in the diff.
+8. **Source lines.** For every table row, the function or rule that
+   implements it, found with grep at the head and read there: the pure rule
+   in a header (with its unit test) when one exists, else the call site, else
+   the script that sets the option. Note the file and the lever names it
+   reads. Every sample in the body is cut from these lines, never retyped
+   from memory or from the conversation summary.
 
 ## Title
 
@@ -118,11 +130,71 @@ inside cells. Three columns, header row left blank for the first:
   it, with the baseline when one exists ("0 Tick shots (baseline fired at
   52 s)"). `✅ Played`, `🟡 Built, Checked` or `⚠️ Not played` are the only
   three forms. An item not played is not hidden in the Harness section.
+- **Every lever named is explained.** Writing a key in backticks is not a
+  description. Each lever a Fix cell names gets a clause saying what it does
+  in the game and what it does not do when a reader would assume more ("a
+  shot-score multiplier; it never moves the unit toward the target"). PR #26
+  first shipped "`press_static` with `commander_priority`" and the owner had
+  to ask what the second one did.
+- **One mechanism per row.** When a row carries two mechanisms with different
+  verification (a press that was played and a target preference that was
+  not), split it into two rows so each Status is true. A Status that covers
+  only the first mechanism in the cell is a false claim about the second.
 
 Harness changes are a bullet list, not a table: what the runner does now and
 why it had to change, one line each. Count new cases/checks/widgets once.
 
-### 3. Performance (when runtime code changed)
+### 3. One sample per feature
+
+Under each area's table, one block per table row, in row order. Each block is
+a bold name of three to five words (the row's first column or its mechanism),
+one sentence saying what the sample shows and where it lives, then a fenced
+code block. The example is
+[the commander lane batch, PR #26](references/example-samples-pr.md).
+
+````markdown
+**Home latch.** Once latched the lane has no front for this commander; the base rungs keep it busy.
+
+```cpp
+bool CCommanderControl::PushHome(CCircuitUnit* unit, State& s, int frame) {
+    if (s.pushHome || options.frontPushAhead <= 0) return s.pushHome;
+    const float riot = enemies->GetEnemyCost(ROLE_TYPE(RIOT));        // observed metal in riot hulls
+    if (options.frontPushHomeRiot > 0 && riot >= options.frontPushHomeRiot) reason = "riot";
+    ...
+    s.pushHome = true;  // for the game
+}
+```
+````
+
+- **Cut, do not write.** The lines come from the source at the head (gather
+  step 8), trimmed to the two to nine lines that carry the rule, with `...`
+  where lines were dropped. Names, signatures and constants stay as the source
+  has them; a reader will grep for them. Whitespace may be re-aligned.
+- **Pick the purest form.** A header rule with a unit test beats its call
+  site; the call site beats the controller loop around it; a predicate or
+  lambda beats the function that installs it.
+- **Annotate the levers.** One trailing comment per line at most, naming the
+  JSON key or the derived window the line reads ("own-400 .. min(own+600,
+  anchor)"), so the sample explains itself without the Fix column.
+- **Pair script with native** when one rule spans both: the script block that
+  sets the option, then the native block that checks the invariant. Two
+  fenced blocks under one bold name, no prose between them.
+- **Close the area with its levers.** After the last sample, one `json` block
+  with the area's new keys and the balanced profile's values, so the knob
+  sits beside the rule it turns. A row whose whole mechanism is one JSON
+  number needs no sample of its own; the lever block covers it.
+- **A sample per lever, not per row.** Every key a Fix cell names appears in
+  a block being read, so the reader sees where in the decision it acts (the
+  last multiplier after admission reads differently from a gate before it).
+  A key that appears only in the closing `json` block, with no line reading
+  it, is a lever the body has not explained.
+- **Harness gets a case fragment**, not a runner excerpt: the new case keys
+  as a fixture uses them.
+- Language tags are `cpp`, `angelscript`, `json`, `lua`, `python`. No block
+  without a tag.
+- A single-fix PR carries one sample. A docs-only or refactor PR carries none.
+
+### 4. Performance (when runtime code changed)
 
 A four-row table, baseline against the published build, then one paragraph of
 method and caveats.
@@ -142,7 +214,7 @@ measured build (commit and DLL hash prefix). Never infer FPS from an
 asymptotic argument; if only a microbenchmark exists, say "component cost
 only, whole-game FPS not measured".
 
-### 4. Docs line
+### 5. Docs line
 
 One paragraph: the decision range, invariant range, known-issue range, which
 role documents moved, where they live if not in this repo, and the checkers
@@ -150,7 +222,7 @@ that passed (`check_invariants`, `check_role_docs`, `check_script_api`,
 `check_doc_links`) with their finding counts. Pre-existing failures are named
 as pre-existing with the count.
 
-### 5. Limits (only when something is open)
+### 6. Limits (only when something is open)
 
 Bullets, one line each, for anything a reviewer would otherwise discover
 after merging: an item not played, a profile family not covered, a known issue
@@ -158,16 +230,19 @@ opened by this work, an owner decision still pending. Link each to its
 `KI-nnn` or `D-nnn`. If nothing is open, omit the section rather than writing
 "none".
 
-### 6. Attribution
+### 7. Attribution
 
 End with the attribution lines the session was given for pull requests, when
 there are any. Nothing after them.
 
 ## Style rules
 
-- Length budget: a ten-item batch fits in about 60 lines and under 600 words;
-  a single fix in about 15 lines. If a section is longer than its table, cut
-  the prose, not the table.
+- Length budget: the prose of a ten-item batch (lead, tables, bullets,
+  paragraphs) stays under 600 words; a single fix in about 15 lines. Code
+  samples are outside that budget but each stays within two to nine lines, so
+  a ten-feature batch with samples runs to about 1,900 words in all. If a
+  section is longer than its table, cut the prose, not the table, and never
+  cut a sample to make room for prose.
 - Short sentences, one idea each. No em-dashes, no semicolons, no nested
   parentheses. Arrows are allowed only inside a Status cell to show a
   sequence ("target 1 → 2 → second gantry").
@@ -194,7 +269,12 @@ gh pr view <number> --json mergeable,mergeStateStatus,statusCheckRollup
 ```
 
 After creating, read the body back once with `gh pr view <number>` and fix any
-table that lost its alignment. When later commits change what the body
+table that lost its alignment. Then run the lever audit: list every
+backticked key in the body and, for each, confirm three things: a clause says
+what it does, a sample shows a line reading it, and a Status cell or a Limits
+bullet states its own verification. A key that fails any of the three is
+either explained in the same turn or removed from the body; it is never left
+as a bare name. When later commits change what the body
 claims (a corrected rule, an item dropped, a new play result), edit the body
 in the same turn you push; a PR whose description lags its head misleads the
 merger.
@@ -211,9 +291,16 @@ merger.
 - [ ] Docs line names the checker results and where the docs live.
 - [ ] Limits section lists every open `KI-` this work created and every
       pending owner decision, or is omitted because there are none.
+- [ ] One sample per table row, cut from the source at the head, two to
+      nine lines, tagged, with the area's lever values in a closing `json`
+      block; a single fix carries one sample.
+- [ ] Lever audit passed: every backticked key has a clause saying what it
+      does, a sample line reading it, and its own verification in a Status
+      cell or a Limits bullet. No row carries two mechanisms with different
+      verification.
 - [ ] Title under about 110 characters, game names not UnitDef ids.
-- [ ] Body under 600 words for a batch, 150 for a single fix; read back on
-      GitHub once.
+- [ ] Prose under 600 words for a batch, 150 for a single fix; read back on
+      GitHub once and count the fenced blocks against the table rows.
 - [ ] Attribution lines last, when the session has them.
 
 ## Related

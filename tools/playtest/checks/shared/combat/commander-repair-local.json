@@ -1,0 +1,39 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "stationary repair",
+      "pattern": "\\[CommanderRepair\\].*stationary=1",
+      "scope": "any",
+      "by_minute": 2
+    },
+    {
+      "key": "healed without movement",
+      "pattern": "stationary_repair_healed",
+      "scope": "any",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "stationary movement",
+      "pattern": "ERROR stationary_repair_moved",
+      "scope": "any"
+    }
+  ]
+}

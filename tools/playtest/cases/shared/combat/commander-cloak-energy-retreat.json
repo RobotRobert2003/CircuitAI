@@ -1,0 +1,84 @@
+{
+  "name": "commander-cloak-energy-retreat",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "TACTICAL",
+  "description": "Threat-only insufficient moving-cloak reserve overrides active jammer safety.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4300,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "commander_initial": true,
+  "enemy_commander_home": true,
+  "enemy_destination": [
+    4700,
+    4000
+  ],
+  "commander_overrides": {
+    "escape_seconds": 10
+  },
+  "camera": [
+    4400,
+    4000,
+    1200
+  ],
+  "photos": [
+    23,
+    28,
+    40
+  ],
+  "min_spawn_spacing": 60,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "observation_frames": 3,
+  "groups": [
+    {
+      "unit": "armjamt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4100,
+        4000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4700,
+        4200
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corllt",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4620,
+        4000
+      ],
+      "after_seconds": 23
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_kills": 0,
+    "min_damage": 0,
+    "max_losses": 0
+  },
+  "checks": "commander-cloak-energy-retreat",
+  "start_energy": 0,
+  "storage_scenario": "commander-energy-retreat",
+  "energy_retreat_observation": true
+}

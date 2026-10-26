@@ -31,6 +31,17 @@
 #include <sstream>
 
 namespace circuit {
+std::string CCommanderControl::DescribeFront(int id) const {
+    const auto it=commanders.find(id);
+    if(it==commanders.end())return "";
+    const auto& s=it->second;
+    return std::to_string(s.frontFrame)+","+std::to_string(int(s.mode))+","+
+        std::to_string(s.pushScreens)+","+std::to_string(s.pushScreenProgress)+","+
+        std::to_string(s.pushBound)+","+std::to_string(s.pushGoalProgress)+","+
+        std::to_string(s.pushHome?1:0)+","+std::to_string(s.front.x)+","+
+        std::to_string(s.front.z)+","+std::to_string(s.workTask?1:0);
+}
+
 using springai::AIFloat3;
 using commander::Point;
 static Point P(const AIFloat3& p) { return {p.x,p.z}; }
@@ -56,6 +67,15 @@ void CCommanderControl::Join(CCircuitUnit* unit) {
     if(commanderTrace) ai->LOG("[CommanderTrace] join=%i role=%i dgun=%i decoy=%i",unit->GetId(),unit->GetCircuitDef()->IsRoleComm(),unit->HasDGun(),ActualDecoy(unit->GetCircuitDef()));
 }
 void CCommanderControl::Leave(int id) {
+    // Unregister calls this before removing the owned unit. Only mex losses
+    // touch obligations: avoid scanning them on every army casualty, and never
+    // let an engine ID reused after death inherit an old defense obligation.
+    if(id==supportUnit) { supportUnit=-1; supportArrived=false; }
+    auto* lost=ai->GetTeamUnit(id);
+    if(lost && lost->GetCircuitDef()->IsMex()) for(auto& [commander,state]:commanders) {
+        auto& pending=state.unfortifiedMexes;
+        pending.erase(std::remove(pending.begin(),pending.end(),id),pending.end());
+    }
     ai->GetAllyTeam()->GetCommanderShots().Release(ai->GetTeamId(),id);
     if(commanders.erase(id)>0) ++operation;
 }
@@ -63,6 +83,10 @@ bool CCommanderControl::RetreatCloakFunded(CCircuitUnit* unit) const {
     if(!Handles(unit) || !unit->GetCircuitDef()->IsAbleToCloak()) return false;
     const auto& cap=ai->GetMilitaryManager()->GetRangedWorld()->CapabilitiesFor(unit->GetCircuitDef());
     return ai->GetEconomyManager()->GetEnergyCur()>=cap.cloakMoving*options.escapeSeconds+options.margin;
+}
+bool CCommanderControl::EnergyRetreat(CCircuitUnit* unit) const {
+    const auto it=commanders.find(unit->GetId());
+    return it!=commanders.end() && it->second.energyRetreat;
 }
 void CCommanderControl::Damaged(CCircuitUnit* unit) {
     auto it=commanders.find(unit->GetId());
@@ -97,6 +121,24 @@ float CCommanderControl::GetDeficit() const {
 }
 bool CCommanderControl::SetOption(const std::string& name,float value) {
     if(!std::isfinite(value)) return false;
+    if(name=="front_defence_definition") {
+        if(value==-1) {frontDefenceDefs.clear();return true;}
+        if(value<0 || value!=std::floor(value) || value>100000 || !ai->GetCircuitDefSafe(int(value))) return false;
+        if(std::find(frontDefenceDefs.begin(),frontDefenceDefs.end(),int(value))==frontDefenceDefs.end())
+            frontDefenceDefs.push_back(int(value));
+        return true;
+    }
+    if(name=="front_support_unit") {
+        if(value < -1 || value > 100000 || value != std::floor(value)) return false;
+        if(supportUnit!=int(value)) { supportUnit=int(value); supportArrived=false; supportNext=0; }
+        return true;
+    }
+    int* supportOption=name=="front_support_def"?&supportDef:name=="front_support_nano"?&supportNano:
+        name=="front_support_radar"?&supportRadar:name=="front_support_jammer"?&supportJammer:name=="front_support_aa"?&supportAA:nullptr;
+    if(supportOption) {
+        if(value < -1 || value > 100000 || value != std::floor(value)) return false;
+        *supportOption=int(value); return true;
+    }
     if(name=="enabled") {
         options.enabled=value>0;
         for(const auto& [id,u]:ai->GetTeamUnits()) if(!commanders.count(id)) Join(u);
@@ -109,7 +151,9 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
     if(name=="decoys") { options.decoys=value>0; return true; }
     if(name=="front_duty") {
         if(options.frontDuty!=(value>0)) for(auto& [id,s]:commanders) s.invalidated=true;
-        options.frontDuty=value>0; return true;
+        options.frontDuty=value>0;
+        if(!options.frontDuty) { supportUnit=-1; supportArrived=false; }
+        return true;
     }
     if(name=="front_ready") { options.frontReady=value>0; return true; }
     if(name=="work") { options.work=value>0; return true; }
@@ -141,6 +185,31 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"cloak_seconds",&options.cloakSeconds,0,5},{"donor_reserve",&options.donorReserve,0,50000},
         {"friendly_margin",&options.friendlyMargin,0,100},{"normal_range",&options.normalRange,.5f,1},
         {"front_workers",&options.frontWorkers,1,20},
+        {"jam_safe",&options.jamSafe,0,1},
+        {"cloak_energy_retreat",&options.cloakEnergyRetreat,0,1},
+        {"cloak_retreat_distance",&options.cloakRetreatDistance,128,2000},
+        {"front_mex_aa",&options.frontMexAA,-1,100000},
+        {"jam_heavy_cost",&options.jamHeavyCost,0,100000},
+        {"front_radar_spacing",&options.radarSpacing,64,4000},
+        {"front_mex_los",&options.frontMexLos,0,1},
+        {"front_support_mex_priority",&options.supportMexPriority,0,100},
+        {"front_support_radar_priority",&options.supportRadarPriority,0,100},
+        {"front_support_line_priority",&options.supportLinePriority,0,100},
+        {"front_persistent",&options.frontPersistent,0,1},
+        {"front_mex_defence",&options.frontMexDefence,0,1},
+        {"front_line_enabled",&options.frontLineEnabled,0,1},
+        {"front_line_fog",&options.frontLineFog,0,4000},
+        {"front_fortify_bank",&options.frontFortifyBank,0,1},
+        {"front_fortify_priority",&options.frontFortifyPriority,0,2},
+        {"front_fortify_advance",&options.frontFortifyAdvance,0,2000},
+        {"front_line_spacing",&options.frontLineSpacing,.5f,1.8f},
+        {"front_defence_spacing",&options.frontDefenceSpacing,0,2},
+        {"front_line_depth",&options.frontLineDepth,400,4000},
+        {"front_mex_offset",&options.frontMexOffset,64,400},
+        {"front_work_behind",&options.frontWorkBehind,0,1000},
+        {"front_corridor",&options.frontCorridor,-1,10000},
+        {"front_corridor_class",&options.frontCorridorClass,-1,10},
+        {"front_line_def",&options.frontLineDef,-1,100000},
         {"front_push_ahead",&options.frontPushAhead,0,2000},
         // D-356 screen-led push, its end, and the FRONT offer corridor margin
         {"front_push_screen",&options.frontPushScreen,0,20},{"front_push_until_seconds",&options.frontPushUntilSeconds,0,7200},
@@ -151,6 +220,7 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"front_mex_turret_every",&options.frontMexTurretEvery,0,20},{"front_mex_enemy_home",&options.frontMexEnemyHome,0,4000},
         {"front_distance",&options.frontDistance,200,10000},{"front_standoff",&options.frontStandoff,200,1500},
         {"front_radius",&options.frontRadius,100,1000},{"front_threat",&options.frontThreat,0,50},
+        {"front_repair_combat",&options.frontRepairCombat,0,1},
         {"front_mex_seconds",&options.frontMexSeconds,0,30},{"front_stall_seconds",&options.frontStallSeconds,3,60},
         {"front_detour_seconds",&options.frontDetourSeconds,0,3},{"t3_decline_gate",&options.t3DeclineGate,0,1},
         {"t3_immediate_shot",&options.t3ImmediateShot,0,1},{"t3_position_seconds",&options.t3PositionSeconds,0,3},
@@ -181,7 +251,15 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"timed_interval",&options.timedInterval,5,600},{"timed_until",&options.timedUntil,0,7200},
         {"radar_coverage",&options.radarCoverage,.1f,1},{"base_radius",&options.baseRadius,200,5000}};
     for(const auto& field:fields) if(name==field.name) {
-        *field.field=std::clamp(value,field.low,field.high); return true;
+        *field.field=std::clamp(value,field.low,field.high);
+        // Dropping the route or disabling line policy must also release its
+        // pending-coverage gate; an old plan must not prevent future advance.
+        if((name=="front_corridor" && value<0) || (name=="front_line_enabled" && value<=0)) for(auto& [id,state]:commanders) {
+            state.territoryPlans.clear();state.territoryPending=false;state.territoryProgress=-1;
+            state.fortifyNextProgress=0;
+            state.territoryCorridor=-1;state.frontFrame=-10000;
+        }
+        return true;
     }
     return false;
 }
@@ -222,7 +300,9 @@ void CCommanderControl::Observe(CCircuitUnit* unit,int frame) {
     // All queries are local. No RangedWorld::Refresh/global army census here.
     // O(E*W+F), retained buffers; effective definition metadata is cached by
     // RangedWorld for this AI lifetime. Enemy reload is never read without LOS.
-    const auto& enemies=ai->GetCallback()->GetEnemyUnitIdsIn(pos,options.scan,false);
+    const bool jammed=Jammed(unit);
+    const float scan=jammed?std::max(options.scan,2.f*maxJammerRadius+unit->GetDGunRange()):options.scan;
+    const auto& enemies=ai->GetCallback()->GetEnemyUnitIdsIn(pos,scan,false);
     if(commanderTrace && frame%30<3) ai->LOG("[CommanderTrace] query unit=%i x=%.0f z=%.0f count=%i",unit->GetId(),pos.x,pos.z,int(enemies.size()));
     for(int id:enemies) {
         auto* enemy=ai->GetEnemyInfo(id);
@@ -304,7 +384,7 @@ void CCommanderControl::Observe(CCircuitUnit* unit,int frame) {
     // need definition/position checks, not velocity/health; they never enter
     // ordinary support/shot scoring. No idle census or cached unit lifetime.
     const bool protect=options.afusDefenceRadius>0 && !afusDefs.empty();
-    const float friendRadius=protect?std::max(options.scan,options.afusDefenceRadius):options.scan;
+    const float friendRadius=protect?std::max(scan,options.afusDefenceRadius):scan;
     float afusDistance=SQUARE(options.afusDefenceRadius);
     const auto& friends=needFriends?ai->GetCallback()->GetFriendlyUnitIdsIn(pos,friendRadius,false):none;
     for(int id:friends) {
@@ -317,7 +397,7 @@ void CCommanderControl::Observe(CCircuitUnit* unit,int frame) {
         if(protect && afusDefs.count(fd->GetId()) && distance<=afusDistance) {
             protectedAfus=id; afusDistance=distance;
         }
-        if(distance>SQUARE(options.scan)) continue;
+        if(distance>SQUARE(scan)) continue;
         commander::Contact c; c.id=id; c.pos={raw[0],raw[2]}; c.height=y;
         api->GetVelocity(id,raw); c.velocity={raw[0]*30,raw[2]*30};
         c.radius=fd->GetRadius(); c.friendly=true; c.blocker=fd->IsRoleComm();
@@ -451,6 +531,7 @@ void CCommanderControl::Transition(CCircuitUnit* unit,State& s,Mode mode,int fra
 void CCommanderControl::Update() {
     performance::Scope measured(ai,performance::COMMANDER_DECISION);
     const int frame=ai->GetLastFrame(); reserve=0;
+    UpdateSupport();
     for(auto& [id,s]:commanders) {
         auto* unit=ai->GetTeamUnit(id); if(!unit || unit->IsDead()) continue;
         if(!Handles(unit)) {
@@ -507,8 +588,61 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
     const float range=unit->GetDGunRange()-12;
     Observe(unit,frame);
     if(trace) ai->LOG("[CommanderTrace] observation unit=%i contacts=%i seeds=%i threats=%i y=%.0f",unit->GetId(),int(contacts.size()),int(seeds.size()),int(threats.size()),pos.y);
+    // Threat-only energy fallback precedes even jam-safe/T3 work. The latch
+    // keeps a healthy commander in its retreat task until the cloak reserve
+    // returns; no extra scan and no peaceful low-energy evacuation.
+    const bool threatened=(s.lastDamage>=0 && frame-s.lastDamage<FRAMES_PER_SEC)
+        || Exposure(P(pos),P(pos),options.escapeSeconds,pos.y)>0.f;
+    if(options.cloakEnergyRetreat>0 && def->IsAbleToCloak()
+        && !RetreatCloakFunded(unit) && (threatened || s.energyRetreat)) {
+        if(!s.energyRetreat) {
+            ai->LOG("[Commander] unit=%i cloak_energy_retreat frame=%i",unit->GetId(),frame);
+            // An already-running health retreat will not receive AssignTo
+            // again. Clear its old cloak request once so recovery can refill.
+            if(current->GetType()==IUnitTask::Type::RETREAT)
+                TRY_UNIT(ai,unit,unit->CmdCloak(false);)
+        }
+        s.energyRetreat=true;s.budget=0;s.fundingBudget=0;s.pending=-1;
+        EndT3(unit,s,frame,"cloak_energy");
+        // A generic haven radius can include the current exposed position.
+        // Publish a precise retreat station instead, at most once per second.
+        // Eight reachable endpoints reuse the observed threat snapshot; keep
+        // a safe goal rather than walking farther once clear of the threat.
+        if(frame>=s.energyPlan+FRAMES_PER_SEC && (s.energyGoal.x<0
+            || (threatened && pos.SqDistance2D(s.energyGoal)<SQUARE(64.f))
+            || Exposure(P(s.energyGoal),P(s.energyGoal),options.escapeSeconds,s.energyGoal.y)>0.f)) {
+            s.energyPlan=frame;
+            const auto home=ai->GetSetupManager()->GetBasePos();
+            Point away=commander::Normal(P(home)-P(pos));
+            float nearest=1e30f;
+            for(const auto& c:contacts) if(!c.friendly) {
+                const float distance=commander::Length(c.pos-P(pos));
+                if(distance<nearest) {nearest=distance;away=commander::Normal(P(pos)-c.pos);}
+            }
+            if(commander::Length(away)<.1f) away={0,-1};
+            float best=1e30f;
+            for(int i=0;i<8;++i) {
+                const float angle=i*.785398163f;
+                const Point direction{away.x*std::cos(angle)-away.z*std::sin(angle),
+                    away.x*std::sin(angle)+away.z*std::cos(angle)};
+                auto at=F(P(pos)+direction*options.cloakRetreatDistance);
+                if(!OnMap(at)) continue;
+                at.y=ai->GetMap()->GetElevationAt(at.x,at.z);
+                if(!ai->GetTerrainManager()->CanReachAt(unit,at,64.f)) continue;
+                const float risk=Exposure(P(pos),P(at),options.escapeSeconds,pos.y)
+                    +4.f*Exposure(P(at),P(at),options.escapeSeconds,at.y);
+                if(risk<best) {best=risk;s.energyGoal=at;}
+            }
+        }
+
+        if(current->GetType()!=IUnitTask::Type::RETREAT)
+            ai->GetBuilderManager()->AssignTask(unit,ai->GetBuilderManager()->EnqueueRetreat());
+        return;
+    }
+    s.energyRetreat=false;s.energyGoal={-1,0,-1};
     // D-294: a T3 in range is engaged from the line (concealed per-T3 plan)
     // ahead of the D-293 withdrawal, which then covers everything else.
+    if(JamControl(unit,s,frame)) return;
     if(Intercept(unit,s,frame)) return;
     if(!task && frame<s.retry) return;
     if(current->GetType()==IUnitTask::Type::RETREAT && Handles(unit)) {
@@ -762,7 +896,7 @@ void CCommanderControl::Tick(CCircuitUnit* unit,State& s,int frame) {
                 for(const auto& c:contacts) if(c.friendly) {
                     const auto* ally=ai->GetFriendlyUnit(c.id);
                     const auto* repair=ally?ally->GetCircuitDef():nullptr;
-                    if(repair && repair->IsBuilder() && repair->GetWorkerTime()>0
+                    if(repair && repair->IsAbleToAssist() && repair->GetWorkerTime()>0
                         && commander::Length(c.pos-P(pos))<=repair->GetBuildDistance()
                         && !ally->GetUnit()->IsBeingBuilt() && !ally->GetUnit()->IsParalyzed()) {
                         lineRepair=true; break;
@@ -814,6 +948,8 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         // (bounded by line_hold_seconds); the ladder offers that work.
         if(frame<s.lineUntil && !s.lineDone) return false;
         const auto pos=unit->GetPos(frame),goal=FrontPosition(unit,s,frame);
+        if(commanderTrace && frame%300<3) ai->LOG("[CommanderTrace] front unit=%i own=%.0f bound=%.0f goal_progress=%.0f goal=%.0f,%.0f",
+            unit->GetId(),ai->GetBattle()->GetFrontLaneProgress(pos),s.pushBound,s.pushGoalProgress,goal.x,goal.z);
         if(goal.x<0 || Exposure(P(pos),P(pos),1.f,pos.y)>unit->GetUnit()->GetHealth()*.12f) return false;
         // INV-234 (D-356): the push goal never passes front_distance nor the
         // screen-led bound (the furthest corridor screen plus front_push_ahead,
@@ -824,11 +960,15 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
             // point (a folded polyline projects it onto a later segment).
             const float progress=s.pushGoalProgress;
             // The unscreened push (front_push_screen 0) is bounded by front_distance alone.
-            const float bound=options.frontPushScreen>0?std::min(options.frontDistance,s.pushBound):options.frontDistance;
+            const float plannedBound=options.frontPushScreen>0?std::min(options.frontDistance,s.pushBound):options.frontDistance;
+            const float bound=options.frontPersistent>0?std::max(plannedBound,ai->GetBattle()->GetFrontLaneProgress(pos)):plannedBound;
             if(progress>bound+64.f)
                 ai->LOG("[INVARIANT] INV-234 lane push goal beyond its bound unit=%i progress=%.0f bound=%.0f screens=%i",
                     unit->GetId(),progress,bound,s.pushScreens);
         }
+        if(unit->GetTask()==s.workTask && !unit->GetTask()->IsDead()
+            && (s.workKind==WORK_MEX_DEFENCE || s.workKind==WORK_TERRITORY_LINE || s.workKind==WORK_REPAIR_COMBAT)
+            && CanResumeFrontTask(unit,unit->GetTask())) return true;
         auto* build=dynamic_cast<IBuilderTask*>(unit->GetTask());
         // Finish a live frame/chain; planned base economy no longer prevents
         // deployment forever. Front work has its own bounded area and owner.
@@ -836,7 +976,7 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         // construction; finish it before walking on (D-299). A repair or
         // reclaim ladder task has no build definition and is still finishing
         // work (D-356: the moving anchor no longer abandons it).
-        if(build && !build->IsDead()) {
+        if(build && !build->IsDead() && CanResumeFrontTask(unit,build)) {
             const bool finishing=(build==s.workTask
                     || (build->GetBuildDef() && build->GetTarget() && !build->GetTarget()->IsFinished()))
                 && build->GetPosition().SqDistance2D(pos)<=std::pow(options.frontRadius+unit->GetCircuitDef()->GetBuildDistance(),2.f);
@@ -863,7 +1003,13 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
             // D-357: on a published corridor the en-route spot is the corridor
             // sweep's (lane window), not the LOS disc around the commander.
             const int kind=ai->GetBattle()->GetFrontLaneLength()>0.f?WORK_MEX_LANE:WORK_MEX;
-            if(auto* mex=FrontWork(unit,kind,nullptr,0)) {
+            auto* laser=options.frontLineDef>=0?ai->GetCircuitDefSafe(int(options.frontLineDef)):nullptr;
+            IUnitTask* mex=options.frontRepairCombat>0?FrontWork(unit,WORK_REPAIR_COMBAT,nullptr,0):nullptr;
+            if(!mex) mex=FrontWork(unit,kind,SupportActive(unit)?nullptr:laser,0);
+            if(!mex) mex=SupportAssist(unit);
+            if(!mex && !SupportActive(unit)) mex=FrontWork(unit,WORK_MEX_DEFENCE,laser,0);
+            if(!mex && !SupportActive(unit)) mex=FrontWork(unit,WORK_TERRITORY_LINE,laser,0);
+            if(mex) {
                 ai->GetBuilderManager()->AssignTask(unit,mex);
                 if(unit->GetTask()==mex) {
                     s.route.clear();
