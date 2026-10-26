@@ -60,7 +60,12 @@ namespace Factory {
 				if (isReset && fac == "none") return null;
 				CCircuitDef@ def = (fac != "") ? ai.GetCircuitDef(fac) : null;
 				if (def !is null && def.IsAvailable(ai.frame)) {
-					if (!isReset) Global::AISettings::StartFactory = fac;
+					// A later recovery can ask isStart again. Keep the opening
+					// identity stable: roster/corridor class must not alternate
+					// when the recovered lab changes between bots and vehicles.
+					// The selected result below still owns this actual build.
+					if (!isReset && Global::AISettings::StartFactory.length()==0)
+						Global::AISettings::StartFactory = fac;
 					@result = def;
 				}
 			}

@@ -1,4 +1,4 @@
-#include "task/builder/FrontFollowTask.h"
+#include "task/builder/CommanderGroupFollowTask.h"
 /*
  * BuilderManager.cpp
  *
@@ -1217,8 +1217,8 @@ IUnitTask* CBuilderManager::FindMatchingGuard(CCircuitUnit* unit, const TaskB::S
 		? current : nullptr;
 }
 
-IUnitTask* CBuilderManager::EnqueueFrontFollow(CCircuitUnit* leader,float radius) {
-    auto* task=new CFrontFollowTask(this,leader->GetId(),radius);
+IUnitTask* CBuilderManager::EnqueueCommanderGroupFollow(CCircuitUnit* leader,float radius) {
+    auto* task=new CCommanderGroupFollowTask(this,leader->GetId(),radius);
     updateTasks.push_back(task); lastEnqueued=task; TaskAdded(task); return task;
 }
 CCommanderTask* CBuilderManager::EnqueueCommander(IUnitTask* previous) {

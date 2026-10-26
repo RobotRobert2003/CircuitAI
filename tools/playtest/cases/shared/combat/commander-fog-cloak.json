@@ -1,0 +1,67 @@
+{
+  "name": "commander-fog-cloak",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "TACTICAL",
+  "description": "Peaceful commander keeps cloak near fog while energy income is above 500, and releases that request after its fusion is removed.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4300,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "commander_initial": true,
+  "enemy_commander_home": true,
+  "enemy_destination": [
+    4700,
+    4000
+  ],
+  "commander_overrides": {
+    "fog_cloak_distance": 600,
+    "fog_cloak_income": 500
+  },
+  "camera": [
+    4400,
+    4000,
+    1200
+  ],
+  "photos": [
+    23,
+    28,
+    40
+  ],
+  "min_spawn_spacing": 60,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "observation_frames": 3,
+  "groups": [
+    {
+      "unit": "armfus",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3200,
+        4000
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_kills": 0,
+    "min_damage": 0,
+    "max_losses": 0
+  },
+  "checks": "commander-fog-cloak",
+  "start_energy": 1000000,
+  "storage_scenario": "commander-fog-cloak",
+  "energy_retreat_observation": false,
+  "remove_units_after_seconds": 70,
+  "remove_unit_name": "armfus"
+}

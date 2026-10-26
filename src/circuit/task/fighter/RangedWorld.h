@@ -72,6 +72,7 @@ public:
     bool FreeSlot(int id, const springai::AIFloat3& pos, float spacing) const;
     void Nearby(const springai::AIFloat3& pos, float radius, std::vector<int>& result) const;
     const std::vector<Contact>& Contacts() const { return contacts; }
+    bool PeerSeesCommander(const Contact& contact,CCircuitDef* def,const springai::AIFloat3& shooter,float peerRadius) const;
     const std::vector<int>& Objectives() const { return objectives; }
     // press (owner 2026-10-19, RangedPolicy::pressStatic): armed static
     // contacts of that tech level or lower count only with their death blast.

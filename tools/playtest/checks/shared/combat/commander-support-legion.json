@@ -3,43 +3,43 @@
   "expect": [
     {
       "key": "member",
-      "pattern": "\\[FrontSupport\\] member=\\d+ side=legion",
+      "pattern": "\\[CommanderGroup\\] member=\\d+ side=legion",
       "scope": "any",
       "by_minute": 3
     },
     {
       "key": "owned power bootstrap",
-      "pattern": "\\[FrontSupport\\] unit=\\d+ build=legnanotc bootstrap=1",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ build=legnanotc bootstrap=1",
       "scope": "any",
       "by_minute": 5
     },
     {
       "key": "upgraded defense",
-      "pattern": "\\[FrontSupport\\] unit=\\d+ defence=legmg powered=1",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ defence=legmg powered=1",
       "scope": "any",
       "by_minute": 6
     },
     {
       "key": "commander assists",
-      "pattern": "\\[FrontSupport\\] commander=\\d+ assist=\\d+",
+      "pattern": "\\[CommanderGroup\\] commander=\\d+ assist=\\d+",
       "scope": "any",
       "by_minute": 6
     },
     {
-      "key": "radar",
-      "pattern": "\\[FrontSupport\\] unit=\\d+ build=legrad bootstrap=0",
+      "key": "completed powered radar package",
+      "pattern": "commander_group_radar_package radar=\\d+ nano=\\d+ jammer=\\d+",
       "scope": "any",
       "by_minute": 6
     },
     {
       "key": "jammer",
-      "pattern": "\\[FrontSupport\\] unit=\\d+ build=legjam bootstrap=0",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ build=legjam bootstrap=0",
       "scope": "any",
       "by_minute": 6
     },
     {
       "key": "finished forward package",
-      "pattern": "front_support_finished nano=[1-9]\\d* defence=[1-9]\\d* radar=[1-9]\\d* jammer=[1-9]\\d*",
+      "pattern": "commander_group_finished nano=[1-9]\\d* defence=[1-9]\\d* radar=[1-9]\\d* jammer=[1-9]\\d*",
       "scope": "any",
       "by_minute": 6
     },

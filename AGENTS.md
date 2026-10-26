@@ -4,7 +4,7 @@ These instructions apply to the entire repository. `AGENTS.md` is the sole repos
 
 ## Primary test profile
 
-Use `experimental_balanced` as the primary profile for simulations and regression checks unless the user specifies otherwise. Run other profiles as compatibility coverage when shared code changes; do not substitute them for balanced-profile verification.
+Use only `experimental_balanced` for simulations, runtime compilation checks and regression/performance testing unless the user explicitly requests another profile. It is the only profile used in live games. Update other profiles when required by a task or shared-code compatibility, but do not run them as additional test coverage.
 
 ## Simulation iteration and lifecycle
 

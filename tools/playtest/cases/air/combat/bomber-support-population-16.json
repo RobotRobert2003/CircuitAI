@@ -1,0 +1,498 @@
+{
+  "name": "bomber-support-population-16",
+  "storage_scenario": "bomber-support-16",
+  "unit": "armbrawl",
+  "side": "armada",
+  "role": "AIR",
+  "enemy_role": "AIR",
+  "map": "Full Metal Plate 1.7",
+  "map_key": "metal-plate",
+  "starts": [
+    [
+      1000,
+      1000
+    ],
+    [
+      2400,
+      1000
+    ],
+    [
+      3800,
+      1000
+    ],
+    [
+      5200,
+      1000
+    ],
+    [
+      6600,
+      1000
+    ],
+    [
+      8000,
+      1000
+    ],
+    [
+      9400,
+      1000
+    ],
+    [
+      10800,
+      1000
+    ],
+    [
+      1000,
+      10500
+    ],
+    [
+      2400,
+      10500
+    ],
+    [
+      3800,
+      10500
+    ],
+    [
+      5200,
+      10500
+    ],
+    [
+      6600,
+      10500
+    ],
+    [
+      8000,
+      10500
+    ],
+    [
+      9400,
+      10500
+    ],
+    [
+      10800,
+      10500
+    ]
+  ],
+  "ally_spots": "1,2,3,4,5,6,7,8",
+  "camera": [
+    6000,
+    5500,
+    3000
+  ],
+  "photos": [],
+  "batch_spawn": true,
+  "min_spawn_spacing": 24,
+  "hold_teams": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "groups": [
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 0,
+      "position": [
+        5200,
+        5300
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 0,
+      "position": [
+        5200,
+        5500
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 1,
+      "position": [
+        5360,
+        5300
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 1,
+      "position": [
+        5360,
+        5500
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 2,
+      "position": [
+        5520,
+        5300
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 2,
+      "position": [
+        5520,
+        5500
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 3,
+      "position": [
+        5680,
+        5300
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 3,
+      "position": [
+        5680,
+        5500
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 4,
+      "position": [
+        5840,
+        5300
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 4,
+      "position": [
+        5840,
+        5500
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 5,
+      "position": [
+        6000,
+        5300
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 5,
+      "position": [
+        6000,
+        5500
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 6,
+      "position": [
+        6160,
+        5300
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 6,
+      "position": [
+        6160,
+        5500
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 7,
+      "position": [
+        6320,
+        5300
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 7,
+      "position": [
+        6320,
+        5500
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 8,
+      "position": [
+        5200,
+        5850
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 8,
+      "position": [
+        5200,
+        5650
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 9,
+      "position": [
+        5360,
+        5850
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 9,
+      "position": [
+        5360,
+        5650
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 10,
+      "position": [
+        5520,
+        5850
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 10,
+      "position": [
+        5520,
+        5650
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 11,
+      "position": [
+        5680,
+        5850
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 11,
+      "position": [
+        5680,
+        5650
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 12,
+      "position": [
+        5840,
+        5850
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 12,
+      "position": [
+        5840,
+        5650
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 13,
+      "position": [
+        6000,
+        5850
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 13,
+      "position": [
+        6000,
+        5650
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 14,
+      "position": [
+        6160,
+        5850
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 14,
+      "position": [
+        6160,
+        5650
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "count": 4,
+      "team": 15,
+      "position": [
+        6320,
+        5850
+      ],
+      "columns": 2,
+      "spacing": 60,
+      "after_seconds": 12
+    },
+    {
+      "unit": "armmstor",
+      "count": 8,
+      "team": 15,
+      "position": [
+        6320,
+        5650
+      ],
+      "columns": 4,
+      "spacing": 32,
+      "after_seconds": 12
+    }
+  ],
+  "commander_observation": true,
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "checks": "bomber-support-population-16",
+  "description": "Fixed 16-AIR selector cost fixture: 64 held gunships and 128 unarmed visible contacts; runner freezes other AIR policies and weapon fire equally for on/off controls."
+}

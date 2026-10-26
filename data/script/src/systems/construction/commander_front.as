@@ -1,4 +1,4 @@
-#include "front_support.as"
+#include "commander_group.as"
 // FRONT duty is offered before default economy can enqueue a base job.
 // Only task offers mutate native structure ownership; combat can preempt them.
 namespace CommanderFront {
@@ -15,7 +15,7 @@ namespace CommanderFront {
         return false;
     }
     void Update() {
-        FrontSupport::Update();
+        CommanderGroup::Update();
         const bool ready=Ready();
         aiBuilderMgr.SetCommanderCombatOption("front_ready",ready?1.f:0.f);
         if(ready!=wasReady) {
@@ -76,7 +76,7 @@ namespace CommanderFront {
         if(name=="advance") return aiBuilderMgr.CommanderFrontWork(unit,WORK_ADVANCE,null,0.f);
         if(name=="hold") return aiBuilderMgr.CommanderFrontWork(unit,WORK_HOLD,null,
             aiSetupMgr.ConfigFloat("commander/combat/front_hold_seconds",10.f));
-        if(name=="support_group") return aiBuilderMgr.CommanderFrontWork(unit,20,null,0.f);
+        if(name=="commander_group") return aiBuilderMgr.CommanderFrontWork(unit,20,null,0.f);
         if(name=="assist") return aiBuilderMgr.CommanderFrontWork(unit,WORK_ASSIST,null,Global::Commander::FrontRadius);
         if(name=="mex") return aiBuilderMgr.CommanderFrontWork(unit,WORK_MEX,null,Global::Commander::FrontRadius);
         if(name=="laser") return aiBuilderMgr.CommanderFrontWork(unit,WORK_LASER,laser,Global::Commander::FrontLaserSpacing);
@@ -100,6 +100,12 @@ namespace CommanderFront {
         return null;
     }
     IUnitTask@ Work(CCircuitUnit@ unit) {
+        // Emergency local energy is available before the factory/nano gate too.
+        const string solarSide=UnitHelpers::GetSideForUnitName(unit.circuitDef.GetName());
+        CCircuitDef@ solar=Def("front_solar_unit",UnitHelpers::GetSolarNameForSide(solarSide));
+        aiBuilderMgr.SetCommanderCombatOption("front_solar_def",solar is null?-1.f:float(solar.id));
+        IUnitTask@ energy=aiBuilderMgr.CommanderFrontWork(unit,22,solar,0.f);
+        if(energy !is null) return energy;
         if(!Ready()) return null;
         LoadLadder();
         // Roles choose the order, definitions and spacing.

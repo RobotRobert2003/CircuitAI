@@ -9,6 +9,7 @@
 		"step": 80, "max_approach": 180, "max_seconds": 12,
 		"align_seconds": 0.6, "shots": 2, "margin": 150,
 		"cloak_seconds": 1.5, "escape_seconds": 4.3,
+		"fog_cloak_distance": 600, "fog_cloak_income": 500,
 		"friendly_margin": 12, "front_workers": 2,
 		// Persistent FRONT lane duty after the opener. No riot/time home latch.
 		// Cross-lane LLTs start when unseen ground is within front_line_fog elmos
@@ -17,7 +18,11 @@
 		// Jam safety accepts combat risk; heavy T2 means mobile combat metal >=900.
 		"front_distance": 6000,
 		"front_persistent": 1,
-		"front_support_income": 20,
+		"commander_group_income": 20,
+		"commander_group_jammer_edge": 100,
+		"commander_group_jammer_income": 25,
+		"health_retreat": 0.4,
+		"health_shot_seconds": 2,
 		"front_mex_los": 1,
 		"front_mex_defence": 1,
 		"front_line_enabled": 1,
@@ -37,7 +42,8 @@
 		"front_lane_margin": 150, "front_hold_seconds": 10, "front_standoff": 650, "front_radius": 500, "front_threat": 3,
 		"advance_roles": "FRONT,TACTICAL",
 		"front_repair_combat": 1,
-		"front_ladder": "repair_combat,mex_lane,support_group,mex_defence,territory_line,advance,hold",
+		"front_solar_income": 400, "front_solar_storage": 0.2, "front_solar_radius": 300,
+		"front_ladder": "repair_combat,mex_lane,commander_group,mex_defence,territory_line,advance,hold",
 		// D-357 corridor mex sweep: spots within half-width + front_mex_reach (0: build
 		// distance) of the lane, front_mex_behind behind to front_mex_ahead ahead of the
 		// commander, en route every front_mex_seconds; enemy extractors there are

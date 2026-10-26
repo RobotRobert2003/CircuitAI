@@ -20,6 +20,11 @@ for profile in ['experimental_balanced', 'experimental_hard', 'experimental_terr
     assert source.count('ArtilleryPolicy::Check();') == 1
     path.write_text(source.replace('ArtilleryPolicy::Check();',
         'ArtilleryPolicy::Check();\n        AirClusterProbe::Tick();') + '\n' + probe)
+layout = base / 'AI/Skirmish/BARbTest/test/script/src/systems/air/air_layout.as'
+source = layout.read_text()
+assert source.count('return members[0];') == 1
+layout.write_text(source.replace('return members[0];',
+    'AirClusterProbe::CheckCentered();\n                return members[0];'))
 if not a.observe_only:
     (base / 'LuaUI/Widgets/allied_layout_fixture.lua').write_text(
         (ROOT / 'tools/playtest/widgets/allied_layout_fixture.lua').read_text())

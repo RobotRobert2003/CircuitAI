@@ -1,0 +1,45 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].*loaded",
+      "scope": "any",
+      "by_minute": 0.5
+    },
+    {
+      "key": "idle visible commander",
+      "pattern": "unit id=\\d+ unit=armcom .*cloak=false",
+      "scope": "any",
+      "after_minute": 1,
+      "by_minute": 1.8
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "peaceful energy retreat",
+      "pattern": "cloak_energy_retreat",
+      "scope": "any"
+    },
+    {
+      "key": "income gate",
+      "pattern": "\\[CommanderCloak\\].*fog=1",
+      "scope": "any"
+    }
+  ]
+}

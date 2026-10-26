@@ -3,7 +3,7 @@
   "unit": "corcom",
   "side": "cortex",
   "role": "FRONT",
-  "description": "FRONT first factory produces constructor, scout, six raiders, then one additional constructor.",
+  "description": "FRONT first factory produces constructor, scout, ten raiders, then one additional constructor.",
   "commander_overrides": {
     "front_push_screen": 0
   },
@@ -76,6 +76,10 @@
     "factory": "corvp",
     "products": [
       "corcv",
+      "corfav",
+      "corfav",
+      "corfav",
+      "corfav",
       "corfav",
       "corfav",
       "corfav",

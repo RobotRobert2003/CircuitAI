@@ -85,7 +85,7 @@
     "experimentallegionfaction": 1,
     "multiplier_metalextraction": 10
   },
-  "front_support_observation": {
+  "commander_group_observation": {
     "nano": "legnanotc",
     "defence": "legmg",
     "radar": "legrad",

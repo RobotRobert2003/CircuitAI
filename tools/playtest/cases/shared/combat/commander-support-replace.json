@@ -84,7 +84,7 @@
   "remove_units_after_seconds": 150,
   "remove_unit_name": "armck",
   "remove_unit_team": 0,
-  "front_support_observation": {
+  "commander_group_observation": {
     "nano": "armnanotc",
     "defence": "armbeamer",
     "radar": "armrad",

@@ -146,6 +146,53 @@ void TestAirClustersPackSixWithoutOverlap()
 	Check(!MakeAirFactoryCluster({}, 4, {9, 6}, {9, 9}, {3, 3}, 6, 3, 5, 20).valid, "invalid air facing rejected");
 }
 
+void TestCenteredAirClusters()
+{
+	for (int facing = 0; facing < 4; ++facing) {
+		for (int count = 1; count <= 6; ++count) {
+			for (int columns = 1; columns <= count; ++columns) {
+				for (bool firstT2 : {false, true}) {
+					const Footprint first = firstT2 ? Footprint{9, 9} : Footprint{9, 6};
+					const int firstNanos = firstT2 ? 20 : 5;
+					const auto old = MakeAirFactoryCluster({301, 303}, facing, first, {9, 9}, {3, 3}, count, columns, firstNanos, 20);
+					const auto plan = MakeAirFactoryCluster({301, 303}, facing, first, {9, 9}, {3, 3}, count, columns, firstNanos, 20, firstT2, true);
+					Check(plan.valid, "centered air plan valid");
+					Check(plan.bounds.minX == old.bounds.minX && plan.bounds.maxX == old.bounds.maxX
+						&& plan.bounds.minZ == old.bounds.minZ && plan.bounds.maxZ == old.bounds.maxZ,
+						"centered plan preserves exact reservation envelope");
+					std::vector<Slot> slots = plan.factories;
+					for (int b = 0; b < count; ++b) {
+						Check(plan.nanos[b].size() == old.nanos[b].size(), "support capacity unchanged");
+						if (b == 0 && !firstT2) {
+							Check(plan.factories[b].centre.x2 == old.factories[b].centre.x2 && plan.factories[b].centre.z2 == old.factories[b].centre.z2, "T1 lab stays in place");
+							for (std::size_t i = 0; i < plan.nanos[b].size(); ++i)
+								Check(plan.nanos[b][i].centre.x2 == old.nanos[b][i].centre.x2 && plan.nanos[b][i].centre.z2 == old.nanos[b][i].centre.z2, "T1 support stays in place");
+						} else {
+							const Point forward = Offset({}, facing, 1, 0);
+							int rear = 0, front = 0;
+							for (const auto& nano : plan.nanos[b]) {
+								const int dx = nano.centre.x2 - plan.factories[b].centre.x2;
+								const int dz = nano.centre.z2 - plan.factories[b].centre.z2;
+								if (dx * forward.x2 + dz * forward.z2 < 0) ++rear; else ++front;
+								Check((dx * dx + dz * dz) * HALF_CELL_ELMOS * HALF_CELL_ELMOS <= 400 * 400, "centered support reaches factory");
+							}
+							Check(rear == 9 && front == 11, "T2 factory between balanced nine/eleven banks");
+						}
+						slots.insert(slots.end(), plan.nanos[b].begin(), plan.nanos[b].end());
+					}
+					for (std::size_t i = 0; i < slots.size(); ++i) {
+						const auto rect = RectFromCentre(slots[i].centre, slots[i].footprint, facing);
+						Check(IsAligned(slots[i].centre, slots[i].footprint, facing), "centered slot aligned");
+						Check(Contains(plan.bounds, rect), "centered slot inside original envelope");
+						for (std::size_t j = 0; j < i; ++j)
+							Check(!Intersects(rect, RectFromCentre(slots[j].centre, slots[j].footprint, facing)), "centered slots do not overlap");
+					}
+				}
+			}
+		}
+	}
+}
+
 void TestBoundsAndIntersection()
 {
 	const Rect a{0, 0, 4, 4};
@@ -169,6 +216,7 @@ int main()
 	TestFactoryPairSymmetry();
 	TestBoundsAndIntersection();
 	TestAirClustersPackSixWithoutOverlap();
+	TestCenteredAirClusters();
 	if (failures != 0) {
 		std::cerr << failures << " base-layout geometry check(s) failed\n";
 		return EXIT_FAILURE;

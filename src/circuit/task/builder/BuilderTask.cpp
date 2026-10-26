@@ -345,7 +345,7 @@ bool IBuilderTask::Execute(CCircuitUnit* unit)
 	FindBuildSite(unit, pos, searchRadius);
 
 	if (geom::is_valid(buildPos)) {
-        if(!circuit->GetCommanderControl()->SupportMayBuild(unit,buildDef,buildPos)) return false;
+        if(!circuit->GetCommanderControl()->GroupMayBuild(unit,buildDef,buildPos)) return false;
 		TRY_UNIT(circuit, unit,
 			unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(frame));
 		)
@@ -375,7 +375,9 @@ bool IBuilderTask::TryBuildCachedSite(CCircuitUnit* unit)
         || !circuit->GetBuilderManager()->IsBuildPositionAllowed(buildDef, buildPos)
         || circuit->GetTerrainManager()->IsAllyLayoutBlocked(buildDef, buildPos, facing)
         || !circuit->GetMap()->IsPossibleToBuildAt(buildDef->GetDef(), buildPos, facing)) return false;
-    if(!circuit->GetCommanderControl()->SupportMayBuild(unit,buildDef,buildPos)) return false;
+    if(!circuit->GetCommanderControl()->GroupMayBuild(unit,buildDef,buildPos)) return false;
+    const auto coverage=circuit->GetCommanderControl()->GroupJammerCoverage(unit,buildDef,buildPos,0.f,this);
+    if(!coverage.NearUnjammed({buildPos.x,buildPos.z},circuit->GetCommanderControl()->GroupJammerMargin())) return false;
     const auto exclusions=circuit->GetCommanderControl()->DefenceExclusions(unit,buildDef,buildPos,0.f,this);
     if(!commander::DefenceSpaced({buildPos.x,buildPos.z},exclusions)) return false;
     TRY_UNIT(circuit, unit,
@@ -1026,8 +1028,12 @@ void IBuilderTask::FindBuildSite(CCircuitUnit* builder, const AIFloat3& pos, flo
 
 	CTerrainManager* terrainMgr = manager->GetCircuit()->GetTerrainManager();
     const auto exclusions=manager->GetCircuit()->GetCommanderControl()->DefenceExclusions(builder,buildDef,pos,searchRadius,this);
-	CTerrainManager::TerrainPredicate predicate = [this, terrainMgr, builder, &exclusions](const AIFloat3& p) {
+    auto* control=manager->GetCircuit()->GetCommanderControl();
+    const auto coverage=control->GroupJammerCoverage(builder,buildDef,pos,searchRadius,this);
+	CTerrainManager::TerrainPredicate predicate = [this, terrainMgr, builder, &exclusions, &coverage, control](const AIFloat3& p) {
 		return commander::DefenceSpaced({p.x,p.z},exclusions)
+            && control->GroupSiteAllowed(builder,p)
+            && coverage.NearUnjammed({p.x,p.z},control->GroupJammerMargin())
             && manager->GetCircuit()->GetBuilderManager()->IsBuildPositionAllowed(buildDef, p)
             && terrainMgr->CanReachAtSafe(builder, p, builder->GetCircuitDef()->GetBuildDistance());
 	};

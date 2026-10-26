@@ -4,6 +4,7 @@
 namespace Global {
 namespace RoleSettings {
 namespace Front {
+            float BaseSupportRadius = 1000.0f; // first land constructor stays with home economy
             bool GeothermalEnabled = true;
             uint GeothermalBuilders = 2;
             float GeothermalRadius = 3200.0f;
@@ -89,7 +90,7 @@ namespace Front {
             float MetalIncomePerT2Builder = 40.0f;
 
             // Misc Logic Settings
-            int RaiderOpenerCount = 6;
+            int RaiderOpenerCount = 10;
             // Opt-in profile policy: retain the first scout, then choose tanks.
             float VehicleTankOpenerChance = 0.0f;
             int VehicleTankGatherSeconds = 300; // release a disrupted/incomplete batch

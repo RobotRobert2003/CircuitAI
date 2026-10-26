@@ -4,9 +4,9 @@
 namespace circuit {
 // Movement-only escort: engine GUARD would start construction without the
 // group's owned-nano prerequisite. One task per member, ordinary retreat rules.
-class CFrontFollowTask final: public IWaitTask {
+class CCommanderGroupFollowTask final: public IWaitTask {
 public:
-    CFrontFollowTask(ITaskModule* manager,int target,float radius);
+    CCommanderGroupFollowTask(ITaskModule* manager,int target,float radius);
     void Start(CCircuitUnit* unit) override;
     void Update() override;
     void OnUnitIdle(CCircuitUnit* unit) override;

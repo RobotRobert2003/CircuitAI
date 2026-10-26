@@ -11,6 +11,7 @@ namespace Air {
             float FirstLabIncomeShare = 0.75f; // leave income and a bank for immediate defence
             bool ContinuousFactoryProduction = true; // refill on completion; funded T2 labs bypass discretionary growth holds
             int MaxProductionBays = 0; // zero: no AIR policy cap; terrain/income/support still gate
+            bool CenteredT2FactorySupport = true; // D-381: split support banks inside the existing reserved bay
             int PlannedT2Bays = 6;
             int PlannedT1Bays = 1;
             int PlannedEcoModules = 4; // one AFUS and eight converter pins each; reservation, not a build order
@@ -26,6 +27,7 @@ namespace Air {
             int ConverterParallel = 3;
             float ConverterDraw = 70.0f;
             float ConverterEnergyReserve = 150.0f;
+            bool FloatingSupportFirst = true; // D-378: funded standing-plant support before discretionary expansion
             int T2NanoSoftLimit = 20;
             int T2ExpansionSupport = 20; // completed turrets per existing T2 air lab; banked metal cannot bypass
             int T1NanoLimit = 5;
@@ -183,6 +185,12 @@ namespace Air {
             int NavalSupportSearchSeconds = 20;
 
             bool BaseResponseEnabled = true;
+            bool BomberSupportEnabled = true;
+            array<string> BomberSupportDefinitions = {"armthund", "armsb", "armpnix", "corshad", "corsb", "corhurc", "legspbomber", "legphoenix"};
+            float BomberSupportMaxThreat = 1500.0f; // existing strike threat scale
+            array<string> BomberSupportSpotters = {"armkam", "armsaber", "armbrawl", "armblade", "armdfly",
+                "corbw", "corcut", "corape", "corcrwh", "legmos", "legspsurfacegunship", "legspcarrier", "legfort", "legstronghold"};
+
             float BaseResponseRadius = 1800.0f;
             int BaseResponseSearchSeconds = 20;
             int BaseResponseGunships = 20; // one shared reserve, including frames/orders

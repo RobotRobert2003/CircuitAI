@@ -305,7 +305,7 @@ public:
 
 	float GetGoalExecTime() const { return goalExecTime; }
 	unsigned int GetWorkerCount() const { return workers.size(); }
-    IUnitTask* EnqueueFrontFollow(CCircuitUnit* leader,float radius);
+    IUnitTask* EnqueueCommanderGroupFollow(CCircuitUnit* leader,float radius);
     CCommanderTask* EnqueueCommander(IUnitTask* previous);
     bool SetCommanderCombatOption(const std::string& name,float value);
     float GetCommanderEnergyReserve() const;

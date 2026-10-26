@@ -203,7 +203,7 @@ struct AirFactoryCluster {
 
 [[nodiscard]] inline AirFactoryCluster MakeAirFactoryCluster(Point origin, int facing,
 		Footprint first, Footprint repeated, Footprint nano, int count, int columns,
-		int firstNanos, int repeatedNanos)
+		int firstNanos, int repeatedNanos, bool centerFirst = false, bool centerRepeated = false)
 {
 	AirFactoryCluster result;
 	if (!IsFacingValid(facing) || count < 1 || count > 6 || columns < 1 || columns > count
@@ -240,6 +240,31 @@ struct AirFactoryCluster {
 		result.nanos.push_back(std::move(support));
 	}
 	result.bounds = BoundsOf(all);
+	// Preserve the legacy reservation envelope exactly; only rearrange its slots.
+	// Planning-only O(total support slots), at most 120, with no extra allocations
+	// or callbacks. Persisted reservations retain their original coordinates.
+	// Odd support-row counts split floor/ceil: 20 3x3 nanos around a 9x9 lab
+	// require 9/11 banks within the original 9x30 bay, rather than a wider bay.
+	// Covered across rotations and campus shapes by base_layout_geometry_test.
+	for (int b = 0; b < count; ++b) {
+		if (!(b == 0 ? centerFirst : centerRepeated)) continue;
+		auto& support = result.nanos[b];
+		const int rows = (int(support.size()) + supportColumns - 1) / supportColumns;
+		const int rearRows = rows / 2;
+		const int frontRows = rows - rearRows;
+		auto& factory = result.factories[b];
+		factory.centre = Offset(factory.centre, facing, -2 * frontRows * nano.z, 0);
+		const Point corner = Offset(origin, facing, 2 * (b / columns) * depth, 2 * (b % columns) * pitch);
+		const int rearEdge = supportDepth - frontRows * nano.z;
+		for (int i = 0; i < int(support.size()); ++i) {
+			const int row = i / supportColumns;
+			// Fill the shorter rear bank then the front bank, nearest factory first.
+			const int z2 = row < rearRows
+				? 2 * rearEdge - (2 * row + 1) * nano.z
+				: 2 * (rearEdge + factory.footprint.z) + (2 * (row - rearRows) + 1) * nano.z;
+			support[i].centre = Offset(corner, facing, z2, (2 * (i % supportColumns) + 1) * nano.x);
+		}
+	}
 	result.valid = true;
 	return result;
 }

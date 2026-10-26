@@ -1,0 +1,41 @@
+{
+  "stop_minute": 1,
+  "expect": [
+    {
+      "key": "commander",
+      "pattern": "spawn id=(?P<target>\\d+) team=1 unit=armcom",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "commander shot",
+      "pattern": "shot id=\\d+ unit=corthud weapon=\\d+ target=\\d+.*intent=(?P<target>\\d+)",
+      "scope": "any",
+      "same_as": "commander",
+      "after_key": "commander",
+      "by_minute": 1
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    }
+  ]
+}

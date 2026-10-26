@@ -596,7 +596,7 @@ void CBattleAnalysis::Update(int frame)
             const float hazardRange = e->IsBeingBuilt() ? 0.f : std::max(
                 d->HasSurfToLand() ? d->GetMaxRange(CCircuitDef::RangeType::LAND) : 0.f,
                 (!d->IsMobile() && d->IsAbleToReclaim()) ? d->GetBuildDistance() : 0.f);
-            groundContacts.push_back({e->GetPos(), m, economy, e->GetId(), d->GetId(), kind, hazardRange});
+            groundContacts.push_back({e->GetPos(), m, economy, e->GetId(), d->GetId(), kind, hazardRange, e->IsInLOS()});
         }
         if (observed && !d->IsAbleToFly() && d->IsMobile()
             && (d->IsFloater() || d->IsSubmarine()) && Height(e->GetPos()) < 0.f) {
@@ -711,11 +711,42 @@ int CBattleAnalysis::GetGroundContactId(int i) const {
 int CBattleAnalysis::GetGroundContactDefId(int i) const {
     return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].defId : -1;
 }
+void CBattleAnalysis::AddAirSpotterDef(CCircuitDef* def)
+{
+    if (def == nullptr || !def->IsAbleToFly()) return;
+    const float radius = def->GetLosRadius();
+    airSpotterSight[def->GetId()] = radius;
+    maxAirSpotterSight = std::max(maxAirSpotterSight, radius);
+}
+void CBattleAnalysis::ClearAirSpotterDefs()
+{
+    airSpotterSight.clear(); maxAirSpotterSight = 0.f;
+}
+bool CBattleAnalysis::InAirSpotterSight(const AIFloat3& pos) const
+{
+    if (maxAirSpotterSight <= 0.f || !InLos(pos)) return false;
+    // Script owns the spotter roster. Query only the local friendly spatial
+    // index; no global army census and no cached moving-unit positions. The
+    // legal current allied LOS cell is required in addition to sight range.
+    const auto& ids = circuit->GetCallback()->GetFriendlyUnitIdsIn(pos, maxAirSpotterSight, false);
+    for (int id : ids) {
+        auto* unit = circuit->GetFriendlyUnit(id);
+        if (unit == nullptr) continue;
+        const auto found = airSpotterSight.find(unit->GetCircuitDef()->GetId());
+        if (found == airSpotterSight.end() || unit->GetUnit()->IsBeingBuilt()) continue;
+        if (unit->GetPos(circuit->GetLastFrame()).SqDistance2D(pos) <= SQUARE(found->second)) return true;
+    }
+    return false;
+}
+
 float CBattleAnalysis::GetGroundContactCost(int i) const {
     return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].cost : 0.f;
 }
 bool CBattleAnalysis::IsGroundContactEconomy(int i) const {
     return i >= 0 && i < int(groundContacts.size()) && groundContacts[i].economy;
+}
+bool CBattleAnalysis::IsGroundContactInLos(int i) const {
+    return i >= 0 && i < int(groundContacts.size()) && groundContacts[i].inLos;
 }
 int CBattleAnalysis::GetGroundContactKind(int i) const {
     return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].kind : 0;

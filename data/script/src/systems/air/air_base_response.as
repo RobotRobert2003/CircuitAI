@@ -13,7 +13,7 @@ namespace AirBaseResponse {
     int waitingSince = -1;
     float groundCost = 0, aaCost = 0;
     int updated = -100000, lastSeen = -100000;
-    bool contact = false;
+    bool contact = false, bomberContact = false, spottersReady = false;
     bool Active() { return AirEconomy::Active() && Global::RoleSettings::Air::BaseResponseEnabled; }
     bool Emergency() { return Active() && contact; }
     bool InBase(const AIFloat3 &in p) {
@@ -49,7 +49,8 @@ namespace AirBaseResponse {
         if (AirScreen::IsFighter(d)) return -1;
         if (!d.HasSurfToLand()) return -1;
         if (d.GetTargetMinCost() > 0) return 3; // JSON-opted fortress, separate from cheap gunships
-        return AirWaves::IsWaveBomber(d) ? 1 : 0;
+        return (AirWaves::IsWaveBomber(d) || (Global::RoleSettings::Air::BomberSupportEnabled
+            && Global::RoleSettings::Air::BomberSupportDefinitions.find(d.GetName()) >= 0)) ? 1 : 0;
     }
     bool Heavy(const CCircuitDef@ d) {
         // Same authoritative gantry-exclusive roster as the offensive wave policy.
@@ -62,8 +63,9 @@ namespace AirBaseResponse {
         AirProduction::home.delete(key); AirScreen::Removed(id);
     }
     IUnitTask@ TaskFor(CCircuitUnit@ u) {
-        if (!Active() || !contact || !Free(u)) return null;
+        if (!Active() || !Free(u)) return null;
         const int kind = Kind(u.circuitDef);
+        if (kind == 1 ? !bomberContact : !contact) return null;
         if (kind < 0 || groups[kind] is null || groups[kind].IsDead()) return null;
         // Let the existing interceptor controller answer simultaneous aircraft.
         if (kind == 2 && AirScreen::IntrusionCost() > 0) return null;
@@ -103,7 +105,8 @@ namespace AirBaseResponse {
         if (old !is null && !old.IsDead()) old.Abort();
     }
     void Reset() {
-        contact = false;
+        contact = false; bomberContact = false; spottersReady = false;
+        aiBattle.ClearAirSpotterDefs();
         for (int i = 0; i < 4; ++i) ClearGroup(i);
         members.deleteAll(); updated = -100000; lastSeen = -100000;
         ClearReserve(); groundCost = 0; aaCost = 0;
@@ -166,6 +169,13 @@ namespace AirBaseResponse {
         if (!Active() || ai.frame-updated < SECOND) return;
         updated = ai.frame;
         AirHome::Refresh(); AirOperations::InitHeavyRoster();
+        if (!spottersReady) {
+            aiBattle.ClearAirSpotterDefs();
+            for (uint i = 0; i < Global::RoleSettings::Air::BomberSupportSpotters.length(); ++i)
+                aiBattle.AddAirSpotterDef(ai.GetCircuitDef(Global::RoleSettings::Air::BomberSupportSpotters[i]));
+            spottersReady = true;
+        }
+        bool bomberBase = false;
         array<int> selected(3, -1);
         array<float> scores(3, -1.0f);
         bool selectedGunshipPriority = false;
@@ -173,10 +183,21 @@ namespace AirBaseResponse {
         const int contacts = aiBattle.GetGroundContactCount();
         for (int i = 0; i < contacts; ++i) {
             const AIFloat3 p = aiBattle.GetGroundContactPos(i);
-            if (!InBase(p)) continue;
+            const bool inBase = InBase(p);
             const CCircuitDef@ d = ai.GetCircuitDef(aiBattle.GetGroundContactDefId(i));
             if (d is null) continue;
             const int id = aiBattle.GetGroundContactId(i);
+            // Base defense wins over front support. Within that tier, cost is
+            // authoritative (no incumbent bonus). One contact pass per second,
+            // only improving candidates need the bounded spotter/threat query.
+            if (Global::RoleSettings::Air::BomberSupportEnabled && aiBattle.IsGroundContactInLos(i)
+                && AirMath::PreferBomberSupport(inBase, d.costM, bomberBase, scores[1])
+                && (inBase || aiBattle.InAirSpotterSight(p))
+                && aiBattle.AirThreatAlong(Global::Map::StartPos, p, Global::RoleSettings::Air::StrikeCorridorPadding)
+                    <= Global::RoleSettings::Air::BomberSupportMaxThreat) {
+                selected[1] = i; scores[1] = d.costM; bomberBase = inBase;
+            }
+            if (!inBase) continue;
             // Reuse the existing shared contact pass, not a per-aircraft enemy
             // query. No persistent cache: current observed definitions are read
             // once per response tick. O(C) selection, unchanged one-second cadence.
@@ -188,6 +209,7 @@ namespace AirBaseResponse {
             const float score = (d.HasSurfToLand() || d.HasSurfToAir() ? 100000.0f : 0.0f)
                 + (d.GetBuildSpeed() > 0 ? 50000.0f : 0.0f) + d.costM;
             for (int k = 0; k < 3; ++k) {
+                if (k == 1 && Global::RoleSettings::Air::BomberSupportEnabled) continue;
                 if (!AirMath::DefensiveBomberTarget(k == 1, d.IsMobile(), Heavy(d))) continue;
                 // Stable targets avoid churning orders as a formation moves.
                 // Fortress guns must not be held on a cheap raider by the
@@ -210,12 +232,19 @@ namespace AirBaseResponse {
             Invariants::Violation("INV-192", "gunship-defense", "observed priority AA lost to a lower target tier");
         const bool previous = contact;
         contact = selected[0] >= 0;
+        if (Global::RoleSettings::Air::BomberSupportEnabled && contact && !bomberBase) selected[1] = -1;
+        bomberContact = selected[1] >= 0;
         if (contact) lastSeen = ai.frame;
         if (contact != previous) GenericHelpers::LogUtil("[AIR][BaseResponse] contact=" + contact, 1);
-        if (!contact && ai.frame-lastSeen >= AiMax(1, Global::RoleSettings::Air::BaseResponseSearchSeconds)*SECOND) {
+        if (!contact && !bomberContact && ai.frame-lastSeen >= AiMax(1, Global::RoleSettings::Air::BaseResponseSearchSeconds)*SECOND) {
             for (int k = 0; k < 4; ++k) ClearGroup(k);
             members.deleteAll(); ClearReserve(); return;
         }
+        // Front bomber support must not keep an expired base-defense search
+        // alive. Each controller releases its own tasks independently.
+        const bool searchExpired = !contact && ai.frame-lastSeen >= AiMax(1,
+            Global::RoleSettings::Air::BaseResponseSearchSeconds)*SECOND;
+        if (searchExpired) { ClearGroup(0); ClearGroup(3); ClearReserve(); }
         groundCost = 0; aaCost = 0;
         if (selected[0] >= 0) {
             const AIFloat3 incident = aiBattle.GetGroundContactPos(selected[0]);
@@ -246,10 +275,11 @@ namespace AirBaseResponse {
         }
         for (int k = 0; k < 4; ++k) {
             if (k == 2) { ClearGroup(k); continue; } // legacy ground-escort slot
+            if (k != 1 && searchExpired) continue;
             const int index = selected[k == 2 ? 0 : (k == 3 ? 2 : k)];
             const int next = index < 0 ? -1 : aiBattle.GetGroundContactId(index);
             if (index >= 0) aims[k] = aiBattle.GetGroundContactPos(index);
-            if (k == 1 && contact && index < 0) { ClearGroup(k); continue; }
+            if (k == 1 && index < 0) { ClearGroup(k); continue; }
             if (groups[k] is null || groups[k].IsDead()) {
                 if (index < 0) continue;
                 @groups[k] = cast<CRouteTask>(aiMilitaryMgr.Enqueue(TaskF::Route()));
@@ -268,6 +298,8 @@ namespace AirBaseResponse {
                 groups[k].SetAirTarget(k == 2 ? -1 : next); groups[k].SetRoute(route);
                 targets[k] = next;
                 GenericHelpers::LogUtil("[AIR][BaseResponse] group=" + k + " target=" + next, 1);
+                if (k == 1) GenericHelpers::LogUtil("[AIR][BomberSupport] target=" + next
+                    + " metal=" + scores[1] + " reason=" + (bomberBase ? "base" : "gunship-sight"), 1);
             }
         }
         array<string>@ enrolled = members.getKeys();
@@ -277,7 +309,7 @@ namespace AirBaseResponse {
             else if (!Free(u)) Invariants::Violation("INV-140", enrolled[i], "protected aircraft acquired by base response");
             else if (Kind(u.circuitDef) != k) Invariants::Violation("INV-156", enrolled[i], "base defense target policy differs from aircraft group");
         }
-        if (!contact) return;
+        if (!contact && !bomberContact) return;
         array<Id>@ ids = ai.GetOwnedUnitIds();
         int joined = 0;
         for (uint i = 0; i < ids.length(); ++i) {

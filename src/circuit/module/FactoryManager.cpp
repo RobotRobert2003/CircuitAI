@@ -533,6 +533,8 @@ void CFactoryManager::ReadConfig()
 			boolean("hold_fireline", policy.holdFireline);
 			boolean("stage_when_blocked", policy.stageWhenBlocked);
 			boolean("fire_at_will", policy.fireAtWill);
+            boolean("fire_in_range", policy.fireInRange);
+            boolean("commander_focus", policy.commanderFocus);
             number("commander_priority", policy.commanderPriority, 1.f, 100.f);
 			boolean("coordinated", policy.coordinated);
             // Fireline holding is an individual forward-arc doctrine. Reject

@@ -1,4 +1,8 @@
 void test_air_parity_still_builds_bombers() { Check(AirMath::BomberOrders(1000,1000,6,3)==3); }
+void test_bomber_support_base_precedes_expensive_front_target() { Check(AirMath::PreferBomberSupport(true,100,false,6000)); }
+void test_bomber_support_front_cannot_preempt_base() { Check(!AirMath::PreferBomberSupport(false,6000,true,100)); }
+void test_bomber_support_higher_cost_preempts_incumbent() { Check(AirMath::PreferBomberSupport(false,101,false,100)); }
+void test_bomber_support_equal_cost_retains_order() { Check(!AirMath::PreferBomberSupport(true,100,true,100)); }
 void test_t1_opening_waits_for_completed_crew() { Check(!AirMath::T1OpeningReady(2,3,2,2,false)); }
 void test_t1_opening_waits_for_completed_support() { Check(!AirMath::T1OpeningReady(3,3,1,2,false)); }
 void test_t1_opening_defers_energy_recovery() { Check(!AirMath::T1OpeningReady(3,3,2,2,true)); }

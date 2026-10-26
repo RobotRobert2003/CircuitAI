@@ -1,0 +1,55 @@
+{
+  "stop_minute": 8,
+  "expect": [
+    {
+      "key": "jammer admitted",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ build=armjamt bootstrap=0.*metal=(2[5-9]|[3-9]\\d|\\d{3,})\\.",
+      "scope": "any",
+      "by_minute": 8
+    },
+    {
+      "key": "real income removed",
+      "pattern": "fixture_units_removed unit=armmakr count=26",
+      "scope": "any",
+      "by_minute": 8
+    },
+    {
+      "key": "jammer work paused below gate",
+      "pattern": "\\[CommanderGroup\\] pause jammer unit=\\d+ metal=([01]?\\d|2[0-4])\\.",
+      "scope": "any",
+      "by_minute": 8
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "front turret crowding",
+      "pattern": "front_spacing_violation",
+      "scope": "any"
+    },
+    {
+      "key": "unfunded new jammer",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ build=armjamt bootstrap=0.*metal=([01]?\\d|2[0-4])\\.",
+      "scope": "any"
+    }
+  ]
+}

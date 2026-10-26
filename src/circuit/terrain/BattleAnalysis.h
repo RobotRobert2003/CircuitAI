@@ -132,12 +132,16 @@ public:
     bool IsAirContactArmed(int index) const;
     float GetArmedAirCost() const;
     float AmphThreat(const springai::AIFloat3& pos) const;
+    void AddAirSpotterDef(CCircuitDef* def);
+    void ClearAirSpotterDefs();
+    bool InAirSpotterSight(const springai::AIFloat3& pos) const;
     int GetGroundContactCount() const { return static_cast<int>(groundContacts.size()); }
     int GetGroundContactId(int index) const;
     int GetGroundContactDefId(int index) const;
     springai::AIFloat3 GetGroundContactPos(int index) const;
     float GetGroundContactCost(int index) const;
     bool IsGroundContactEconomy(int index) const;
+    bool IsGroundContactInLos(int index) const;
     // D-296: economy kind flags of a ground contact (static only), O(1).
     enum ContactKind: int {K_MEX = 1, K_WIND = 2, K_NANO = 4, K_OTHER_ECO = 8};
     int GetGroundContactKind(int index) const;
@@ -305,8 +309,11 @@ private:
 	};
 	std::vector<AirContact> airContacts;
     struct GroundContact { springai::AIFloat3 pos; float cost; bool economy; int id; int defId;
-        int kind = 0; float hazardRange = 0.f; }; // D-296: ContactKind flags; LAND reach when armed
+        int kind = 0; float hazardRange = 0.f; bool inLos = false; }; // D-296: ContactKind flags; LAND reach when armed
     std::vector<GroundContact> groundContacts;
+    std::unordered_map<int, float> airSpotterSight;
+    float maxAirSpotterSight = 0.f;
+
     std::vector<springai::AIFloat3> navalContacts;
     std::vector<AirContact> allyAssets;
     int allyAssetFrame = -100000;

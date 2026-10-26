@@ -3,7 +3,7 @@
   "unit": "legcom",
   "side": "legion",
   "role": "FRONT",
-  "description": "FRONT recruits one land support constructor at real 20 metal income, builds owned nanos before defenses/utilities, and commander assists locally.",
+  "description": "Three supplied T1 land constructors establish base, expansion and Commander Group seats; verify Legion's forward support package and commander assistance.",
   "commander_overrides": {
     "front_push_screen": 0
   },
@@ -57,7 +57,9 @@
     {
       "unit": "legck",
       "team": 0,
-      "count": 1,
+      "count": 3,
+      "spacing": 70,
+      "columns": 3,
       "position": [
         2350,
         4050
@@ -85,11 +87,12 @@
     "experimentallegionfaction": 1,
     "multiplier_metalextraction": 10
   },
-  "front_support_observation": {
+  "commander_group_observation": {
     "nano": "legnanotc",
     "defence": "legmg",
     "radar": "legrad",
     "jammer": "legjam"
   },
-  "front_spacing_observation": true
+  "front_spacing_observation": true,
+  "commander_radar_package_check": true
 }

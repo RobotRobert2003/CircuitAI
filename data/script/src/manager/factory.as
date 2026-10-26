@@ -130,7 +130,7 @@ namespace Factory {
 		// delegate allowed these earlier providers to restart a retired lab.
 		if (Lifecycle::IsRetiring(u)) return null;
         if(Global::AISettings::Role==AiRole::FRONT) {
-            IUnitTask@ front=FrontSupport::Recruit(u);
+            IUnitTask@ front=CommanderGroup::Recruit(u);
             if(front !is null) return front;
         }
 		IUnitTask@ recovery = Team::Recovery::FactoryMakeTask(u);

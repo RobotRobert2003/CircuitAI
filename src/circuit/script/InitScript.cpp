@@ -478,11 +478,11 @@ static bool CTerrainManager_PlanFactoryPair(CTerrainManager* terrainMgr, const s
 
 static bool CTerrainManager_PlanAirFactoryCluster(CTerrainManager* terrainMgr, const std::string& name,
 		const CCircuitDef* firstFactory, const CCircuitDef* repeatedFactory, const CCircuitDef* nanoDef,
-		const AIFloat3& origin, int facing, int count, int columns, int firstNanos)
+		const AIFloat3& origin, int facing, int count, int columns, int firstNanos, bool centerFirst, bool centerRepeated)
 {
 	return terrainMgr->PlanAirFactoryCluster(name, const_cast<CCircuitDef*>(firstFactory),
 			const_cast<CCircuitDef*>(repeatedFactory), const_cast<CCircuitDef*>(nanoDef),
-			origin, facing, count, columns, firstNanos);
+			origin, facing, count, columns, firstNanos, centerFirst, centerRepeated);
 }
 
 static bool IBuilderTask_PinReservation(IUnitTask* task, int id)
@@ -1399,7 +1399,7 @@ void CInitScript::RegisterMgr()
 	r = engine->RegisterObjectMethod("CTerrainManager", "AIFloat3 NearestFriendlyNavalYard(const AIFloat3& in, float)", asMETHOD(CTerrainManager, NearestFriendlyNavalYard), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool CanUpgradeTerrain(CCircuitDef@, const AIFloat3& in)", asFUNCTION(CTerrainManager_CanUpgradeTerrain), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool PlanFactoryPair(const string& in, const CCircuitDef@, const CCircuitDef@, const CCircuitDef@, const AIFloat3& in, int facing, int sideOffsetCells, int forwardOffsetCells)", asFUNCTION(CTerrainManager_PlanFactoryPair), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
-	r = engine->RegisterObjectMethod("CTerrainManager", "bool PlanAirFactoryCluster(const string& in, const CCircuitDef@, const CCircuitDef@, const CCircuitDef@, const AIFloat3& in, int, int, int, int)", asFUNCTION(CTerrainManager_PlanAirFactoryCluster), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CTerrainManager", "bool PlanAirFactoryCluster(const string& in, const CCircuitDef@, const CCircuitDef@, const CCircuitDef@, const AIFloat3& in, int, int, int, int, bool = false, bool = false)", asFUNCTION(CTerrainManager_PlanAirFactoryCluster), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "int GetFactoryNanoAvailable() const", asMETHOD(CTerrainManager, GetFactoryNanoAvailable), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "int GetFactoryNanoActive() const", asMETHOD(CTerrainManager, GetFactoryNanoActive), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CTerrainManager", "bool HasLayoutGroup(const string& in) const", asMETHOD(CTerrainManager, HasLayoutGroup), asCALL_THISCALL); ASSERT(r >= 0);
@@ -1506,6 +1506,7 @@ void CInitScript::RegisterMgr()
     r = engine->RegisterObjectMethod("CBattleAnalysis", "AIFloat3 GetGroundContactPos(int) const", asMETHOD(CBattleAnalysis, GetGroundContactPos), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "float GetGroundContactCost(int) const", asMETHOD(CBattleAnalysis, GetGroundContactCost), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "bool IsGroundContactEconomy(int) const", asMETHOD(CBattleAnalysis, IsGroundContactEconomy), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CBattleAnalysis", "bool IsGroundContactInLos(int) const", asMETHOD(CBattleAnalysis, IsGroundContactInLos), asCALL_THISCALL); ASSERT(r >= 0);
     // D-296 scout raids: economy kind flags, observed ground hazard, raid route.
     r = engine->RegisterObjectMethod("CBattleAnalysis", "int GetGroundContactKind(int) const", asMETHOD(CBattleAnalysis, GetGroundContactKind), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "float GroundHazard(const AIFloat3& in, float)", asMETHOD(CBattleAnalysis, GroundHazard), asCALL_THISCALL); ASSERT(r >= 0);
@@ -1573,6 +1574,9 @@ void CInitScript::RegisterMgr()
 	r = engine->RegisterObjectMethod("CBattleAnalysis", "int EnemyCount(int) const", asMETHOD(CBattleAnalysis, EnemyCount), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBattleAnalysis", "float SurfThreat(const AIFloat3& in) const", asMETHOD(CBattleAnalysis, SurfThreat), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CBattleAnalysis", "float AirThreat(const AIFloat3& in) const", asMETHOD(CBattleAnalysis, AirThreat), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CBattleAnalysis", "void AddAirSpotterDef(CCircuitDef@)", asMETHOD(CBattleAnalysis, AddAirSpotterDef), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CBattleAnalysis", "void ClearAirSpotterDefs()", asMETHOD(CBattleAnalysis, ClearAirSpotterDefs), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CBattleAnalysis", "bool InAirSpotterSight(const AIFloat3& in) const", asMETHOD(CBattleAnalysis, InAirSpotterSight), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "bool InLos(const AIFloat3& in) const", asMETHOD(CBattleAnalysis, InLos), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "float AirThreatAlong(const AIFloat3& in, const AIFloat3& in, float) const", asMETHOD(CBattleAnalysis, AirThreatAlong), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "int GetSeaForceCount()", asMETHOD(CBattleAnalysis, GetSeaForceCount), asCALL_THISCALL); ASSERT(r >= 0);

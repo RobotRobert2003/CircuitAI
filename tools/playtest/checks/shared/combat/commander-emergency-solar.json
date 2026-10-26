@@ -1,0 +1,47 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "solar offered",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=22 solar=armsolar",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "solar frame",
+      "pattern": "child id=\\d+ parent=\\d+ unit=armsolar",
+      "scope": "any",
+      "after_key": "solar offered",
+      "by_minute": 2
+    },
+    {
+      "key": "solar completed",
+      "pattern": "finished id=\\d+ team=0 unit=armsolar",
+      "scope": "any",
+      "after_key": "solar frame",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    }
+  ]
+}

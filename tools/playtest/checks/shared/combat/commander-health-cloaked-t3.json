@@ -1,0 +1,62 @@
+{
+  "stop_minute": 3,
+  "expect": [
+    {
+      "key": "actual cloak",
+      "pattern": "health_fixture_actual_cloak",
+      "scope": "any",
+      "by_minute": 2.5
+    },
+    {
+      "key": "low health confirmed",
+      "pattern": "health_fixture_below_40",
+      "scope": "any",
+      "by_minute": 2.5
+    },
+    {
+      "key": "finite T3 exception",
+      "pattern": "\\[CommanderSafety\\].*action=cloaked_t3_wait",
+      "scope": "any",
+      "by_minute": 2.5
+    },
+    {
+      "key": "weapon",
+      "pattern": "\\[RangedArena\\].*shot .*unit=armcom .*weaponName=.*(dgun|disintegrator)",
+      "scope": "any",
+      "by_minute": 2.5
+    },
+    {
+      "key": "kill",
+      "pattern": "\\[RangedArena\\].*death .*team=1 unit=armmar",
+      "scope": "any",
+      "by_minute": 2.5
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "commander_death",
+      "pattern": "\\[RangedArena\\].*death id=\\d+ team=0 unit=armcom",
+      "scope": "any"
+    }
+  ]
+}

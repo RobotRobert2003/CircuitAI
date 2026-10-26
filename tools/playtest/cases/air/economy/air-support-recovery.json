@@ -1,0 +1,89 @@
+{
+  "name": "air-support-recovery",
+  "storage_scenario": "air-support-recovery",
+  "unit": "armaap",
+  "side": "armada",
+  "role": "AIR",
+  "description": "High metal with depleted energy and no supplied reactor must retain recovery priority instead of accelerated production support.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4000,
+    2800
+  ],
+  "photos": [
+    90,
+    180
+  ],
+  "min_spawn_spacing": 64,
+  "command_breakdown": true,
+  "hold_friendly": false,
+  "builders": true,
+  "production": true,
+  "start_metal": 6000,
+  "start_energy": 0,
+  "checks": "air-support-recovery",
+  "groups": [
+    {
+      "unit": "armaap",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3800,
+        4000
+      ],
+      "spacing": 700,
+      "columns": 2
+    },
+    {
+      "unit": "armca",
+      "count": 4,
+      "team": 0,
+      "position": [
+        4000,
+        3600
+      ]
+    },
+    {
+      "unit": "armmoho",
+      "count": 8,
+      "team": 0,
+      "position": [
+        3000,
+        3000
+      ],
+      "spacing": 120,
+      "columns": 4
+    },
+    {
+      "unit": "armmstor",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3400,
+        3000
+      ]
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "enemy_role": "FRONT",
+  "modoptions": {
+    "multiplier_metalextraction": 10
+  }
+}

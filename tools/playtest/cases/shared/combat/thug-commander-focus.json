@@ -1,0 +1,72 @@
+{
+  "name": "thug-commander-focus",
+  "unit": "corthud",
+  "side": "cortex",
+  "role": "FRONT",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      3000,
+      1800
+    ],
+    [
+      6000,
+      7000
+    ]
+  ],
+  "camera": [
+    3900,
+    3950,
+    1800
+  ],
+  "photos": [
+    25,
+    40
+  ],
+  "groups": [
+    {
+      "unit": "corthud",
+      "count": 4,
+      "team": 0,
+      "position": [
+        3800,
+        3900
+      ],
+      "columns": 4,
+      "spacing": 64,
+      "after_seconds": 20
+    },
+    {
+      "unit": "armcom",
+      "count": 1,
+      "team": 1,
+      "position": [
+        3900,
+        4270
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armwar",
+      "count": 2,
+      "team": 1,
+      "position": [
+        3750,
+        4200
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "enemy_commander_home": true,
+  "commander_observation": true,
+  "checks": "thug-commander-focus",
+  "assertions": {
+    "min_types_assigned": 1,
+    "min_shooters": 2,
+    "min_damage": 100,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "description": "Thugs select a visible commander over a closer ordinary enemy without changing movement policy."
+}

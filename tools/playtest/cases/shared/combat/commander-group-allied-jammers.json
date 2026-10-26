@@ -1,0 +1,163 @@
+{
+  "name": "commander-group-allied-jammers",
+  "unit": "corcom",
+  "side": "cortex",
+  "role": "FRONT",
+  "description": "Commander Group shares active allied jammers and does not build new jammers deep inside their coverage.",
+  "commander_overrides": {
+    "front_push_screen": 0
+  },
+  "map": "Proving Grounds v1.0",
+  "map_key": "proving",
+  "starts": [
+    [
+      2524,
+      4194
+    ],
+    [
+      2400,
+      3800
+    ],
+    [
+      11805,
+      10125
+    ]
+  ],
+  "camera": [
+    3600,
+    4800,
+    2900
+  ],
+  "photos": [
+    120,
+    300,
+    540
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "hold_friendly": false,
+  "groups": [
+    {
+      "unit": "corlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2400,
+        4000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "cornanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2200,
+        4000
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "corcv",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2350,
+        4050
+      ],
+      "after_seconds": 24
+    },
+    {
+      "unit": "corjamt",
+      "team": 1,
+      "count": 1,
+      "position": [
+        3000,
+        4400
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corjamt",
+      "team": 1,
+      "count": 1,
+      "position": [
+        3600,
+        4600
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corjamt",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4200,
+        4800
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corjamt",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4800,
+        5000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corjamt",
+      "team": 1,
+      "count": 1,
+      "position": [
+        5400,
+        5200
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corjamt",
+      "team": 1,
+      "count": 1,
+      "position": [
+        7600,
+        5400
+      ],
+      "after_seconds": 12
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "checks": "commander-group-allied-jammers",
+  "commander_initial": true,
+  "start_metal": 100000,
+  "commander_trace": true,
+  "coverage_probe": true,
+  "coverage_min_advance": 1500,
+  "builders": true,
+  "production": true,
+  "start_energy": 1000000,
+  "storage_scenario": "commander-group-jammers",
+  "commander_group_observation": {
+    "nano": "cornanotc",
+    "defence": "corhllt",
+    "radar": "corrad",
+    "jammer": "corjamt"
+  },
+  "modoptions": {
+    "multiplier_metalextraction": 10
+  },
+  "front_spacing_observation": true,
+  "ally_spots": "1,2",
+  "jammer_overlap_observation": {
+    "ally_team": 1
+  },
+  "enemy_role": "TACTICAL"
+}

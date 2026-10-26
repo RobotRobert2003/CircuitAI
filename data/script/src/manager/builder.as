@@ -1993,7 +1993,13 @@ namespace Builder {
         // FRONT ownership precedes generic edge/spam/economy providers and
         // tracking gates. Otherwise they can bypass the role's front ladder.
         if(Global::AISettings::Role==AiRole::FRONT) {
-            IUnitTask@ front=UnitHelpers::IsCommander(u.circuitDef)?CommanderFront::Work(u):FrontSupport::Work(u);
+            if (FrontConstructors::Eligible(u)) {
+                if (u.task !is null && (u.task.IsExternalControlled() || u.task.IsEnemyReclaim()
+                    || u.task.GetType() == int(Task::Type::PLAYER) || u.task.GetType() == int(Task::Type::RETREAT))) return u.task;
+                if (FrontConstructors::IsBase(u.id)) return FrontConstructors::BaseWork(u);
+                if (FrontConstructors::Seat(u.id) != 2) return aiBuilderMgr.DefaultMakeTask(u);
+            }
+            IUnitTask@ front=UnitHelpers::IsCommander(u.circuitDef)?CommanderFront::Work(u):CommanderGroup::Work(u);
             if(front !is null) return front;
         }
 		IUnitTask@ t = null;
@@ -2422,6 +2428,8 @@ namespace Builder {
 			return;
 		}
 
+        if (usage == Unit::UseAs::BUILDER && FrontConstructors::OnAdded(unit)) return;
+
 		// Handle constructor-specific registration
 		int ctorTier = UnitHelpers::GetConstructorTier(cdef);
 		string uname = (cdef is null ? "" : cdef.GetName());
@@ -2778,6 +2786,7 @@ namespace Builder {
 		if (unit is null) return;
 
 		Team::SeaAssist::OnUnitRemoved(unit);
+        FrontConstructors::OnRemoved(unit);
 
 		// Ensure any per-builder task mapping is cleared for this unit
 		ClearBuilderTaskByUnit(unit);

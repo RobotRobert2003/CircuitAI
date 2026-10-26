@@ -1,0 +1,43 @@
+{
+  "name": "commander-emergency-solar",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      3000,
+      3000
+    ],
+    [
+      6000,
+      6500
+    ]
+  ],
+  "camera": [
+    3000,
+    3000,
+    1800
+  ],
+  "photos": [
+    30,
+    60
+  ],
+  "groups": [],
+  "commander_observation": true,
+  "commander_front_work": true,
+  "commander_initial": true,
+  "start_energy": 50,
+  "start_energy_storage": 10000,
+  "start_metal": 1000,
+  "checks": "commander-emergency-solar",
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "description": "Low stored energy and sub-400 income permit local solar construction before the factory/nano gate.",
+  "storage_scenario": "comm-solar"
+}

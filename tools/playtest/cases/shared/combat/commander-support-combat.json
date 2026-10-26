@@ -101,7 +101,7 @@
   "production": true,
   "start_energy": 1000000,
   "storage_scenario": "front-support-combat",
-  "front_support_observation": {
+  "commander_group_observation": {
     "nano": "armnanotc",
     "defence": "armbeamer",
     "radar": "armrad",

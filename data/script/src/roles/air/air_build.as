@@ -496,6 +496,10 @@ namespace AirBuild {
         const bool opening = !ProductionMath::CrewReady(crew, Global::RoleSettings::Air::OpeningAirConstructors);
         const bool useful = ProductionMath::FactoryAssistUseful(!opening, plant.GetBuildProgress() >= 1.0f, PlantHasWork(plant));
         IUnitTask@ t = null;
+        if (!opening) {
+            @t = FloatingSupport(u);
+            if (t !is null) return Record(t, "overflow.production.support", u);
+        }
         if (!opening && !AirEconomy::recovery && AirEconomy::OpeningSupportNeeded()) {
             @t = Nano(u, true);
             if (t !is null) return Record(t, "opening.support", u);
@@ -978,7 +982,19 @@ namespace AirBuild {
         }
         return count;
     }
-    IUnitTask@ Nano(CCircuitUnit@ u, bool openingOnly = false)
+    // D-378: spend a floating bank on standing production before starting more
+    // projects. Reuse live queue ownership and funding; never interrupt a build.
+    IUnitTask@ FloatingSupport(CCircuitUnit@ u)
+    {
+        if (!Global::RoleSettings::Air::FloatingSupportFirst || AirEconomy::t2 == 0
+            || AirEconomy::recovery || (!AirEconomy::MetalFloating() && !AirWorkforce::pressure)) return null;
+        IUnitTask@ queued = aiBuilderMgr.FindQueuedTask(u, int(Task::BuildType::NANO));
+        if (queued !is null && projects.findByRef(queued) >= 0) return queued;
+        IUnitTask@ task = Nano(u, false, true);
+        if (task !is null) return task;
+        return Assist(u, false, ai.GetCircuitDef(UnitHelpers::GetT1NanoNameForSide(Global::AISettings::Side)));
+    }
+    IUnitTask@ Nano(CCircuitUnit@ u, bool openingOnly = false, bool productionOnly = false)
     {
         CCircuitDef@ d = ai.GetCircuitDef(UnitHelpers::GetT1NanoNameForSide(Global::AISettings::Side));
         const string key = "" + u.id;
@@ -995,12 +1011,28 @@ namespace AirBuild {
         if (BuildPowerMath::Batch(AirWorkforce::constructionPower, d.GetBuildTime(),
             Global::RoleSettings::Air::WorkforceSupportSeconds, AirWorkforce::pendingSupport,
             Global::RoleSettings::Air::WorkforceSupportBatchMax) <= 0) return null;
-        if (!openingOnly) {
+        if (!openingOnly && !productionOnly) {
             IUnitTask@ local = AirEcoLayout::Nano(u, d);
             if (local !is null) { AirWorkforce::Admit(d, true, true); return local; }
         }
         AirEconomy::RefreshSupport();
-        for (uint b = 0; b < AirLayout::bays.length() && b < AirEconomy::nanoCount.length(); ++b) {
+        // Floating support starts at the least-supported standing advanced bay.
+        // O(B*Q) owner queries (each may fall back to a B-bay search),
+        // using existing reservation ownership; no extra unit census;
+        // funded fallback visits each bay once. Reservations remain synchronous.
+        uint first = 0;
+        if (productionOnly) {
+            int least = 2147483647;
+            for (uint b = 0; b < AirLayout::bays.length() && b < AirEconomy::nanoCount.length(); ++b) {
+                if (AirLayout::bays[b].factoryId < 0 || !UnitHelpers::IsT2AircraftPlant(AirLayout::bays[b].defName)) continue;
+                const int committed = SupportCommitted(b);
+                if (committed < AirEconomy::NanoTarget(b) && committed < least) { first = b; least = committed; }
+            }
+        }
+        for (uint offset = 0; offset < AirLayout::bays.length() && offset < AirEconomy::nanoCount.length(); ++offset) {
+            const uint b = (first + offset) % AirLayout::bays.length();
+            if (b >= AirEconomy::nanoCount.length()) continue;
+            if (productionOnly && !UnitHelpers::IsT2AircraftPlant(AirLayout::bays[b].defName)) continue;
             if ((openingOnly || AirEconomy::energy < 250.0f) && (!UnitHelpers::IsT1AircraftPlant(AirLayout::bays[b].defName)
                 || SupportCommitted(b) >= AirEconomy::OpeningNanoTarget())) continue;
             if (AirLayout::bays[b].factoryId < 0 || SupportCommitted(b) >= AirEconomy::NanoTarget(b)) continue;

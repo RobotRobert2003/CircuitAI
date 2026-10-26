@@ -1,0 +1,49 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "valuable target",
+      "pattern": "spawn id=(?P<target>\\d+) team=2 unit=armwar",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "base target",
+      "pattern": "\\[AIR\\]\\[BomberSupport\\] target=(?P<target>\\d+) metal=.* reason=base",
+      "scope": "any",
+      "same_as": "valuable target",
+      "after_key": "valuable target",
+      "by_minute": 1
+    },
+    {
+      "key": "bombs hit",
+      "pattern": "damage id=(?P<target>\\d+).*attackerDef=armpnix",
+      "scope": "any",
+      "by_minute": 2,
+      "same_as": "valuable target",
+      "after_key": "base target"
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    }
+  ]
+}

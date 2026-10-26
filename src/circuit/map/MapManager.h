@@ -52,6 +52,7 @@ public:
 
 	bool IsInLOS(const springai::AIFloat3& pos) const;
 	bool IsAreaInLOS(const springai::AIFloat3& pos, float radius) const;
+	bool IsNearFog(const springai::AIFloat3& pos, float radius) const;
 	// True where our ally team has radar coverage. Absence of a radar contact
 	// only means something where we are actually looking, which is what makes
 	// a radar hole evidence of jamming rather than of empty ground.
