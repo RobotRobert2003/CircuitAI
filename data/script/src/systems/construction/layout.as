@@ -662,6 +662,13 @@ namespace Layout {
             float best = -1.0f; int bestIdx = -1; AIFloat3 bestCentre;
             for (uint i = 0; i < fronts.length(); ++i) {
                 const AIFloat3 centre = fronts[i] + fwd * (float(depth) * 0.5f * cell);
+                // owner, 2026-10-26: a box that runs past the map edge (Starwatcher P1 faces the top
+                // edge) is skipped before any terrain query; the native ally-zone lookup read outside
+                // its grid there (access violation)
+                const bool alongZ = facing == 0 || facing == 2;
+                const float halfX = float(alongZ ? across : depth) * 0.5f * cell, halfZ = float(alongZ ? depth : across) * 0.5f * cell;
+                if (centre.x - halfX < 0.0f || centre.z - halfZ < 0.0f
+                    || centre.x + halfX >= float(AiTerrainWidth()) || centre.z + halfZ >= float(AiTerrainHeight())) continue;
                 if (aiTerrainMgr.IsZoneAlly(centre)) continue;   // an ally's ground
                 const float score = BoxScore(centre, across, depth);
                 if (score >= minScore && score > best) { best = score; bestIdx = int(i); bestCentre = centre; }
