@@ -36,6 +36,12 @@ namespace Lifecycle {
         retiringZ.set(key, double(p.z));
         retiringName.set(key, u.circuitDef.GetName());
         ids.insertLast(key);
+        GenericHelpers::LogUtil("[LIFECYCLE] " + u.circuitDef.GetName() + " " + u.id + " retiring: " + why, 1);
+        // Played 2026-10-26 (Kolmogorov, client crash): FRONT's energy reclaim retired a wind/solar/
+        // converter whose native manager was null, and CmdClearBuildQueue dereferenced it. A structure
+        // that cannot build has no production or queue to end, so only factories and nanos get the
+        // commands below; the retiring state above is all the others need.
+        if (u.circuitDef.GetBuildSpeed() <= 0.0f) return;
         // Close native admission before engine commands can generate an idle
         // callback. Previously a pending recruit could restart after STOP.
         u.SetProductionEnabled(false);
@@ -44,7 +50,6 @@ namespace Lifecycle {
         u.CmdRepeat(false);
         u.CmdClearBuildQueue();
         u.CmdStop();
-        GenericHelpers::LogUtil("[LIFECYCLE] " + u.circuitDef.GetName() + " " + u.id + " retiring: " + why, 1);
     }
 
     // The unit-removed hook: the position is remembered a while for INV-001.
