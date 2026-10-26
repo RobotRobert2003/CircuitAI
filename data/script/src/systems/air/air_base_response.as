@@ -20,6 +20,11 @@ namespace AirBaseResponse {
         // The outer radius of a frontline ally can cross into enemy territory.
         // Keep cliff/edge intrusions on our side without claiming enemy bases.
         if (!AirHome::Friendly(p)) return false;
+        // D-368: while the first advanced plant's cost is being banked, only this AI's own
+        // base is a contact; the allies' bases are their fronts' business until then
+        // (played: 50 Shadows and 46 EMP bats for allied bases at +10 metal, no plant at 26 min)
+        if (AirEconomy::t2 == 0 && !AirEconomy::ProductionFunded())
+            return AirMath::BaseContact(MapHelpers::SqDist(p, Global::Map::StartPos), Global::RoleSettings::Air::BaseResponseRadius);
         for (uint i = 0; i < WallHelpers::starts.length(); ++i)
             if (AirMath::BaseContact(MapHelpers::SqDist(p, WallHelpers::starts[i]), Global::RoleSettings::Air::BaseResponseRadius)) return true;
         return false;
@@ -289,7 +294,10 @@ namespace AirBaseResponse {
     const array<string> lethal = {"armkam", "armbrawl", "corape", "legmos", "legstronghold", "corshad"};
     int ProductionTarget() {
         CCircuitDef@ best = ai.GetCircuitDef(GunshipName(Global::AISettings::Side, AirEconomy::t2 > 0));
-        return AiMax(Global::RoleSettings::Air::BaseResponseGunships, Required(best is null ? 250.0f : best.costM));
+        const int target = AiMax(Global::RoleSettings::Air::BaseResponseGunships, Required(best is null ? 250.0f : best.costM));
+        // D-368: the minimum wave only while the first plant's cost is being banked
+        if (AirEconomy::t2 == 0 && !AirEconomy::ProductionFunded()) return AiMin(target, Global::RoleSettings::Air::BaseResponseMinWave);
+        return target;
     }
     int Deficit() {
         int ready = 0, frames = 0, pending = 0;
