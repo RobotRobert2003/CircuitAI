@@ -1091,6 +1091,14 @@ namespace RoleTech
 			if (t3rush !is null) return t3rush;
             IUnitTask@ amphib = AmphibiousOps::Produce(u, botLabGate);
             if (amphib !is null) return amphib;
+			// owner, 2026-10-26: with a HeavyPair<Side> set the pair alternates from the
+			// gantry's first unit (after the t3rush units on that plan), whatever the income
+			if (TechHeavyChoice::HasPair(side))
+			{
+				IUnitTask @tPair = TechHeavyChoice::LateBatch(u, side, /*count*/ 5);
+				if (tPair !is null)
+					return tPair;
+			}
 			// If economy is very strong, queue a batch of signature experimentals.
 			// D-287: after the late latch the batch is the terrain's heavy (land:
 			// Thor-class, amphibious: Titan-class), the other heavy as fallback.
