@@ -29,7 +29,7 @@ namespace Ascendancy {
 		StartSpot(AIFloat3( 2313, 0,  3205), AiRole::FRONT, false), // P2  front
 		StartSpot(AIFloat3(  614, 0,  4435), AiRole::AIR,   false), // P3  air
 		StartSpot(AIFloat3( 2101, 0,  5940), AiRole::FRONT, false), // P4  front
-		StartSpot(AIFloat3( 1192, 0,  7152), AiRole::FRONT, false), // P5  front
+		StartSpot(AIFloat3( 1192, 0,  7152), AiRole::TECH,  false), // P5  tech (was front)
 		StartSpot(AIFloat3( 2302, 0,  7786), AiRole::FRONT, false), // P6  front
 		StartSpot(AIFloat3(  579, 0, 10206), AiRole::FRONT, false), // P7  front
 		StartSpot(AIFloat3( 2188, 0, 11233), AiRole::FRONT, false), // P8  front
@@ -37,7 +37,7 @@ namespace Ascendancy {
 		StartSpot(AIFloat3( 9870, 0,  3310), AiRole::FRONT, false), // P10 front
 		StartSpot(AIFloat3(11740, 0,  4872), AiRole::AIR,   false), // P11 air
 		StartSpot(AIFloat3(10068, 0,  6389), AiRole::FRONT, false), // P12 front
-		StartSpot(AIFloat3(11143, 0,  7314), AiRole::FRONT, false), // P13 front
+		StartSpot(AIFloat3(11143, 0,  7314), AiRole::TECH,  false), // P13 tech (was front; mirror of P5)
 		StartSpot(AIFloat3( 9998, 0,  8078), AiRole::FRONT, false), // P14 front
 		StartSpot(AIFloat3(11737, 0, 10295), AiRole::FRONT, false), // P15 front
 		StartSpot(AIFloat3(10410, 0, 11049), AiRole::FRONT, false) // P16 front
