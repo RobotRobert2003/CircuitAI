@@ -27,7 +27,7 @@ static commander::Point Heading(const CBattleAnalysis* battle,const AIFloat3& p)
 }
 
 bool CCommanderControl::IsFrontDefence(const CCircuitDef* def) const {
-    return def && (def->GetId()==int(options.frontLineDef) || def->GetId()==supportDef
+    return def && (def->GetId()==int(options.frontLineDef) || def->GetId()==groupDef
         || std::find(frontDefenceDefs.begin(),frontDefenceDefs.end(),def->GetId())!=frontDefenceDefs.end());
 }
 
@@ -35,13 +35,13 @@ std::vector<commander::DefenceExclusion> CCommanderControl::DefenceExclusions(CC
     CCircuitDef* def,const AIFloat3& center,float searchRadius,const IUnitTask* ignore) const {
     std::vector<commander::DefenceExclusion> result;
     if(!options.frontDuty || options.frontDefenceSpacing<=0 || !IsFrontDefence(def)
-        || (unit->GetId()!=supportUnit && !Handles(unit))) return result;
+        || (unit->GetId()!=groupUnit && !Handles(unit))) return result;
     float maxRange=def->GetMaxRange();
     for(int id:frontDefenceDefs) {
         auto* other=ai->GetCircuitDefSafe(id);
         if(other) maxRange=std::max(maxRange,other->GetMaxRange());
     }
-    for(int id:{int(options.frontLineDef),supportDef}) {
+    for(int id:{int(options.frontLineDef),groupDef}) {
         auto* other=ai->GetCircuitDefSafe(id);
         if(other) maxRange=std::max(maxRange,other->GetMaxRange());
     }
@@ -79,15 +79,16 @@ void CCommanderControl::MexFinished(CCircuitUnit* worker,CCircuitUnit* mex) {
 IUnitTask* CCommanderControl::FortifySite(CCircuitUnit* unit,CCircuitDef* def,const AIFloat3& site,int frame,const AIFloat3* coveragePoint) {
     auto* builder=ai->GetBuilderManager();
     const float coverageRadius=std::max(0.f,def->GetMaxRange()*.8f-16.f);
-    auto* supportCommander=unit->GetId()==supportUnit?SupportCommander():nullptr;
-    const auto supportCenter=supportCommander?supportCommander->GetPos(frame):site;
-    const float supportSight=supportCommander?supportCommander->GetCircuitDef()->GetLosRadius():0.f;
+    auto* groupCommander=unit->GetId()==groupUnit?GroupCommander():nullptr;
+    const auto groupCenter=groupCommander?groupCommander->GetPos(frame):site;
+    const float groupSight=groupCommander?groupCommander->GetCircuitDef()->GetLosRadius():0.f;
     CTerrainManager::TerrainPredicate admit=[&](const AIFloat3& p) {
+        if(!GroupSiteAllowed(unit,p)) return false;
         // Reject before enqueueing/spending the incremental allowance. The
         // final build guard also enforces this, but an invalid offer otherwise
         // repeatedly abandons defenses after replacement (support-replace).
-        if(unit->GetId()==supportUnit && (!supportCommander
-            || p.SqDistance2D(supportCenter)>SQUARE(std::max(0.f,supportSight-16.f)))) return false;
+        if(unit->GetId()==groupUnit && (!groupCommander
+            || p.SqDistance2D(groupCenter)>SQUARE(std::max(0.f,groupSight-16.f)))) return false;
         if(coveragePoint && (p.SqDistance2D(*coveragePoint)>coverageRadius*coverageRadius
             || ai->GetBattle()->CorridorAtPoint(int(options.frontCorridorClass),p)!=int(options.frontCorridor))) return false;
         // A buildable site can lie across a cliff from the commander. Reject it
@@ -98,8 +99,8 @@ IUnitTask* CCommanderControl::FortifySite(CCircuitUnit* unit,CCircuitDef* def,co
     };
     for(auto* task:builder->GetTasks(BT::DEFENCE)) {
         if(task->IsDead() || task->GetBuildDef()!=def || task->GetPosition().SqDistance2D(site)>64.f*64.f || !admit(task->GetPosition())) continue;
-        if(unit->GetId()==supportUnit) {
-            bool covered=false;auto* power=SupportPower(unit,task->GetPosition(),covered);
+        if(unit->GetId()==groupUnit) {
+            bool covered=false;auto* power=GroupPower(unit,task->GetPosition(),covered);
             if(!covered) return power;
         }
         return task->CanAssignTo(unit)?task:nullptr;
@@ -114,8 +115,8 @@ IUnitTask* CCommanderControl::FortifySite(CCircuitUnit* unit,CCircuitDef* def,co
         auto* ally=ai->GetFriendlyUnit(id);
         if(!ally || !ally->GetUnit()->IsBeingBuilt() || !admit(ally->GetPos(frame))
             || builder->IsReclaimUnit(ally)) continue;
-        if(unit->GetId()==supportUnit) {
-            bool covered=false;auto* power=SupportPower(unit,ally->GetPos(frame),covered);
+        if(unit->GetId()==groupUnit) {
+            bool covered=false;auto* power=GroupPower(unit,ally->GetPos(frame),covered);
             if(!covered) return power;
         }
         auto* repair=builder->EnqueueRepairFor(ally,60*FRAMES_PER_SEC,unit);
@@ -144,14 +145,14 @@ IUnitTask* CCommanderControl::FortifySite(CCircuitUnit* unit,CCircuitDef* def,co
             ai->LOG("[CommanderFront] unit=%i fortify_rejected found=%i safe=%i reachable=%i site=%.0f,%.0f selected=%.0f,%.0f",unit->GetId(),int(found),int(safe),int(reachable),site.x,site.z,at.x,at.z);
         return nullptr;
     }
-    if(unit->GetId()==supportUnit) {
+    if(unit->GetId()==groupUnit) {
         bool covered=false;
-        auto* power=SupportPower(unit,at,covered);
+        auto* power=GroupPower(unit,at,covered);
         if(!covered) return power;
     }
     const auto priority=static_cast<IBuilderTask::Priority>(int(options.frontFortifyPriority));
     auto* task=builder->Enqueue(TaskB::Common(BT::DEFENCE,priority,def,at,16.f,true,60*FRAMES_PER_SEC));
-    if(task && unit->GetId()==supportUnit) ai->LOG("[FrontSupport] unit=%i defence=%s powered=1",unit->GetId(),def->GetDef()->GetName());
+    if(task && unit->GetId()==groupUnit) ai->LOG("[CommanderGroup] unit=%i defence=%s powered=1",unit->GetId(),def->GetDef()->GetName());
     if(task) ai->LOG("[CommanderFront] unit=%i fortify_site x=%.0f z=%.0f line=%i frame=%i",unit->GetId(),at.x,at.z,int(coveragePoint!=nullptr),frame);
     return task;
 }
@@ -187,7 +188,7 @@ IUnitTask* CCommanderControl::MexDefenceWork(CCircuitUnit* unit,State& s,CCircui
                 && commander::EnemySideCover(P(pos),P(ally->GetPos(frame)),forward,range)) {covered=true;break;}
         }
         if(covered && options.frontMexAA>=0) {
-            auto* aa=ai->GetCircuitDefSafe(unit->GetId()==supportUnit?supportAA:int(options.frontMexAA));
+            auto* aa=ai->GetCircuitDefSafe(unit->GetId()==groupUnit?groupAA:int(options.frontMexAA));
             if(!aa || !unit->GetCircuitDef()->CanBuild(aa)) {++i;continue;}
             covered=false;
             for(int id:ai->GetCallback()->GetFriendlyUnitIdsIn(pos,options.frontMexOffset+64.f,false)) {
@@ -282,7 +283,7 @@ IUnitTask* CCommanderControl::TerritoryLineWork(CCircuitUnit* unit,State& s,CCir
     }
     const float next=std::min(s.fortifyNextProgress,
         std::min(options.frontDistance,length-options.frontStandoff)-64.f);
-    if(!selected || (incremental && unit->GetId()!=supportUnit && own<next)) return nullptr;
+    if(!selected || (incremental && unit->GetId()!=groupUnit && own<next)) return nullptr;
     auto& plan=*selected;
     const auto center=battle->GetFrontLanePoint(plan.progress);
     const auto forward=Heading(battle,center);

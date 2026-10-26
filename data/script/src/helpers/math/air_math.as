@@ -51,6 +51,9 @@ namespace AirMath {
     bool DefensiveBomberTarget(bool advancedBomber, bool mobile, bool heavy) {
         return !advancedBomber || !mobile || heavy;
     }
+    bool PreferBomberSupport(bool inBase, float cost, bool selectedBase, float selectedCost) {
+        return inBase != selectedBase ? inBase : cost > selectedCost;
+    }
     // Dedicated AA avoids promoting every tank whose ground weapon can shoot up.
     // Mobile AA includes advanced AA bots regardless of tier; the configurable
     // metal ceiling applies only to static AA. Disable priority without changing

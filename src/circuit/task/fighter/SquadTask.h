@@ -58,6 +58,8 @@ protected:
 	std::map<float, std::set<CCircuitUnit*>> rangeUnits;
 
 	int groupFrame;
+	// Squad attack cadence is separate from IFighterTask's individual orders.
+	// cppcheck-suppress duplInheritedMember
 	int attackFrame;
 
 #ifdef DEBUG_VIS

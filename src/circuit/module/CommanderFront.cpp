@@ -178,12 +178,65 @@ AIFloat3 CCommanderControl::FrontPosition(CCircuitUnit* unit,State& s,int frame)
 }
 
 IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef* buildDef,float radius) {
-    if(kind==19) return SupportWork(unit);
-    if(kind==20) return SupportAssist(unit);
-    if(SupportActive(unit) && (kind==WORK_MEX_DEFENCE || kind==WORK_TERRITORY_LINE
+    if(kind==19) return GroupWork(unit);
+    if(HealthRetreat(unit) || EnergyRetreat(unit)) return nullptr;
+    if(kind==WORK_SOLAR) {
+        if(!Handles(unit) || !options.frontDuty || options.frontSolarIncome<=0 || !unit->IsFinished()) return nullptr;
+        auto found=commanders.find(unit->GetId());
+        if(found==commanders.end()) return nullptr;
+        auto& state=found->second;
+        auto* current=unit->GetTask();
+        if(!current || current->IsExternalControlled() || current->IsEnemyReclaim()
+            || current->GetType()==IUnitTask::Type::PLAYER || current->GetType()==IUnitTask::Type::RETREAT) return nullptr;
+        if((state.workKind==WORK_SOLAR || state.workKind==WORK_REPAIR_COMBAT)
+            && current==state.workTask && !current->IsDead()) return current;
+        auto* eco=ai->GetEconomyManager();
+        if(eco->GetAvgEnergyIncome()>=options.frontSolarIncome || eco->GetEnergyStore()<=0
+            || eco->GetEnergyCur()>=eco->GetEnergyStore()*options.frontSolarStorage) return nullptr;
+        // Priority-two repairs retain precedence over emergency economy. Only
+        // ask the existing bounded repair selector when a solar is eligible;
+        // ordinary deployment does not gain another friendly-unit query.
+        if(options.frontRepairCombat>0) {
+            if(auto* repair=FrontWork(unit,WORK_REPAIR_COMBAT,nullptr,0)) return repair;
+        }
+        const int frame=ai->GetLastFrame();
+        if(frame<state.frontSolarNext) return nullptr;
+        auto* def=buildDef?buildDef:ai->GetCircuitDefSafe(int(options.frontSolarDef));
+        if(!def || !unit->GetCircuitDef()->CanBuild(def)) return nullptr;
+        const auto pos=unit->GetPos(frame);
+        const float reach=unit->GetCircuitDef()->GetBuildDistance();
+        const float radius=options.frontSolarRadius;
+        auto* terrain=ai->GetTerrainManager();
+        auto* builder=ai->GetBuilderManager();
+        CTerrainManager::TerrainPredicate allowed=[&](const AIFloat3& at) {
+            return at.SqDistance2D(pos)<=radius*radius && InsideLine(state,at,frame,reach)
+                && ai->GetThreatMap()->GetThreatAt(unit,at)<=options.frontThreat
+                && terrain->CanReachAtSafe2(unit,at,reach);
+        };
+        // Task-offer work only: reuse a local energy claim before a bounded
+        // nearest-site search. Failed placement retries after three seconds;
+        // no map/army scan, no independent timer, and no base-layout detour.
+        IBuilderTask* task=nullptr;
+        for(auto* queued:builder->GetTasks(BT::ENERGY)) {
+            if(!queued->IsDead() && queued->GetBuildDef()==def && allowed(queued->GetPosition())
+                && queued->CanAssignTo(unit)) { task=queued;break; }
+        }
+        if(!task) {
+            const auto site=terrain->FindBuildSite(def,pos,std::min(radius,std::max(32.f,reach-32.f)),0,allowed);
+            const auto at=OnMap(site)?site:terrain->FindBuildSite(def,pos,radius,0,allowed);
+            if(OnMap(at)) task=builder->Enqueue(TaskB::Common(BT::ENERGY,IBuilderTask::Priority::HIGH,def,at,0.f,true,60*FRAMES_PER_SEC));
+        }
+        if(!task) { state.frontSolarNext=frame+3*FRAMES_PER_SEC;return nullptr; }
+        state.workTask=task;state.workKind=WORK_SOLAR;
+        ai->LOG("[CommanderWork] unit=%i work=22 solar=%s income=%.1f storage=%.3f",unit->GetId(),def->GetDef()->GetName(),
+            eco->GetAvgEnergyIncome(),eco->GetEnergyCur()/eco->GetEnergyStore());
+        return task;
+    }
+    if(kind==20) return GroupAssist(unit);
+    if(GroupActive(unit) && (kind==WORK_MEX_DEFENCE || kind==WORK_TERRITORY_LINE
         || kind==WORK_LINE || (kind==WORK_TIMED && buildDef && buildDef->GetId()==int(options.frontLineDef))
         || kind==3 || kind==WORK_RADAR || kind==2)) return nullptr;
-    if(SupportActive(unit) && kind==WORK_MEX_LANE) buildDef=nullptr;
+    if(GroupActive(unit) && kind==WORK_MEX_LANE) buildDef=nullptr;
     if(!Handles(unit) || !options.frontDuty || !options.frontReady || !unit->IsFinished()
         || (kind!=WORK_HOLD && unit->GetHealthPercent()<options.recover && !Jammed(unit))) return nullptr;
     auto found=commanders.find(unit->GetId()); if(found==commanders.end()) return nullptr;

@@ -41,7 +41,7 @@ public:
 
 	// @see rts/lib/tracy/public/tracy/TracyLua.hpp  or
 	//      rts/lib/tracy/public/client/TracyScoped.hpp
-	static inline void TracyZoneBegin(uint32_t line, const char* source, const char* function, const std::string name, uint32_t color = 0) {
+	static inline void TracyZoneBegin(uint32_t line, const char* source, const char* function, const std::string& name, uint32_t color = 0) {
 #ifdef CIRCUIT_PROFILING
 	#ifdef TRACY_ON_DEMAND
 		const auto zoneCnt = tracy::GetLuaZoneState().counter++;

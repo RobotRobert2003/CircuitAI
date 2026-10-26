@@ -2,8 +2,8 @@
   "stop_minute": 6,
   "expect": [
     {
-      "key": "ordered nine-unit opening",
-      "pattern": "factory_opening_complete count=9",
+      "key": "ordered thirteen-unit opening",
+      "pattern": "factory_opening_complete count=13",
       "scope": "any",
       "by_minute": 6
     }

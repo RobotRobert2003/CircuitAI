@@ -9,7 +9,7 @@
     },
     {
       "key": "member",
-      "pattern": "\\[FrontSupport\\] member=(?P<worker>\\d+) side=armada",
+      "pattern": "\\[CommanderGroup\\] member=(?P<worker>\\d+) side=armada",
       "scope": "any",
       "by_minute": 3
     },
@@ -23,37 +23,37 @@
     },
     {
       "key": "owned power bootstrap",
-      "pattern": "\\[FrontSupport\\] unit=\\d+ build=armnanotc bootstrap=1",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ build=armnanotc bootstrap=1",
       "scope": "any",
       "by_minute": 5
     },
     {
       "key": "upgraded defense",
-      "pattern": "\\[FrontSupport\\] unit=\\d+ defence=armbeamer powered=1",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ defence=armbeamer powered=1",
       "scope": "any",
       "by_minute": 6
     },
     {
       "key": "commander assists",
-      "pattern": "\\[FrontSupport\\] commander=\\d+ assist=\\d+",
+      "pattern": "\\[CommanderGroup\\] commander=\\d+ assist=\\d+",
       "scope": "any",
       "by_minute": 6
     },
     {
       "key": "radar",
-      "pattern": "\\[FrontSupport\\] unit=\\d+ build=armrad bootstrap=0",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ build=armrad bootstrap=0",
       "scope": "any",
       "by_minute": 6
     },
     {
       "key": "jammer",
-      "pattern": "\\[FrontSupport\\] unit=\\d+ build=armjamt bootstrap=0",
+      "pattern": "\\[CommanderGroup\\] unit=\\d+ build=armjamt bootstrap=0",
       "scope": "any",
       "by_minute": 6
     },
     {
       "key": "replacement member",
-      "pattern": "\\[FrontSupport\\] member=(?P<worker>\\d+) side=armada",
+      "pattern": "\\[CommanderGroup\\] member=(?P<worker>\\d+) side=armada",
       "scope": "any",
       "after_minute": 2.5,
       "by_minute": 6,
@@ -61,7 +61,7 @@
     },
     {
       "key": "finished forward package",
-      "pattern": "front_support_finished nano=[1-9]\\d* defence=[1-9]\\d* radar=[1-9]\\d* jammer=[1-9]\\d*",
+      "pattern": "commander_group_finished nano=[1-9]\\d* defence=[1-9]\\d* radar=[1-9]\\d* jammer=[1-9]\\d*",
       "scope": "any",
       "by_minute": 6
     },
@@ -74,7 +74,7 @@
     },
     {
       "key": "assists replacement",
-      "pattern": "\\[FrontSupport\\] commander=\\d+ assist=(?P<worker>\\d+)",
+      "pattern": "\\[CommanderGroup\\] commander=\\d+ assist=(?P<worker>\\d+)",
       "scope": "any",
       "after_key": "initial member dies",
       "by_minute": 6,

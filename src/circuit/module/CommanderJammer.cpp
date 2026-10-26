@@ -21,9 +21,7 @@ using springai::AIFloat3;
 using commander::Point;
 static Point P(const AIFloat3& p) { return {p.x,p.z}; }
 
-bool CCommanderControl::Jammed(CCircuitUnit* unit) {
-    jamZones.clear();
-    if(options.jamSafe<=0 || !Handles(unit) || EnergyRetreat(unit)) return false;
+void CCommanderControl::InitJammerRadii() {
     // UnitDef radii are immutable for this AI lifetime. Cache only metadata;
     // membership/activation is deliberately fresh on damage as well as ticks.
     // One bounded spatial query, O(local allies), no whole-army sensor census.
@@ -37,6 +35,44 @@ bool CCommanderControl::Jammed(CCircuitUnit* unit) {
             maxJammerRadius=std::max(maxJammerRadius,radius);
         }
     }
+}
+
+commander::JammerCoverage CCommanderControl::GroupJammerCoverage(CCircuitUnit* unit,CCircuitDef* def,
+    const AIFloat3& center,float searchRadius,const IUnitTask* ignore) {
+    if(!options.frontDuty || !options.frontReady || !def || def->GetId()!=groupJammer
+        || (unit->GetId()!=groupUnit && !Handles(unit))) return commander::JammerCoverage{};
+    InitJammerRadii();
+    std::vector<commander::JammerCoverage::Disc> discs;
+    // Include every disc intersecting any candidate's margin neighbourhood.
+    // Fresh membership and sensor state; immutable radii alone are cached.
+    // Own unstarted jobs and allied frames reserve space, never safety cover.
+    const float radius=maxJammerRadius+searchRadius+options.groupJammerEdge;
+    const auto ids=ai->GetCallback()->GetFriendlyUnitIdsIn(center,radius,false);
+    const auto* ignoredBuild=dynamic_cast<const IBuilderTask*>(ignore);
+    const auto* ignoredTarget=ignoredBuild?ignoredBuild->GetTarget():nullptr;
+    for(int id:ids) {
+        if(ignoredTarget && ignoredTarget->GetId()==id) continue;
+        const int definition=ai->GetCallback()->Unit_GetDefId(id);
+        if(definition<=0 || size_t(definition)>=jammerRadii.size() || jammerRadii[definition]<=0) continue;
+        auto* ally=ai->GetFriendlyUnit(id);
+        if(!ally || (!ally->GetUnit()->IsBeingBuilt() && !ai->GetUnitAPI()->IsActiveSensor(id))) continue;
+        discs.push_back({P(ally->GetPos(ai->GetLastFrame())),jammerRadii[definition]});
+    }
+    for(auto* task:ai->GetBuilderManager()->GetTasks(IBuilderTask::BuildType::DEFENCE)) {
+        auto* definition=task->GetBuildDef();
+        if(task==ignore || task->IsDead() || !definition || task->GetTarget()) continue;
+        const int id=definition->GetId();
+        if(id<=0 || size_t(id)>=jammerRadii.size() || jammerRadii[id]<=0
+            || task->GetPosition().SqDistance2D(center)>radius*radius) continue;
+        discs.push_back({P(task->GetPosition()),jammerRadii[id]});
+    }
+    return commander::JammerCoverage(std::move(discs));
+}
+
+bool CCommanderControl::Jammed(CCircuitUnit* unit) {
+    jamZones.clear();
+    if(options.jamSafe<=0 || !Handles(unit) || EnergyRetreat(unit) || HealthRetreat(unit)) return false;
+    InitJammerRadii();
     if(maxJammerRadius<=0) return false;
     const int frame=ai->GetLastFrame();
     const auto pos=unit->GetPos(frame);

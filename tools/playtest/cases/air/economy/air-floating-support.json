@@ -1,0 +1,98 @@
+{
+  "name": "air-floating-support",
+  "storage_scenario": "air-floating-support",
+  "unit": "armaap",
+  "side": "armada",
+  "role": "AIR",
+  "description": "Two supplied T2 air plants with no nanos, funded high metal bank: factory support must precede discretionary expansion.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4000,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4000,
+    4000,
+    2800
+  ],
+  "photos": [
+    90,
+    180
+  ],
+  "min_spawn_spacing": 64,
+  "command_breakdown": true,
+  "hold_friendly": false,
+  "builders": true,
+  "production": true,
+  "start_metal": 6000,
+  "start_energy": 1000000,
+  "checks": "air-floating-support",
+  "groups": [
+    {
+      "unit": "armaap",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3800,
+        4000
+      ],
+      "spacing": 700,
+      "columns": 2
+    },
+    {
+      "unit": "armca",
+      "count": 4,
+      "team": 0,
+      "position": [
+        4000,
+        3600
+      ]
+    },
+    {
+      "unit": "armafus",
+      "count": 1,
+      "team": 0,
+      "position": [
+        3400,
+        3400
+      ]
+    },
+    {
+      "unit": "armmoho",
+      "count": 8,
+      "team": 0,
+      "position": [
+        3000,
+        3000
+      ],
+      "spacing": 120,
+      "columns": 4
+    },
+    {
+      "unit": "armmstor",
+      "count": 2,
+      "team": 0,
+      "position": [
+        3400,
+        3000
+      ]
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "enemy_role": "FRONT",
+  "modoptions": {
+    "multiplier_metalextraction": 10
+  }
+}

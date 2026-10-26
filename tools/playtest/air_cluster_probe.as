@@ -3,6 +3,32 @@ namespace AirClusterProbe {
     const bool controlled = true;
     int blocked = -1, cluster = -1, sampled = -100000;
     bool relocated = false;
+    dictionary centeredPlans;
+    void CheckCentered()
+    {
+        // Observe reserved coordinates only: no placement or construction orders.
+        if (Global::RoleSettings::Air::CenteredT2FactorySupport) {
+            for (uint b = 0; b < AirLayout::bays.length(); ++b) {
+                AirLayout::Bay@ bay = AirLayout::bays[b];
+                if (bay.cluster < 0 || !UnitHelpers::IsT2AircraftPlant(bay.defName)) continue;
+                // Called synchronously after atomic planning, before gameplay can
+                // obstruct or release pins. Relocation creates a new slot ID.
+                const string planKey = "" + bay.slot;
+                if (centeredPlans.exists(planKey)) continue;
+                const AIFloat3 axis = AirLayout::Offset(bay.centre, bay.facing, 0.0f, 1.0f);
+                int rear = 0, front = 0;
+                for (uint n = 0; n < bay.nanos.length(); ++n) {
+                    const AIFloat3 p = aiTerrainMgr.GetReservationPos(bay.nanos[n]);
+                    const float projection = (p.x - bay.centre.x) * (axis.x - bay.centre.x)
+                        + (p.z - bay.centre.z) * (axis.z - bay.centre.z);
+                    if (projection < 0.0f) ++rear; else if (projection > 0.0f) ++front;
+                }
+                GenericHelpers::LogUtil("[AirClusterProbe] " + ((rear == 9 && front == 11) || (rear == 11 && front == 9) ? "PASS" : "FAIL")
+                    + " centered bay=" + bay.key + " rear=" + rear + " front=" + front, 1);
+                centeredPlans.set(planKey, true);
+            }
+        }
+    }
     void Tick()
     {
         if (ai.teamId != 0 || !AirEconomy::Active()) return;

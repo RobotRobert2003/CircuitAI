@@ -28,6 +28,8 @@ namespace AirRules {
             @t = AirBuild::Assist(u, true);
             if (t !is null) return AirBuild::Record(t, "recovery.assist", u);
         }
+        @t = AirBuild::FloatingSupport(u);
+        if (t !is null) return AirBuild::Record(t, "overflow.production.support", u);
         @t = AirBuild::Resume(u);
         if (t !is null) return AirBuild::Record(t, "project.resume", u);
         // D-365 (owner): once an advanced plant's bay is reserved, its two turrets are

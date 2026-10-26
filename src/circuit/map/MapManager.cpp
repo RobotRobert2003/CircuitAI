@@ -6,6 +6,7 @@
  */
 
 #include "map/MapManager.h"
+#include "terrain/FogProximity.h"
 #include "map/ThreatMap.h"
 #include "map/InfluenceMap.h"
 #include "CircuitAI.h"
@@ -303,6 +304,11 @@ bool CMapManager::IsAreaInLOS(const AIFloat3& pos, float radius) const
 	for (int z=z1; z<=z2; ++z) for (int x=x1; x<=x2; ++x)
 		if (losMap[z*losWidth+x]<=0) return false;
 	return true;
+}
+
+bool CMapManager::IsNearFog(const AIFloat3& pos, float radius) const
+{
+	return visibility::NearFog(losMap, losWidth, losResConv, pos.x, pos.z, radius);
 }
 
 } // namespace circuit

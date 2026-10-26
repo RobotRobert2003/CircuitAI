@@ -66,7 +66,7 @@ bool CBNanoTask::Execute(CCircuitUnit* unit)
 	FindBuildSite(unit, pos, searchRadius);
 
 	if (geom::is_valid(buildPos)) {
-        if(!circuit->GetCommanderControl()->SupportMayBuild(unit,buildDef,buildPos)) return false;
+        if(!circuit->GetCommanderControl()->GroupMayBuild(unit,buildDef,buildPos)) return false;
 		TRY_UNIT(circuit, unit,
 			unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(frame));
 		)

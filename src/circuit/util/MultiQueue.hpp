@@ -112,14 +112,15 @@ template <typename T>
 void CMultiQueue<T>::RemoveAllIf(ConditionFunction condition)
 {
 	std::lock_guard<spring::mutex> mlock(_mutex);
-	typename std::deque<T>::iterator iter = _queue.begin();
-	while (iter != _queue.end()) {
-		if (condition(*iter)) {
-//			iter = _queue.erase(iter);  // NOTE: micro-opt
-			*iter = _queue.back();
+	// Indices survive swap/pop, including removal of the final element.
+	// Keep the original unordered removal and predicate evaluation order.
+	std::size_t index = 0;
+	while (index < _queue.size()) {
+		if (condition(_queue[index])) {
+			_queue[index] = _queue.back();
 			_queue.pop_back();
 		} else {
-			++iter;
+			++index;
 		}
 	}
 }

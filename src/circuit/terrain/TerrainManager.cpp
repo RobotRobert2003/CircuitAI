@@ -110,7 +110,9 @@ bool ReadLayoutString(std::istream& is, std::string& value)
 CTerrainManager::CTerrainManager(CCircuitAI* circuit, CTerrainData* terrainData)
 		: circuit(circuit)
 		, allyZoneCells(9)
+		, areaData(nullptr)
 		, terrainData(terrainData)
+		, minLandPercent(0.f)
 #ifdef DEBUG_VIS
 		, dbgTextureId(-1)
 		, sdlWindowId(-1)
@@ -1948,7 +1950,7 @@ bool CTerrainManager::PlanMexCluster(const std::string& name, CCircuitDef* def,
 
 bool CTerrainManager::PlanAirFactoryCluster(const std::string& name, CCircuitDef* firstFactory,
 		CCircuitDef* repeatedFactory, CCircuitDef* nanoDef, const AIFloat3& origin,
-		int facing, int count, int columns, int firstNanos)
+		int facing, int count, int columns, int firstNanos, bool centerFirst, bool centerRepeated)
 {
 	if (!layoutEnabled || name.empty() || !MakesAircraft(circuit, firstFactory)
 			|| !MakesAircraft(circuit, repeatedFactory) || nanoDef == nullptr || nanoDef->GetDef() == nullptr) return false;
@@ -1957,7 +1959,7 @@ bool CTerrainManager::PlanAirFactoryCluster(const std::string& name, CCircuitDef
 	};
 	const auto plan = base_layout::MakeAirFactoryCluster(
 			{int(std::lround(origin.x / 8.f)), int(std::lround(origin.z / 8.f))}, facing,
-			footprint(firstFactory), footprint(repeatedFactory), footprint(nanoDef), count, columns, firstNanos, 20);
+			footprint(firstFactory), footprint(repeatedFactory), footprint(nanoDef), count, columns, firstNanos, 20, centerFirst, centerRepeated);
 	if (!plan.valid || !IsRectFree(plan.bounds)) return false;
 	// Existing corridors are checked once; flying output needs no internal
 	// ground lanes. Every other reservation caller retains its original policy.

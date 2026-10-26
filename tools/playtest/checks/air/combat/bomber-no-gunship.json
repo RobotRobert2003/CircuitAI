@@ -1,0 +1,38 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "valuable target",
+      "pattern": "spawn id=(?P<target>\\d+) team=2 unit=armbull",
+      "scope": "any",
+      "by_minute": 1
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "no gunship support",
+      "pattern": "\\[AIR\\]\\[BomberSupport\\].*reason=gunship-sight",
+      "scope": "any"
+    }
+  ]
+}

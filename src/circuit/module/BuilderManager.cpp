@@ -1,4 +1,4 @@
-#include "task/builder/FrontFollowTask.h"
+#include "task/builder/CommanderGroupFollowTask.h"
 /*
  * BuilderManager.cpp
  *
@@ -81,7 +81,7 @@ CBuilderManager::CBuilderManager(CCircuitAI* circuit)
 		, buildPower(.0f)
 		, dangerHysteresis(MAX_TRAVEL_SEC * FRAMES_PER_SEC)
 {
-	circuit->GetScheduler()->RunOnInit(CScheduler::GameJob(&CBuilderManager::Init, this));
+	circuit->GetScheduler()->RunOnInit(CScheduler::GameJob(&CBuilderManager::InitBuilder, this));
 
 	buildTasks.resize(static_cast<IBuilderTask::BT>(IBuilderTask::BuildType::_SIZE_));
 
@@ -474,7 +474,7 @@ void CBuilderManager::ReadConfig()
 	}
 }
 
-void CBuilderManager::Init()
+void CBuilderManager::InitBuilder()
 {
 	CSetupManager::StartFunc subinit = [this](const AIFloat3& pos) {
 		CScheduler* scheduler = circuit->GetScheduler().get();
@@ -1217,8 +1217,8 @@ IUnitTask* CBuilderManager::FindMatchingGuard(CCircuitUnit* unit, const TaskB::S
 		? current : nullptr;
 }
 
-IUnitTask* CBuilderManager::EnqueueFrontFollow(CCircuitUnit* leader,float radius) {
-    auto* task=new CFrontFollowTask(this,leader->GetId(),radius);
+IUnitTask* CBuilderManager::EnqueueCommanderGroupFollow(CCircuitUnit* leader,float radius) {
+    auto* task=new CCommanderGroupFollowTask(this,leader->GetId(),radius);
     updateTasks.push_back(task); lastEnqueued=task; TaskAdded(task); return task;
 }
 CCommanderTask* CBuilderManager::EnqueueCommander(IUnitTask* previous) {

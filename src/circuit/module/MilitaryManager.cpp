@@ -83,7 +83,7 @@ CMilitaryManager::CMilitaryManager(CCircuitAI* circuit)
 		, armyCost(0.f)
 		, bigGunDef(nullptr)
 {
-	circuit->GetScheduler()->RunOnInit(CScheduler::GameJob(&CMilitaryManager::Init, this));
+	circuit->GetScheduler()->RunOnInit(CScheduler::GameJob(&CMilitaryManager::InitMilitary, this));
 
 	defence = circuit->GetAllyTeam()->GetDefenceData().get();
 
@@ -721,7 +721,7 @@ void CMilitaryManager::InitEconomyScores(const std::vector<CCircuitDef*>&& build
 	});
 }
 
-void CMilitaryManager::Init()
+void CMilitaryManager::InitMilitary()
 {
 	CMetalManager* metalMgr = circuit->GetMetalManager();
 	const CMetalData::Clusters& clusters = metalMgr->GetClusters();
@@ -2457,8 +2457,7 @@ void CMilitaryManager::PointOfInterest(CEnemyInfo* enemy, int start, int step)
 		CMetalData::ClusterGraph::IncEdgeIt edgeIt(clusterGraph, node);
 		for (; edgeIt != lemon::INVALID; ++edgeIt) {
 			const int childId = clusterGraph.id(clusterGraph.oppositeNode(node, edgeIt));
-			if (visited.find(childId) == visited.end()) {
-				visited.insert(childId);
+			if (visited.insert(childId).second) {
 				toVisit.emplace_back(childId, q.second + step);
 			}
 		}

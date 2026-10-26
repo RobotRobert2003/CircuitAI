@@ -147,6 +147,8 @@ namespace AirLayout {
                 if (bays[i] is reuse || (reuse.cluster >= 0 && bays[i].cluster == reuse.cluster)) members.insertLast(bays[i]);
             @plant = ai.GetCircuitDef(members[0].defName);
         }
+        const bool centerT2 = Global::RoleSettings::Air::CenteredT2FactorySupport;
+        const bool centerFirst = centerT2 && UnitHelpers::IsT2AircraftPlant(plant.GetName());
         const int cluster = reuse !is null && reuse.cluster >= 0 ? reuse.cluster : aiTerrainMgr.GetLayoutInt("air.clusters", 0);
         const string key = "air.cluster." + cluster;
         const bool compact = ai.frame >= (MetalEconomy::Active() ? MetalEconomy::CompactCampusAfterSeconds
@@ -173,7 +175,7 @@ namespace AirLayout {
                 // Narrow metal lanes need a longer compound with fewer columns.
                 // Keep the same six sites and support pins, using the shared geometry.
                 const int columns = AiMin(count, (MetalEconomy::Active() || compact) ? 3 - variant % 3 : 3);
-                if (!aiTerrainMgr.PlanAirFactoryCluster(key, plant, advanced, nano, at, planFacing, count, columns, firstNanos)) continue;
+                if (!aiTerrainMgr.PlanAirFactoryCluster(key, plant, advanced, nano, at, planFacing, count, columns, firstNanos, centerFirst, centerT2)) continue;
                 bool allowed = true;
                 for (int b = 0; b < count; ++b) {
                     const AIFloat3 p = aiTerrainMgr.GetReservationPos(aiTerrainMgr.GetLayoutInt(key + ".bay." + b + ".slot", -1));

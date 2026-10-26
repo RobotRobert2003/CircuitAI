@@ -247,7 +247,8 @@ void CRetreatTask::Update()
 				: healthPerc > 0.98f;
 
 		CCircuitDef* cdef = unit->GetCircuitDef();
-		if(circuit->GetCommanderControl()->EnergyRetreat(unit)) {
+		if(circuit->GetCommanderControl()->EnergyRetreat(unit)
+            || circuit->GetCommanderControl()->HealthRetreat(unit)) {
             Start(unit);continue;
         }
 		if (isRepaired && !unit->IsDisarmed(frame)) {
@@ -480,7 +481,7 @@ void CRetreatTask::Recovered(CCircuitUnit* unit)
 		if (unit->GetCircuitDef()->IsAbleToCloak()
 			&& unit->GetCircuitDef()->GetCloakCost() > manager->GetCircuit()->GetEconomyManager()->GetAvgEnergyIncome() * 0.1f)
 		{
-			unit->CmdCloak(false);
+			unit->CmdCloak(manager->GetCircuit()->GetCommanderControl()->FogCloak(unit));
 		}
 		unit->CmdSetFireState(unit->GetCircuitDef()->GetFireState());
 	)

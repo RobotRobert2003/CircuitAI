@@ -1,0 +1,104 @@
+{
+  "name": "bomber-no-gunship",
+  "storage_scenario": "bomber-no-gunship",
+  "unit": "armpnix",
+  "side": "armada",
+  "role": "AIR",
+  "enemy_role": "TACTICAL",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      3000,
+      3000
+    ],
+    [
+      2800,
+      3000
+    ],
+    [
+      6000,
+      6500
+    ]
+  ],
+  "ally_spots": "1,2",
+  "camera": [
+    4700,
+    4400,
+    2300
+  ],
+  "photos": [
+    25,
+    45,
+    75
+  ],
+  "hold_friendly": false,
+  "command_breakdown": true,
+  "min_spawn_spacing": 55,
+  "start_metal": 1000,
+  "groups": [
+    {
+      "unit": "armpnix",
+      "team": 0,
+      "count": 10,
+      "position": [
+        3000,
+        3200
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4700,
+        4300
+      ],
+      "after_seconds": 10
+    },
+    {
+      "unit": "armbull",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4950,
+        4400
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armwar",
+      "team": 2,
+      "count": 1,
+      "position": [
+        4850,
+        4550
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armmstor",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2600,
+        2600
+      ],
+      "after_seconds": 5
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "description": "Friendly ground vision alone cannot opt a front target into immediate gunship bomber support.",
+  "checks": "bomber-no-gunship",
+  "enemy_team": 2,
+  "hold_teams": [
+    1,
+    2
+  ]
+}

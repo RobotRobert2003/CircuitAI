@@ -56,7 +56,7 @@ namespace TaskS {
 
 	static inline SServSTask Repair(IBuilderTask::Priority priority, CAllyUnit* target)
 	{
-		SServSTask ti;
+		SServSTask ti{};
 		ti.type = IBuilderTask::BuildType::REPAIR;
 		ti.priority = priority;
 		ti.target = target;
@@ -65,7 +65,7 @@ namespace TaskS {
 	static inline SServSTask Reclaim(IBuilderTask::Priority priority,
 			const springai::AIFloat3& position, float radius, int timeout = 0)
 	{
-		SServSTask ti;
+		SServSTask ti{};
 		ti.type = IBuilderTask::BuildType::RECLAIM;
 		ti.priority = priority;
 		ti.position = position;
@@ -76,7 +76,7 @@ namespace TaskS {
 	static inline SServSTask Patrol(IBuilderTask::Priority priority,
 			const springai::AIFloat3& position, int timeout)
 	{
-		SServSTask ti;
+		SServSTask ti{};
 		ti.type = IBuilderTask::BuildType::PATROL;
 		ti.priority = priority;
 		ti.position = position;
@@ -85,7 +85,7 @@ namespace TaskS {
 	}
 	static inline SServSTask Wait(bool stop, int timeout)
 	{
-		SServSTask ti;
+		SServSTask ti{};
 		ti.type = IBuilderTask::BuildType::WAIT;
 		ti.stop = stop;
 		ti.timeout = timeout;
@@ -141,7 +141,7 @@ public:
 	bool RegisterScriptFactory(CCircuitDef* def, const CCircuitDef* prototype);
 private:
 	void ReadConfig();
-	void Init();
+	void InitFactory();
 	void RefillCompletedFactory(CCircuitUnit::Id id, unsigned long long ticket);
 	std::unordered_map<CCircuitUnit::Id, unsigned long long> completionRefills;
 	unsigned long long nextRefillTicket = 0;

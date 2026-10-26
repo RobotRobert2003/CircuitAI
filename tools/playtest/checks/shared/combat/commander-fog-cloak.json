@@ -1,0 +1,77 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "loaded",
+      "pattern": "\\[RangedArena\\].*loaded",
+      "scope": "any",
+      "by_minute": 0.5
+    },
+    {
+      "key": "fog cloak enabled",
+      "pattern": "\\[CommanderCloak\\] unit=(?P<commander>\\d+) fog=1",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "actual cloak",
+      "pattern": "unit id=(?P<commander>\\d+) unit=armcom .*cloak=true",
+      "scope": "any",
+      "same_as": "fog cloak enabled",
+      "after_key": "fog cloak enabled",
+      "by_minute": 1
+    },
+    {
+      "key": "sustained cloak",
+      "pattern": "unit id=(?P<commander>\\d+) unit=armcom .*cloak=true",
+      "scope": "any",
+      "same_as": "fog cloak enabled",
+      "after_minute": 0.9,
+      "by_minute": 1.1
+    },
+    {
+      "key": "fusion removed",
+      "pattern": "fixture_units_removed unit=armfus count=1",
+      "scope": "any",
+      "by_minute": 1.3
+    },
+    {
+      "key": "income release",
+      "pattern": "\\[CommanderCloak\\] unit=(?P<commander>\\d+) fog=0",
+      "scope": "any",
+      "same_as": "fog cloak enabled",
+      "after_key": "fusion removed",
+      "by_minute": 1.8
+    },
+    {
+      "key": "uncloaked after income loss",
+      "pattern": "unit id=(?P<commander>\\d+) unit=armcom .*cloak=false",
+      "scope": "any",
+      "same_as": "fog cloak enabled",
+      "after_key": "income release",
+      "by_minute": 2
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "peaceful energy retreat",
+      "pattern": "cloak_energy_retreat",
+      "scope": "any"
+    }
+  ]
+}

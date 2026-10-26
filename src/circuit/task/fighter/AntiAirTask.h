@@ -28,6 +28,8 @@ public:
 	virtual void OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker) override;
 
 private:
+	// Deliberately selects the AA predicate instead of the squad ground test.
+	// cppcheck-suppress duplInheritedMember
 	NSMicroPather::HitFunc GetHitTest() const;
 	void FindTarget();
 	void FallbackDisengage();

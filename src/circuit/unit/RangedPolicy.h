@@ -100,6 +100,8 @@ struct RangedPolicy {
     // Coordinated cohorts keep automatic fire through their reload cycle.
     // Off by default. Individual-controller spam handling is a separate feature.
     bool fireAtWill = false;
+    bool fireInRange = false; // automatic response without changing coordinated movement
+    bool commanderFocus = false; // strict shot priority for a peer-spotted commander
     // Owner 2026-10-19: 0 = off. Armed static defences of this tech level or
     // lower (BAR customparams.techlevel, 1 when absent) are not coverage this
     // hull avoids: it picks firing sites, paths and stays inside their reach

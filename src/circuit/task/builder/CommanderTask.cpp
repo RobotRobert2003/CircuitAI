@@ -17,7 +17,8 @@ void CCommanderTask::AssignTo(CCircuitUnit* unit) {
     // second command owner. This task owns no generic fighter side sets.
     restored=false;
     oldFire=unit->GetRequestedFireState(); oldMove=unit->GetRequestedMoveState();
-    oldCloak=unit->GetUnit()->IsCloaked();
+    oldCloak=unit->GetUnit()->IsCloaked()
+        && !manager->GetCircuit()->GetCommanderControl()->FogCloak(unit);
     IUnitTask::AssignTo(unit);
 }
 void CCommanderTask::Restore(CCircuitUnit* unit) {
@@ -26,7 +27,7 @@ void CCommanderTask::Restore(CCircuitUnit* unit) {
     TRY_UNIT(manager->GetCircuit(),unit,
         if(unit->GetRequestedFireState()!=oldFire) unit->TrySetFireState(static_cast<CCircuitDef::FireT>(oldFire));
         if(unit->GetRequestedMoveState()!=oldMove) unit->TrySetMoveState(static_cast<CCircuitDef::MoveT>(oldMove));
-        unit->CmdCloak(oldCloak);
+        unit->CmdCloak(oldCloak || manager->GetCircuit()->GetCommanderControl()->FogCloak(unit));
     )
 }
 void CCommanderTask::Stop(bool done) {

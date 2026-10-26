@@ -1,0 +1,114 @@
+{
+  "name": "bomber-base-defense",
+  "storage_scenario": "bomber-base-defense",
+  "unit": "armpnix",
+  "side": "armada",
+  "role": "AIR",
+  "enemy_role": "TACTICAL",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      3000,
+      3000
+    ],
+    [
+      2800,
+      3000
+    ],
+    [
+      6000,
+      6500
+    ]
+  ],
+  "ally_spots": "1,2",
+  "camera": [
+    4700,
+    4400,
+    2300
+  ],
+  "photos": [
+    25,
+    45,
+    75
+  ],
+  "hold_friendly": false,
+  "command_breakdown": true,
+  "min_spawn_spacing": 55,
+  "start_metal": 1000,
+  "groups": [
+    {
+      "unit": "armpnix",
+      "team": 0,
+      "count": 10,
+      "position": [
+        3000,
+        3200
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbrawl",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4700,
+        4300
+      ],
+      "after_seconds": 10
+    },
+    {
+      "unit": "armbull",
+      "team": 2,
+      "count": 1,
+      "position": [
+        3500,
+        3300
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armwar",
+      "team": 2,
+      "count": 1,
+      "position": [
+        3450,
+        3500
+      ],
+      "after_seconds": 20
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        3400,
+        3350
+      ],
+      "after_seconds": 10
+    },
+    {
+      "unit": "armmstor",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2600,
+        2600
+      ],
+      "after_seconds": 5
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "min_damage": 500,
+    "min_kills": 1,
+    "max_losses": 0
+  },
+  "description": "Idle bombers defend a base from a non-T3 tank even while the friendly gunship is far away; no offensive-wave opening or escort gate.",
+  "checks": "bomber-base-defense",
+  "enemy_team": 2,
+  "hold_teams": [
+    1,
+    2
+  ]
+}

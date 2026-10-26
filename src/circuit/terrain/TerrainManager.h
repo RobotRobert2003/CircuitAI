@@ -286,7 +286,8 @@ public:
 			CCircuitDef* nanoDef, const springai::AIFloat3& base, int facing, int sideOffsetCells, int forwardOffsetCells);
 	int AcquireFactoryReservation(CCircuitDef* factoryDef);
 	bool PlanAirFactoryCluster(const std::string& name, CCircuitDef* firstFactory, CCircuitDef* repeatedFactory,
-			CCircuitDef* nanoDef, const springai::AIFloat3& origin, int facing, int count, int columns, int firstNanos);
+			CCircuitDef* nanoDef, const springai::AIFloat3& origin, int facing, int count, int columns, int firstNanos,
+			bool centerFirst = false, bool centerRepeated = false);
 	bool PinLayoutTask(IBuilderTask* task, const std::string& groupName, CCircuitUnit* builder);
 	bool PinFactoryNanoTask(IBuilderTask* task, CCircuitUnit* builder);
 	int GetFactoryNanoAvailable() const;

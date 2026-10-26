@@ -1,0 +1,36 @@
+{
+  "stop_minute": 2,
+  "expect": [
+    {
+      "key": "low health confirmed",
+      "pattern": "health_fixture_below_40",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "active coverage",
+      "pattern": "health_fixture_inside_active_jammer",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "safety decision",
+      "pattern": "\\[CommanderSafety\\].*action=health_retreat",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "physical retreat",
+      "pattern": "health_fixture_withdrew",
+      "scope": "any",
+      "by_minute": 1
+    }
+  ],
+  "forbid": [
+    {
+      "key": "errors",
+      "pattern": "\\[INVARIANT\\]|\\[RangedArena\\].*ERROR|SCRIPT CRASH|Lib exception|Access violation|has crashed|: ERR\\s+:",
+      "scope": "any"
+    }
+  ]
+}

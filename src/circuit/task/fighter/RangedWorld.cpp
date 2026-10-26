@@ -23,6 +23,24 @@ namespace circuit {
 using springai::AIFloat3;
 static ranged::Point P(const AIFloat3& p) { return {p.x,p.z}; }
 static const bool verifyRangedQueries=std::getenv("CIRCUIT_VERIFY_RANGED_QUERIES")!=nullptr;
+bool CRangedWorld::PeerSeesCommander(const Contact& contact,CCircuitDef* def,const AIFloat3& shooter,float peerRadius) const
+{
+    if(!contact.los || !contact.def || !contact.def->IsEnemyRoleAny(CCircuitDef::COMM)) return false;
+    EnsureAllies();
+    bool seen=false;
+    // Reuse the current legal friendly snapshot and spatial buckets. No army
+    // scan per hull; only commander candidates query local same-definition
+    // peers. LOS is aggregate legal LOS plus the individual peer's sight disc.
+    allies.Query(P(contact.pos),def->GetLosRadius(),[&](int index) {
+        const auto& peer=friends[index];
+        if(!seen && peer.def==def && peer.pos.SqDistance2D(contact.pos)<=SQUARE(peer.los)
+            && peer.pos.SqDistance2D(shooter)<=SQUARE(peerRadius)) {
+            auto* observer=circuit->GetFriendlyUnit(peer.id);
+            if(observer && !observer->GetUnit()->IsBeingBuilt()) seen=true;
+        }
+    });
+    return seen;
+}
 CRangedWorld::CRangedWorld(CCircuitAI* circuit): circuit(circuit), friendlyOrder(MAX_UNITS)
 {
     const float width=float(circuit->GetMap()->GetWidth()*SQUARE_SIZE);

@@ -1,6 +1,7 @@
 #pragma once
 #include "terrain/CommanderCombat.h"
 #include "terrain/CommanderFortification.h"
+#include "terrain/CommanderJammerCoverage.h"
 #include "spring/RouteCommand.h"
 #include "AIFloat3.h"
 #include <cmath>
@@ -23,7 +24,13 @@ public:
     bool Handles(CCircuitUnit* unit) const;
     bool Jammed(CCircuitUnit* unit);
     bool RetreatCloakFunded(CCircuitUnit* unit) const;
+    bool FogCloak(CCircuitUnit* unit) const;
     bool EnergyRetreat(CCircuitUnit* unit) const;
+    bool HealthRetreat(CCircuitUnit* unit) const;
+    bool GroupSiteAllowed(CCircuitUnit* unit,const springai::AIFloat3& site) const;
+    commander::JammerCoverage GroupJammerCoverage(CCircuitUnit* unit,CCircuitDef* def,
+        const springai::AIFloat3& center,float searchRadius,const IUnitTask* ignore=nullptr);
+    float GroupJammerMargin() const { return options.groupJammerEdge; }
     bool RetreatStation(CCircuitUnit* unit,springai::AIFloat3& goal) const;
     bool SetOption(const std::string& name,float value);
     float GetReserve() const { return reserve; }
@@ -37,7 +44,7 @@ public:
     IUnitTask* FrontWork(CCircuitUnit* unit,int kind,CCircuitDef* buildDef,float radius);
     bool CanStartRadar(CCircuitUnit* unit);
     void MexFinished(CCircuitUnit* commander, CCircuitUnit* mex);
-    bool SupportMayBuild(CCircuitUnit* unit,CCircuitDef* def,const springai::AIFloat3& site) const;
+    bool GroupMayBuild(CCircuitUnit* unit,CCircuitDef* def,const springai::AIFloat3& site) const;
     bool CanResumeFrontTask(CCircuitUnit* unit, IUnitTask* task) const;
     std::vector<commander::DefenceExclusion> DefenceExclusions(CCircuitUnit* unit,CCircuitDef* def,
         const springai::AIFloat3& center,float searchRadius,const IUnitTask* ignore=nullptr) const;
@@ -46,17 +53,18 @@ private:
     bool IsFrontDefence(const CCircuitDef* def) const;
     // Script owns the one-member roster and faction definitions. IDs are
     // reacquired on every ask and cleared on ownership loss, never wrappers.
-    int supportUnit=-1, supportDef=-1, supportNano=-1, supportRadar=-1, supportJammer=-1,supportAA=-1;
-    int supportNext=0;
-    bool supportArrived=false;
-    CCircuitUnit* SupportCommander() const;
-    bool SupportActive(CCircuitUnit* commander);
-    IUnitTask* SupportWork(CCircuitUnit* unit);
-    IUnitTask* SupportAssist(CCircuitUnit* commander);
-    IUnitTask* SupportBuild(CCircuitUnit* unit, CCircuitDef* def, const springai::AIFloat3& site, bool bootstrap=false);
-    IUnitTask* SupportPower(CCircuitUnit* unit, const springai::AIFloat3& site, bool& covered);
-    bool SupportPowered(const springai::AIFloat3& site) const;
-    void UpdateSupport();
+    int groupUnit=-1, groupDef=-1, groupNano=-1, groupRadar=-1, groupJammer=-1,groupAA=-1;
+    int groupNext=0;
+    bool groupArrived=false;
+    CCircuitUnit* GroupCommander() const;
+    bool GroupActive(CCircuitUnit* commander);
+    IUnitTask* GroupWork(CCircuitUnit* unit);
+    IUnitTask* GroupAssist(CCircuitUnit* commander);
+    bool GroupTaskFunded(IUnitTask* task) const;
+    IUnitTask* GroupBuild(CCircuitUnit* unit, CCircuitDef* def, const springai::AIFloat3& site, bool bootstrap=false);
+    IUnitTask* GroupPower(CCircuitUnit* unit, const springai::AIFloat3& site, bool& covered);
+    bool GroupPowered(const springai::AIFloat3& site) const;
+    void UpdateCommanderGroup();
     // Values are logged as integers; append new modes only.
     enum class Mode { SUPPORT,ASSESS,APPROACH,ALIGN,PENDING,ESCAPE,RECOVER,FALLBACK };
     struct State {
@@ -64,12 +72,18 @@ private:
         int generation=0,seen=-10000,started=0,pending=-1,fired=-1,failed=0;
         int retry=0,target=-1,leaseUntil=0,next=0,lastLog=0,lastDamage=-1,frontFrame=-10000,frontYield=0;
         int frontMexFrame=-10000,frontProgressFrame=0;
+        int frontSolarNext=0; // failed local placement retry, no recurring timer
         // Throttles (owner 2026-10-19): a failed detour or a declined T3 waits
         // 1 s, +1 s per failure in a row, at most 3 s; success resets.
         int detourNext=0,detourFails=0,t3DeclineFails=0;
         int t3PositionUntil=0,t3PositionTarget=-1;
         bool immediatePending=false;
         bool energyRetreat=false;
+        bool fogCloak=false;
+        int fogCloakNext=0;
+        bool healthRetreat=false;
+        int healthPlan=-10000,healthShotUntil=-1;
+        springai::AIFloat3 healthGoal{-1,0,-1};
         int energyPlan=-10000;
         springai::AIFloat3 energyGoal{-1,0,-1};
         float detourDist=0.f; // distance to the front at the last detour MOVE
@@ -152,6 +166,7 @@ private:
         bool work=true; // D-299 ladder and fallback hand-over (script Global::Commander::Work)
         bool frontRecovery=false;
         float frontRepairCombat=0;
+        float frontSolarIncome=0, frontSolarStorage=.2f, frontSolarRadius=300, frontSolarDef=-1;
         float frontMexSeconds=0,frontStallSeconds=10,frontDetourSeconds=0; // 0: no detour backoff
         float moveResendSeconds=0;   // 0: a swallowed/failed MOVE is resent every tick
         float t3ImmediateShot=0,t3PositionSeconds=0; // opt-in balanced combat policy
@@ -163,9 +178,11 @@ private:
         float friendlyMargin=12,normalRange=.85f,frontWorkers=2;
         float frontDistance=1600,frontStandoff=650,frontRadius=500,frontThreat=3;
         float jamSafe=0, jamHeavyCost=900;
+        float healthRetreatFraction=0,healthShotSeconds=2,groupJammerEdge=100,groupJammerIncome=25;
         float cloakEnergyRetreat=0,cloakRetreatDistance=600,frontMexAA=-1;
+        float fogCloakDistance=0,fogCloakIncome=500;
         float frontMexLos=0,radarSpacing=500;
-        float supportMexPriority=3,supportRadarPriority=2,supportLinePriority=1;
+        float groupMexPriority=3,groupRadarPriority=2,groupLinePriority=1;
         float frontPersistent=0, frontMexDefence=0, frontLineEnabled=0;
         float frontLineFog=1000, frontLineSpacing=1.5f;
         float frontDefenceSpacing=.5f;
@@ -226,6 +243,7 @@ private:
     // UnitDef decoy relationship separately; definitions live for this AI/game.
     mutable std::map<int,bool> actualDecoys;
     bool ActualDecoy(CCircuitDef* definition) const;
+    void UpdateFogCloak(CCircuitUnit* unit,State& state,int frame);
     std::vector<commander::Contact> contacts;
     std::set<int> afusDefs; // script-selected immutable definition IDs, per AI
     int protectedAfus=-1; // fresh local observation, never retained across Tick
@@ -257,6 +275,8 @@ private:
     float maxJammerRadius=-1;
     std::vector<int> jammerIds;
     std::vector<float> jammerRadii;
+    void InitJammerRadii();
+    bool HealthControl(CCircuitUnit* unit,State& s,int frame);
     struct JamZone { commander::Point center; float radius; };
     std::vector<JamZone> jamZones;
     bool JamControl(CCircuitUnit* unit,State& state,int frame);
@@ -289,7 +309,7 @@ private:
     // script names them in commander.json front_ladder (CommanderFront::Work).
     enum WorkKind { WORK_LINE=5,WORK_REPAIR_DEFENCE=6,WORK_REPAIR_UNITS=7,WORK_RECLAIM=8,
         WORK_TIMED=9,WORK_RADAR=10,WORK_FACTORY=11,WORK_BASE=12,WORK_MEX=13,WORK_ADVANCE=14,WORK_HOLD=15,
-        WORK_MEX_LANE=16, WORK_TERRITORY_LINE=17, WORK_MEX_DEFENCE=18, WORK_REPAIR_COMBAT=21 };
+        WORK_MEX_LANE=16, WORK_TERRITORY_LINE=17, WORK_MEX_DEFENCE=18, WORK_REPAIR_COMBAT=21, WORK_SOLAR=22 };
     IUnitTask* LadderWork(CCircuitUnit* unit,State& state,int kind,CCircuitDef* buildDef,float radius,int frame);
     // D-357: the corridor mex sweep (WORK_MEX_LANE) and its dry probe (INV-235).
     IUnitTask* LaneMexWork(CCircuitUnit* unit,State& state,CCircuitDef* turretDef,int frame);

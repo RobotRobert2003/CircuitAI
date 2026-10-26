@@ -1,0 +1,81 @@
+{
+  "name": "commander-health-unsafe-t3",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "FRONT",
+  "description": "A genuinely cloaked low-health commander rejects an unsurvivable Behemoth shot and physically withdraws.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4300,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "camera": [
+    4300,
+    4100,
+    1600
+  ],
+  "photos": [
+    25,
+    40,
+    65,
+    90
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "observation_frames": 3,
+  "hold_friendly": true,
+  "groups": [
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4600,
+        4600
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "corjugg",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4300,
+        4400
+      ],
+      "after_seconds": 23
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_kills": 0,
+    "max_losses": 0,
+    "min_damage": 0
+  },
+  "checks": "commander-health-unsafe-t3",
+  "enemy_destination": [
+    4300,
+    4400
+  ],
+  "commander_initial": true,
+  "commander_overrides": {
+    "t3_screen": 0
+  },
+  "enemy_commander_home": true,
+  "storage_scenario": "commander-health-unsafe",
+  "commander_health_fixture": {
+    "after_seconds": 23,
+    "percent": 35,
+    "wait_cloaked": true,
+    "enemy_range": 300,
+    "enemy_unit": "corjugg"
+  }
+}
