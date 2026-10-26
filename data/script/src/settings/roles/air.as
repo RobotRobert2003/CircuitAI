@@ -494,9 +494,9 @@ namespace Air {
             float LicheWeightGantry = 20.0f;          // 5) T3 gantries
             float LicheWeightT2Factory = 1.0f;        // 6) T2 air, vehicle, bot and sea factories
             // A Liche guarding the wave breaks off with an ATTACK the moment a roster target is this close
-            // to it: this share of the T2 bombers' StrikeImmediateRadius (1800 -> 600). The homing missile
-            // needs no run-up and hits close targets easily (owner, 2026-10-24: "cut that number in 1/3").
-            float LicheStrikeRadiusShare = 1.0f / 3.0f;
+            // to it: this share of the T2 bombers' StrikeImmediateRadius. Owner 2026-10-24 cut it to a third
+            // (600); owner 2026-10-26: the Liches share the bombers' full range again (1800).
+            float LicheStrikeRadiusShare = 1.0f;
             int LicheStrikersPerTarget = 2;  // Liches on one target at once; the rest keep guarding (<= 0: no cap)
             int LicheStrikeSeconds = 45;     // an ATTACK not resolved by then ends and the Liche rejoins the wave
 

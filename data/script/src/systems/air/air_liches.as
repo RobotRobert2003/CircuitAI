@@ -32,8 +32,8 @@ EscortStrikeTask.*, not the bombers' CAirWaveTask) that:
   - when that bomber dies, guards the living wave bomber nearest the Liches
     (one GUARD per Liche again);
   - keeps every Liche on its guard until a roster target is IN SIGHT within
-    StrikeRadius() of it (a third of the T2 bombers' StrikeImmediateRadius,
-    1800 -> 600), then breaks it off at once with one ATTACK on that unit.
+    StrikeRadius() of it (the T2 bombers' StrikeImmediateRadius, 1800;
+    owner 2026-10-26), then breaks it off at once with one ATTACK on that unit.
     A radar dot or a structure only remembered does not break the guard
     (owner 2026-10-25: they split off before they had found a target). At
     most LicheStrikersPerTarget Liches take one target; the rest keep
@@ -73,7 +73,7 @@ namespace AirLiches {
 
     bool Enabled() { return Global::RoleSettings::Air::LichesEnabled && AirEconomy::Active(); }
     bool IsLiche(const CCircuitDef@ d) { return d !is null && d.GetName() == Name; }
-    // A third of the T2 bombers' in-flight retarget radius (owner, 2026-10-24).
+    // The T2 bombers' in-flight retarget radius times LicheStrikeRadiusShare (1800, owner 2026-10-26).
     float StrikeRadius()
     {
         return Global::RoleSettings::Air::StrikeImmediateRadius * Global::RoleSettings::Air::LicheStrikeRadiusShare;
