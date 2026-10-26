@@ -96,6 +96,10 @@ namespace Spam {
         float RimDepth = 1536.0f;
         float RimBackReach = 2000.0f;
         int RimGapSamples = 3;
+        // owner, 2026-10-26: after the jackknife to the back edge's far corner, every
+        // lane (edge lanes, gantries, FRONT and TECH pumps) runs back along the same
+        // edge: its middle, then its other corner (nearest where the lane reached it).
+        bool RimReturnEnabled = true;
         // owner, 2026-10-26 (host lag delays AI orders): every T3 gantry, any role, is
         // a lag fallback (systems/production/gantry_fallback.as). GantryLagRepeat: the
         // engine repeats its last product until the AI's next order arrives (each order

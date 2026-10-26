@@ -622,8 +622,8 @@ namespace Spam {
     bool RimFinish(array<AIFloat3>@ route, CCircuitDef@ d, const AIFloat3 &in from, const string &in key, const AIFloat3 &in lanePoint)
     {
         if (!Global::Spam::EnemyCornerEnabled || route is null || route.length() == 0) return false;
-        AIFloat3 end, turn, s, e;
-        if (!EdgeLanes::Ends(s, e) || !EdgeLanes::RimEnds(d, from, lanePoint, 0, key, end, turn)) return false;
+        AIFloat3 end, turn, mid, home, s, e;
+        if (!EdgeLanes::Ends(s, e) || !EdgeLanes::RimEnds(d, from, lanePoint, 0, key, end, turn, mid, home)) return false;
         const float ax = e.x - s.x, az = e.z - s.z;
         const float endAlong = (end.x - s.x) * ax + (end.z - s.z) * az;
         const AIFloat3 last = route[route.length() - 1];
@@ -634,13 +634,16 @@ namespace Spam {
         }
         route.insertLast(end);
         if (turn.x >= 0.0f) route.insertLast(turn);
+        if (mid.x >= 0.0f) route.insertLast(mid);      // owner, 2026-10-26: back along the back edge
+        if (home.x >= 0.0f) route.insertLast(home);
         const AIFloat3 c = (turn.x >= 0.0f) ? turn : end;
-        const string text = "" + int(end.x) + "," + int(end.z) + "|" + int(c.x) + "," + int(c.z);
+        const string text = "" + int(end.x) + "," + int(end.z) + "|" + int(c.x) + "," + int(c.z) + "|" + int(home.x) + "," + int(home.z);
         string was = "";
         if (key.length() == 0 || !rimLogged.get(key, was) || was != text) {
             if (key.length() > 0) rimLogged.set(key, text);
             GenericHelpers::LogUtil("[Spam] lane " + (key.length() > 0 ? key : "edge") + " ends at (" + int(end.x) + "," + int(end.z)
-                + "); enemy corner (" + int(c.x) + "," + int(c.z) + ") on the playable rim (was (" + int(last.x) + "," + int(last.z) + "))", 1);
+                + "); enemy corner (" + int(c.x) + "," + int(c.z) + ") on the playable rim (was (" + int(last.x) + "," + int(last.z) + "))"
+                + ((home.x >= 0.0f) ? ("; back via (" + int(mid.x) + "," + int(mid.z) + ") to (" + int(home.x) + "," + int(home.z) + ")") : ""), 1);
         }
         return true;
     }
@@ -682,37 +685,56 @@ namespace Spam {
                 if (key.length() > 0) cornerPick.set(key, pick);
             }
         }
-        const string ck = key + "|" + pick;
-        float cx = 0.0f, cz = 0.0f;
-        AIFloat3 c;
-        if (key.length() > 0 && cornerX.get(ck, cx) && cornerZ.get(ck, cz)) {
-            c = AIFloat3(cx, 0.0f, cz);
-        } else {
-            const float along = (pick == 1) ? size - m : m;
-            const AIFloat3 raw = acrossX ? AIFloat3(back, 0.0f, along) : AIFloat3(along, 0.0f, back);
-            // In from the corner three ways - along the back edge, along the side
-            // edge toward our side, and toward the map centre - and keep the
-            // playable point nearest the corner. Played 2026-10-24 (Kings Assault):
-            // the centre ray alone stopped 2400 elmos short of an unplayable corner
-            const float other = (pick == 1) ? m : size - m;
-            const float home = (back > (acrossX ? w : h) * 0.5f) ? m : (acrossX ? w : h) - m;
-            array<AIFloat3> toward = {
-                acrossX ? AIFloat3(back, 0.0f, other) : AIFloat3(other, 0.0f, back),
-                acrossX ? AIFloat3(home, 0.0f, along) : AIFloat3(along, 0.0f, home),
-                AIFloat3(w * 0.5f, 0.0f, h * 0.5f) };
-            c = AIFloat3(-1.0f, 0.0f, -1.0f);
-            for (uint i = 0; i < toward.length(); ++i) {
-                const AIFloat3 q = EdgeLanes::PullIn(d, from, raw, toward[i]);
-                if (q.x >= 0.0f && (c.x < 0.0f || MapHelpers::SqDist(q, raw) < MapHelpers::SqDist(c, raw))) c = q;
-            }
-            if (key.length() > 0) { cornerX.set(ck, c.x); cornerZ.set(ck, c.z); }
+        bool fresh = false;
+        const AIFloat3 c = BackCorner(d, from, key, pick, acrossX, back, size, fresh);
+        if (fresh)
             GenericHelpers::LogUtil("[Spam] lane " + (key.length() > 0 ? key : "edge") + " ends at (" + int(last.x) + "," + int(last.z)
                 + "); enemy corner (" + int(c.x) + "," + int(c.z) + ")" + (random ? " picked at random (lane ends mid-map)" : "")
                 + (c.x < 0.0f ? ": no playable ground, lane unchanged" : ""), 1);
-        }
         // no playable ground there, or the lane already ends at that corner
         if (c.x < 0.0f || MapHelpers::SqDist(c, last) < 400.0f * 400.0f) return;
         route.insertLast(c);
+        // owner, 2026-10-26: then back along the back edge, its middle pulled in toward
+        // the map centre, to its other corner (the one nearest where the lane reached it)
+        if (!Global::Spam::RimReturnEnabled) return;
+        const AIFloat3 o = BackCorner(d, from, key, 1 - pick, acrossX, back, size, fresh);
+        if (o.x < 0.0f || MapHelpers::SqDist(o, c) < 400.0f * 400.0f) return;
+        const AIFloat3 rawMid = acrossX ? AIFloat3(back, 0.0f, size * 0.5f) : AIFloat3(size * 0.5f, 0.0f, back);
+        const AIFloat3 mid = EdgeLanes::PullIn(d, from, rawMid, AIFloat3(w * 0.5f, 0.0f, h * 0.5f));
+        if (mid.x >= 0.0f && MapHelpers::SqDist(mid, c) > 400.0f * 400.0f && MapHelpers::SqDist(mid, o) > 400.0f * 400.0f)
+            route.insertLast(mid);
+        route.insertLast(o);
+    }
+    // The enemy back edge's corner `pick` (0 low, 1 high), pulled in until playable and
+    // reachable from `from`; cached by the lab's key (`fresh`: just computed). x < 0: none.
+    AIFloat3 BackCorner(CCircuitDef@ d, const AIFloat3 &in from, const string &in key, int pick, bool acrossX, float back, float size, bool &out fresh)
+    {
+        fresh = false;
+        const string ck = key + "|" + pick;
+        float cx = 0.0f, cz = 0.0f;
+        if (key.length() > 0 && cornerX.get(ck, cx) && cornerZ.get(ck, cz)) return AIFloat3(cx, 0.0f, cz);
+        fresh = true;
+        const float w = float(aiTerrainMgr.GetTerrainWidth()), h = float(aiTerrainMgr.GetTerrainHeight());
+        const float m = Global::Spam::MapMargin;
+        const float along = (pick == 1) ? size - m : m;
+        const AIFloat3 raw = acrossX ? AIFloat3(back, 0.0f, along) : AIFloat3(along, 0.0f, back);
+        // In from the corner three ways - along the back edge, along the side
+        // edge toward our side, and toward the map centre - and keep the
+        // playable point nearest the corner. Played 2026-10-24 (Kings Assault):
+        // the centre ray alone stopped 2400 elmos short of an unplayable corner
+        const float other = (pick == 1) ? m : size - m;
+        const float home = (back > (acrossX ? w : h) * 0.5f) ? m : (acrossX ? w : h) - m;
+        array<AIFloat3> toward = {
+            acrossX ? AIFloat3(back, 0.0f, other) : AIFloat3(other, 0.0f, back),
+            acrossX ? AIFloat3(home, 0.0f, along) : AIFloat3(along, 0.0f, home),
+            AIFloat3(w * 0.5f, 0.0f, h * 0.5f) };
+        AIFloat3 c(-1.0f, 0.0f, -1.0f);
+        for (uint i = 0; i < toward.length(); ++i) {
+            const AIFloat3 q = EdgeLanes::PullIn(d, from, raw, toward[i]);
+            if (q.x >= 0.0f && (c.x < 0.0f || MapHelpers::SqDist(q, raw) < MapHelpers::SqDist(c, raw))) c = q;
+        }
+        if (key.length() > 0) { cornerX.set(ck, c.x); cornerZ.set(ck, c.z); }
+        return c;
     }
 
     AIFloat3 ReachableNear(CCircuitDef@ def, const AIFloat3 &in from, const AIFloat3 &in desired)

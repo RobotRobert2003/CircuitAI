@@ -84,7 +84,7 @@ namespace GantryFallback {
         g.CmdFactoryRoute(route);
         routed.set(key, true);
         GenericHelpers::LogUtil("[GantryFallback] gantry " + g.id + " waypoints: the " + EdgeLanes::Name(side)
-            + " edge lane, " + route.length() + " points", 1);
+            + " edge lane, " + route.length() + " points" + Spam::RouteText(route), 1);
     }
 
     void Forget(CCircuitUnit@ g)
