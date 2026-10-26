@@ -41,6 +41,9 @@ this program (owner, 2026-10-26):
             store    StoreCrew (5) T2 air constructors: build the storages
                      (6 armuwadves / coruwadves, 8 legadvestore for the
                      Starfall) as a strip StorageCols (2) wide, then assist.
+                     A storage slot that does not reserve, or whose orders
+                     keep failing, moves to the nearest free spot within
+                     StoreSearchRadius of the strip.
           Our own finished air constructors are claimed first, new ones as
           they come out; the rest are ordered from our air plants,
           CrewRecruitBatch every CrewOrderSeconds. With no plant that makes a
@@ -118,6 +121,7 @@ namespace LolCannon {
     array<int> storeRes;
     array<IUnitTask@> storeTask;
     array<int> storeMiss;
+    array<bool> storeDead;           // slots no free spot near the strip was found for
     array<AIFloat3> doneSites;       // the site of every cannon built, for a rebuild
     array<int> doneFacings;
     array<AIFloat3> doneTargets;     // the enemy spawn each finished cannon was sited against
@@ -138,6 +142,7 @@ namespace LolCannon {
     int nextPlan = 0;
     int nextGateLog = 0;
     int storesUntil = 0;
+    int nextStoreFix = 0;
     int nextLog = 0;
 
     bool Enabled() { return Global::LolCannon::Enabled; }
@@ -639,8 +644,9 @@ namespace LolCannon {
         @gunTask = null;
         turretTask.resize(0); turretMiss.resize(0);
         for (uint i = 0; i < turretPos.length(); ++i) { turretTask.insertLast(null); turretMiss.insertLast(0); }
-        storeTask.resize(0); storeMiss.resize(0);
-        for (uint i = 0; i < storePos.length(); ++i) { storeTask.insertLast(null); storeMiss.insertLast(0); }
+        storeTask.resize(0); storeMiss.resize(0); storeDead.resize(0);
+        for (uint i = 0; i < storePos.length(); ++i) { storeTask.insertLast(null); storeMiss.insertLast(0); storeDead.insertLast(false); }
+        nextStoreFix = 0;
     }
 
     CCircuitUnit@ StandingGun()
@@ -682,10 +688,10 @@ namespace LolCannon {
     // A slot list's next piece of work: finish an unfinished one, order a free slot
     // (at most `atOnce` in flight), or help one on its way; null when the list is done.
     IUnitTask@ SlotWork(CCircuitUnit@ u, CCircuitDef@ d, Task::BuildType type, const array<AIFloat3> &in at, array<int>@ ids,
-        array<IUnitTask@>@ tasks, array<int>@ misses, const AIFloat3 &in centre, int atOnce, const string &in what)
+        array<IUnitTask@>@ tasks, array<int>@ misses, const AIFloat3 &in centre, int atOnce, const string &in what, float near = 260.0f)
     {
         if (d is null || !u.circuitDef.CanBuild(d)) return null;
-        CCircuitUnit@ unf = aiBuilderMgr.FindUnfinishedNear(centre, 260.0f, d);
+        CCircuitUnit@ unf = aiBuilderMgr.FindUnfinishedNear(centre, near, d);
         if (unf !is null) return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, unf, 30 * SECOND));
         int flying = 0;
         IUnitTask@ help = null;
@@ -712,7 +718,87 @@ namespace LolCannon {
 
     IUnitTask@ StoreWork(CCircuitUnit@ u)
     {
-        return SlotWork(u, Store(), Task::BuildType::STORE, storePos, storeRes, storeTask, storeMiss, stripCentre, 2, "storage");
+        return SlotWork(u, Store(), Task::BuildType::STORE, storePos, storeRes, storeTask, storeMiss, stripCentre, 2, "storage",
+            Global::LolCannon::StoreSearchRadius + 64.0f);
+    }
+
+    // The nearest spot round the strip, ring by ring out to StoreSearchRadius, where
+    // a storage reserves (kept and pinned when `keep`); never within 24 of `avoid`.
+    bool FreeStoreSpot(CCircuitDef@ st, const AIFloat3 &in avoid, bool keep, AIFloat3 &out at, int &out id)
+    {
+        id = -1;
+        at = avoid;
+        const float step = AiMax(LolCannonMath::Pitch(Layout::Across(st, facing)), LolCannonMath::Pitch(Layout::Along(st, facing)));
+        const int rings = int(Global::LolCannon::StoreSearchRadius / step);
+        const AIFloat3 side = Layout::Side(facing), fwd = Layout::Fwd(facing);
+        for (int r = 0; r <= rings; ++r)
+            for (int i = -r; i <= r; ++i)
+                for (int j = -r; j <= r; ++j) {
+                    if (AiMax(AiMax(i, -i), AiMax(j, -j)) != r) continue;   // this ring's edge only
+                    const AIFloat3 q = At(stripCentre, side, float(i) * step, fwd, float(j) * step);
+                    if (MapHelpers::SqDist(q, avoid) < 24.0f * 24.0f || !aiTerrainMgr.CanReserveBuilding(st, q, facing)) continue;
+                    if (keep) {
+                        id = aiTerrainMgr.ReserveBuilding(st, q, facing);
+                        if (id < 0) continue;
+                        at = aiTerrainMgr.GetReservationPos(id);
+                    } else at = q;
+                    return true;
+                }
+        return false;
+    }
+
+    // Storage slots that cannot be built where the strip put them (refused at the
+    // site search, or three orders there came to nothing) move to the nearest free
+    // spot round the strip. Every 10 s while the crews work.
+    void ReplaceStores()
+    {
+        if (ai.frame < nextStoreFix) return;
+        nextStoreFix = ai.frame + 10 * SECOND;
+        CCircuitDef@ st = Store();
+        if (st is null || stripCentre.x < 0.0f) return;
+        const bool layoutOn = aiTerrainMgr.IsLayoutEnabled();
+        bool switched = false;
+        for (uint k = 0; k < storePos.length(); ++k) {
+            if (storeDead[k] || (storeTask[k] !is null && !storeTask[k].IsDead())) continue;
+            const bool failing = storeMiss[k] >= 3;
+            if (!failing && (storeRes[k] >= 0 || !layoutOn)) continue;   // reserved, or FRONT's unpinned slot still on its first tries
+            if (aiBuilderMgr.FindOwnNear(storePos[k], 24.0f, st) !is null) continue;
+            if (!switched && !layoutOn) {
+                if (!aiTerrainMgr.SetLayoutEnabled(true)) return;
+                switched = true;
+            }
+            const AIFloat3 old = storePos[k];
+            if (storeRes[k] >= 0) { aiTerrainMgr.ReleaseReservation(storeRes[k]); storeRes[k] = -1; }
+            AIFloat3 at;
+            int id = -1;
+            bool ok = false;
+            if (!failing && aiTerrainMgr.CanReserveBuilding(st, old, facing)) {   // free again where it was laid out
+                id = aiTerrainMgr.ReserveBuilding(st, old, facing);
+                ok = id >= 0;
+                if (ok) at = aiTerrainMgr.GetReservationPos(id);
+            }
+            if (!ok) ok = FreeStoreSpot(st, failing ? old : AIFloat3(-1000.0f, 0.0f, -1000.0f), layoutOn, at, id);
+            if (!ok) {
+                storeDead[k] = true;
+                GenericHelpers::LogUtil("[LolCannon] storage " + (k + 1) + " of " + storePos.length() + " at (" + int(old.x) + ", " + int(old.z)
+                    + "): no free spot within " + int(Global::LolCannon::StoreSearchRadius) + " of the strip", 1);
+                continue;
+            }
+            storePos[k] = at; storeRes[k] = id; storeMiss[k] = 0; @storeTask[k] = null;
+            GenericHelpers::LogUtil("[LolCannon] storage " + (k + 1) + " of " + storePos.length() + " moved from (" + int(old.x) + ", " + int(old.z)
+                + ") to (" + int(at.x) + ", " + int(at.z) + ")" + (failing ? " after 3 failed orders" : ", its slot did not reserve"), 1);
+        }
+        if (switched) aiTerrainMgr.SetLayoutEnabled(false);
+    }
+
+    // Storage slots neither standing nor given up.
+    int OpenStores()
+    {
+        CCircuitDef@ st = Store();
+        int n = 0;
+        for (uint k = 0; k < storePos.length(); ++k)
+            if (!storeDead[k] && (st is null || aiBuilderMgr.FindOwnNear(storePos[k], 24.0f, st) is null)) ++n;
+        return n;
     }
 
     IUnitTask@ CannonWork(CCircuitUnit@ u)
@@ -745,8 +831,7 @@ namespace LolCannon {
         if (kind < 0) return null;
         if (phase == STORES) {
             IUnitTask@ w = StoreWork(u);
-            if (w is null && u.circuitDef.CanBuild(Store())) storesUntil = ai.frame;   // nothing left this crew can do there
-            return (w is null) ? Wait(3) : w;
+            return (w is null) ? Wait(3) : w;   // the phase ends in FinishStores, not on one crew member's empty hand
         }
         IUnitTask@ t = null;
         if (kind == STARTER && (gunTask is null || gunTask.IsDead())) @t = CannonWork(u);
@@ -941,14 +1026,19 @@ namespace LolCannon {
         nextPlan = ai.frame + 30 * SECOND;
     }
 
-    // The storage phase: done when every storage stands or StoreFinishSeconds pass.
+    // The storage phase: done when every storage stands, when no slot is left to
+    // build (each short one found no free spot) or after StoreFinishSeconds.
     void FinishStores()
     {
         const int stores = CountStanding(Store(), storePos, 32.0f);
         const bool done = stores >= int(storePos.length());
-        if (!done && ai.frame < storesUntil) return;
-        GenericHelpers::LogUtil("[LolCannon] REPORT storages " + stores + "/" + storePos.length() + " at=" + (ai.frame / SECOND) + "s"
-            + (done ? "" : " (gave up after " + Global::LolCannon::StoreFinishSeconds + " s)"), 1);
+        const bool stuck = !done && OpenStores() == 0
+            && aiBuilderMgr.FindUnfinishedNear(stripCentre, Global::LolCannon::StoreSearchRadius + 64.0f, Store()) is null;
+        if (!done && !stuck && ai.frame < storesUntil) return;
+        string why = "";
+        if (stuck) why = " (no free spot near the strip for the other " + (int(storePos.length()) - stores) + ")";
+        else if (!done) why = " (gave up after " + Global::LolCannon::StoreFinishSeconds + " s)";
+        GenericHelpers::LogUtil("[LolCannon] REPORT storages " + stores + "/" + storePos.length() + " at=" + (ai.frame / SECOND) + "s" + why, 1);
         ReleaseCrew("storage strip " + (done ? "done" : "left short"));
         phase = IDLE;
         nextPlan = ai.frame + 30 * SECOND;
@@ -998,6 +1088,7 @@ namespace LolCannon {
 
     void Advance()
     {
+        if (phase == BUILD || phase == STORES) ReplaceStores();
         if (phase == STORES) {
             FinishStores();
             return;
