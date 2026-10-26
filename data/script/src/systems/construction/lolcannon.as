@@ -435,6 +435,26 @@ namespace LolCannon {
 
     // why the last search found nothing (the "no site" line)
     int refusedGun = 0, shortTurrets = 0, bestTurrets = 0;
+    int skipResource = 0, skipLayout = 0;
+
+    // The cannon's footprint at the candidate or one of TrySite's slides: off
+    // metal/geo spots and off ally layouts, reservations and structures
+    // (CanReserveArea). Cheap rectangle tests before the ground score; what is
+    // left for TrySite is our own zones and the engine's ground test.
+    bool GunGroundFree(CCircuitDef@ gun, const AIFloat3 &in p, int f)
+    {
+        const float hA = LolCannonMath::Pitch(Layout::Across(gun, f)) * 0.5f, hL = LolCannonMath::Pitch(Layout::Along(gun, f)) * 0.5f;
+        const AIFloat3 side = Layout::Side(f), fwd = Layout::Fwd(f);
+        const array<float> slide = { 0.0f, 0.5f, -0.5f, 1.0f, -1.0f };
+        bool resource = false;
+        for (uint k = 0; k < slide.length(); ++k) {
+            const AIFloat3 q = At(p, side, slide[k] * hA * 2.0f, fwd, 0.0f);
+            if (aiTerrainMgr.IsResourceAreaBlocked(q, f, hA, hL)) { resource = true; continue; }
+            if (aiTerrainMgr.CanReserveArea(q, f, hA, hL)) return true;
+        }
+        if (resource) ++skipResource; else ++skipLayout;
+        return false;
+    }
     int storesReserved = 0;          // of the site found
     AIFloat3 firstRefused;           // the first candidate whose cannon was refused, for the native reason
     int firstRefusedF = 0;
@@ -504,7 +524,8 @@ namespace LolCannon {
         const float w = float(AiTerrainWidth()), h = float(AiTerrainHeight());
         // The SiteProbes candidates nearest home, kept sorted (insertion; n = starts x rings x angles).
         array<AIFloat3> best; array<float> bestD; array<int> bestF;
-        const int probes = AiMax(1, Global::LolCannon::SiteProbes);
+        // candidates kept: SiteProbes x 4 nearest home; SiteProbes of them may be tried
+        const int probes = AiMax(1, Global::LolCannon::SiteProbes) * 4;
         for (uint s = 0; s < starts.length(); ++s) {
             for (int k = 0; ; ++k) {
                 const float r = LolCannonMath::RingRadius(range, Global::LolCannon::SiteRangeMarginMin, Global::LolCannon::SiteRangeMarginMax,
@@ -533,8 +554,9 @@ namespace LolCannon {
         int scored = 0, tried = 0;
         refusedGun = 0; shortTurrets = 0; bestTurrets = 0;
         bool found = false;
-        for (uint i = 0; i < best.length() && !found; ++i) {
-            if (aiTerrainMgr.IsZoneAlly(best[i])) continue;
+        skipResource = 0; skipLayout = 0;
+        for (uint i = 0; i < best.length() && !found && tried < Global::LolCannon::SiteProbes; ++i) {
+            if (aiTerrainMgr.IsZoneAlly(best[i]) || !GunGroundFree(gun, best[i], bestF[i])) continue;
             ++scored;
             const float score = GroundScore(gun, nano, st, best[i], bestF[i]);
             if (score < Global::LolCannon::SiteMinScore) continue;
@@ -559,7 +581,8 @@ namespace LolCannon {
             GenericHelpers::LogUtil("[LolCannon] no site for " + gun.GetName() + " (range " + int(range) + ") just inside reach of "
                 + starts.length() + " enemy start(s): " + best.length() + " candidates, " + scored + " scored, " + tried
                 + " tried (cannon refused " + refusedGun + ", turrets short " + shortTurrets + ", best " + bestTurrets + "/"
-                + Global::LolCannon::MinTurrets + "); retry in 30 s", 1);
+                + Global::LolCannon::MinTurrets + "); skipped: " + skipResource + " on metal/geo spots, " + skipLayout
+                + " on ally layouts, reservations or structures; retry in 30 s", 1);
         return found;
     }
 

@@ -22,7 +22,9 @@ namespace LolCannon {
     float SiteRangeMarginMax = 650.0f;
     float SiteRangeStep = 125.0f;
     int SiteAngles = 64;            // candidates per ring
-    int SiteProbes = 96;            // candidates whose footprint is actually tried, nearest our base first
+    int SiteProbes = 96;            // candidates whose footprint is actually tried, nearest our base first, out of the
+                                    // 4 x SiteProbes nearest; ones whose cannon footprint sits on a metal/geo spot or
+                                    // an ally layout, reservation or structure are skipped before they count
     float SiteMinScore = 0.7f;
     // the construction turret block beside the cannon (cols x rows, across x along)
     int TurretCols = 4;

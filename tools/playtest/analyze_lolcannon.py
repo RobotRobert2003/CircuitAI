@@ -25,7 +25,7 @@ a = ap.parse_args()
 AI = r':::AI LOG:S:\d+:T:(\d+):F:(\d+):L::'
 re_gates = re.compile(AI + r'\[LolCannon\] gates open: (.*)')
 re_site = re.compile(AI + r'\[LolCannon\] site for (\S+) \(range (\d+)\) at \((\d+), (\d+)\), facing (\d), (\d+) from home, ground (\d+)%')
-re_nosite = re.compile(AI + r'\[LolCannon\] no site for.*?(?:\((cannon refused \d+, turrets short \d+, best \d+/\d+)\))?; retry')
+re_nosite = re.compile(AI + r'\[LolCannon\] no site for(?:.*?\((cannon refused \d+, turrets short \d+, best \d+/\d+)\))?(?:; skipped: ([^;]*))?')
 re_framed = re.compile(AI + r'\[LolCannon\] REPORT framed at=(-?\d+)s ordered=(-?\d+)s')
 re_done = re.compile(AI + r'\[LolCannon\] REPORT finished (.*)')
 re_first = re.compile(AI + r'\[LolCannon\] REPORT first_target unit=(\d+) enemy=(-?\d+) at=(\d+)s after_finish=(\d+)s(.*)')
@@ -48,7 +48,7 @@ with open(a.infolog, encoding='utf-8', errors='replace') as f:
         elif m := re_site.search(line):
             team(m[1])['site'] = {'def': m[3], 'range': int(m[4]), 'x': int(m[5]), 'z': int(m[6]), 'from_home': int(m[8]), 'ground': int(m[9])}
         elif m := re_nosite.search(line):
-            t = team(m[1]); t['no_site'] += 1; t['no_site_why'] = m[3] or t['no_site_why']
+            t = team(m[1]); t['no_site'] += 1; t['no_site_why'] = '; '.join(x for x in (m[3], m[4] and 'skipped ' + m[4]) if x) or t['no_site_why']
         elif m := re_framed.search(line):
             team(m[1])['framed'].append({'framed': int(m[3]), 'ordered': int(m[4])})
         elif m := re_done.search(line):
