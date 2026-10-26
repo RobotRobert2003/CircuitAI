@@ -7,6 +7,7 @@
 #include "../helpers/units/unit_helpers.as"
 #include "builder.as"
 #include "../systems/team/ferry.as"
+#include "../systems/production/gantry_fallback.as"
 
 namespace Factory {
 
@@ -129,6 +130,7 @@ namespace Factory {
 		// constructor donations/recovery and spam. Checking only in the TECH
 		// delegate allowed these earlier providers to restart a retired lab.
 		if (Lifecycle::IsRetiring(u)) return null;
+		GantryFallback::Arm(u);   // owner, 2026-10-26: T3 gantries repeat and rally to their edge lane
         if(Global::AISettings::Role==AiRole::FRONT) {
             IUnitTask@ front=CommanderGroup::Recruit(u);
             if(front !is null) return front;
@@ -395,6 +397,7 @@ namespace Factory {
             return;
 		GenericHelpers::LogUtil("Enter FactoryAiUnitRemoved", 4);
 		Spam::OnFactoryRemoved(unit);   // drop the factory spam route
+		GantryFallback::Forget(unit);
 		// Clear lab references when a lab dies
 		if (Factory::primaryT1BotLab is unit){ @Factory::primaryT1BotLab = null; }
 		if (Factory::primaryT2BotLab is unit){ @Factory::primaryT2BotLab = null; }

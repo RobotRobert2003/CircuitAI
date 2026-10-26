@@ -17,6 +17,7 @@ public:
 	CSWaitTask(ITaskModule* mgr, bool stop, int timeout);
 	virtual ~CSWaitTask();
 
+	virtual void Start(CCircuitUnit* unit) override;
 	virtual void OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker) override;
 };
 

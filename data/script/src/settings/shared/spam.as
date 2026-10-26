@@ -79,6 +79,14 @@ namespace Spam {
         float RimDepth = 1536.0f;
         float RimBackReach = 2000.0f;
         int RimGapSamples = 3;
+        // owner, 2026-10-26 (host lag delays AI orders): every T3 gantry, any role, is
+        // a lag fallback (systems/production/gantry_fallback.as). GantryLagRepeat: the
+        // engine repeats its last product until the AI's next order arrives (each order
+        // still picks the unit). GantryLaneRoute: its units leave on the route of its
+        // nearest edge lane (EdgeLanes::RallyFor), which they follow until the AI
+        // orders them; they take the AI's orders as usual.
+        bool GantryLagRepeat = true;
+        bool GantryLaneRoute = true;
         dictionary UnitByFactory = {
             {"armlab", "armpw"},   {"corlab", "corak"},    {"leglab", "leggob"},
             {"armvp", "armflash"}, {"corvp", "corgator"},  {"legvp", "leghades"}

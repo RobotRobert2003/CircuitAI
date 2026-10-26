@@ -117,6 +117,10 @@ public:
 	int GetProductionFrame() const { return productionFrame; }
 	bool IsProductionEnabled() const { return productionEnabled; }
 	void SetProductionEnabled(bool value) { productionEnabled = value; }
+	// Owner, 2026-10-26: T3 gantry lag fallback; the engine repeat flag holds the
+	// last product while the AI's next order is delayed (RecruitTask::ExecuteLagRepeat)
+	bool IsLagRepeat() const { return lagRepeat; }
+	void SetLagRepeat(bool value) { lagRepeat = value; }
 	void SetProducerId(int value, int frame) { producerId = value; productionFrame = frame; }
 
 	void SetAllowedToJump(bool value) { isAllowedToJump = value; }
@@ -253,6 +257,7 @@ private:
 	int producerId = -1; // creation event only; persistent policy membership is script-owned
 	int productionFrame = -1; // unknown on adopted units; never infer it from completion
 	bool productionEnabled = true; // script-owned lifecycle admission; O(1) at command boundary
+	bool lagRepeat = false; // gantry lag fallback: engine repeat between AI orders
 	// NOTE: taskFrame assigned on task change and OnUnitIdle to workaround idle spam.
 	//       Proper fix: do not issue any commands OnUnitIdle, delay them until next frame?
 	int taskFrame;

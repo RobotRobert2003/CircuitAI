@@ -174,6 +174,12 @@ public:
 	const std::vector<CRecruitTask*>& GetTasks() const { return factoryTasks; }
     int GetPendingRecruitCount(const CCircuitDef* def) const;
     void RefreshPendingRecruit(CRecruitTask* task);
+	// Owner, 2026-10-26: T3 gantry lag fallback. A lag-repeat factory with no
+	// recruit task (its last task done, the AI's next order not yet in) keeps
+	// building its last product on engine repeat; that unfinished unit is the
+	// factory's "stray", which the next recruit of the same def adopts.
+	CCircuitUnit* TakeLagStray(CCircuitUnit* factory);
+	void AdoptUnfinished(CCircuitUnit* unit, CRecruitTask* task) { unfinishedUnits[unit] = task; }
 	bool IsAssistRequired() const { return isAssistRequired; }
 	void ApplySwitchFrame();
 	bool IsSwitchTime();
@@ -243,6 +249,7 @@ private:
 
 	std::map<CAllyUnit*, IBuilderTask*> unfinishedUnits;
 	std::vector<CRecruitTask*> factoryTasks;  // order matters
+	std::unordered_map<CCircuitUnit::Id, CCircuitUnit::Id> lagStrays;  // factory -> its repeat-built unit
     DefinitionCounts<CRecruitTask*> pendingRecruits;
 	float metalRequire;
 	float energyRequire;

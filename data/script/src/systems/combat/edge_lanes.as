@@ -335,27 +335,33 @@ namespace EdgeLanes {
     // The lane's rally points from `from`; empty when one has no playable point
     array<AIFloat3> Rally(CCircuitDef@ d, const AIFloat3 &in from)
     {
+        return RallyFor(d, from, lane);
+    }
+    // The rally points of the edge lane on side `side` (-1 left, +1 right) from
+    // `from`; also used by GantryFallback for each T3 gantry's nearest lane
+    array<AIFloat3> RallyFor(CCircuitDef@ d, const AIFloat3 &in from, int side)
+    {
         array<AIFloat3> r;
         AIFloat3 s0, e0;
-        if (lane == 0 || d is null || !Ends(s0, e0)) return r;
+        if (side == 0 || d is null || !Ends(s0, e0)) return r;
         // owner, 2026-10-25: the playable rim on the lane's side, then the end of the
         // enemy's back edge on that side, then the jackknife to its other end
         AIFloat3 end, turn;
-        if (RimEnds(d, from, from, lane, "", end, turn)) {
+        if (RimEnds(d, from, from, side, "", end, turn)) {
             const float ax = e0.x - s0.x, az = e0.z - s0.z;
             const float endAlong = (end.x - s0.x) * ax + (end.z - s0.z) * az;
             const array<float> shares = { Global::Spam::EdgeFirstShare, Global::Spam::EdgeSecondShare };
             for (uint i = 0; i < shares.length(); ++i) {
-                const AIFloat3 q = RimSide(d, from, s0, e0, lane, shares[i]);
+                const AIFloat3 q = RimSide(d, from, s0, e0, side, shares[i]);
                 if (q.x >= 0.0f && (q.x - s0.x) * ax + (q.z - s0.z) * az < endAlong) r.insertLast(q);
             }
             r.insertLast(end);
             if (turn.x >= 0.0f) r.insertLast(turn);
             return r;
         }
-        const AIFloat3 r1 = EdgePoint(d, from, s0, e0, lane, Global::Spam::EdgeFirstShare);
-        const AIFloat3 r2 = EdgePoint(d, from, s0, e0, lane, Global::Spam::EdgeSecondShare);
-        const AIFloat3 r3 = CornerPoint(d, from, s0, e0, lane);
+        const AIFloat3 r1 = EdgePoint(d, from, s0, e0, side, Global::Spam::EdgeFirstShare);
+        const AIFloat3 r2 = EdgePoint(d, from, s0, e0, side, Global::Spam::EdgeSecondShare);
+        const AIFloat3 r3 = CornerPoint(d, from, s0, e0, side);
         if (r1.x < 0.0f || r2.x < 0.0f || r3.x < 0.0f) return r;
         r.insertLast(r1); r.insertLast(r2); r.insertLast(r3);
         Spam::AppendEnemyCorner(r, d, from, "");   // rally 4, when playable (owner, 2026-10-24)

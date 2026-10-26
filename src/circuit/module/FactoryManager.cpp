@@ -983,6 +983,11 @@ int CFactoryManager::UnitCreated(CCircuitUnit* unit, CCircuitUnit* builder)
 
 	IUnitTask* task = builder->GetTask();
 	if ((task == nullptr) || (task->GetType() != IUnitTask::Type::FACTORY)) {
+		// Owner, 2026-10-26: the gantry's engine repeat started its last product again
+		// before the AI's next order arrived; the next recruit may adopt it
+		if (builder->IsLagRepeat() && unit->GetUnit()->IsBeingBuilt()) {
+			lagStrays[builder->GetId()] = unit->GetId();
+		}
 		return 0; //signaling: OK
 	}
 
@@ -991,6 +996,11 @@ int CFactoryManager::UnitCreated(CCircuitUnit* unit, CCircuitUnit* builder)
 		if (taskR->GetTarget() == nullptr) {
 			taskR->SetTarget(unit);
 			unfinishedUnits[unit] = taskR;
+			// Lag fallback: from now the engine repeats this product until the AI's next order
+			if (builder->IsLagRepeat() && !taskR->IsRepeat()) {
+				lagStrays.erase(builder->GetId());
+				TRY_UNIT(circuit, builder, builder->GetUnit()->SetRepeat(true);)
+			}
 		}
 	}
 
@@ -1084,6 +1094,7 @@ int CFactoryManager::UnitIdle(CCircuitUnit* unit)
 
 int CFactoryManager::UnitDestroyed(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+	lagStrays.erase(unit->GetId());
 	auto iter = unfinishedUnits.find(unit);
 	if (iter != unfinishedUnits.end()) {
 		AbortTask(iter->second);
@@ -1112,6 +1123,20 @@ int CFactoryManager::GetPendingRecruitCount(const CCircuitDef* def) const
         if (count != indexed) circuit->LOG("[INVARIANT] INV-175 recruit index=%i scan=%i", indexed, count);
     }
     return indexed;
+}
+
+CCircuitUnit* CFactoryManager::TakeLagStray(CCircuitUnit* factory)
+{
+	auto it = lagStrays.find(factory->GetId());
+	if (it == lagStrays.end()) return nullptr;
+	const CCircuitUnit::Id id = it->second;
+	lagStrays.erase(it);
+	CCircuitUnit* stray = circuit->GetTeamUnit(id);
+	// ids are reused: the unit must still be this factory's unfinished product
+	if (stray == nullptr || stray->IsDead() || stray->IsFinished()
+		|| stray->GetProducerId() != factory->GetId()) return nullptr;
+	if (unfinishedUnits.find(stray) != unfinishedUnits.end()) return nullptr;
+	return stray;
 }
 
 void CFactoryManager::RefreshPendingRecruit(CRecruitTask* task)
