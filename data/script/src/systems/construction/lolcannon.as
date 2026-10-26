@@ -393,7 +393,7 @@ namespace LolCannon {
         array<AIFloat3> &out turrets, array<AIFloat3> &out stores, AIFloat3 &out block, AIFloat3 &out strip)
     {
         const AIFloat3 fwd = Layout::Fwd(f), side = Layout::Side(f);
-        const float gunHalf = float(Layout::Across(gun, f)) * SQUARE_SIZE * 0.5f;
+        const float gunHalf = LolCannonMath::Pitch(Layout::Across(gun, f)) * 0.5f;
         const int cols = Global::LolCannon::TurretCols, rows = Global::LolCannon::TurretRows + AiMax(0, Global::LolCannon::TurretSpareRows);
         const float nA = LolCannonMath::Pitch(Layout::Across(nano, f)), nL = LolCannonMath::Pitch(Layout::Along(nano, f));
         block = At(gp, side, hand * (gunHalf + 16.0f + float(cols) * nA * 0.5f), fwd, 0.0f);
@@ -418,13 +418,13 @@ namespace LolCannon {
     // TECH's box measure over the cannon, its block and its strip.
     float GroundScore(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in p, int f)
     {
-        const float gunHalf = float(Layout::Across(gun, f)) * SQUARE_SIZE * 0.5f;
+        const float gunHalf = LolCannonMath::Pitch(Layout::Across(gun, f)) * 0.5f;
         const float blockW = float(Global::LolCannon::TurretCols) * LolCannonMath::Pitch(Layout::Across(nano, f));
         const float stripW = float(Global::LolCannon::StorageCols) * LolCannonMath::Pitch(Layout::Across(st, f));
         const float halfAcross = gunHalf + 16.0f + AiMax(blockW, stripW);
         const float blockL = float(Global::LolCannon::TurretRows) * LolCannonMath::Pitch(Layout::Along(nano, f));
         const float stripL = float(LolCannonMath::Rows(StoresNeeded(), Global::LolCannon::StorageCols)) * LolCannonMath::Pitch(Layout::Along(st, f));
-        const float halfAlong = AiMax(float(Layout::Along(gun, f)) * SQUARE_SIZE, AiMax(blockL, stripL)) * 0.5f;
+        const float halfAlong = AiMax(LolCannonMath::Pitch(Layout::Along(gun, f)), AiMax(blockL, stripL)) * 0.5f;
         return aiTerrainMgr.FlatFraction(p, f, halfAcross, halfAlong, Global::RoleSettings::Tech::LayoutBoxMaxSlope)
             * aiTerrainMgr.BuildableFraction(nano, p, halfAcross, halfAlong, f);
     }
@@ -432,14 +432,27 @@ namespace LolCannon {
     // why the last search found nothing (the "no site" line)
     int refusedGun = 0, shortTurrets = 0, bestTurrets = 0;
     int storesReserved = 0;          // of the site found
+    AIFloat3 firstRefused;           // the first candidate whose cannon was refused, for the native reason
+    int firstRefusedF = 0;
 
     // One candidate: the cannon and MinTurrets turrets reserved, either hand; the
     // storages reserve where they can and never refuse the site. On success the
     // slots are kept (TECH) or read and released (FRONT, keep false).
     bool TrySite(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in p, int f, bool keep)
     {
-        const int id = aiTerrainMgr.CanReserveBuilding(gun, p, f) ? aiTerrainMgr.ReserveBuilding(gun, p, f) : -1;
-        if (id < 0) { ++refusedGun; return false; }
+        // the cannon at the candidate, else slid sideways (along the ring) up to its own width
+        const AIFloat3 side = Layout::Side(f);
+        const float w = LolCannonMath::Pitch(Layout::Across(gun, f));
+        const array<float> slide = { 0.0f, 0.5f, -0.5f, 1.0f, -1.0f };
+        int id = -1;
+        for (uint k = 0; k < slide.length() && id < 0; ++k) {
+            const AIFloat3 q = At(p, side, slide[k] * w, Layout::Fwd(f), 0.0f);
+            if (aiTerrainMgr.CanReserveBuilding(gun, q, f)) id = aiTerrainMgr.ReserveBuilding(gun, q, f);
+        }
+        if (id < 0) {
+            if (refusedGun++ == 0) { firstRefused = p; firstRefusedF = f; }
+            return false;
+        }
         const AIFloat3 gp = aiTerrainMgr.GetReservationPos(id);
         for (int h = 0; h < 2; ++h) {
             array<AIFloat3> tc, sc, tp, sp;
@@ -529,6 +542,13 @@ namespace LolCannon {
                     + turretPos.length() + " turrets and " + storePos.length() + " " + st.GetName() + " beside it ("
                     + storesReserved + " storage slots reserved)"
                     + (layoutOn ? " (reserved)" : " (FRONT: unpinned)"), 1);
+        }
+        if (!found && refusedGun > 0) {
+            // one non-quiet try: native logs "RESERVE: refused <def> ...: <why>" (terrain, a blocked cell, the engine's ground test)
+            const int probe = aiTerrainMgr.ReserveBuilding(gun, firstRefused, firstRefusedF);
+            if (probe >= 0) aiTerrainMgr.ReleaseReservation(probe);
+            GenericHelpers::LogUtil("[LolCannon] first refused cannon spot (" + int(firstRefused.x) + ", " + int(firstRefused.z) + ") facing "
+                + firstRefusedF + ": " + (probe >= 0 ? "reserves without the pre-check (zone, ally layout or exit lane)" : "see the RESERVE line above"), 1);
         }
         if (!layoutOn) aiTerrainMgr.SetLayoutEnabled(false);
         if (!found)

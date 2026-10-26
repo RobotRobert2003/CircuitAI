@@ -21,10 +21,10 @@ namespace LolCannonMath {
         if ((dx < 0.0f ? -dx : dx) > (dz < 0.0f ? -dz : dz)) return (dx > 0.0f) ? 1 : 3;
         return (dz > 0.0f) ? 0 : 2;
     }
-    // Grid pitch of a footprint (squares of 8 elmos), on the 16-elmo build grid.
-    float Pitch(int squares)
+    // Grid pitch of a footprint given in 16-elmo cells (CCircuitDef::GetFootprintX,
+    // Layout::Across/Along): its full extent, at least one cell.
+    float Pitch(int cells)
     {
-        const int cells = (squares + 1) / 2;
         return float(cells < 1 ? 1 : cells) * 16.0f;
     }
     // Offset of column/row i of n, centred on 0.

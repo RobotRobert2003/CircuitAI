@@ -21,9 +21,9 @@ void test_facing_points_at_the_direction() {
     Check(LolCannonMath::Facing(-10, 3) == 3);
 }
 void test_grid_geometry() {
-    Check(LolCannonMath::Pitch(3) == 32.0f);
-    Check(LolCannonMath::Pitch(4) == 32.0f);
-    Check(LolCannonMath::Pitch(5) == 48.0f);
+    Check(LolCannonMath::Pitch(3) == 48.0f);
+    Check(LolCannonMath::Pitch(4) == 64.0f);
+    Check(LolCannonMath::Pitch(0) == 16.0f);
     Check(LolCannonMath::Offset(0, 4, 32) == -48.0f);
     Check(LolCannonMath::Offset(3, 4, 32) == 48.0f);
     Check(LolCannonMath::Offset(0, 1, 32) == 0.0f);
