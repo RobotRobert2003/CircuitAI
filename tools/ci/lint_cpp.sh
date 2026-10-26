@@ -46,8 +46,13 @@ if ! command -v cppcheck > /dev/null; then
 fi
 cppcheck_findings=0
 report="$(mktemp)"
+# Bundled third-party implementations are not maintained by this lint job.
+# AngelScript method-pointer macros require generated engine types unavailable
+# here; model only their opaque registration argument. Platform builds validate
+# the real pointer types and calling conventions.
 cppcheck --std=c++20 --language=c++ --enable=warning,performance,portability --inline-suppr \
 	--suppress=missingInclude --suppress=missingIncludeSystem --suppress=unmatchedSuppression \
+	'--suppress=*:src/lib/*' -DANGELSCRIPT_H '-DasMETHODPR(c,m,p,r)=0' '-DasMETHOD(c,m)=0' \
 	--suppress=unknownMacro --quiet -j "$(nproc 2>/dev/null || echo 2)" \
 	-I src -I src/circuit -I src/lib \
 	--template='::error file={file},line={line},col={column},title=cppcheck {id}::{message}' \

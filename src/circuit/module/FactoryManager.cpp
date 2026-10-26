@@ -72,7 +72,7 @@ CFactoryManager::CFactoryManager(CCircuitAI* circuit)
 		, bpRatio(1.f)
 		, reWeight(.5f)
 {
-	circuit->GetScheduler()->RunOnInit(CScheduler::GameJob(&CFactoryManager::Init, this));
+	circuit->GetScheduler()->RunOnInit(CScheduler::GameJob(&CFactoryManager::InitFactory, this));
 
 
 	for (CCircuitDef& cdef : circuit->GetCircuitDefs()) {
@@ -296,13 +296,13 @@ void CFactoryManager::InitHandlers()
 			if (--fac.nanoSize > 0) {
 				continue;
 			}
-			auto it = havens.begin();
-			while (it != havens.end()) {
-				if (it->SqDistance2D(assPos) < sqRadius) {
-					*it = havens.back();
+			std::size_t index = 0;
+			while (index < havens.size()) {
+				if (havens[index].SqDistance2D(assPos) < sqRadius) {
+					havens[index] = havens.back();
 					havens.pop_back();
 				} else {
-					++it;
+					++index;
 				}
 			}
 		}
@@ -938,7 +938,7 @@ void CFactoryManager::ReadConfig()
 	reWeight = root["response"].get("_weight_", .5f).asFloat();
 }
 
-void CFactoryManager::Init()
+void CFactoryManager::InitFactory()
 {
 	CSetupManager::StartFunc subinit = [this](const AIFloat3& pos) {
 		CScheduler* scheduler = circuit->GetScheduler().get();
@@ -1716,7 +1716,7 @@ void CFactoryManager::DisableFactory(CCircuitUnit* unit)
 					float maxEnergyUse = 0.f;
 					for (CCircuitUnit* fac : af.factories) {
 						auto fit = factories.begin();  // FIXME: Nested loops
-						while ((fit->unit != fac) && (fit != factories.end())) {
+						while ((fit != factories.end()) && (fit->unit != fac)) {
 							++fit;
 						}
 						if (fit != factories.end()) {

@@ -25,6 +25,8 @@ public:
 	virtual ~ITaskModuleScript();
 
 protected:
+	// Extends base module initialization with task hooks; deliberately hides it.
+	// cppcheck-suppress duplInheritedMember
 	void InitModule(asIScriptModule* mod);
 
 public:

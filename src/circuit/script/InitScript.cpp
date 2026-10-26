@@ -62,13 +62,8 @@ namespace circuit {
 using namespace springai;
 
 CInitScript::SInitInfo::SInitInfo(const SInitInfo& o)
+	: armor(o.armor), category(o.category), profile(o.profile)
 {
-	armor = o.armor;
-	category = o.category;
-	if (profile != nullptr) {
-		profile->Release();
-	}
-	profile = o.profile;
 	if (profile != nullptr) {
 		profile->AddRef();
 	}

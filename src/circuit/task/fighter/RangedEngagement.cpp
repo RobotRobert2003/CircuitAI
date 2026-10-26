@@ -34,9 +34,9 @@ static const bool trace = std::getenv("CIRCUIT_RANGED_TRACE") != nullptr;
 
 CRangedEngagement::CRangedEngagement(CCircuitAI* ai,IUnitTask* owner,CCircuitUnit* unit)
     : ai(ai),owner(owner),worldOwner(ai->GetMilitaryManager()->GetRangedWorld()),world(*worldOwner),
-      caps(world.CapabilitiesFor(unit->GetCircuitDef())),id(unit->GetId())
+      caps(world.CapabilitiesFor(unit->GetCircuitDef())),id(unit->GetId()),
+      lastPos(unit->GetPos(ai->GetLastFrame())), destination(lastPos)
 {
-    lastPos=unit->GetPos(ai->GetLastFrame()); destination=lastPos;
     lastShotFrame=lastProgressFrame=ai->GetLastFrame();
     world.Join(unit); world.Refresh();
     unit->TrySetMoveState(CCircuitDef::HOLD_POS);

@@ -279,9 +279,9 @@ struct AirFactoryCluster {
 		Offset(origin, facing, back2, right2),
 	};
 	int minX2 = corners[0].x2;
-	int maxX2 = corners[0].x2;
+	int maxX2 = minX2;
 	int minZ2 = corners[0].z2;
-	int maxZ2 = corners[0].z2;
+	int maxZ2 = minZ2;
 	for (std::size_t i = 1; i < corners.size(); ++i) {
 		minX2 = std::min(minX2, corners[i].x2);
 		maxX2 = std::max(maxX2, corners[i].x2);

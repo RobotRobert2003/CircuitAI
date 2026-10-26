@@ -98,8 +98,10 @@ else
 fi
 commands=()
 if [ "$ONLY" != as ]; then
+	tests+=(multi_queue_test)
 	for t in "${tests[@]}"; do
 		extra=""
+		[ "$t" = multi_queue_test ] && extra=" -I$SRC/tests/stubs"
 		for e in $(extra_sources "$t"); do extra="$extra $SRC/$e"; done
 		commands+=("$CXXBIN -std=c++20 -O1 -Wall -Wextra $LINK -I$SRC/src -I$SRC/src/circuit -I$SRC/src/lib $SRC/tests/$t.cpp$extra -o $BIN/$t$EXT")
 	done
