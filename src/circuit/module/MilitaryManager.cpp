@@ -2457,8 +2457,7 @@ void CMilitaryManager::PointOfInterest(CEnemyInfo* enemy, int start, int step)
 		CMetalData::ClusterGraph::IncEdgeIt edgeIt(clusterGraph, node);
 		for (; edgeIt != lemon::INVALID; ++edgeIt) {
 			const int childId = clusterGraph.id(clusterGraph.oppositeNode(node, edgeIt));
-			if (visited.find(childId) == visited.end()) {
-				visited.insert(childId);
+			if (visited.insert(childId).second) {
 				toVisit.emplace_back(childId, q.second + step);
 			}
 		}

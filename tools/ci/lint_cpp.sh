@@ -46,6 +46,15 @@ if ! command -v cppcheck > /dev/null; then
 fi
 cppcheck_findings=0
 report="$(mktemp)"
+analysis_files=()
+for file in "${files[@]}"; do
+	# The implementation explicitly requires its owning header, which includes it.
+	if [ "$file" = src/circuit/util/MultiQueue.hpp ]; then
+		analysis_files+=(src/circuit/util/MultiQueue.h)
+	else
+		analysis_files+=("$file")
+	fi
+done
 # Bundled third-party implementations are not maintained by this lint job.
 # AngelScript method-pointer macros require generated engine types unavailable
 # here; model only their opaque registration argument. Platform builds validate
@@ -56,7 +65,7 @@ cppcheck --std=c++20 --language=c++ --enable=warning,performance,portability --i
 	--suppress=unknownMacro --quiet -j "$(nproc 2>/dev/null || echo 2)" \
 	-I src -I src/circuit -I src/lib \
 	--template='::error file={file},line={line},col={column},title=cppcheck {id}::{message}' \
-	"${files[@]}" 2> "$report" || true
+	"${analysis_files[@]}" 2> "$report" || true
 if [ -s "$report" ]; then
 	cat "$report"
 	cppcheck_findings="$(grep -c '^::error' "$report" || true)"
