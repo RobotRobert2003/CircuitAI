@@ -424,7 +424,12 @@ COLOURS = ["0.2 0.6 1.0", "1.0 0.5 0.1", "0.3 0.9 0.3", "0.9 0.3 0.9", "0.9 0.9 
 
 def write_script(args, d):
     top, mod = read_prod_script()
-    game = args.game or top.get("gametype") or latest_game_version()
+    # owner, 2026-10-26: the newest byar:test before the lobby script's gametype. data\_script.txt
+    # is only rewritten when the lobby hosts a game; a stale one (test-31450) crashed the armcom
+    # script ("piece not found: hatcosmeticpoint") and every Armada AI built nothing for 30 minutes.
+    latest = latest_game_version()
+    game = args.game or latest or top.get("gametype")
+    log("game: %s (%s)" % (game, "--game" if args.game else "newest byar:test" if latest else "lobby script"))
     if not game:
         die("no game version: pass --game 'Beyond All Reason test-...'")
     map_name = args.map or top.get("mapname") or "Supreme Isthmus v1.7"
@@ -965,7 +970,7 @@ def add_stage_args(p):
 def add_script_args(p):
     p.add_argument("--map", help="map name as the lobby shows it (default: the last lobby script's)")
     p.add_argument("--map-file", help="the AI map file with the StartSpot table (default: derived from the map name)")
-    p.add_argument("--game", help="game archive name (default: the last lobby script's, else the newest byar:test)")
+    p.add_argument("--game", help="game archive name (default: the newest byar:test, else the last lobby script's)")
     p.add_argument("--roles", default="all", help="roles to field on both sides, e.g. TECH,FRONT; 'all' = every spot")
     p.add_argument("--others", default="test", choices=["test", "prod", "none"],
                    help="the other AIs: this build (test), the deployed SMRTBARb (prod), or enemies only (none)")
