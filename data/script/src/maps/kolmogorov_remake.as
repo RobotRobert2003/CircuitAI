@@ -56,10 +56,10 @@ namespace KolmogorovRemake {
 	dictionary getFactoryWeights() {
 		dictionary root; // role -> sideDict
 
-		// FRONT role: side specific dictionaries
-		dictionary frontArm; frontArm.set("armlab",2); frontArm.set("armvp",5);
-		dictionary frontCor; frontCor.set("corlab",2); frontCor.set("corvp",5);
-		dictionary frontLeg; frontLeg.set("leglab",2); frontLeg.set("legvp",5);
+		// FRONT role: bots only (owner, 2026-10-26: hilly map, vehicles struggle)
+		dictionary frontArm; frontArm.set("armlab",1);
+		dictionary frontCor; frontCor.set("corlab",1);
+		dictionary frontLeg; frontLeg.set("leglab",1);
 		dictionary frontRole; frontRole.set("armada", @frontArm); frontRole.set("cortex", @frontCor); frontRole.set("legion", @frontLeg);
 		root.set("FRONT", @frontRole);
 
