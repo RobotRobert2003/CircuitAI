@@ -16,8 +16,12 @@ this program (owner, 2026-10-26):
 
   gates   one cannon per MetalIncomeGates entry: the first at 600 metal/s, the
           second at 1000, each also at MinEnergyIncome (5000) energy/s, as 10 s
-          minima (Economy::GetMin*IncomeLast10s, so sustained over 10 s).
-  site    on rings round each enemy start just inside the cannon's range
+          minima (Economy::GetMin*IncomeLast10s, so sustained over 10 s). A
+          further cannon starts only while every earlier one stands.
+  site    on rings round each enemy FRONT spawn (StartSpot role; every enemy
+          spawn on a map without roles) that no earlier cannon was sited
+          against, so the second covers a different spawn (TargetStarts),
+          with the same blueprint, just inside the cannon's range
           (range - SiteRangeMarginMax .. range - SiteRangeMarginMin), the
           candidate nearest our base first, facing that start. The ground is
           measured the way TECH's layout measures its turret box (flat x
@@ -48,7 +52,8 @@ this program (owner, 2026-10-26):
           ReconRadarScouts radar/sonar planes (team/lolcannon_recon.as). A
           lost cannon is rebuilt on its own site.
   fire    Military::AiMakeTask hands each lolcannon's CSuperTask the roster
-          below and holds the unit's fire, so it shoots nothing else (no spam):
+          below and sets FireState (2, fire at will, owner 2026-10-26; kept
+          once a minute); a roster target in range is ordered, best tier first:
             1 advanced fusions, advanced geothermals
             2 Pulsar, Bulwark, Bastion
             3 Keeper, Overseer, Soteria; anti-nukes (Citadel, Prevailer,
@@ -115,6 +120,9 @@ namespace LolCannon {
     array<int> storeMiss;
     array<AIFloat3> doneSites;       // the site of every cannon built, for a rebuild
     array<int> doneFacings;
+    array<AIFloat3> doneTargets;     // the enemy spawn each finished cannon was sited against
+    AIFloat3 siteTarget(-1.0f, 0.0f, -1.0f);   // ... and the one the current site is against
+    int nextFireCheck = 0;
 
     // the fire roster: def id -> tier 1..6, 0 none
     array<int> tierByDef;
@@ -509,13 +517,48 @@ namespace LolCannon {
         return false;
     }
 
+    bool IsFrontSpawn(const AIFloat3 &in p)
+    {
+        if (Global::Map::Config is null) return true;
+        StartSpot@[]@ spots = Global::Map::Config.StartSpots;
+        if (spots is null || spots.length() == 0) return true;   // no roles on this map: every spawn counts
+        StartSpot@ sp = MapHelpers::NearestSpot(p, spots);
+        return sp is null || MapHelpers::SqDist(sp.pos, p) > 800.0f * 800.0f || sp.aiRole == AiRole::FRONT;
+    }
+
+    bool Targeted(const AIFloat3 &in p)
+    {
+        for (uint i = 0; i < doneTargets.length(); ++i)
+            if (MapHelpers::SqDist(doneTargets[i], p) < 400.0f * 400.0f) return true;
+        return false;
+    }
+
+    // The enemy spawns this cannon may be sited against (owner, 2026-10-26): enemy
+    // FRONT spawns no earlier cannon was sited against; else any such enemy spawn;
+    // else (every spawn taken) the front spawns again.
+    array<AIFloat3> TargetStarts(string &out why)
+    {
+        const array<AIFloat3> all = Lanes::EnemyStarts();
+        array<AIFloat3> fresh, freshAny, fronts;
+        for (uint i = 0; i < all.length(); ++i) {
+            const bool front = IsFrontSpawn(all[i]), taken = Targeted(all[i]);
+            if (front) fronts.insertLast(all[i]);
+            if (!taken) { freshAny.insertLast(all[i]); if (front) fresh.insertLast(all[i]); }
+        }
+        if (fresh.length() > 0) { why = fresh.length() + " enemy FRONT spawn(s) no cannon is sited against"; return fresh; }
+        if (freshAny.length() > 0) { why = "no untargeted enemy FRONT spawn; " + freshAny.length() + " other enemy spawn(s)"; return freshAny; }
+        why = "every enemy spawn already has a cannon; " + (fronts.length() > 0 ? "the FRONT spawns again" : "all spawns again");
+        return fronts.length() > 0 ? fronts : all;
+    }
+
     bool Plan()
     {
         CCircuitDef@ gun = Gun();
         CCircuitDef@ nano = Nano();
         CCircuitDef@ st = Store();
         if (gun is null || nano is null || st is null) return false;
-        const array<AIFloat3> starts = Lanes::EnemyStarts();
+        string targetWhy;
+        const array<AIFloat3> starts = TargetStarts(targetWhy);
         if (starts.length() == 0) {
             GenericHelpers::LogUtil("[LolCannon] no enemy start known; site search retried in 30 s", 1);
             return false;
@@ -525,7 +568,7 @@ namespace LolCannon {
         const float margin = 160.0f;
         const float w = float(AiTerrainWidth()), h = float(AiTerrainHeight());
         // The SiteProbes candidates nearest home, kept sorted (insertion; n = starts x rings x angles).
-        array<AIFloat3> best; array<float> bestD; array<int> bestF;
+        array<AIFloat3> best; array<float> bestD; array<int> bestF, bestS;
         // candidates kept: SiteProbes x 4 nearest home; SiteProbes of them may be tried
         const int probes = AiMax(1, Global::LolCannon::SiteProbes) * 4;
         for (uint s = 0; s < starts.length(); ++s) {
@@ -543,7 +586,8 @@ namespace LolCannon {
                     while (at > 0 && bestD[at - 1] > d) --at;
                     best.insertAt(at, p); bestD.insertAt(at, d);
                     bestF.insertAt(at, LolCannonMath::Facing(starts[s].x - p.x, starts[s].z - p.z));
-                    if (int(best.length()) > probes) { best.removeLast(); bestD.removeLast(); bestF.removeLast(); }
+                    bestS.insertAt(at, int(s));
+                    if (int(best.length()) > probes) { best.removeLast(); bestD.removeLast(); bestF.removeLast(); bestS.removeLast(); }
                 }
             }
         }
@@ -564,12 +608,14 @@ namespace LolCannon {
             if (score < Global::LolCannon::SiteMinScore) continue;
             ++tried;
             found = TrySite(gun, nano, st, best[i], bestF[i], layoutOn);
+            if (found) siteTarget = starts[bestS[i]];
             if (found)
                 GenericHelpers::LogUtil("[LolCannon] site for " + gun.GetName() + " (range " + int(range) + ") at (" + int(site.x) + ", " + int(site.z)
                     + "), facing " + facing + ", " + int(sqrt(bestD[i])) + " from home, ground " + int(score * 100.0f) + "%; "
                     + turretPos.length() + " turrets and " + storePos.length() + " " + st.GetName() + " beside it ("
                     + storesReserved + " storage slots reserved)"
-                    + (layoutOn ? " (reserved)" : " (FRONT: unpinned)"), 1);
+                    + (layoutOn ? " (reserved)" : " (FRONT: unpinned)") + "; against the enemy spawn at (" + int(siteTarget.x) + ", "
+                    + int(siteTarget.z) + "): " + targetWhy, 1);
         }
         if (!found && refusedGun > 0) {
             // one non-quiet try: native logs "RESERVE: refused <def> ...: <why>" (terrain, a blocked cell, the engine's ground test)
@@ -795,7 +841,7 @@ namespace LolCannon {
             + gantries.length() + " gantries)", 1);
     }
 
-    // Military AiMakeTask: a lolcannon's CSuperTask fires at the roster only, fire held otherwise.
+    // Military AiMakeTask: a lolcannon's CSuperTask orders roster targets; the unit fires at will otherwise.
     void FireControl(CCircuitUnit@ u, IUnitTask@ t)
     {
         if (!Enabled() || !Global::LolCannon::FireTiers || u is null || u.circuitDef is null || t is null
@@ -806,9 +852,9 @@ namespace LolCannon {
         for (uint i = 0; i < tierByDef.length(); ++i)
             if (tierByDef[i] > 0) st.SetTargetTier(ai.GetCircuitDef(int(i)), tierByDef[i]);
         st.SetTierRetarget(Global::LolCannon::FireRetargetFrames);
-        u.SetFireState(0);   // hold fire: only the tiered attack orders shoot
+        u.SetFireState(Global::LolCannon::FireState);   // owner 2026-10-26: fire at will; the tiered orders pick the target when one is in range
         GenericHelpers::LogUtil("[LolCannon] " + u.circuitDef.GetName() + " " + u.id + " fires at " + st.GetTierCount()
-            + " roster defs, best tier first; fire held otherwise", 1);
+            + " roster defs, best tier first; fire state " + Global::LolCannon::FireState, 1);
     }
 
     // ---------------------------------------------------------------- the program
@@ -878,6 +924,7 @@ namespace LolCannon {
             ++built;
             doneSites.insertLast(site);
             doneFacings.insertLast(facing);
+            doneTargets.insertLast(siteTarget);
         }
         LolCannonRecon::Send(Global::LolCannon::ReconT1Scouts, Global::LolCannon::ReconRadarScouts);
         rebuild = false;
@@ -958,6 +1005,9 @@ namespace LolCannon {
         if (phase == IDLE) {
             if (CheckLost()) return;
             if (built >= int(Global::LolCannon::MetalIncomeGates.length()) || ai.frame < nextPlan) return;
+            // a further cannon only while every earlier one stands (a lost one is rebuilt first, above)
+            for (uint i = 0; i < doneSites.length(); ++i)
+                if (aiBuilderMgr.FindOwnNear(doneSites[i], 96.0f, Gun()) is null) return;
             string why;
             if (!Gates(why)) {
                 if (ai.frame >= nextGateLog && Economy::GetMinMetalIncomeLast10s() >= Global::LolCannon::MetalIncomeGates[built] * 0.5f) {
@@ -1004,5 +1054,21 @@ namespace LolCannon {
             if (mine[i] is null || mine[i].IsDead()) mine.removeAt(i);
         if (RoleMay()) Advance();
         if (watchIds.length() > 0) WatchFirstTargets();
+        if (ai.frame >= nextFireCheck) {
+            nextFireCheck = ai.frame + 60 * SECOND;
+            KeepFireState();
+        }
+    }
+
+    // Every standing lolcannon of ours at its fire state, once a minute (a task or a
+    // player may have changed it). O(done sites).
+    void KeepFireState()
+    {
+        CCircuitDef@ gun = Gun();
+        if (gun is null) return;
+        for (uint i = 0; i < doneSites.length(); ++i) {
+            CCircuitUnit@ g = aiBuilderMgr.FindOwnNear(doneSites[i], 96.0f, gun);
+            if (g !is null && g.GetBuildProgress() >= 1.0f) g.SetFireState(Global::LolCannon::FireState);
+        }
     }
 }

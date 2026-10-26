@@ -58,8 +58,9 @@ namespace LolCannon {
     int StarterGraceSeconds = 60;   // no T2 air constructor by then: our own T2 ground constructors may start the cannon
     int StallSeconds = 240;         // turrets/storages with no work this long: the cannon is ordered anyway
     // firing: only the roster below, best tier first (CSuperTask::SetTargetTier),
-    // fire held otherwise so the engine never spends it on spam
+    // the engine's own targeting otherwise (FireState)
     bool FireTiers = true;
+    int FireState = 2;              // owner 2026-10-26: fire at will (0 hold, 1 return, 2 fire at will)
     int FireRetargetFrames = 60;
     // when a cannon stands, AIR flies one scout sweep of this make-up
     int ReconT1Scouts = 10;
