@@ -116,6 +116,8 @@ namespace LolCannon {
     // the fire roster: def id -> tier 1..6, 0 none
     array<int> tierByDef;
     bool rosterReady = false;
+    // Why the tried sites of the last search failed: cannon refused, turrets short (best count), storages short.
+    int gunRefused = 0, turretsShort = 0, storesShort = 0, bestTurrets = 0;
 
     // the report (owner, 2026-10-26): "[LolCannon] REPORT" lines for the playtest analysis
     int orderFrame = -1;             // the cannon's first order
@@ -414,9 +416,9 @@ namespace LolCannon {
     // success the slots are kept (TECH) or read and released (FRONT, keep false).
     bool TrySite(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in p, int f, bool keep)
     {
-        if (!aiTerrainMgr.CanReserveBuilding(gun, p, f)) return false;
+        if (!aiTerrainMgr.CanReserveBuilding(gun, p, f)) { ++gunRefused; return false; }
         const int id = aiTerrainMgr.ReserveBuilding(gun, p, f);
-        if (id < 0) return false;
+        if (id < 0) { ++gunRefused; return false; }
         const AIFloat3 gp = aiTerrainMgr.GetReservationPos(id);
         for (int h = 0; h < 2; ++h) {
             array<AIFloat3> tp, sp;
@@ -425,6 +427,9 @@ namespace LolCannon {
             array<int> tr, sr;
             const int turrets = ReserveEach(nano, tp, f, tr);
             const int stores = (turrets >= Global::LolCannon::MinTurrets) ? ReserveEach(st, sp, f, sr) : 0;
+            bestTurrets = AiMax(bestTurrets, turrets);
+            if (turrets < Global::LolCannon::MinTurrets) ++turretsShort;
+            else if (stores < int(sp.length())) ++storesShort;
             if (turrets < Global::LolCannon::MinTurrets || stores < int(sp.length())) {
                 ReleaseAll(tr); ReleaseAll(sr);
                 continue;
@@ -489,6 +494,7 @@ namespace LolCannon {
             return false;
         }
         int scored = 0, tried = 0;
+        gunRefused = 0; turretsShort = 0; storesShort = 0; bestTurrets = 0;
         bool found = false;
         for (uint i = 0; i < best.length() && !found; ++i) {
             if (aiTerrainMgr.IsZoneAlly(best[i])) continue;
@@ -507,7 +513,8 @@ namespace LolCannon {
         if (!found)
             GenericHelpers::LogUtil("[LolCannon] no site for " + gun.GetName() + " (range " + int(range) + ") just inside reach of "
                 + starts.length() + " enemy start(s): " + best.length() + " candidates, " + scored + " scored, " + tried
-                + " tried; retry in 30 s", 1);
+                + " tried (cannon refused " + gunRefused + ", turrets short " + turretsShort + " hands, best " + bestTurrets + "/"
+                + Global::LolCannon::MinTurrets + ", storages short " + storesShort + " hands); retry in 30 s", 1);
         return found;
     }
 
