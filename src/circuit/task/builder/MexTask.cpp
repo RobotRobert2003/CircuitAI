@@ -55,7 +55,7 @@ bool CBMexTask::CanAssignTo(CCircuitUnit* unit) const
 {
 	auto* economy = manager->GetCircuit()->GetEconomyManager();
 	if (economy->IsMexNavigationEnabled() && (!economy->CanReachMex(unit, buildPos)
-			|| (target == nullptr && !economy->IsOwnSpot(buildPos)))) return false;
+			|| (target == nullptr && !economy->IsMexSpotAdmissible(buildPos)))) return false;  // D-387: or captured
 	// can unit build at all
 	const CCircuitDef* cdef = unit->GetCircuitDef();
 	if (((target == nullptr) || !cdef->IsAbleToAssist() || unit->IsAttrSolo()) && !cdef->CanBuild(buildDef)) {
@@ -139,7 +139,7 @@ bool CBMexTask::Execute(CCircuitUnit* unit)
 	// Keep an existing frame productive; abort returns the claim through Cancel.
 	auto* admission = circuit->GetEconomyManager();
 	if (admission->IsMexNavigationEnabled()
-			&& (!admission->IsOwnSpot(buildPos) || !admission->CanReachMex(unit, buildPos))) {
+			&& (!admission->IsMexSpotAdmissible(buildPos) || !admission->CanReachMex(unit, buildPos))) {
 		// This unstarted task owns only its local spot claim. Do not reopen
 		// the shared occupancy bit if an ally has since built on the spot.
 		if (spotId >= 0) { admission->SetOpenMexSpot(spotId, true); spotId = -1; }
@@ -191,8 +191,10 @@ bool CBMexTask::Reevaluate(CCircuitUnit* unit)
 			manager->AbortTask(this);
 			return false;
 		};
+		// D-387: a spot captured for its owner is in that owner's zone by design.
 		if (!circuit->GetEconomyManager()->IsMexNavigationEnabled()
-				&& circuit->GetTerrainManager()->IsZoneAlly(buildPos)) {
+				&& circuit->GetTerrainManager()->IsZoneAlly(buildPos)
+				&& circuit->GetEconomyManager()->MexCaptureOwner(buildPos) < 0) {
 			static const bool trace = std::getenv("CIRCUIT_BUILD_TRACE") != nullptr;
 			if (trace) circuit->LOG("MEX_REJECT: team=%d worker=%d reason=ally-zone pos=%.0f,%.0f", circuit->GetTeamId(),unit->GetId(),buildPos.x,buildPos.z);
 			return closeTask();

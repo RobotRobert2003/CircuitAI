@@ -262,6 +262,24 @@ function widget:GameFrame(f)
             if u.team==0 and UnitDefs[u.def].name==cfg.unit then
                 local x,_,z=Spring.GetUnitPosition(id)
                 local hp,maxhp=Spring.GetUnitHealth(id)
+                if fixture.sent and not fixture.applied and hp and maxhp
+                    and math.abs(hp/maxhp-fixture.percent/100)<.01 then
+                    fixture.applied=true
+                    log("health_fixture_applied unit="..id.." percent="..fixture.percent)
+                end
+                if fixture.applied and fixture.hold_seconds and hp and maxhp then
+                    if f<(fixture.after_seconds+fixture.hold_seconds)*30
+                        and f>=(fixture.lastHealthSet or 0)+150 then
+                        fixture.lastHealthSet=f
+                        Spring.SendLuaRulesMsg("$dev$:sethealth "..id..":"..fixture.percent)
+                    end
+                    local command=Spring.GetUnitCurrentCommand(id)
+                    if not fixture.buildObserved and hp/maxhp>=.4 and hp/maxhp<.8
+                        and command and command<0 then
+                        fixture.buildObserved=true
+                        log("health_fixture_building_below_recovery unit="..id)
+                    end
+                end
                 local ready=not fixture.wait_cloaked or Spring.GetUnitIsCloaked(id)
                 if ready and fixture.enemy_range then
                     ready=false
@@ -273,7 +291,7 @@ function widget:GameFrame(f)
                     end
                 end
                 if not fixture.sent and ready and f>=fixture.after_seconds*30 then
-                    fixture.sent=true;fixture.x=x;fixture.z=z
+                    fixture.sent=true;fixture.x=x;fixture.z=z;fixture.lastHealthSet=f
                     if fixture.wait_cloaked then log("health_fixture_actual_cloak") end
                     Spring.SendLuaRulesMsg("$dev$:sethealth "..id..":"..fixture.percent)
                 elseif fixture.sent and hp and maxhp and hp/maxhp<.4 then

@@ -271,8 +271,8 @@ namespace AirEconomy {
     {
         // Re-read gifts, deaths and completion immediately before an order.
         RefreshSupport();
-        // D-368: the expansion prerequisite is T2PlantExpansionTurrets per standing plant;
-        // T2ExpansionSupport stays the nano target (the twenty-turret bank, D-155)
+        // Every standing plant must finish its support bank before another starts.
+        // Framed and queued turrets must not unlock expansion early.
         int factories = 0, finished = 0, least = Global::RoleSettings::Air::T2PlantExpansionTurrets;
         for (uint i = 0; i < owned.length(); ++i) {
             CCircuitUnit@ plant = ai.GetTeamUnit(owned[i]);
@@ -475,6 +475,9 @@ namespace AirEconomy {
         if (ai.frame - plantBankFullSince < Global::RoleSettings::Air::PlantOverflowSeconds * SECOND
             || ai.frame - plantOverflowLogged < 60 * SECOND || PlantsHave() >= PlantsWanted()) return;
         plantOverflowLogged = ai.frame;
+        // A full bank must fund the standing support prerequisite first. Check
+        // live completion only at the existing one-minute diagnostic cadence.
+        if (!ExistingT2SupportReady()) return;
         Invariants::Violation("INV-243", "plants", "metal bank full " + int((ai.frame - plantBankFullSince) / SECOND)
             + " s with " + PlantsHave() + " of " + PlantsWanted() + " advanced plants at +" + int(metal) + " metal");
     }
@@ -507,10 +510,14 @@ namespace AirEconomy {
         // RepairSupport to allocate its first turret.
         const int cap = limit;
         const int production = ProductionMath::SupportTarget(work, plant.GetBuildSpeed(), nano.GetBuildSpeed(), Global::RoleSettings::Air::WarmFactoryGapSeconds, rate, cap);
+        // A standing lab's prerequisite must remain a target even after income
+        // dips below the transition threshold. Funding still gates each order.
+        const int required = advanced && AirLayout::bays[bay].factoryId >= 0
+            ? AiMin(cap, Global::RoleSettings::Air::T2PlantExpansionTurrets) : 0;
         const int expansion = advanced && Transition(plant) ? AiMin(cap, Global::RoleSettings::Air::T2ExpansionSupport) : 0;
         const int opening = !advanced && CompletedConstructors() >= Global::RoleSettings::Air::OpeningAirConstructors
             ? AiMin(cap, OpeningNanoTarget()) : 0;
-        return AiMax(opening, AiMax(expansion, production));
+        return AiMax(required, AiMax(opening, AiMax(expansion, production)));
     }
     int OpeningNanoTarget() { return AiMax(0, AiMin(5, AiMin(Global::RoleSettings::Air::T1NanoLimit, Global::RoleSettings::Air::OpeningNanoCount))); }
     int OpeningNanoCompleted()

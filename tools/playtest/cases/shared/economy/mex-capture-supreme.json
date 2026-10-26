@@ -1,0 +1,10 @@
+{
+  "name": "mex-capture-supreme",
+  "description": "Natural 8v8 Supreme Isthmus, experimental_balanced: builders take spots an allied AI owns and the finished extractor is given to that owner (D-387); the observer confirms each transfer is between allies and counts each ally team's extractors once a minute.",
+  "runner": "tools/playtest/playtest.py",
+  "arguments": ["run", "--map", "Supreme Isthmus v1.7", "--roles", "all", "--side", "armada",
+    "--ai-option", "profile=experimental_balanced", "--ai-option", "random_seed=3870",
+    "--mode", "fast", "--speed", "20", "--headless", "--minutes", "12",
+    "--extra-widget", "tools/playtest/widgets/mex_capture_watch.lua"],
+  "checks": "shared/economy/mex-capture.json"
+}

@@ -230,13 +230,25 @@ static void TestPartition() {
     Require(lanes::FromCorridors(m, circuit::field::C_VEH, 0, starts, clusters, 400.f).lanes.empty(), "a class without corridors has no lanes");
 }
 
+// D-387: a builder takes an ally's spot and the extractor goes to the owner;
+// its own, unowned and unknown-ally spots stay with the builder.
+static void TestCapture() {
+    Require(CaptureFor(true, 3, 1) == 3, "capture: an ally's spot is built for that ally");
+    Require(CaptureFor(true, 1, 1) == -1, "capture: our own spot is kept");
+    Require(CaptureFor(true, -1, 1) == -1, "capture: an unowned spot is kept");
+    Require(CaptureFor(true, -2, 1) == -1, "capture: an ally of unknown team is not a recipient");
+    Require(CaptureFor(false, 3, 1) == -1, "capture off: the ally's spot is not admitted");
+    Require(CaptureFor(true, 0, 1) == 0, "capture: team zero is a valid owner");
+}
+
 int main() {
     try {
         TestMaskAndHome(); TestSeaAndFord(); TestLanes(); TestCorridor(); TestRace(); TestWindowOpenings(); TestBalance(); TestValue(); TestPartition();
+        TestCapture();
     } catch (const std::exception& e) {
         std::cerr << "mex_territory_test: FAIL " << e.what() << "\n";
         return 1;
     }
-    std::cout << "mex_territory_test: PASS mask, home, sea, lanes, race, openings, balance, value, corridor partition\n";
+    std::cout << "mex_territory_test: PASS mask, home, sea, lanes, race, openings, balance, value, corridor partition, capture\n";
     return 0;
 }

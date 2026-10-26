@@ -22,6 +22,8 @@ namespace MexOwnershipProbe {
             Report("default configuration",Global::RoleSettings::MexOwnershipSeconds==600.f);
             Report("profile enabled",Global::RoleSettings::MexOwnershipEnabled);
             aiEconomyMgr.SetMexOwnership(true,cutoff);
+            // These checks test the skip itself; D-387 capture would admit the ally's spot.
+            aiEconomyMgr.SetMexCapture(false);
             if (low !is null && high !is null)
                 GenericHelpers::LogUtil("[MexOwnershipTest] legacy reach uphill="
                     +aiTerrainMgr.CanReachAtSafe(low,hill,low.circuitDef.GetBuildDistance())

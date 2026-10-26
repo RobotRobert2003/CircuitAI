@@ -1,4 +1,5 @@
 void test_first_lab_needs_no_existing_support() { Check(ProductionMath::ExpansionSupportReady(0, 0, 0, 20)); }
+void test_second_lab_rejects_old_four_turret_threshold() { Check(!ProductionMath::ExpansionSupportReady(1, 1, 4, 20)); }
 void test_second_lab_rejects_nineteen_completed() { Check(!ProductionMath::ExpansionSupportReady(1, 1, 19, 20)); }
 void test_second_lab_accepts_twenty_completed() { Check(ProductionMath::ExpansionSupportReady(1, 1, 20, 20)); }
 void test_expansion_requires_every_lab_not_total_turrets() { Check(!ProductionMath::ExpansionSupportReady(2, 2, 19, 20)); }

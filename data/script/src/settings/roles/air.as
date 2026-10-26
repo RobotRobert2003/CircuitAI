@@ -113,13 +113,13 @@ namespace Air {
             // per T2PlantMetalIncomeStep, up to MaxT2AirPlants; a full metal bank holding a
             // plant's whole cost admits one more (played: a full 3,000 bank is not one).
             // Each next plant needs T2PlantExpansionTurrets finished turrets at every
-            // standing plant (the twenty-turret bank of D-155 is the nano target, not the
-            // expansion gate) and PlantBankFraction of its cost banked. INV-243 reports a bank
+            // standing plant, completing its twenty-turret bank before expansion,
+            // and PlantBankFraction of its cost banked. INV-243 reports a bank
             // full PlantOverflowSeconds with fewer plants than the income wants.
             float T2PlantSecondMetalIncome = 50.0f;
             float T2PlantMetalIncomeStep = 40.0f;
             int MaxT2AirPlants = 8;
-            int T2PlantExpansionTurrets = 4;
+            int T2PlantExpansionTurrets = 20;
             float PlantBankFraction = 0.5f;
             int PlantOverflowSeconds = 120;
             // D-368: a plant order that dies without a frame (the engine refused the pinned

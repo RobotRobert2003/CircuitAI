@@ -139,9 +139,26 @@ public:
 	// D-072: a metal spot belongs to the team whose start position is nearest
 	// to it; the script feeds the allies' starts (the roster) and the ally-aware
 	// mex enqueue leaves the others' spots alone.
-	void ClearAllyStarts() { allyStarts.clear(); }
-	void AddAllyStart(const springai::AIFloat3& pos) { allyStarts.push_back(pos); }
+	void ClearAllyStarts() { allyStarts.clear(); allyStartTeams.clear(); }
+	// team -1: an older caller without the team id; the spot is then refused
+	// as before and never captured (no recipient to give it to).
+	void AddAllyStart(const springai::AIFloat3& pos, int team = -1) { allyStarts.push_back(pos); allyStartTeams.push_back(team); }
 	bool IsOwnSpot(const springai::AIFloat3& pos);
+	// D-387: capture for the owner. With capture on, a spot another allied
+	// claimant owns is admitted for any builder; the finished extractor is
+	// given to that owner (MexBuilt). Ownership still names the recipient.
+	void SetMexCapture(bool enabled) { mexCaptureEnabled = enabled; }
+	bool IsMexCaptureEnabled() const { return mexCaptureEnabled; }
+	// The spot's owner team under the active rule, ignoring our in-flight
+	// precedence: -1 nobody, -2 an ally whose team is unknown.
+	int MexOwnerTeam(const springai::AIFloat3& pos);
+	// The ally a new extractor here is built for, or -1 when we keep it.
+	int MexCaptureOwner(const springai::AIFloat3& pos);
+	// Ours, unowned, or capturable: the admission every mex order checks.
+	bool IsMexSpotAdmissible(const springai::AIFloat3& pos) { return IsOwnSpot(pos) || MexCaptureOwner(pos) >= 0; }
+	// A new extractor (BuildType::MEX, not an upgrade) finished: give it to
+	// its spot's owner one frame later when capture names one.
+	void MexBuilt(CCircuitUnit* unit);
 	void SetMexOwnership(bool enabled, float seconds);
 	void SetMexAllyStart(int team, const springai::AIFloat3& pos, int commander);
 	bool CanReachMex(CCircuitUnit* builder, const springai::AIFloat3& pos);
@@ -446,6 +463,8 @@ private:
 	std::shared_ptr<IMainJob> morph;
 	std::set<CCircuitUnit*> morphees;
 	std::vector<springai::AIFloat3> allyStarts;  // D-072
+	std::vector<int> allyStartTeams;              // D-387: parallel to allyStarts, -1 unknown
+	bool mexCaptureEnabled = false;               // D-387
 	bool mexNavigationEnabled = false;
 	int mexOwnershipUntil = 0;
 	struct SMexStart {

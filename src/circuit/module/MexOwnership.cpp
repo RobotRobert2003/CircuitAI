@@ -140,13 +140,16 @@ float CEconomyManager::MexStartDistance(SMexStart& start, const AIFloat3& pos) {
 }
 
 bool CEconomyManager::IsMexExpansionAllowed(const AIFloat3& pos, bool allyAware) {
-    if (!mexNavigationEnabled) return !allyAware || (!circuit->GetTerrainManager()->IsZoneAlly(pos) && IsOwnSpot(pos));
     // While the opening window runs, start allocation is the only territorial
     // veto. Real occupied mexes and allied structure footprints are still
     // protected by their existing owners. After the window the ally-zone veto
     // and the D-072 Voronoi split (inside IsOwnSpot) hold again (D-327).
-    if (IsMexOwnershipActive()) return IsOwnSpot(pos);
-    return !allyAware || (!circuit->GetTerrainManager()->IsZoneAlly(pos) && IsOwnSpot(pos));
+    const bool owned = !mexNavigationEnabled || !IsMexOwnershipActive()
+        ? (!allyAware || (!circuit->GetTerrainManager()->IsZoneAlly(pos) && IsOwnSpot(pos)))
+        : IsOwnSpot(pos);
+    // D-387: an ally's spot is built for that ally instead of skipped. Asked
+    // only after a refusal, so admitted spots cost nothing extra.
+    return owned || MexCaptureOwner(pos) >= 0;
 }
 }
 

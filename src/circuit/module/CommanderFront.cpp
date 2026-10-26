@@ -238,16 +238,20 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
         || kind==3 || kind==WORK_RADAR || kind==2)) return nullptr;
     if(GroupActive(unit) && kind==WORK_MEX_LANE) buildDef=nullptr;
     if(!Handles(unit) || !options.frontDuty || !options.frontReady || !unit->IsFinished()
-        || (kind!=WORK_HOLD && unit->GetHealthPercent()<options.recover && !Jammed(unit))) return nullptr;
+        || (kind!=WORK_HOLD && options.healthRetreatFraction<=0
+            && unit->GetHealthPercent()<options.recover && !Jammed(unit))) return nullptr;
     auto found=commanders.find(unit->GetId()); if(found==commanders.end()) return nullptr;
     auto& s=found->second; const int frame=ai->GetLastFrame();
     const auto record=[&](IUnitTask* task) {
+        // Lane mexes already passed their own LOS/reach/territory window before
+        // claiming a spot. Reapplying the narrower generic-work window here
+        // strands the claim and can alternate idle holds with deployment.
         // D-356: an offer whose site lies beyond the corridor (lane half-width
         // plus front_lane_margin, or the build distance) is declined, never
         // aborted: assist/repair/base rungs hand back tasks the shared queue
         // created for other builders, which keep them.
         if(auto* build=dynamic_cast<IBuilderTask*>(task);build && !FallbackActive(s,frame)
-            && kind!=WORK_MEX_DEFENCE && kind!=WORK_TERRITORY_LINE && kind!=WORK_REPAIR_COMBAT
+            && kind!=WORK_MEX_DEFENCE && kind!=WORK_TERRITORY_LINE && kind!=WORK_REPAIR_COMBAT && kind!=WORK_MEX_LANE
             && ai->GetBattle()->GetFrontLaneLength()>0.f
             && ai->GetBattle()->GetFrontLaneDistance(build->GetPosition())>ai->GetBattle()->GetFrontLaneWidth()
                 +(options.frontLaneMargin>0?options.frontLaneMargin:unit->GetCircuitDef()->GetBuildDistance())) {
@@ -255,7 +259,7 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
         }
         if(auto* build=dynamic_cast<IBuilderTask*>(task); build && options.frontPersistent>0
             && !FallbackActive(s,frame) && ai->GetBattle()->GetFrontLaneLength()>0.f
-            && kind!=WORK_MEX_DEFENCE && kind!=WORK_TERRITORY_LINE && kind!=WORK_REPAIR_COMBAT
+            && kind!=WORK_MEX_DEFENCE && kind!=WORK_TERRITORY_LINE && kind!=WORK_REPAIR_COMBAT && kind!=WORK_MEX_LANE
             && ai->GetBattle()->GetFrontLaneProgress(build->GetPosition())
                 <ai->GetBattle()->GetFrontLaneProgress(unit->GetPos(frame))-options.frontWorkBehind)
             task=nullptr; // decline shared work; never abort another builder's task
