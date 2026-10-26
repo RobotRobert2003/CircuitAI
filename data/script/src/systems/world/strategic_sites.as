@@ -12,25 +12,63 @@ namespace StrategicSites {
     // consumers (TechHeavyChoice); counted once per survey, O(beaches).
     int assaultBeaches = 0;
     // Moated (owner, 2026-10-26): our start has no land route to ANY enemy start - the
-    // water between has no crossing shallow enough for a land-only heavy (MoatProbe,
-    // Thor), so only amphibious, hover, naval and air units can reach the enemy. A
-    // narrow isthmus or a ford is not a moat. -1 = not surveyed yet, 0 = land route,
-    // 1 = moated. The map file's landLocked flag always counts as moated.
+    // water between has no crossing shallow enough for land units, so only amphibious,
+    // hover, naval and air units can reach the enemy. A narrow isthmus or a ford is not a
+    // moat. -1 = not surveyed yet, 0 = land route, 1 = moated. The map file's landLocked
+    // flag always counts as moated. Three probes (owner, 2026-10-26):
+    //   land route: a Thor (MoatProbe) OR a T1 bot (MoatBotProbe) reaches an enemy start,
+    //               so a slope that only stops the Thor is not a moat;
+    //   walled:     not even a Titan (MoatAmphProbe) reaches one - a cliff or plateau,
+    //               not water, so not a moat either;
+    //   each probe starts and ends at the nearest ground it can stand on (a rim start).
     const string MoatProbe = "armthor";
+    const string MoatBotProbe = "armpw";
+    const string MoatAmphProbe = "armbanth";
     int moated = -1;
-    int moatReachable = 0, moatEnemies = 0;
+    int moatReachable = 0, moatBotReachable = 0, moatAmphReachable = 0, moatEnemies = 0;
     bool Moated() { return Global::Map::LandLocked || moated == 1; }
+    // p, or the nearest point within 4 rings of 128 elmos the def can stand on; (-1) if none
+    AIFloat3 Footing(CCircuitDef@ def, const AIFloat3& in p) {
+        if (aiTerrainMgr.CanTraverse(def, p, p)) return p;
+        for (int ring = 1; ring <= 4; ++ring) for (int k = 0; k < 16; ++k) {
+            const float a = float(k) * 0.392699f;
+            const AIFloat3 q(p.x + cos(a) * float(ring) * 128.0f, 0, p.z + sin(a) * float(ring) * 128.0f);
+            if (aiTerrainMgr.CanTraverse(def, q, q)) return q;
+        }
+        return AIFloat3(-1, 0, -1);
+    }
+    // enemy starts the def reaches from our start: the exact points first (the area lookup
+    // snaps to the nearest sector, and the footing test is stricter, so a footing can sit on
+    // an isolated patch), then the footings; O(enemies x 64) path-area lookups, once per survey
+    int Reach(const string& in name, const array<AIFloat3>& in theirs) {
+        CCircuitDef@ def = ai.GetCircuitDef(name);
+        if (def is null) return 0;
+        const AIFloat3 start = Global::Map::StartPos;
+        const AIFloat3 from = Footing(def, start);
+        int n = 0;
+        for (uint i = 0; i < theirs.length(); ++i) {
+            if (aiTerrainMgr.CanTraverse(def, start, theirs[i])) { ++n; continue; }
+            if (from.x < 0.0f) continue;
+            const AIFloat3 to = Footing(def, theirs[i]);
+            if (to.x >= 0.0f && aiTerrainMgr.CanTraverse(def, from, to)) ++n;
+        }
+        return n;
+    }
     void Moat(const array<AIFloat3>& in theirs) {
-        CCircuitDef@ probe = ai.GetCircuitDef(MoatProbe);
-        if (probe is null || theirs.length() == 0) return;   // stays unsurveyed
+        if (theirs.length() == 0 || ai.GetCircuitDef(MoatProbe) is null) return;   // stays unsurveyed
         moatEnemies = int(theirs.length());
-        moatReachable = 0;
-        for (uint i = 0; i < theirs.length(); ++i)
-            if (aiTerrainMgr.CanTraverse(probe, Global::Map::StartPos, theirs[i])) ++moatReachable;
-        moated = moatReachable == 0 ? 1 : 0;
+        moatReachable = Reach(MoatProbe, theirs);
+        moatBotReachable = moatReachable > 0 ? -1 : Reach(MoatBotProbe, theirs);      // -1: not needed
+        moatAmphReachable = (moatReachable > 0 || moatBotReachable > 0) ? -1 : Reach(MoatAmphProbe, theirs);
+        const bool landRoute = moatReachable > 0 || moatBotReachable > 0;
+        moated = (!landRoute && moatAmphReachable > 0) ? 1 : 0;
+        const string why = moatReachable > 0 ? "land route" : moatBotReachable > 0 ? "land route (bots only)"
+            : moatAmphReachable > 0 ? "MOATED" : "walled (no unit reaches the enemy; not a moat)";
         GenericHelpers::LogUtil("[Strategic] moat: start (" + int(Global::Map::StartPos.x) + ", " + int(Global::Map::StartPos.z)
-            + ") " + (Moated() ? "MOATED" : "land route") + " - " + MoatProbe + " reaches " + moatReachable + " of " + moatEnemies
-            + " enemy starts" + (Global::Map::LandLocked ? " (map flag landLocked)" : ""), 1);
+            + ") " + (Global::Map::LandLocked ? "MOATED (map flag landLocked), probes: " : "") + why
+            + " - of " + moatEnemies + " enemy starts " + MoatProbe + " reaches " + moatReachable
+            + (moatBotReachable >= 0 ? ", " + MoatBotProbe + " " + moatBotReachable : "")
+            + (moatAmphReachable >= 0 ? ", " + MoatAmphProbe + " " + moatAmphReachable : ""), 1);
     }
 
     int LandAt(const AIFloat3& in p) {
