@@ -1,0 +1,89 @@
+{
+  "name": "front-opener-bot",
+  "unit": "corcom",
+  "side": "cortex",
+  "role": "FRONT",
+  "description": "FRONT first factory produces constructor, scout, six raiders, then one additional constructor.",
+  "commander_overrides": {
+    "front_push_screen": 0
+  },
+  "map": "Proving Grounds v1.0",
+  "map_key": "proving",
+  "starts": [
+    [
+      2524,
+      4194
+    ],
+    [
+      11805,
+      10125
+    ]
+  ],
+  "camera": [
+    3600,
+    4800,
+    2900
+  ],
+  "photos": [
+    120,
+    300,
+    540
+  ],
+  "min_spawn_spacing": 38,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "hold_friendly": false,
+  "groups": [
+    {
+      "unit": "corlab",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2400,
+        4000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "cornanotc",
+      "team": 0,
+      "count": 1,
+      "position": [
+        2200,
+        4000
+      ],
+      "after_seconds": 20
+    }
+  ],
+  "assertions": {
+    "min_shooters": 0,
+    "min_damage": 0,
+    "min_kills": 0,
+    "max_losses": 0
+  },
+  "checks": "front-opener-bot",
+  "commander_initial": true,
+  "start_metal": 100000,
+  "commander_trace": true,
+  "builders": true,
+  "production": true,
+  "start_energy": 1000000,
+  "storage_scenario": "front-opener-bot",
+  "modoptions": {
+    "multiplier_metalextraction": 10
+  },
+  "factory_opening": {
+    "factory": "corlab",
+    "products": [
+      "corck",
+      "corak",
+      "corak",
+      "corak",
+      "corak",
+      "corak",
+      "corak",
+      "corak",
+      "corck"
+    ]
+  }
+}

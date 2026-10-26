@@ -2,6 +2,14 @@
 #include <limits>
 #include "terrain/CommanderCombat.h"
 namespace circuit::commander {
+struct DefenceExclusion { Point center; float radius; };
+inline bool DefenceSpaced(Point site,const std::vector<DefenceExclusion>& exclusions) {
+    for(const auto& exclusion:exclusions) {
+        const auto delta=site-exclusion.center;
+        if(Dot(delta,delta)<exclusion.radius*exclusion.radius) return false;
+    }
+    return true;
+}
 // Geometry only. Fixed 64-elmo probes bounded by the public map diagonal; no
 // army scan. The caller supplies its owned territory predicate. Slots cover the
 // end strips, unlike simply rounding the width down to a spacing multiple.

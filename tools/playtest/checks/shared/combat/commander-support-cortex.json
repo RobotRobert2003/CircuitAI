@@ -49,6 +49,12 @@
       "scope": "any",
       "after_minute": 4,
       "by_minute": 6
+    },
+    {
+      "key": "observed spaced forward defenses",
+      "pattern": "front_spacing_observed turrets=([2-9]|[1-9]\\d+)",
+      "scope": "any",
+      "by_minute": 6
     }
   ],
   "forbid": [
@@ -70,6 +76,11 @@
     {
       "key": "fixture",
       "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "front turret crowding",
+      "pattern": "front_spacing_violation",
       "scope": "any"
     }
   ]

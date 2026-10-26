@@ -1,5 +1,6 @@
 #pragma once
 #include "terrain/CommanderCombat.h"
+#include "terrain/CommanderFortification.h"
 #include "spring/RouteCommand.h"
 #include "AIFloat3.h"
 #include <cmath>
@@ -38,7 +39,11 @@ public:
     void MexFinished(CCircuitUnit* commander, CCircuitUnit* mex);
     bool SupportMayBuild(CCircuitUnit* unit,CCircuitDef* def,const springai::AIFloat3& site) const;
     bool CanResumeFrontTask(CCircuitUnit* unit, IUnitTask* task) const;
+    std::vector<commander::DefenceExclusion> DefenceExclusions(CCircuitUnit* unit,CCircuitDef* def,
+        const springai::AIFloat3& center,float searchRadius,const IUnitTask* ignore=nullptr) const;
 private:
+    std::vector<int> frontDefenceDefs;
+    bool IsFrontDefence(const CCircuitDef* def) const;
     // Script owns the one-member roster and faction definitions. IDs are
     // reacquired on every ask and cleared on ownership loss, never wrappers.
     int supportUnit=-1, supportDef=-1, supportNano=-1, supportRadar=-1, supportJammer=-1,supportAA=-1;
@@ -163,6 +168,7 @@ private:
         float supportMexPriority=3,supportRadarPriority=2,supportLinePriority=1;
         float frontPersistent=0, frontMexDefence=0, frontLineEnabled=0;
         float frontLineFog=1000, frontLineSpacing=1.5f;
+        float frontDefenceSpacing=.5f;
         float frontLineDepth=800, frontMexOffset=160, frontWorkBehind=400;
         float frontFortifyBank=.5f, frontFortifyPriority=1;
         float frontFortifyAdvance=0; // 0: complete the line before advancing

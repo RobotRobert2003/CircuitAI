@@ -376,6 +376,8 @@ bool IBuilderTask::TryBuildCachedSite(CCircuitUnit* unit)
         || circuit->GetTerrainManager()->IsAllyLayoutBlocked(buildDef, buildPos, facing)
         || !circuit->GetMap()->IsPossibleToBuildAt(buildDef->GetDef(), buildPos, facing)) return false;
     if(!circuit->GetCommanderControl()->SupportMayBuild(unit,buildDef,buildPos)) return false;
+    const auto exclusions=circuit->GetCommanderControl()->DefenceExclusions(unit,buildDef,buildPos,0.f,this);
+    if(!commander::DefenceSpaced({buildPos.x,buildPos.z},exclusions)) return false;
     TRY_UNIT(circuit, unit,
         unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(circuit->GetLastFrame()));
     )
@@ -1023,8 +1025,10 @@ void IBuilderTask::FindBuildSite(CCircuitUnit* builder, const AIFloat3& pos, flo
 	FindFacing(pos);
 
 	CTerrainManager* terrainMgr = manager->GetCircuit()->GetTerrainManager();
-	CTerrainManager::TerrainPredicate predicate = [this, terrainMgr, builder](const AIFloat3& p) {
-		return manager->GetCircuit()->GetBuilderManager()->IsBuildPositionAllowed(buildDef, p)
+    const auto exclusions=manager->GetCircuit()->GetCommanderControl()->DefenceExclusions(builder,buildDef,pos,searchRadius,this);
+	CTerrainManager::TerrainPredicate predicate = [this, terrainMgr, builder, &exclusions](const AIFloat3& p) {
+		return commander::DefenceSpaced({p.x,p.z},exclusions)
+            && manager->GetCircuit()->GetBuilderManager()->IsBuildPositionAllowed(buildDef, p)
             && terrainMgr->CanReachAtSafe(builder, p, builder->GetCircuitDef()->GetBuildDistance());
 	};
 	if (reservationId >= 0) {

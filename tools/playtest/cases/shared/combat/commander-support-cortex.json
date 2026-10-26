@@ -89,5 +89,6 @@
   },
   "modoptions": {
     "multiplier_metalextraction": 10
-  }
+  },
+  "front_spacing_observation": true
 }

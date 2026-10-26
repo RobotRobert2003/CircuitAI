@@ -97,6 +97,14 @@ namespace CommanderCombat {
             Option("front_fortify_priority",1.f);
             Option("front_fortify_advance",0.f);
             Option("front_line_spacing",1.5f);
+            Option("front_defence_spacing",.5f);
+            aiBuilderMgr.SetCommanderCombatOption("front_defence_definition",-1.f);
+            array<string>@ defenceNames=aiSetupMgr.ConfigString("commander/combat/front_defence_definitions",
+                "armllt,corllt,leglht,armbeamer,corhllt,legmg").split(",");
+            for(uint i=0;i<defenceNames.length();++i) {
+                CCircuitDef@ defence=ai.GetCircuitDef(defenceNames[i]);
+                if(defence !is null) aiBuilderMgr.SetCommanderCombatOption("front_defence_definition",float(defence.id));
+            }
             Option("front_line_depth",800.f);
             Option("front_mex_offset",160.f);
             Option("front_work_behind",400.f);

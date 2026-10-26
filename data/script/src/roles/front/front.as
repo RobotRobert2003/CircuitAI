@@ -244,6 +244,9 @@ namespace RoleFront {
 
     // One-time T1 raider opener state for the first suitable T1 land factory
     bool g_frontRaiderOpenerDone = false;
+    array<IUnitTask@> g_frontOpeningRaiders;
+    int g_frontRaiderFactoryId = -1;
+    bool g_frontPostRaidConstructorQueued = false;
 
     // One-time scout rush state for the very first T1 land factory (bot or vehicle)
     bool g_frontScoutRushFinished = false;
@@ -314,17 +317,49 @@ namespace RoleFront {
         const AIFloat3 pos = u.GetPos(ai.frame);
         IUnitTask@ last = null;
         const int count = Global::RoleSettings::Front::RaiderOpenerCount;
+        g_frontRaiderFactoryId = u.id;
         if (tank !is null && count > 0) FrontOpener::Begin(u, tank, count);
         for (int i = 0; i < count; ++i) {
             @last = aiFactoryMgr.Enqueue(
                 TaskS::Recruit(Task::RecruitType::FIREPOWER, Task::Priority::NORMAL, pdef, pos, 64.f)
             );
             if (tank !is null) FrontOpener::Recruit(last);
+            if (last !is null) g_frontOpeningRaiders.insertLast(last);
         }
         g_frontRaiderOpenerDone = true;
         FrontOpener::MarkQueued("batch");
         GenericHelpers::LogUtil("[FRONT] T1 raider opener enqueued count=" + count + " unit=" + raiderName, 2);
         return last;
+    }
+
+    // D-376: one extra constructor AFTER the finite raid queue drains. Keeping
+    // handles tests this batch, not surviving raiders or unrelated production.
+    // R status checks and at most R^2 array shifts, R=RaiderOpenerCount (six
+    // by default), only while opening; release each retired handle.
+    // A cancelled recruit is settled too, so factory loss cannot deadlock this
+    // one-time follow-up. The existing minimum-constructor rule stays first.
+    IUnitTask@ Front_TryPostRaidConstructor(CCircuitUnit@ factory, const array<string>& in names)
+    {
+        if (!g_frontRaiderOpenerDone || g_frontRaiderFactoryId < 0 || g_frontPostRaidConstructorQueued
+            || FrontOpener::WasQueued("constructor")) return null;
+        for (int i = int(g_frontOpeningRaiders.length()) - 1; i >= 0; --i) {
+            if (g_frontOpeningRaiders[i].IsDead()) g_frontOpeningRaiders.removeAt(i);
+        }
+        if (g_frontOpeningRaiders.length() > 0) return null;
+        // Keep the fourth step at the original producer while it survives;
+        // another suitable land factory may recover it after producer loss.
+        if (factory.id != g_frontRaiderFactoryId && ai.GetTeamUnit(g_frontRaiderFactoryId) !is null) return null;
+        if (names.length() == 0) return null;
+        CCircuitDef@ constructor = ai.GetCircuitDef(names[0]);
+        if (constructor is null || !factory.circuitDef.CanBuild(constructor) || !constructor.IsAvailable(ai.frame)) return null;
+        IUnitTask@ task = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::BUILDPOWER,
+            Task::Priority::HIGH, constructor, factory.GetPos(ai.frame), 64.f));
+        if (task !is null) {
+            g_frontPostRaidConstructorQueued = true;
+            FrontOpener::MarkQueued("constructor");
+            GenericHelpers::LogUtil("[FRONT] Post-raider constructor enqueued unit=" + constructor.GetName(), 2);
+        }
+        return task;
     }
 
     // Ensure labs recruit a minimum number of constructors
@@ -365,6 +400,8 @@ namespace RoleFront {
             // After scout rush, try one-time T1 raider opener for T1 bot lab
             IUnitTask@ raiderTask = Front_TryT1RaiderOpener(u, factoryName, side);
             if (raiderTask !is null) return raiderTask;
+            IUnitTask@ postRaidConstructor = Front_TryPostRaidConstructor(u, botConstructorNames);
+            if (postRaidConstructor !is null) return postRaidConstructor;
         }
 
         // T1 Vehicle Plant enforcement
@@ -391,6 +428,8 @@ namespace RoleFront {
             // After scout rush, try one-time T1 raider opener for T1 vehicle plant
             IUnitTask@ raiderTask2 = Front_TryT1RaiderOpener(u, factoryName, side);
             if (raiderTask2 !is null) return raiderTask2;
+            IUnitTask@ postRaidConstructor2 = Front_TryPostRaidConstructor(u, vehicleConstructorNames);
+            if (postRaidConstructor2 !is null) return postRaidConstructor2;
         }
 
         // T2 Bot Lab enforcement (Front-specific minimum T2 bot constructors)

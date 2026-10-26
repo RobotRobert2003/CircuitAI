@@ -121,6 +121,13 @@ float CCommanderControl::GetDeficit() const {
 }
 bool CCommanderControl::SetOption(const std::string& name,float value) {
     if(!std::isfinite(value)) return false;
+    if(name=="front_defence_definition") {
+        if(value==-1) {frontDefenceDefs.clear();return true;}
+        if(value<0 || value!=std::floor(value) || value>100000 || !ai->GetCircuitDefSafe(int(value))) return false;
+        if(std::find(frontDefenceDefs.begin(),frontDefenceDefs.end(),int(value))==frontDefenceDefs.end())
+            frontDefenceDefs.push_back(int(value));
+        return true;
+    }
     if(name=="front_support_unit") {
         if(value < -1 || value > 100000 || value != std::floor(value)) return false;
         if(supportUnit!=int(value)) { supportUnit=int(value); supportArrived=false; supportNext=0; }
@@ -196,6 +203,7 @@ bool CCommanderControl::SetOption(const std::string& name,float value) {
         {"front_fortify_priority",&options.frontFortifyPriority,0,2},
         {"front_fortify_advance",&options.frontFortifyAdvance,0,2000},
         {"front_line_spacing",&options.frontLineSpacing,.5f,1.8f},
+        {"front_defence_spacing",&options.frontDefenceSpacing,0,2},
         {"front_line_depth",&options.frontLineDepth,400,4000},
         {"front_mex_offset",&options.frontMexOffset,64,400},
         {"front_work_behind",&options.frontWorkBehind,0,1000},

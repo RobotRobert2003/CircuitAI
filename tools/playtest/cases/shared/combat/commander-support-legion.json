@@ -90,5 +90,6 @@
     "defence": "legmg",
     "radar": "legrad",
     "jammer": "legjam"
-  }
+  },
+  "front_spacing_observation": true
 }

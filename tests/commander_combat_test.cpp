@@ -260,6 +260,21 @@ int main(int argc,char** argv) {
         spans={{-100,100}};
         assert(NearestCoverageGap(spans,-100,100,0)==100);
     }
+    {
+        // Front placement snapshots include finished units, frames and queued
+        // sites alike. The boundary is inclusive and uses horizontal distance.
+        std::vector<DefenceExclusion> occupied={{{0,0},250},{{800,0},325}};
+        assert(!DefenceSpaced({249,0},occupied));
+        assert(DefenceSpaced({250,0},occupied));
+        assert(DefenceSpaced({0,250},occupied));
+        assert(!DefenceSpaced({600,0},occupied));
+        assert(DefenceSpaced({475,0},occupied));
+        assert(!DefenceSpaced({476,0},occupied));
+        occupied.erase(occupied.begin()+1); // queued task cancelled / turret lost
+        assert(DefenceSpaced({600,0},occupied));
+        occupied.clear(); // own reused task excluded, empty neighborhood
+        assert(DefenceSpaced({0,0},occupied));
+    }
     if(argc>1 && std::string(argv[1])=="--benchmark") {
         std::vector<Attacker> crowd; for(int i=0;i<400;++i) crowd.push_back({{value(rng)*.25f,value(rng)*.25f},100});
         float groupMetal=0;

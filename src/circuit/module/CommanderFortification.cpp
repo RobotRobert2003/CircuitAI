@@ -26,6 +26,47 @@ static commander::Point Heading(const CBattleAnalysis* battle,const AIFloat3& p)
     return commander::Normal(P(battle->GetFrontLanePoint(d+64))-P(battle->GetFrontLanePoint(std::max(0.f,d-64))));
 }
 
+bool CCommanderControl::IsFrontDefence(const CCircuitDef* def) const {
+    return def && (def->GetId()==int(options.frontLineDef) || def->GetId()==supportDef
+        || std::find(frontDefenceDefs.begin(),frontDefenceDefs.end(),def->GetId())!=frontDefenceDefs.end());
+}
+
+std::vector<commander::DefenceExclusion> CCommanderControl::DefenceExclusions(CCircuitUnit* unit,
+    CCircuitDef* def,const AIFloat3& center,float searchRadius,const IUnitTask* ignore) const {
+    std::vector<commander::DefenceExclusion> result;
+    if(!options.frontDuty || options.frontDefenceSpacing<=0 || !IsFrontDefence(def)
+        || (unit->GetId()!=supportUnit && !Handles(unit))) return result;
+    float maxRange=def->GetMaxRange();
+    for(int id:frontDefenceDefs) {
+        auto* other=ai->GetCircuitDefSafe(id);
+        if(other) maxRange=std::max(maxRange,other->GetMaxRange());
+    }
+    for(int id:{int(options.frontLineDef),supportDef}) {
+        auto* other=ai->GetCircuitDefSafe(id);
+        if(other) maxRange=std::max(maxRange,other->GetMaxRange());
+    }
+    const float radius=searchRadius+maxRange*options.frontDefenceSpacing;
+    auto add=[&](CCircuitDef* other,const AIFloat3& at) {
+        if(IsFrontDefence(other) && OnMap(at) && at.SqDistance2D(center)<=radius*radius)
+            result.push_back({P(at),std::max(def->GetMaxRange(),other->GetMaxRange())*options.frontDefenceSpacing});
+    };
+    // Fresh per-offer snapshot: O(F*D + Q*D) for local friendlies F, queued
+    // defenses Q and the small script roster D. Terrain candidates use only
+    // copied discs, never callbacks. No cache survives enqueue/loss/transfer.
+    // Both frames and completed allied defenses occupy space; own queued sites
+    // reserve it before a frame exists. The executing task excludes itself.
+    for(int id:ai->GetCallback()->GetFriendlyUnitIdsIn(center,radius,false)) {
+        auto* ally=ai->GetFriendlyUnit(id);
+        if(ally) add(ally->GetCircuitDef(),ally->GetPos(ai->GetLastFrame()));
+    }
+    for(auto* task:ai->GetBuilderManager()->GetTasks(BT::DEFENCE)) {
+        if(task==ignore || task->IsDead()) continue;
+        const auto& at=task->GetBuildPos();
+        add(task->GetBuildDef(),geom::is_valid(at)?at:task->GetPosition());
+    }
+    return result;
+}
+
 void CCommanderControl::MexFinished(CCircuitUnit* worker,CCircuitUnit* mex) {
     if(!options.frontDuty || options.frontMexDefence<=0 || !Handles(worker)) return;
     auto it=commanders.find(worker->GetId());
@@ -89,7 +130,11 @@ IUnitTask* CCommanderControl::FortifySite(CCircuitUnit* unit,CCircuitDef* def,co
     // coverage fills the gap and remains in this territory. This replaces
     // repeated failed exact-slot builds on unbuildable ground (Proving Grounds).
     const float search=coveragePoint?def->GetMaxRange()*.75f:48.f;
-    const auto at=ai->GetTerrainManager()->FindBuildSite(def,site,search,0,admit);
+    const auto exclusions=DefenceExclusions(unit,def,site,search);
+    CTerrainManager::TerrainPredicate spaced=[&](const AIFloat3& p) {
+        return commander::DefenceSpaced(P(p),exclusions) && admit(p);
+    };
+    const auto at=ai->GetTerrainManager()->FindBuildSite(def,site,search,0,spaced);
     const bool found=OnMap(at);
     const bool safe=found && ai->GetThreatMap()->GetThreatAt(unit,at)<=options.frontThreat;
     const bool reachable=safe && ai->GetTerrainManager()->CanReachAtSafe2(unit,at,unit->GetCircuitDef()->GetBuildDistance());

@@ -9,6 +9,7 @@ local priorDamage,damageHook
 local camera,photos=nil,{}
 local commandTypes,unitCommands={},{}
 local factorySamples,factoryIds={},{}
+local openingFactory,openingProducts=nil,0
 local completed=false
 local fixtureReady=false
 local commanderShooters,commanderShooterCount={},0
@@ -156,6 +157,24 @@ end
 function widget:UnitDamaged(...) if not damageHook then damage(...) end end
 function widget:UnitCommand(...) command(...) end
 function widget:UnitCreated(id,def,team,builder)
+    -- Opt-in opener proof uses actual factory products. Production debug logs
+    -- may be suppressed; count only the selected producer's finite prefix.
+    if cfg.factory_opening and team==0 and builder then
+        local producer=UnitDefs[Spring.GetUnitDefID(builder)]
+        local opening=cfg.factory_opening
+        if producer and producer.name==opening.factory and openingProducts<#opening.products then
+            openingFactory=openingFactory or builder
+            if builder==openingFactory then
+                openingProducts=openingProducts+1
+                local name=UnitDefs[def].name
+                if name~=opening.products[openingProducts] then
+                    log("ERROR factory_opening_order step="..openingProducts.." unit="..name)
+                end
+                log("factory_opening_step="..openingProducts.." unit="..name)
+                if openingProducts==#opening.products then log("factory_opening_complete count="..openingProducts) end
+            end
+        end
+    end
     if cfg.factory_throughput and team==0 and UnitDefs[def].isFactory then factoryIds[id]=true end
     if cfg.natural and team==0 and UnitDefs[def].name==cfg.unit then
         local x,_,z=Spring.GetUnitPosition(id)
@@ -509,6 +528,31 @@ function widget:GameFrame(f)
             end
         end
         log(string.format("front_support_finished nano=%d defence=%d radar=%d jammer=%d",counts.nano,counts.defence,counts.radar,counts.jammer))
+    end
+    -- D-375 opt-in correctness check of real frame positions, not task offers.
+    -- Small supplied arenas only: O(T^2) for the observed forward turrets.
+    if cfg.front_spacing_observation and f%150==0 then
+        local names={armllt=true,corllt=true,leglht=true,armbeamer=true,corhllt=true,legmg=true}
+        local turrets={}
+        local start=cfg.starts[1]
+        for _,id in ipairs(Spring.GetTeamUnits(0) or {}) do
+            local def=UnitDefs[Spring.GetUnitDefID(id)]
+            local x,_,z=Spring.GetUnitPosition(id)
+            if def and names[def.name] and x and (x-start[1])^2+(z-start[2])^2>600^2 then
+                local range=0
+                for _,weapon in ipairs(def.weapons or {}) do
+                    range=math.max(range,WeaponDefs[weapon.weaponDef].range or 0)
+                end
+                for _,other in ipairs(turrets) do
+                    local minimum=.5*math.max(range,other.range)
+                    if (x-other.x)^2+(z-other.z)^2<(minimum-.1)^2 then
+                        log(string.format("front_spacing_violation units=%d,%d required=%.1f",id,other.id,minimum))
+                    end
+                end
+                turrets[#turrets+1]={id=id,x=x,z=z,range=range}
+            end
+        end
+        log(string.format("front_spacing_observed turrets=%d",#turrets))
     end
     if f%300==0 then
         if cfg.trace_spam then
