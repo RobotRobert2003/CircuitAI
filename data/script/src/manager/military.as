@@ -13,6 +13,48 @@
 
 namespace Military {
 
+    // Surface roles summed into the "ground" layer of the enemy threat and
+    // cost caches below (UpdateEnemyThreatCache / UpdateEnemyCostCache).
+    const array<string> SURFACE_ROLES = {
+        "assault", "skirmish", "riot", "artillery", "heavy",
+        "super", "raider", "support", "builder"
+    };
+
+    // Role name -> role *index* (Unit::Role::X.type), not mask. The two are
+    // not interchangeable and the difference is not visible at a call site: a
+    // mask is 1 << index, so passing one where the other is wanted compiles,
+    // runs, and reads far out of bounds. CEnemyManager::GetEnemyThreat /
+    // GetEnemyCost index a 64-entry array by index; the caches below query
+    // them, and did so with masks until an access violation at f=180 on Eight
+    // Horses made it obvious (D-002). Built once by BuildRoleCaches from
+    // Setup::setupMap; nothing else writes it.
+    dictionary roleTypeCache;
+
+    void BuildRoleCaches() {
+        roleTypeCache.deleteAll();
+        roleTypeCache.set("builder", int(Unit::Role::BUILDER.type));
+        roleTypeCache.set("scout", int(Unit::Role::SCOUT.type));
+        roleTypeCache.set("raider", int(Unit::Role::RAIDER.type));
+        roleTypeCache.set("riot", int(Unit::Role::RIOT.type));
+        roleTypeCache.set("assault", int(Unit::Role::ASSAULT.type));
+        roleTypeCache.set("skirmish", int(Unit::Role::SKIRM.type));
+        roleTypeCache.set("artillery", int(Unit::Role::ARTY.type));
+        roleTypeCache.set("anti_air", int(Unit::Role::AA.type));
+        roleTypeCache.set("anti_sub", int(Unit::Role::AS.type));
+        roleTypeCache.set("anti_heavy", int(Unit::Role::AH.type));
+        roleTypeCache.set("bomber", int(Unit::Role::BOMBER.type));
+        roleTypeCache.set("support", int(Unit::Role::SUPPORT.type));
+        roleTypeCache.set("mine", int(Unit::Role::MINE.type));
+        roleTypeCache.set("transport", int(Unit::Role::TRANS.type));
+        roleTypeCache.set("air", int(Unit::Role::AIR.type));
+        roleTypeCache.set("sub", int(Unit::Role::SUB.type));
+        roleTypeCache.set("static", int(Unit::Role::STATIC.type));
+        roleTypeCache.set("heavy", int(Unit::Role::HEAVY.type));
+        roleTypeCache.set("super", int(Unit::Role::SUPER.type));
+        roleTypeCache.set("commander", int(Unit::Role::COMM.type));
+        GenericHelpers::LogUtil("[Military] BuildRoleCaches: cached " + roleTypeCache.getSize() + " role indices", 2);
+    }
+
     // Cohort travel policy; native targeting/terrain/safety may stop the move.
     // Called only after a contact/objective is cleared, not per member/frame.
     AIFloat3 AiGroundObjective(CCircuitUnit@ u, const AIFloat3& in previous)
@@ -240,9 +282,9 @@ namespace Military {
 		roles.insertLast("anti_air");
 		roles.insertLast("air");
 		roles.insertLast("bomber");
-		// Surface roles as defined in FactoryProduction::SURFACE_ROLES
-		for (uint i = 0; i < FactoryProduction::SURFACE_ROLES.length(); ++i) {
-			roles.insertLast(FactoryProduction::SURFACE_ROLES[i]);
+		// Surface roles as defined in SURFACE_ROLES above
+		for (uint i = 0; i < SURFACE_ROLES.length(); ++i) {
+			roles.insertLast(SURFACE_ROLES[i]);
 		}
 		roles.insertLast("sub");
 		roles.insertLast("anti_sub");
@@ -256,7 +298,7 @@ namespace Military {
 		for (uint i = 0; i < roles.length(); ++i) {
 			const string roleName = roles[i];
 			float threat = 0.f;
-			if (FactoryProduction::roleTypeCache.get(roleName, roleType)) {
+			if (roleTypeCache.get(roleName, roleType)) {
 				GenericHelpers::LogUtil("[Military] UpdateEnemyThreatCache: querying role '" + roleName + "' type=" + roleType, 4);
 				threat = aiEnemyMgr.GetEnemyThreat(roleType);
 				GenericHelpers::LogUtil("[Military] UpdateEnemyThreatCache: threat retrieved=" + threat, 4);
@@ -290,8 +332,8 @@ namespace Military {
 		g_cachedTotalAirThreat += GetCachedRoleThreat("bomber");
 
 		// Surface: assault/skirm/riot/artillery/heavy/super/raider/support/builder
-		for (uint i = 0; i < FactoryProduction::SURFACE_ROLES.length(); ++i) {
-			g_cachedTotalSurfaceThreat += GetCachedRoleThreat(FactoryProduction::SURFACE_ROLES[i]);
+		for (uint i = 0; i < SURFACE_ROLES.length(); ++i) {
+			g_cachedTotalSurfaceThreat += GetCachedRoleThreat(SURFACE_ROLES[i]);
 		}
 
 		// Water: submarines + anti-submarines
@@ -339,9 +381,9 @@ namespace Military {
 		roles.insertLast("anti_air");
 		roles.insertLast("air");
 		roles.insertLast("bomber");
-		// Surface roles as defined in FactoryProduction::SURFACE_ROLES
-		for (uint i = 0; i < FactoryProduction::SURFACE_ROLES.length(); ++i) {
-			roles.insertLast(FactoryProduction::SURFACE_ROLES[i]);
+		// Surface roles as defined in SURFACE_ROLES above
+		for (uint i = 0; i < SURFACE_ROLES.length(); ++i) {
+			roles.insertLast(SURFACE_ROLES[i]);
 		}
 		roles.insertLast("sub");
 		roles.insertLast("anti_sub");
@@ -351,7 +393,7 @@ namespace Military {
 		for (uint i = 0; i < roles.length(); ++i) {
 			const string roleName = roles[i];
 			float cost = 0.f;
-			if (FactoryProduction::roleTypeCache.get(roleName, roleType)) {
+			if (roleTypeCache.get(roleName, roleType)) {
 				GenericHelpers::LogUtil("[Military] UpdateEnemyCostCache: querying role '" + roleName + "' type=" + roleType, 4);
 				cost = aiEnemyMgr.GetEnemyCost(roleType);
 			} else {
@@ -382,8 +424,8 @@ namespace Military {
 		g_cachedTotalAirCost += GetCachedRoleCost("bomber");
 
 		// Surface: assault/skirm/riot/artillery/heavy/super/raider/support/builder
-		for (uint i = 0; i < FactoryProduction::SURFACE_ROLES.length(); ++i) {
-			g_cachedTotalSurfaceCost += GetCachedRoleCost(FactoryProduction::SURFACE_ROLES[i]);
+		for (uint i = 0; i < SURFACE_ROLES.length(); ++i) {
+			g_cachedTotalSurfaceCost += GetCachedRoleCost(SURFACE_ROLES[i]);
 		}
 
 		// Water: submarines + anti-submarines

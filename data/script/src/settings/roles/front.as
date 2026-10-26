@@ -233,12 +233,6 @@ namespace Front {
             int MaxT2BotLabs = 1;
             int MaxT2VehicleLabs = 1;
 
-            /******************** DYNAMIC FACTORY PRODUCTION ********************/
-            // Toggle for role-based dynamic factory production system (replaces factory.json logic)
-            // When enabled, FRONT factories (labs, air plants, gantries, etc.) delegate unit
-            // selection to FactoryProduction::MakeTask using threat-aware scoring.
-            bool UseDynamicFactoryProduction = false;
-
             /******************** FRONT ECONOMY SETTINGS ********************/
             // Consider energy storage "low" when current < storage * percent
             float EnergyStorageLowPercent = 0.90f;

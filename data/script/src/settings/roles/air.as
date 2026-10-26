@@ -97,6 +97,14 @@ namespace Air {
             int T1SupportCap = 16;
             float TransitionMinEnergy = 1200.0f;
             int TransitionEarliestSeconds = 8 * 60;
+            // D-362: the first-lab saving hold (transition.save) ends while the metal bank
+            // is floating and holds the funded lab's remaining cost plus this fraction of
+            // storage besides: what the hold protects is banked and the rest overflows.
+            // Played before the change: 7,300 of 7,300 metal for three minutes at +99
+            // while the builders reclaimed winds and waited, the lab five minutes in frame.
+            float TransitionBankFreeFraction = 0.25f;
+            // INV-239: a metal bank full this long before the first advanced plant stands.
+            int TransitionOverflowSeconds = 120;
             int HomeFighterFloor = 6;
             int HomeFighterCeiling = 60;
             int OpeningAirConstructors = 3;
@@ -229,12 +237,6 @@ namespace Air {
             float MilitaryRaidMinPower = 1.0f;
             float MilitaryRaidAvgPower = 1.0f;
 
-            /******************** DYNAMIC FACTORY PRODUCTION ********************/
-            // Toggle for role-based dynamic factory production system for AIR role.
-            // When enabled, AIR factories (T1/T2 aircraft plants, gantries that
-            // produce aircraft, etc.) delegate unit selection to
-            // FactoryProduction::MakeTask using threat-aware scoring.
-            bool UseDynamicFactoryProduction = false;
             /******************** AIR DYNAMIC QUOTA SETTINGS ********************/
             // Enemy surface cost multiplier used to determine when AIR is underpowered.
             // If our estimated army metal cost is below enemySurfaceCostPerPlayer * multiplier,
@@ -330,7 +332,7 @@ namespace Air {
             float LateAFUSMetalIncome = 60.0f;
             float LateAFUSMetalCurrent = 6000.0f;
             // Then T3: a gantry once this rich. Gantry production is
-            // FactoryProduction's business (EnqueueGantrySignatureBatch).
+            // manager/factory.as's business (EnqueueGantrySignatureBatch).
             float LateGantryMetalIncome = 60.0f;
             float LateGantryMetalCurrent = 6000.0f;
 

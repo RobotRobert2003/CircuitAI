@@ -264,7 +264,7 @@ namespace Tech {
             string HeavyAmphCortex = "corkorg";
             string HeavyLandLegion = "legerailtank";
             string HeavyAmphLegion = "legeheatraymech";
-            // D-288 (owner): one land gantry per GantryScaleMetalStep of 10 s minimum
+            // D-288 (owner), step 400 since D-364: one land gantry per GantryScaleMetalStep of 10 s minimum
             // metal income (floor(income / step), capped at GantryScaleMax). The target
             // is a persisted high-water mark (a dip never lowers it); a new order also
             // needs income >= (have + 1) x step x GantryScaleDropShare right now.

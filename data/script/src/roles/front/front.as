@@ -5,12 +5,11 @@
 #include "../../helpers/construction/economy_helpers.as"
 #include "../../helpers/construction/guard_helpers.as"
 #include "../../helpers/units/unitdef_helpers.as"
-// Dynamic factory production + shared helpers
+// Shared helpers
 #include "../../helpers/objectives/objective_helpers.as"
 #include "../../helpers/roles/role_limit_helpers.as"
 #include "../../global.as"
 #include "../../types/terrain.as"
-#include "../../systems/production/factory_production.as"
 #include "../../systems/production/front_opener.as"
 #include "../../systems/production/front_tank_mass.as"
 #include "../../systems/production/front_wave_escort.as"
@@ -72,14 +71,6 @@ namespace RoleFront {
         g_frontVehicleThresholdsApplied = false;
 
         Front_ApplyStartLimits();
-
-        // Initialize dynamic factory production system for FRONT role when enabled
-        if (Global::RoleSettings::Front::UseDynamicFactoryProduction) {
-            FactoryProduction::Initialize();
-            GenericHelpers::LogUtil("[FRONT] Dynamic factory production system initialized", 2);
-        } else {
-            GenericHelpers::LogUtil("[FRONT] Dynamic factory production disabled; using legacy factory selection", 2);
-        }
 
         // Log all strategic objectives with distance from start
         ObjectiveHelpers::LogAllObjectivesFromStart(AiRole::FRONT, "FRONT");
@@ -476,16 +467,6 @@ namespace RoleFront {
 
         IUnitTask@ siege = LandSiege::Produce(u);
         if (siege !is null) return siege;
-
-        // After constructor guarantees (T1/T2) and optional scout rushes, prefer dynamic factory
-        // production for all factories (T1/T2 labs, air, gantries, etc.) when enabled.
-        if (Global::RoleSettings::Front::UseDynamicFactoryProduction) {
-            IUnitTask@ dynTask = FactoryProduction::MakeTask(u);
-            if (dynTask !is null) {
-                return dynTask;
-            }
-            GenericHelpers::LogUtil("[FRONT] Dynamic factory production returned null for '" + factoryName + "', using default", 3);
-        }
 
         // Fall back to default when no rule triggers
         return aiFactoryMgr.DefaultMakeTask(u);

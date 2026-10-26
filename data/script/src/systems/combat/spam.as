@@ -21,9 +21,14 @@ behaviour once the economy
 clears Global::Spam::MinMetalIncome and MinEnergyIncome (both, sliding 10 s
 minimum; deactivation at ReleaseFraction of each so a dip does not flap):
 
-  factories   Income-budgeted T1 factories in Global::Spam::UnitByFactory
+  factories   Every T1 factory in Global::Spam::UnitByFactory a role owns
               produces that unit on repeat and nothing else while spam is
-              active (Factory::AiMakeTask asks here first).
+              active (Factory::AiMakeTask asks here first). The income budget
+              (LabsWanted) decides how many labs are BUILT for spam, never
+              which of the existing labs pump (D-360): a lab left out of the
+              budget went on producing the same cheap unit one recruit at a
+              time, off repeat and off its lane, each offspring an ordinary
+              military task (the owner's FRONT report).
   routes      Each spam factory owns one native CRouteTask (TaskF::Route)
               holding a multi-step route from the factory to the destination.
               Routes of different factories run in parallel lanes: the k-th
@@ -314,7 +319,9 @@ namespace Spam {
             IUnitTask@ task;
             if (!repeatTask.get(keys[i], @task)) continue;
             if (f is null || task is null || task.IsDead() || f.task !is task) { repeatTask.delete(keys[i]); continue; }
-            if (!enabled || Lifecycle::IsRetiring(f) || Team::Recovery::WantsFactory(f) || int(labs.length()) >= LabsWanted()) {
+            // D-360: a pump ends with spam (ReleaseFraction), retirement or a
+            // recovery claim, not with a dip under the lab-construction budget.
+            if (!enabled || Lifecycle::IsRetiring(f) || Team::Recovery::WantsFactory(f)) {
                 repeatTask.delete(keys[i]); task.Abort(); continue;
             }
             CRouteTask@ route;
@@ -907,7 +914,10 @@ namespace Spam {
             _Reject(factory, "unit '" + unitName + "' is not a loaded def");
             return null;
         }
-        if (int(repeatTask.getSize()) >= LabsWanted()) return null;
+        // D-360: no LabsWanted cap here. Every eligible lab the role owns pumps,
+        // as TECH's spam clusters always did (TECH never owns more T1 labs than
+        // the budget built). The budget still caps lab construction
+        // (BuilderMakeTask) and spam deactivates at ReleaseFraction.
         if (d.maxThisUnit < d.count + 50) d.maxThisUnit = d.count + 50;
         if (!d.IsAvailable(ai.frame)) {
             // The likely cause when a listed T1 factory still exists and still

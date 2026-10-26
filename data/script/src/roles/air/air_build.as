@@ -541,8 +541,10 @@ namespace AirBuild {
             if (t !is null) return Record(t, "transition.support", u);
             @t = Assist(u, false, null, true);
             if (t !is null) return Record(t, "transition.finish", u);
-            u.CmdStop();
-            return Record(aiBuilderMgr.Enqueue(TaskB::Wait(3 * SECOND)), "transition.save", u);
+            if (!AirEconomy::BankBeyondLab()) {   // D-362: no hold on a floating bank
+                u.CmdStop();
+                return Record(aiBuilderMgr.Enqueue(TaskB::Wait(3 * SECOND)), "transition.save", u);
+            }
         }
         // Finish the factory before branching. During the crew opening, nearby
         // energy recovery is the only exception to guarding production.

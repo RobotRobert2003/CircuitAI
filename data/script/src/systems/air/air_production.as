@@ -286,10 +286,6 @@ namespace AirProduction {
         if (advanced && !fundedProduction && AirEconomy::TechGrowth() && !AirEconomy::MassBombers()
             && homeValue + futureValue >= AirEconomy::HomeValueTarget())
             return aiFactoryMgr.Enqueue(TaskS::Wait(false, 3 * SECOND));
-        if (Global::RoleSettings::Air::UseDynamicFactoryProduction && (!advanced || AirEconomy::MassBombers())) {
-            @t = FactoryProduction::MakeTask(u);
-            if (t !is null) return t;
-        }
         CCircuitDef@ fd = ai.GetCircuitDef(fighter);
         @t = Recruit(u, fighter, Projected(fd) + 1, "air.control", Task::Priority::NORMAL);
         if (fundedProduction && t is null && fd !is null && fd.IsAvailable(ai.frame) && u.circuitDef.CanBuild(fd))

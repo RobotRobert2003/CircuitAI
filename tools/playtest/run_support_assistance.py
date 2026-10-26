@@ -46,7 +46,7 @@ def main():
     checks = directory/'checks.json'
     checks.write_text(json.dumps({'stop_minute':5.1, 'expect':[
         {'key':key,'pattern':r'\[SupportAssistTest\] PASS '+key,'by_minute':5.1,'scope':'any'}
-        for key in ('caps_roster_and_map_limit','physical_production')],
+        for key in ('caps_and_map_limit','physical_production')],
         'forbid':[{'key':'failure','pattern':r'\[INVARIANT\]|\[SupportAssistTest\] FAIL|: ERR\s+:|SCRIPT CRASH|Lib exception','scope':'any'}]}, indent=2))
     subprocess.run(call+['launch','--dir',str(directory)],check=True)
     return subprocess.run(call+['watch','--dir',str(directory),'--role','SUPPORT','--minutes','5.1',

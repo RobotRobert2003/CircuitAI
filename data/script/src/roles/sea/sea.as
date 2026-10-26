@@ -6,7 +6,6 @@
 #include "../../global.as"
 #include "../../types/terrain.as"
 #include "../../helpers/objectives/objective_helpers.as"
-#include "../../systems/production/factory_production.as"
 #include "../../helpers/construction/sea_constructor_helpers.as"
 #include "sea_build.as"
 #include "../../systems/sea/sea_recovery.as"
@@ -105,12 +104,6 @@ namespace RoleSea {
                 d.SetFireState(3);
             }
             GenericHelpers::LogUtil("[SEA] Applied default fire state=3 to T1 naval combat units", 3);
-        }
-
-        // Initialize dynamic factory production system if enabled
-        if (Global::RoleSettings::Sea::UseDynamicFactoryProduction) {
-            FactoryProduction::Initialize();
-            GenericHelpers::LogUtil("[SEA] Dynamic factory production system initialized", 2);
         }
 
         // Log all strategic objectives with distance from start
@@ -304,16 +297,7 @@ namespace RoleSea {
                 }
             }
 
-            // Try dynamic factory production system first (if enabled)
-            if (Global::RoleSettings::Sea::UseDynamicFactoryProduction) {
-                IUnitTask@ dynamicTask = FactoryProduction::MakeTask(u);
-                if (dynamicTask !is null) {
-                    return dynamicTask;
-                }
-                // If dynamic system returns null, fall through to legacy logic below
-            }
-
-            // Legacy constructor guarantee logic continues below
+            // Constructor guarantee logic continues below
             have = UnitDefHelpers::GetUnitDefCount(t1Ctor);
             if (have < 2) {
                 CCircuitDef@ d = ai.GetCircuitDef(t1Ctor);

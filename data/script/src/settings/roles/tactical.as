@@ -55,11 +55,6 @@ namespace Tactical {
             // SEA's numbers (helpers/sea_constructor_helpers.as, D-042).
             bool SeaConstructorMimicsSea = true;
 
-            /******************** DYNAMIC FACTORY PRODUCTION ********************/
-            // Toggle for role-based dynamic factory production system (replaces factory.json logic)
-            // When enabled, uses threat-driven unit selection with tier scaling for hover factories
-            bool UseDynamicFactoryProduction = false;
-
             /******************** TACTICAL START LIMIT CAPS ********************/
             // Initial caps applied at game start for the TACTICAL role (formerly HOVER_SEA)
             int StartCapT1BotLabs = 0;

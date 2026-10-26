@@ -1,7 +1,6 @@
 // SUPPORT shares geometry and construction mechanisms with TECH, not its
 // post-T2 strategy. One bounded sequence per builder ask; no global unit scan.
 #include "../tech/tech.as"
-#include "../../systems/production/factory_production.as"
 #include "../../helpers/construction/owned_economy_helpers.as"
 #include "support_production.as"
 #include "../../systems/construction/front_reclaim.as"
@@ -15,6 +14,10 @@ namespace SupportBuild {
     int giftFrame = -1;
     int lastForwardOrder = -100000;
     int lastDeferredMexes = -1;
+    int afusGateLogged = -1;   // D-359: -1 unknown, else the last logged allowAdvancedFusion; one line per transition
+    int labsWantedLogged = -1; // D-361: the last logged T2LabsWanted; one line per change
+    int bankFullSince = -1;    // D-361 / INV-238: the frame the metal bank became full, -1 while it is not
+    int overflowLogged = -100000;
 
     AIFloat3 HomeUpgradePosition(CCircuitUnit@ worker, CCircuitDef@ advanced) {
         AIFloat3 result(-1.0f, 0.0f, -1.0f);
@@ -189,6 +192,10 @@ namespace SupportBuild {
         giftFrame = -1;
         lastForwardOrder = -100000;
         lastDeferredMexes = -1;
+        afusGateLogged = -1;
+        labsWantedLogged = -1;
+        bankFullSince = -1;
+        overflowLogged = -100000;
         TechBuild::throwawayDecided = false;
         TechBuild::throwawayLabId = -1;
         aiBuilderMgr.recoverConstruction = true;
@@ -227,9 +234,78 @@ namespace SupportBuild {
             GenericHelpers::LogUtil("[SUPPORT][Phase] T2 combat production online", 1);
         }
         DeliverConstructor();
-        const bool ready = donationResolved && HomeMexesReady();
-        if (ready && !economyReady) GenericHelpers::LogUtil("[SUPPORT][Phase] home upgrades complete; combat released", 1);
-        economyReady = ready;
+        // D-361: the release is a phase, latched once. It used to be recomputed every
+        // tick, and every later home mex (TechBuild::ExpandMex) or upgrade in flight
+        // (HomeMexesReady reads queued MEXUP and unfinished extractors) pulled it back
+        // to false, which held the T2 bot lab on 3 s waits for minutes at a full bank
+        // (played: nine "combat released" lines in one 40-minute game, the lab idle
+        // 24:00-27:30 and 29:00-31:00 at 15,300 of 15,300 metal).
+        if (!economyReady && donationResolved && HomeMexesReady()) {
+            economyReady = true;
+            GenericHelpers::LogUtil("[SUPPORT][Phase] home upgrades complete; combat released", 1);
+        }
+        WatchOverflow();
+    }
+
+    // D-361: how many T2 bot labs this income carries. The first is the opening's;
+    // the second at T2LabSecondMetalIncome, one more per T2LabMetalIncomeStep over it.
+    int T2LabsWanted(float metalIncome) {
+        const float second = Global::RoleSettings::Support::T2LabSecondMetalIncome;
+        const float step = Global::RoleSettings::Support::T2LabMetalIncomeStep;
+        int wanted = 1;
+        if (metalIncome >= second && step > 0.0f) wanted = 2 + int((metalIncome - second) / step);
+        return AiMax(1, AiMin(Global::RoleSettings::Support::MaxT2BotLabs, wanted));
+    }
+    // Standing labs, frames included (count), plus orders without a frame yet.
+    int T2LabsHave(CCircuitDef@ lab) {
+        return lab.count + aiBuilderMgr.GetQueuedBuildCount(int(Task::BuildType::FACTORY), lab);
+    }
+    // INV-238 (D-361): the metal bank full for T2LabOverflowSeconds while fewer T2 bot
+    // labs stand or are ordered than the income wants, and no cluster is open for one.
+    void WatchOverflow() {
+        // The clock runs from the release: a bank full during the home-upgrade hold is
+        // KI-661's, not this rule's (played: one false report 9 s after the release).
+        if (!economyReady || !aiEconomyMgr.isMetalFull) { bankFullSince = -1; return; }
+        if (bankFullSince < 0) bankFullSince = ai.frame;
+        if (ai.frame - bankFullSince < Global::RoleSettings::Support::T2LabOverflowSeconds * SECOND
+            || ai.frame - overflowLogged < 60 * SECOND) return;
+        CCircuitDef@ lab = ai.GetCircuitDef(UnitHelpers::GetT2BotLabForSide(Global::AISettings::Side));
+        if (lab is null) return;
+        const int wanted = T2LabsWanted(Economy::GetMinMetalIncomeLast10s());
+        if (T2LabsHave(lab) >= wanted || TechFactories::OpenAbove(2)) return;
+        overflowLogged = ai.frame;
+        Invariants::Violation("INV-238", "t2-labs", "metal bank full " + int((ai.frame - bankFullSince) / SECOND)
+            + " s with " + T2LabsHave(lab) + " of " + wanted + " T2 bot labs and no cluster open");
+    }
+    // D-361: the next T2 bot lab, through TECH's front factory clusters (D-114: a
+    // 2 x 2 turret block, then the lab), once the first stands and combat is
+    // released. An open cluster is carried to its end whatever the bank; a new one
+    // is planned only while the metal bank is ahead, so a surplus buys production
+    // capacity and a frame going up keeps its budget.
+    IUnitTask@ MoreLabs(CCircuitUnit@ unit, float metalIncome) {
+        if (!transitioned || !economyReady) return null;
+        CCircuitDef@ lab = ai.GetCircuitDef(UnitHelpers::GetT2BotLabForSide(Global::AISettings::Side));
+        if (lab is null || !unit.circuitDef.CanBuild(lab)) return null;
+        const int wanted = T2LabsWanted(metalIncome);
+        if (wanted != labsWantedLogged) {
+            labsWantedLogged = wanted;
+            GenericHelpers::LogUtil("[SUPPORT][Labs] T2 bot labs wanted " + wanted + " at +" + int(metalIncome)
+                + " metal (" + T2LabsHave(lab) + " standing or ordered)", 1);
+        }
+        if (TechFactories::OpenAbove(2)) {
+            IUnitTask@ open = TechFactories::Work(lab, unit, false);
+            if (open !is null) return open;
+        }
+        if (T2LabsHave(lab) >= wanted || !TechBuild::MetalAhead()) return null;
+        // behaviour.json caps the advanced lab at one for Armada and Legion; the
+        // wanted count lifts it (TechFactories::Work lifts it by one at order time
+        // too, but MayPlan reads IsAvailable before planning)
+        if (lab.maxThisUnit < wanted) lab.maxThisUnit = wanted;
+        IUnitTask@ task = TechFactories::Work(lab, unit, true);
+        if (task !is null)
+            GenericHelpers::LogUtil("[SUPPORT][Labs] T2 bot lab " + (T2LabsHave(lab) + 1) + " of " + wanted + " planned at +"
+                + int(metalIncome) + " metal, " + TechBuild::MetalAheadWhy(), 1);
+        return task;
     }
 
     IUnitTask@ FactoryTask(CCircuitUnit@ unit) {
@@ -355,14 +431,29 @@ namespace SupportBuild {
             Economy::GetMinMetalIncomeLast10s(), Economy::GetMinEnergyIncomeLast10s());
         state.allowConverters = !TechBuild::MetalFullLong();
         state.allowReactors = economyReady;
+        // D-359: ordinary fusions scale the energy linearly, one per shortfall; the
+        // advanced fusion waits for the energy-income gate so metal stays on combat.
+        const float afusGate = Global::RoleSettings::Support::AdvancedFusionEnergyIncome;
+        state.allowAdvancedFusion = afusGate <= 0.0f || state.eIncome >= afusGate;
+        if (state.builderIsT2 && (state.allowAdvancedFusion ? 1 : 0) != afusGateLogged) {
+            afusGateLogged = state.allowAdvancedFusion ? 1 : 0;
+            GenericHelpers::LogUtil("[SUPPORT][Eco] advanced fusion " + (state.allowAdvancedFusion ? "allowed" : "withheld")
+                + ": energy income " + int(state.eIncome) + " against gate " + int(afusGate), 1);
+        }
         if (economyReady) {
             @task = aiBuilderMgr.FindQueuedTask(unit, int(Task::BuildType::DEFENCE));
             if (task !is null) return task;
             @task = ForwardDefence(unit);
             if (task !is null) return task;
         }
+        // D-361: a surplus buys T2 production capacity before the energy ladder
+        // spends it (the advanced fusion waits on its gate anyway, D-359).
+        @task = MoreLabs(unit, state.mIncome);
+        if (task !is null) return task;
         string reason;
         const string key = EcoPlanner::Decide(state, reason);
+        if (key == "afus" && !state.allowAdvancedFusion)
+            Invariants::Violation("INV-237", "afus-gate", "SUPPORT chose an advanced fusion under its energy-income gate");
         if (key.length() > 0) {
             @task = EcoPlanner::Enqueue(key, unit);
             if (task !is null) return task;

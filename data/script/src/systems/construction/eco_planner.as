@@ -202,6 +202,7 @@ namespace EcoPlanner {
         bool air = false; // default preserves TECH policy and geometry
         bool allowConverters = true; // caller may reserve surplus metal for production/build power
         bool allowReactors = true; // role-local home upgrades may precede reactors
+        bool allowAdvancedFusion = true; // D-359: SUPPORT withholds the advanced fusion until its energy-income gate
         float energyGoal = 0.0f; // optional role objective floor
 
         float windMin;
@@ -487,7 +488,10 @@ namespace EcoPlanner {
         if (s.builderIsT2 && s.allowReactors) {
             @o = Make("fusion", UnitHelpers::GetFusionNameForSide(side), s, true);
             if (o !is null && s.mIncome >= Global::RoleSettings::Tech::MinimumMetalIncomeForFUS) opts.insertLast(o);
-            @o = Make("afus", UnitHelpers::GetAdvFusionNameForSide(side), s, true);
+            // D-359: a role may keep ordinary fusions only (SUPPORT below its energy gate);
+            // the fusion stays offered, so the ladder adds one reactor per energy shortfall.
+            @o = null;
+            if (s.allowAdvancedFusion) @o = Make("afus", UnitHelpers::GetAdvFusionNameForSide(side), s, true);
             if (o !is null && s.mIncome >= Global::RoleSettings::Tech::MinimumMetalIncomeForAFUS) opts.insertLast(o);
         }
         // affordable first, then metal per E/s, then the larger output
