@@ -161,6 +161,10 @@ namespace Main {
 	{
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
         Global::RoleSettings::Tech::HeavyAlternate = true; // owner 2026-10-22: late heavy batches alternate Thor / Titan (land and amphibious)
+        // owner 2026-10-26: after the t3rush units, every TECH gantry alternates these pairs, first unit first, on every map
+        Global::RoleSettings::Tech::HeavyPairArmada = array<string> = {"armbanth", "armthor"};         // Titan, Thor
+        Global::RoleSettings::Tech::HeavyPairCortex = array<string> = {"corkorg", "corcat"};           // Juggernaut, Catapult
+        Global::RoleSettings::Tech::HeavyPairLegion = array<string> = {"legeheatraymech", "legelrpcmech"}; // Sol Invictus, Astraeus
         // TECH t3rush gantry turrets (owner, 2026-10-18): a random 14-20 construction turrets while the gantry goes up,
         // then a slower climb to 40 over the 5 minutes after it stands (src/settings/roles/tech.as T3RushTurrets*, off there)
         Global::RoleSettings::Tech::T3RushTurretsMin = 14;

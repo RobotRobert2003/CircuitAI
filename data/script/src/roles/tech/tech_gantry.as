@@ -538,10 +538,19 @@ namespace TechHeavyChoice {
             string land = Global::RoleSettings::Tech::HeavyLandArmada, amph = Global::RoleSettings::Tech::HeavyAmphArmada;
             if (side == "cortex") { land = Global::RoleSettings::Tech::HeavyLandCortex; amph = Global::RoleSettings::Tech::HeavyAmphCortex; }
             else if (side == "legion") { land = Global::RoleSettings::Tech::HeavyLandLegion; amph = Global::RoleSettings::Tech::HeavyAmphLegion; }
-            const string first = terrain == 1 ? amph : land, second = terrain == 1 ? land : amph;
+            array<string> pair = Global::RoleSettings::Tech::HeavyPairArmada;
+            if (side == "cortex") pair = Global::RoleSettings::Tech::HeavyPairCortex;
+            else if (side == "legion") pair = Global::RoleSettings::Tech::HeavyPairLegion;
             cached.resize(0);
-            if (first.length() > 0) cached.insertLast(first);
-            if (second.length() > 0 && second != first) cached.insertLast(second);
+            if (pair.length() > 0) {
+                // HeavyPair<Side> (owner, 2026-10-26): the same pair on every map
+                for (uint i = 0; i < pair.length(); ++i)
+                    if (pair[i].length() > 0 && cached.find(pair[i]) < 0) cached.insertLast(pair[i]);
+            } else {
+                const string first = terrain == 1 ? amph : land, second = terrain == 1 ? land : amph;
+                if (first.length() > 0) cached.insertLast(first);
+                if (second.length() > 0 && second != first) cached.insertLast(second);
+            }
         }
         return @cached;
     }
