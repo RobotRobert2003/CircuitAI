@@ -586,10 +586,14 @@ namespace TechHeavyChoice {
     // fallback when the first cannot be built. Candidates() itself stays unchanged: the transport
     // check reads it.
     array<string> alternated;    // reused ordering for LateBatch
-    string lastBatchUnit;        // the unit the last successful late batch built
-    array<string>@ BatchOrder(const string& in side) {
+    // owner, 2026-10-26: per gantry, so each gantry starts with the pair's first unit and
+    // alternates on its own (one AI-wide memory left one gantry on Titans and the next on Thors)
+    dictionary lastBatchUnit;    // gantry id -> the unit its last successful late batch built
+    array<string>@ BatchOrder(const string& in side, int gantryId) {
         array<string>@ c = Candidates(side);
-        if (!Global::RoleSettings::Tech::HeavyAlternate || c.length() < 2 || lastBatchUnit != c[0]) return @c;
+        string last;
+        lastBatchUnit.get("" + gantryId, last);
+        if (!Global::RoleSettings::Tech::HeavyAlternate || c.length() < 2 || last != c[0]) return @c;
         alternated.resize(0);
         for (uint i = 1; i < c.length(); ++i) alternated.insertLast(c[i]);
         alternated.insertLast(c[0]);
@@ -597,11 +601,11 @@ namespace TechHeavyChoice {
     }
     // One level-1 line per batch (one batch per gantry ask, five units each).
     IUnitTask@ LateBatch(CCircuitUnit@ gantry, const string& in side, int count) {
-        IUnitTask@ task = Factory::EnqueueGantryBatchFrom(gantry, BatchOrder(side), count, Task::Priority::HIGH);
-        if (task !is null) lastBatchUnit = Factory::lastGantryBatchUnit;
+        IUnitTask@ task = Factory::EnqueueGantryBatchFrom(gantry, BatchOrder(side, gantry.id), count, Task::Priority::HIGH);
+        if (task !is null) lastBatchUnit.set("" + gantry.id, Factory::lastGantryBatchUnit);
         if (task !is null)
             GenericHelpers::LogUtil("[TECH][Heavy] batch side=" + side + " terrain=" + Terrain()
-                + " unit=" + Factory::lastGantryBatchUnit + " gantry=" + gantry.circuitDef.GetName() + " x" + count, 1);
+                + " unit=" + Factory::lastGantryBatchUnit + " gantry=" + gantry.circuitDef.GetName() + " " + gantry.id + " x" + count, 1);
         return task;
     }
 
