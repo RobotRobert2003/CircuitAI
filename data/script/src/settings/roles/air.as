@@ -497,7 +497,7 @@ namespace Air {
             // to it: this share of the T2 bombers' StrikeImmediateRadius. Owner 2026-10-24 cut it to a third
             // (600); owner 2026-10-26: the Liches share the bombers' full range again (1800).
             float LicheStrikeRadiusShare = 1.0f;
-            int LicheStrikersPerTarget = 2;  // Liches on one target at once; the rest keep guarding (<= 0: no cap)
+            int LicheStrikersPerTarget = 5;  // Liches on one target at once (owner 2026-10-26: 5); the rest keep guarding (<= 0: no cap)
             int LicheStrikeSeconds = 45;     // an ATTACK not resolved by then ends and the Liche rejoins the wave
 
             /******************** T2 BOMBER TARGET TIERS (systems/air/air_strike_tiers.as) ********************/
