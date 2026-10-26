@@ -909,6 +909,14 @@ static void CCircuitUnit_CmdRepeat(CCircuitUnit* unit, bool on)
 	unit->GetUnit()->SetRepeat(on);
 }
 
+// Owner, 2026-10-26: T3 gantry lag fallback (RecruitTask::ExecuteLagRepeat).
+// Turning it off also drops the engine repeat flag it may have set.
+static void CCircuitUnit_SetLagRepeat(CCircuitUnit* unit, bool on)
+{
+	unit->SetLagRepeat(on);
+	if (!on) unit->GetUnit()->SetRepeat(false);
+}
+
 // D-111: a factory's route: the move orders every unit it builds leaves with.
 // The first replaces the factory's previous orders; the rest are queued behind.
 // Build orders are the factory's own queue and are untouched.
@@ -1316,6 +1324,8 @@ void CInitScript::RegisterCore()
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void CmdMoveTo(const AIFloat3& in)", asFUNCTION(CCircuitUnit_CmdMoveTo), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-112
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void CmdRepeat(bool)", asFUNCTION(CCircuitUnit_CmdRepeat), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-111
 	r = engine->RegisterObjectMethod("CCircuitUnit", "void CmdFactoryRoute(const array<AIFloat3>@+)", asFUNCTION(CCircuitUnit_CmdFactoryRoute), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);  // D-111
+	r = engine->RegisterObjectMethod("CCircuitUnit", "void SetLagRepeat(bool)", asFUNCTION(CCircuitUnit_SetLagRepeat), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CCircuitUnit", "bool IsLagRepeat() const", asMETHOD(CCircuitUnit, IsLagRepeat), asCALL_THISCALL); ASSERT(r >= 0);
 	// Auto-handle retains only a generation-validated task; preserve unit.task syntax.
 	r = engine->RegisterObjectMethod("CCircuitUnit", "IUnitTask@+ get_task() const property", asMETHOD(CCircuitUnit, GetLiveTask), asCALL_THISCALL); ASSERT(r >= 0);
 	// RulesParams accessor on Unit

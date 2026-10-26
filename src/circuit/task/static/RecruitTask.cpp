@@ -19,6 +19,8 @@
 
 #include "AISCommands.h"
 
+#include <algorithm>
+
 namespace circuit {
 
 using namespace springai;
@@ -120,7 +122,10 @@ void CRecruitTask::Finish()
 	// and can cancel that replacement when it has the same negative UnitDef ID.
 	// Retain only the verified single-product queue; repeats, cancellations,
 	// unexpected queues and difficulty pauses keep their original cleanup.
-	bool naturalCompletion = completionRefill && !repeat && buildDelay <= 0
+	// A lag-repeat gantry (owner, 2026-10-26) keeps the engine's repeated copy too:
+	// it is the fallback product until the AI's next order arrives.
+	const bool lagRepeat = units.size() == 1 && (*units.begin())->IsLagRepeat();
+	bool naturalCompletion = (completionRefill || lagRepeat) && !repeat && buildDelay <= 0
 		&& target != nullptr && target->IsFinished() && units.size() == 1;
 	if (naturalCompletion) {
 		const int id = (*units.begin())->GetId();
@@ -207,6 +212,7 @@ bool CRecruitTask::Execute(CCircuitUnit* unit)
 	}
 
 	if (geom::is_valid(buildPos)) {
+		if (!repeat && unit->IsLagRepeat() && ExecuteLagRepeat(unit, frame)) return true;
 		TRY_UNIT(circuit, unit,
 			if (repeat) unit->GetUnit()->SetRepeat(true);
 			unit->CmdBuild(buildDef, buildPos, UNIT_NO_FACING, 0, repeat ? INT_MAX : frame + FRAMES_PER_SEC * 10);
@@ -217,6 +223,51 @@ bool CRecruitTask::Execute(CCircuitUnit* unit)
 		return false;
 	}
 	return true;
+}
+
+// Owner, 2026-10-26: T3 gantry lag fallback. The gantry's engine repeat flag
+// keeps its last product cycling, so a delayed AI order never leaves it idle.
+// Each new order still decides what is built: the repeated copy is adopted
+// when it is this task's def, otherwise it is removed (the engine refunds its
+// metal) unless it is already LagStrayKeep built, when it finishes once with
+// repeat off. True when the factory's queue already serves this task (no
+// CmdBuild); false hands over to the ordinary build order, and the factory's
+// UnitCreated re-arms repeat once this task's product starts.
+bool CRecruitTask::ExecuteLagRepeat(CCircuitUnit* unit, int frame)
+{
+	static constexpr float LagStrayKeep = 0.5f;
+	CCircuitAI* circuit = manager->GetCircuit();
+	auto* factoryMgr = static_cast<CFactoryManager*>(manager);
+	CCircuitUnit* stray = factoryMgr->TakeLagStray(unit);
+	if (stray != nullptr && stray->GetCircuitDef() == buildDef) {
+		SetTarget(stray);
+		factoryMgr->AdoptUnfinished(stray, this);
+		lastBuildCommandFrame = frame;
+		TRY_UNIT(circuit, unit, unit->GetUnit()->SetRepeat(true);)
+		return true;
+	}
+	const bool keepStray = (stray != nullptr) && (stray->GetUnit()->GetBuildProgress() >= LagStrayKeep);
+	const float keepCmd = keepStray ? -float(stray->GetCircuitDef()->GetId()) : 0.f;
+	// The queue normally holds only the repeated copy of the last product
+	CUnitAPI* unitAPI = circuit->GetUnitAPI();
+	const int cmdSize = unitAPI->GetCMDQueueSize(unit->GetId());
+	std::vector<float> drop;
+	bool queued = false;
+	for (int i = 0; i < cmdSize; ++i) {
+		const int cmdId = unitAPI->GetCMD(unit->GetId(), i);
+		if (cmdId >= 0) continue;
+		if (cmdId == -buildDef->GetId()) queued = true;
+		else if (float(cmdId) != keepCmd && std::find(drop.begin(), drop.end(), float(cmdId)) == drop.end()) drop.push_back(float(cmdId));
+	}
+	TRY_UNIT(circuit, unit,
+		if (!drop.empty()) unit->CmdRemove(std::move(drop), UNIT_COMMAND_OPTION_ALT_KEY | UNIT_COMMAND_OPTION_CONTROL_KEY);
+		unit->GetUnit()->SetRepeat(queued && !keepStray);
+	)
+	if (queued) {
+		lastBuildCommandFrame = frame;  // its start maps it to this task (UnitCreated)
+		return true;
+	}
+	return false;
 }
 
 void CRecruitTask::OnUnitIdle(CCircuitUnit* unit)

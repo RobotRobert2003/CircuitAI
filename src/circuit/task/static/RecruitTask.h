@@ -35,6 +35,7 @@ protected:
 	virtual void Cancel() override;
 
 	virtual bool Execute(CCircuitUnit* unit) override;
+	bool ExecuteLagRepeat(CCircuitUnit* unit, int frame);
 
 public:
 	virtual void OnUnitIdle(CCircuitUnit* unit) override;
