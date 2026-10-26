@@ -55,7 +55,8 @@ void CCommanderTask::Resume(CCircuitUnit* unit) {
     // leave the combat escape route running under their restored ownership.
     TRY_UNIT(manager->GetCircuit(),unit,unit->CmdStop();)
     if(previous && !previous->IsDead() && previous->GetManager()==manager
-        && !previous->IsExternalControlled() && previous->CanAssignTo(unit)) {
+        && !previous->IsExternalControlled() && previous->CanAssignTo(unit)
+        && manager->GetCircuit()->GetCommanderControl()->CanResumeFrontTask(unit,previous)) {
         manager->AssignTask(unit,previous);
     } else RemoveAssignee(unit);
 }

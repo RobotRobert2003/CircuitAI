@@ -166,6 +166,7 @@ bool CCommanderControl::RetreatStation(CCircuitUnit* unit,AIFloat3& goal) const 
     const auto found=commanders.find(unit->GetId());
     if(found==commanders.end()) return false;
     const auto& s=found->second;
+    if(s.energyRetreat && s.energyGoal.x>=0) {goal=s.energyGoal;return true;}
     const int frame=ai->GetLastFrame();
     // Borrow only a freshly planned, reachable fallback point. The controller
     // owns/invalidate it; RetreatTask keeps its task and repairer ownership.

@@ -23,7 +23,7 @@ static Point P(const AIFloat3& p) { return {p.x,p.z}; }
 
 bool CCommanderControl::Jammed(CCircuitUnit* unit) {
     jamZones.clear();
-    if(options.jamSafe<=0 || !Handles(unit)) return false;
+    if(options.jamSafe<=0 || !Handles(unit) || EnergyRetreat(unit)) return false;
     // UnitDef radii are immutable for this AI lifetime. Cache only metadata;
     // membership/activation is deliberately fresh on damage as well as ticks.
     // One bounded spatial query, O(local allies), no whole-army sensor census.

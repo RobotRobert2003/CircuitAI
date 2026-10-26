@@ -17,6 +17,8 @@
 		// Jam safety accepts combat risk; heavy T2 means mobile combat metal >=900.
 		"front_distance": 6000,
 		"front_persistent": 1,
+		"front_support_income": 20,
+		"front_mex_los": 1,
 		"front_mex_defence": 1,
 		"front_line_enabled": 1,
 		"front_line_fog": 1000,
@@ -28,17 +30,20 @@
 		"front_mex_offset": 160,
 		"front_work_behind": 400,
 		"jam_safe": 1,
+        "cloak_energy_retreat": 1,
+        "front_mex_aa_enabled": 1,
 		"jam_heavy_cost": 900,
 		"front_push_ahead": 600, "front_push_screen": 0, "front_push_until_seconds": 0, "front_push_home_riot": 0,
 		"front_lane_margin": 150, "front_hold_seconds": 10, "front_standoff": 650, "front_radius": 500, "front_threat": 3,
 		"advance_roles": "FRONT,TACTICAL",
-		"front_ladder": "mex_defence,territory_line,mex_lane,advance,repair_defence,repair_units,reclaim,radar,assist,hold",
+		"front_repair_combat": 1,
+		"front_ladder": "repair_combat,mex_lane,support_group,mex_defence,territory_line,advance,hold",
 		// D-357 corridor mex sweep: spots within half-width + front_mex_reach (0: build
 		// distance) of the lane, front_mex_behind behind to front_mex_ahead ahead of the
 		// commander, en route every front_mex_seconds; enemy extractors there are
 		// captured; one line turret per front_mex_turret_every corridor mexes.
 		"front_mex_seconds": 3, "front_mex_reach": 0, "front_mex_behind": 400, "front_mex_ahead": 600,
-		"front_mex_capture_enemy": 1, "front_mex_turret_every": 3, "front_mex_enemy_home": 1100,
+		"front_mex_capture_enemy": 1, "front_mex_turret_every": 0, "front_mex_enemy_home": 1100,
 		"front_radar_spacing": 500, "front_laser_spacing": 300,
 		"front_detour_seconds": 1, "move_resend_seconds": 1,
 		"t3_decline_gate": 1, "t3_immediate_shot": 1, "t3_position_seconds": 1,

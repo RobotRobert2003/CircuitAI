@@ -84,7 +84,9 @@ void CRetreatTask::AssignTo(CCircuitUnit* unit)
 
 	if (unit->GetCircuitDef()->IsAbleToCloak()) {
 		TRY_UNIT(manager->GetCircuit(), unit,
-			unit->CmdCloak(true);
+			// An energy retreat must let the reserve refill, rather than
+            // repeatedly spending each regenerated tick on an unfunded cloak.
+            unit->CmdCloak(!circuit->GetCommanderControl()->EnergyRetreat(unit));
 			// Opted-in precision retreat must not decloak on return fire.
 			unit->CmdSetFireState((cdef->IsAttrRanged() && cdef->IsAttrRetHold())
                 || (circuit->GetCommanderControl() && circuit->GetCommanderControl()->RetreatCloakFunded(unit))
@@ -245,6 +247,9 @@ void CRetreatTask::Update()
 				: healthPerc > 0.98f;
 
 		CCircuitDef* cdef = unit->GetCircuitDef();
+		if(circuit->GetCommanderControl()->EnergyRetreat(unit)) {
+            Start(unit);continue;
+        }
 		if (isRepaired && !unit->IsDisarmed(frame)) {
 			Recovered(unit);
 		} else if (unit->IsForceUpdate(frame) || isExecute) {

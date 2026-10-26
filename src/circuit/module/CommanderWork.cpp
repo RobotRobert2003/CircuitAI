@@ -3,6 +3,7 @@
 #include "module/EconomyManager.h"
 #include "module/FactoryManager.h"
 #include "task/builder/BuilderTask.h"
+#include "task/builder/RepairTask.h"
 #include "unit/CircuitUnit.h"
 #include "unit/ally/AllyUnit.h"
 #include "setup/SetupManager.h"
@@ -66,6 +67,7 @@ IUnitTask* CCommanderControl::LadderWork(CCircuitUnit* unit,State& s,int kind,CC
         case WORK_LINE: return LineWork(unit,s,buildDef,frame);
         case WORK_REPAIR_DEFENCE: return RepairWork(unit,s,true,work,frame);
         case WORK_REPAIR_UNITS: return RepairWork(unit,s,false,work,frame);
+        case WORK_REPAIR_COMBAT: return RepairWork(unit,s,false,std::max(1.f,unit->GetCircuitDef()->GetBuildDistance()-32.f),frame,true);
         case WORK_RECLAIM: return ReclaimWork(unit,s,work,frame);
         case WORK_RADAR: return RadarWork(unit,s,buildDef,frame);
         case WORK_MEX: {
@@ -123,7 +125,7 @@ IUnitTask* CCommanderControl::LadderWork(CCircuitUnit* unit,State& s,int kind,CC
     }
 }
 
-IUnitTask* CCommanderControl::RepairWork(CCircuitUnit* unit,const State& s,bool defence,float radius,int frame) {
+IUnitTask* CCommanderControl::RepairWork(CCircuitUnit* unit,const State& s,bool defence,float radius,int frame,bool stationary) {
     if(!unit->GetCircuitDef()->IsAbleToRepair()) return nullptr;
     auto* builder=ai->GetBuilderManager();
     const AIFloat3 pos=unit->GetPos(frame);
@@ -135,12 +137,13 @@ IUnitTask* CCommanderControl::RepairWork(CCircuitUnit* unit,const State& s,bool 
         if(id==unit->GetId()) continue;
         CAllyUnit* ally=ai->GetFriendlyUnit(id);
         CCircuitDef* def=ally?ally->GetCircuitDef():nullptr;
-        if(def==nullptr || def->IsAbleToFly() || (!def->IsMobile() && def->IsAttacker())!=defence) continue;
+        if(def==nullptr || (stationary && !def->IsAttacker()) || (def->IsAbleToFly() && !stationary) || (!stationary && (!def->IsMobile() && def->IsAttacker())!=defence)) continue;
         auto* u=ally->GetUnit();
         const float health=u->GetHealth(),maxHealth=u->GetMaxHealth();
         // Nanoframes are construction (assist), not repair.
-        if(u->IsBeingBuilt() || health<=0 || health>=maxHealth*options.repairHealth || builder->IsReclaimUnit(ally)) continue;
+        if(u->IsBeingBuilt() || health<=0 || health>=maxHealth*(stationary?1.f:options.repairHealth) || builder->IsReclaimUnit(ally)) continue;
         const AIFloat3 at=ally->GetPos(frame);
+        if(stationary && pos.SqDistance(at)>radius*radius) continue;
         if(!InsideLine(s,at,frame,reach)) continue;
         candidates.push_back({ally,at,defence?0.f:DefinitionFor(def).tech,pos.distance2D(at),id});
     }
@@ -157,7 +160,10 @@ IUnitTask* CCommanderControl::RepairWork(CCircuitUnit* unit,const State& s,bool 
         if(options.workClearance>0 && !ai->GetCallback()->GetEnemyUnitIdsIn(c.at,options.workClearance,false).empty()) continue;
         if(!ai->GetTerrainManager()->CanReachAtSafe2(unit,c.at,reach)) continue;
         IBuilderTask* task=builder->EnqueueRepairFor(c.ally,FRAMES_PER_SEC*60,unit);
-        if(task && task->CanAssignTo(unit)) return task;
+        if(stationary) if(auto* repair=dynamic_cast<CBRepairTask*>(task)) repair->InviteStationaryCommander(unit->GetId());
+        if(task && task->CanAssignTo(unit)) {
+            return task;
+        }
     }
     return nullptr;
 }
@@ -359,9 +365,10 @@ IUnitTask* CCommanderControl::AssistWork(CCircuitUnit* unit,const State& s,const
 // says the spot is hot. One bounded engine area query per candidate spot
 // (spots inside the window, typically under twenty), per offer, not per frame.
 static std::function<bool(const AIFloat3&)> LaneMexAccept(CCircuitAI* ai,CCircuitUnit* unit,const CBattleAnalysis* battle,
-        float width,float lo,float hi,bool capture,float frontThreat,float enemyHome) {
+        float width,float lo,float hi,bool capture,float frontThreat,float enemyHome,bool losOnly) {
     return [=](const AIFloat3& p) {
         if(battle->GetFrontLaneDistance(p)>width) return false;
+        if(losOnly && p.SqDistance2D(unit->GetPos(ai->GetLastFrame()))>SQUARE(unit->GetCircuitDef()->GetLosRadius())) return false;
         // The enemy's home spots (front_mex_enemy_home of an enemy start) are a
         // commander rush, not a lane sweep (hold arena, b02: taking and fortifying
         // the spot 630 elmos from the enemy start drew its commander into a fight).
@@ -416,14 +423,14 @@ IUnitTask* CCommanderControl::LaneMexWork(CCircuitUnit* unit,State& s,CCircuitDe
     const float reach=options.frontMexReach>0?options.frontMexReach:unit->GetCircuitDef()->GetBuildDistance();
     const float width=battle->GetFrontLaneWidth()+reach;
     const float own=battle->GetFrontLaneProgress(pos);
-    const float radius=std::max(options.frontMexBehind,options.frontMexAhead)+width;
+    const float radius=options.frontMexLos>0?unit->GetCircuitDef()->GetLosRadius():std::max(options.frontMexBehind,options.frontMexAhead)+width;
     // The sweep never leads the front: spots ahead are taken only up to the
     // push anchor (screen rule, front_distance, lane limit, enemy-group
     // stand-off, threat), so the commander does not creep mex by mex into an
     // enemy it would not walk toward (hold arena, b01: both commanders met).
-    const auto accept=LaneMexAccept(ai,unit,battle,width,own-options.frontMexBehind,
-        std::min(own+options.frontMexAhead,LaneMexAheadLimit(unit,s,frame,own)),
-        options.frontMexCaptureEnemy>0,options.frontThreat,options.frontMexEnemyHome);
+    const auto accept=LaneMexAccept(ai,unit,battle,width,own-(options.frontMexLos>0?radius:options.frontMexBehind),
+        std::min(own+(options.frontMexLos>0?radius:options.frontMexAhead),LaneMexAheadLimit(unit,s,frame,own)),
+        options.frontMexCaptureEnemy>0,options.frontThreat,options.frontMexEnemyHome,options.frontMexLos>0);
     IBuilderTask* task=ai->GetEconomyManager()->EnqueueMexWithin(unit,pos,radius,0,true,{},accept);
     if(task) {
         const AIFloat3 at=task->GetPosition();
@@ -446,10 +453,10 @@ bool CCommanderControl::LaneMexAvailable(CCircuitUnit* unit,State& s,int frame) 
     const float reach=options.frontMexReach>0?options.frontMexReach:unit->GetCircuitDef()->GetBuildDistance();
     const float width=battle->GetFrontLaneWidth()+reach;
     const float own=battle->GetFrontLaneProgress(pos);
-    const float radius=std::max(options.frontMexBehind,options.frontMexAhead)+width;
-    const auto accept=LaneMexAccept(ai,unit,battle,width,own-options.frontMexBehind,
-        std::min(own+options.frontMexAhead,LaneMexAheadLimit(unit,s,frame,own)),
-        options.frontMexCaptureEnemy>0,options.frontThreat,options.frontMexEnemyHome);
+    const float radius=options.frontMexLos>0?unit->GetCircuitDef()->GetLosRadius():std::max(options.frontMexBehind,options.frontMexAhead)+width;
+    const auto accept=LaneMexAccept(ai,unit,battle,width,own-(options.frontMexLos>0?radius:options.frontMexBehind),
+        std::min(own+(options.frontMexLos>0?radius:options.frontMexAhead),LaneMexAheadLimit(unit,s,frame,own)),
+        options.frontMexCaptureEnemy>0,options.frontThreat,options.frontMexEnemyHome,options.frontMexLos>0);
     return ai->GetEconomyManager()->CountOpenMexWithin(unit,pos,radius,true,accept)>0;
 }
 }

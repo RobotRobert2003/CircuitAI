@@ -6,6 +6,7 @@
  */
 
 #include "task/builder/BuilderTask.h"
+#include "task/builder/RepairTask.h"
 #include "task/DormantTaskChain.h"
 #include "terrain/ReservationClaim.h"
 #include "task/builder/BuildChain.h"
@@ -344,6 +345,7 @@ bool IBuilderTask::Execute(CCircuitUnit* unit)
 	FindBuildSite(unit, pos, searchRadius);
 
 	if (geom::is_valid(buildPos)) {
+        if(!circuit->GetCommanderControl()->SupportMayBuild(unit,buildDef,buildPos)) return false;
 		TRY_UNIT(circuit, unit,
 			unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(frame));
 		)
@@ -373,6 +375,7 @@ bool IBuilderTask::TryBuildCachedSite(CCircuitUnit* unit)
         || !circuit->GetBuilderManager()->IsBuildPositionAllowed(buildDef, buildPos)
         || circuit->GetTerrainManager()->IsAllyLayoutBlocked(buildDef, buildPos, facing)
         || !circuit->GetMap()->IsPossibleToBuildAt(buildDef->GetDef(), buildPos, facing)) return false;
+    if(!circuit->GetCommanderControl()->SupportMayBuild(unit,buildDef,buildPos)) return false;
     TRY_UNIT(circuit, unit,
         unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(circuit->GetLastFrame()));
     )
@@ -636,6 +639,9 @@ CCircuitUnit* IBuilderTask::GetNextAssignee()
 
 void IBuilderTask::Update(CCircuitUnit* unit)
 {
+    if(auto* repair=dynamic_cast<CBRepairTask*>(this); repair && repair->IsStationaryCommander(unit)) {
+        repair->UpdateStationary(unit);return;
+    }
 	if (IsExperimental() && (target != nullptr) && (engaged.find(unit) != engaged.end())
 		&& !manager->GetCircuit()->GetEconomyManager()->IsEnergyEmpty())
 	{

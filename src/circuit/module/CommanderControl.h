@@ -22,6 +22,7 @@ public:
     bool Handles(CCircuitUnit* unit) const;
     bool Jammed(CCircuitUnit* unit);
     bool RetreatCloakFunded(CCircuitUnit* unit) const;
+    bool EnergyRetreat(CCircuitUnit* unit) const;
     bool RetreatStation(CCircuitUnit* unit,springai::AIFloat3& goal) const;
     bool SetOption(const std::string& name,float value);
     float GetReserve() const { return reserve; }
@@ -35,7 +36,22 @@ public:
     IUnitTask* FrontWork(CCircuitUnit* unit,int kind,CCircuitDef* buildDef,float radius);
     bool CanStartRadar(CCircuitUnit* unit);
     void MexFinished(CCircuitUnit* commander, CCircuitUnit* mex);
+    bool SupportMayBuild(CCircuitUnit* unit,CCircuitDef* def,const springai::AIFloat3& site) const;
+    bool CanResumeFrontTask(CCircuitUnit* unit, IUnitTask* task) const;
 private:
+    // Script owns the one-member roster and faction definitions. IDs are
+    // reacquired on every ask and cleared on ownership loss, never wrappers.
+    int supportUnit=-1, supportDef=-1, supportNano=-1, supportRadar=-1, supportJammer=-1,supportAA=-1;
+    int supportNext=0;
+    bool supportArrived=false;
+    CCircuitUnit* SupportCommander() const;
+    bool SupportActive(CCircuitUnit* commander);
+    IUnitTask* SupportWork(CCircuitUnit* unit);
+    IUnitTask* SupportAssist(CCircuitUnit* commander);
+    IUnitTask* SupportBuild(CCircuitUnit* unit, CCircuitDef* def, const springai::AIFloat3& site, bool bootstrap=false);
+    IUnitTask* SupportPower(CCircuitUnit* unit, const springai::AIFloat3& site, bool& covered);
+    bool SupportPowered(const springai::AIFloat3& site) const;
+    void UpdateSupport();
     // Values are logged as integers; append new modes only.
     enum class Mode { SUPPORT,ASSESS,APPROACH,ALIGN,PENDING,ESCAPE,RECOVER,FALLBACK };
     struct State {
@@ -48,6 +64,9 @@ private:
         int detourNext=0,detourFails=0,t3DeclineFails=0;
         int t3PositionUntil=0,t3PositionTarget=-1;
         bool immediatePending=false;
+        bool energyRetreat=false;
+        int energyPlan=-10000;
+        springai::AIFloat3 energyGoal{-1,0,-1};
         float detourDist=0.f; // distance to the front at the last detour MOVE
         // Same-goal MOVE resend backoff and fallback goal hold (owner 2026-10-19).
         int moveSent=-10000,moveResends=0,fallbackGoalSince=-10000;
@@ -127,6 +146,7 @@ private:
         bool enabled=false,advance=false,decoys=false,frontDuty=false,frontReady=false;
         bool work=true; // D-299 ladder and fallback hand-over (script Global::Commander::Work)
         bool frontRecovery=false;
+        float frontRepairCombat=0;
         float frontMexSeconds=0,frontStallSeconds=10,frontDetourSeconds=0; // 0: no detour backoff
         float moveResendSeconds=0;   // 0: a swallowed/failed MOVE is resent every tick
         float t3ImmediateShot=0,t3PositionSeconds=0; // opt-in balanced combat policy
@@ -138,6 +158,9 @@ private:
         float friendlyMargin=12,normalRange=.85f,frontWorkers=2;
         float frontDistance=1600,frontStandoff=650,frontRadius=500,frontThreat=3;
         float jamSafe=0, jamHeavyCost=900;
+        float cloakEnergyRetreat=0,cloakRetreatDistance=600,frontMexAA=-1;
+        float frontMexLos=0,radarSpacing=500;
+        float supportMexPriority=3,supportRadarPriority=2,supportLinePriority=1;
         float frontPersistent=0, frontMexDefence=0, frontLineEnabled=0;
         float frontLineFog=1000, frontLineSpacing=1.5f;
         float frontLineDepth=800, frontMexOffset=160, frontWorkBehind=400;
@@ -260,7 +283,7 @@ private:
     // script names them in commander.json front_ladder (CommanderFront::Work).
     enum WorkKind { WORK_LINE=5,WORK_REPAIR_DEFENCE=6,WORK_REPAIR_UNITS=7,WORK_RECLAIM=8,
         WORK_TIMED=9,WORK_RADAR=10,WORK_FACTORY=11,WORK_BASE=12,WORK_MEX=13,WORK_ADVANCE=14,WORK_HOLD=15,
-        WORK_MEX_LANE=16, WORK_TERRITORY_LINE=17, WORK_MEX_DEFENCE=18 };
+        WORK_MEX_LANE=16, WORK_TERRITORY_LINE=17, WORK_MEX_DEFENCE=18, WORK_REPAIR_COMBAT=21 };
     IUnitTask* LadderWork(CCircuitUnit* unit,State& state,int kind,CCircuitDef* buildDef,float radius,int frame);
     // D-357: the corridor mex sweep (WORK_MEX_LANE) and its dry probe (INV-235).
     IUnitTask* LaneMexWork(CCircuitUnit* unit,State& state,CCircuitDef* turretDef,int frame);
@@ -273,7 +296,7 @@ private:
     IUnitTask* FortifySite(CCircuitUnit* unit,CCircuitDef* def,const springai::AIFloat3& site,int frame,
         const springai::AIFloat3* coveragePoint=nullptr);
 
-    IUnitTask* RepairWork(CCircuitUnit* unit,const State& state,bool defence,float radius,int frame);
+    IUnitTask* RepairWork(CCircuitUnit* unit,const State& state,bool defence,float radius,int frame,bool stationary=false);
     IUnitTask* ReclaimWork(CCircuitUnit* unit,const State& state,float radius,int frame);
     IUnitTask* LineWork(CCircuitUnit* unit,State& state,CCircuitDef* buildDef,int frame);
     IUnitTask* RadarWork(CCircuitUnit* unit,State& state,CCircuitDef* buildDef,int frame);

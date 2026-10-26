@@ -84,6 +84,8 @@ def prepare(args):
                 condition = '!u.circuitDef.IsRoleAny(Unit::Role::COMM.mask)'
         if name=='builder' and case.get('production'):
             repair += '\n if (ai.teamId==0 && !u.circuitDef.IsMobile()) return aiBuilderMgr.DefaultMakeTask(u);'
+        if name=='builder' and case.get('commander_repair_only'):
+            repair+='\n if (ai.teamId==0 && u.circuitDef.IsRoleAny(Unit::Role::COMM.mask)) { aiBuilderMgr.SetCommanderCombatOption("front_ready",1.f); IUnitTask@ repair=aiBuilderMgr.CommanderFrontWork(u,21,null,0.f); if(repair !is null) return repair; return aiBuilderMgr.CommanderFrontWork(u,15,null,1.f); } // stationary repair isolation fixture\n'
         path.write_text(source[:start]+repair+'\n if ('+condition+') return '+manager+'.Enqueue('+wait+'); // supplied arena only\n'+source[start:])
     path = staged/'script/src/manager/military.as'
     source = path.read_text(); start = source.index('{',source.index('IUnitTask@ AiMakeTask(CCircuitUnit@ u)'))+1
@@ -278,6 +280,8 @@ def prepare(args):
         pins['diagnostics']['CIRCUIT_COMMANDER_TRACE']='1'
     if case.get('production'):
         pins['overrides'] += ['team 0 factories and static assistants active; mobile builders '+('active' if case.get('builders') else 'frozen')]
+    if case.get('commander_repair_only'):
+        pins['overrides'] += ['team 0 commander offers stationary repair then stationary hold; normal combat controller remains active']
     if case.get('commander_front_work'):
         pins['overrides'] += [('all commanders' if case.get('coverage_probe') else 'team 0 commanders')
                              +' use real FRONT builder policy; other builders frozen']

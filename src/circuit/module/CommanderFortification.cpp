@@ -38,7 +38,15 @@ void CCommanderControl::MexFinished(CCircuitUnit* worker,CCircuitUnit* mex) {
 IUnitTask* CCommanderControl::FortifySite(CCircuitUnit* unit,CCircuitDef* def,const AIFloat3& site,int frame,const AIFloat3* coveragePoint) {
     auto* builder=ai->GetBuilderManager();
     const float coverageRadius=std::max(0.f,def->GetMaxRange()*.8f-16.f);
+    auto* supportCommander=unit->GetId()==supportUnit?SupportCommander():nullptr;
+    const auto supportCenter=supportCommander?supportCommander->GetPos(frame):site;
+    const float supportSight=supportCommander?supportCommander->GetCircuitDef()->GetLosRadius():0.f;
     CTerrainManager::TerrainPredicate admit=[&](const AIFloat3& p) {
+        // Reject before enqueueing/spending the incremental allowance. The
+        // final build guard also enforces this, but an invalid offer otherwise
+        // repeatedly abandons defenses after replacement (support-replace).
+        if(unit->GetId()==supportUnit && (!supportCommander
+            || p.SqDistance2D(supportCenter)>SQUARE(std::max(0.f,supportSight-16.f)))) return false;
         if(coveragePoint && (p.SqDistance2D(*coveragePoint)>coverageRadius*coverageRadius
             || ai->GetBattle()->CorridorAtPoint(int(options.frontCorridorClass),p)!=int(options.frontCorridor))) return false;
         // A buildable site can lie across a cliff from the commander. Reject it
@@ -49,17 +57,26 @@ IUnitTask* CCommanderControl::FortifySite(CCircuitUnit* unit,CCircuitDef* def,co
     };
     for(auto* task:builder->GetTasks(BT::DEFENCE)) {
         if(task->IsDead() || task->GetBuildDef()!=def || task->GetPosition().SqDistance2D(site)>64.f*64.f || !admit(task->GetPosition())) continue;
+        if(unit->GetId()==supportUnit) {
+            bool covered=false;auto* power=SupportPower(unit,task->GetPosition(),covered);
+            if(!covered) return power;
+        }
         return task->CanAssignTo(unit)?task:nullptr;
     }
     // An orphaned nanoframe is unfinished work, not a reason to wait forever.
     // Reuse the repair registry (one owner per target) and the same safe-site
     // admission. Finished turrets are accounted for by coverage; let placement
     // search around them rather than vetoing every nearby alternative.
-    for(int id:ai->GetCallback()->GetFriendlyUnitIdsIn(site,64.f,false)) {
+    const auto nearbyIds=ai->GetCallback()->GetFriendlyUnitIdsIn(site,64.f,false);
+    for(int id:nearbyIds) {
         if(ai->GetCallback()->Unit_GetDefId(id)!=def->GetId()) continue;
         auto* ally=ai->GetFriendlyUnit(id);
         if(!ally || !ally->GetUnit()->IsBeingBuilt() || !admit(ally->GetPos(frame))
             || builder->IsReclaimUnit(ally)) continue;
+        if(unit->GetId()==supportUnit) {
+            bool covered=false;auto* power=SupportPower(unit,ally->GetPos(frame),covered);
+            if(!covered) return power;
+        }
         auto* repair=builder->EnqueueRepairFor(ally,60*FRAMES_PER_SEC,unit);
         if(repair && repair->CanAssignTo(unit)) return repair;
     }
@@ -82,8 +99,14 @@ IUnitTask* CCommanderControl::FortifySite(CCircuitUnit* unit,CCircuitDef* def,co
             ai->LOG("[CommanderFront] unit=%i fortify_rejected found=%i safe=%i reachable=%i site=%.0f,%.0f selected=%.0f,%.0f",unit->GetId(),int(found),int(safe),int(reachable),site.x,site.z,at.x,at.z);
         return nullptr;
     }
+    if(unit->GetId()==supportUnit) {
+        bool covered=false;
+        auto* power=SupportPower(unit,at,covered);
+        if(!covered) return power;
+    }
     const auto priority=static_cast<IBuilderTask::Priority>(int(options.frontFortifyPriority));
     auto* task=builder->Enqueue(TaskB::Common(BT::DEFENCE,priority,def,at,16.f,true,60*FRAMES_PER_SEC));
+    if(task && unit->GetId()==supportUnit) ai->LOG("[FrontSupport] unit=%i defence=%s powered=1",unit->GetId(),def->GetDef()->GetName());
     if(task) ai->LOG("[CommanderFront] unit=%i fortify_site x=%.0f z=%.0f line=%i frame=%i",unit->GetId(),at.x,at.z,int(coveragePoint!=nullptr),frame);
     return task;
 }
@@ -108,13 +131,25 @@ IUnitTask* CCommanderControl::MexDefenceWork(CCircuitUnit* unit,State& s,CCircui
         if(incremental && (battle->GetFrontLaneProgress(pos)<own-options.frontWorkBehind
             || pos.SqDistance2D(unit->GetPos(frame))>options.frontRadius*options.frontRadius)) {++i;continue;}
         const auto forward=Heading(battle,pos);
-        const float range=def->GetMaxRange()*.8f;
+        float range=def->GetMaxRange()*.8f;
+        auto* jobDef=def;
+        bool aaPending=false;
         bool covered=false;
         workIds=ai->GetCallback()->GetFriendlyUnitIdsIn(pos,range,false);
         for(int id:workIds) {
             auto* ally=ai->GetFriendlyUnit(id);
             if(ally && ally->GetCircuitDef()==def && !ally->GetUnit()->IsBeingBuilt()
                 && commander::EnemySideCover(P(pos),P(ally->GetPos(frame)),forward,range)) {covered=true;break;}
+        }
+        if(covered && options.frontMexAA>=0) {
+            auto* aa=ai->GetCircuitDefSafe(unit->GetId()==supportUnit?supportAA:int(options.frontMexAA));
+            if(!aa || !unit->GetCircuitDef()->CanBuild(aa)) {++i;continue;}
+            covered=false;
+            for(int id:ai->GetCallback()->GetFriendlyUnitIdsIn(pos,options.frontMexOffset+64.f,false)) {
+                auto* ally=ai->GetFriendlyUnit(id);
+                if(ally && ally->GetCircuitDef()==aa && !ally->GetUnit()->IsBeingBuilt()) {covered=true;break;}
+            }
+            if(!covered) {jobDef=aa;range=aa->GetMaxRange()*.8f;aaPending=true;}
         }
         if(covered) {
             ai->LOG("[CommanderFront] unit=%i mex_defended=%i",unit->GetId(),mex->GetId());
@@ -123,14 +158,14 @@ IUnitTask* CCommanderControl::MexDefenceWork(CCircuitUnit* unit,State& s,CCircui
         const commander::Point side{-forward.z,forward.x};
         // Three bounded placement alternatives keep every site on the enemy
         // side and within LLT range. Retry later, never silently clear a debt.
-        if(frame>=s.mexFortifyRetry && (!incremental || own>=next)) {
+        if(frame>=s.mexFortifyRetry && (!incremental || aaPending || own>=next)) {
             s.mexFortifyRetry=frame+3*FRAMES_PER_SEC;
             for(float lateral:{0.f,64.f,-64.f}) {
                 auto at=F(P(pos)+forward*std::min(options.frontMexOffset,range*.6f)+side*lateral);
                 if(!OnMap(at)) continue;
                 at.y=ai->GetMap()->GetElevationAt(at.x,at.z);
-                if(auto* task=FortifySite(unit,def,at,frame)) {
-                    ai->LOG("[CommanderFront] unit=%i mex_defence=%i x=%.0f z=%.0f",unit->GetId(),mex->GetId(),at.x,at.z);
+                if(auto* task=FortifySite(unit,jobDef,at,frame)) {
+                    ai->LOG("[CommanderFront] unit=%i mex_defence=%i aa=%i x=%.0f z=%.0f",unit->GetId(),mex->GetId(),int(aaPending),at.x,at.z);
                     return task;
                 }
             }
@@ -202,7 +237,7 @@ IUnitTask* CCommanderControl::TerritoryLineWork(CCircuitUnit* unit,State& s,CCir
     }
     const float next=std::min(s.fortifyNextProgress,
         std::min(options.frontDistance,length-options.frontStandoff)-64.f);
-    if(!selected || (incremental && own<next)) return nullptr;
+    if(!selected || (incremental && unit->GetId()!=supportUnit && own<next)) return nullptr;
     auto& plan=*selected;
     const auto center=battle->GetFrontLanePoint(plan.progress);
     const auto forward=Heading(battle,center);

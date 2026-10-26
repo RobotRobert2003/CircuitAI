@@ -83,6 +83,13 @@ namespace CommanderCombat {
             // D-356 push bound and end; D-357 corridor mex sweep. JSON supplies the
             // policy; the fallbacks equal the native defaults (legacy behaviour).
             Option("front_persistent",0.f);
+            Option("front_radar_spacing",500.f);
+            Option("front_mex_los",0.f);
+            Option("cloak_energy_retreat",0.f);
+            Option("cloak_retreat_distance",600.f);
+            Option("front_support_mex_priority",3.f);
+            Option("front_support_radar_priority",2.f);
+            Option("front_support_line_priority",1.f);
             Option("front_mex_defence",0.f);
             Option("front_line_enabled",0.f);
             Option("front_line_fog",1000.f);
@@ -109,6 +116,7 @@ namespace CommanderCombat {
             Option("front_radius",Global::Commander::FrontRadius);
             Option("front_threat",Global::Commander::FrontThreat);
             Option("front_recovery",Global::Commander::FrontRecovery?1.f:0.f);
+            Option("front_repair_combat",0.f);
             Option("front_mex_seconds",Global::Commander::FrontMexSeconds);
             Option("front_stall_seconds",Global::Commander::FrontStallSeconds);
             Option("front_detour_seconds",0.f);
