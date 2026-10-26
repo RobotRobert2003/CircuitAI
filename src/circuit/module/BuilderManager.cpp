@@ -81,7 +81,7 @@ CBuilderManager::CBuilderManager(CCircuitAI* circuit)
 		, buildPower(.0f)
 		, dangerHysteresis(MAX_TRAVEL_SEC * FRAMES_PER_SEC)
 {
-	circuit->GetScheduler()->RunOnInit(CScheduler::GameJob(&CBuilderManager::Init, this));
+	circuit->GetScheduler()->RunOnInit(CScheduler::GameJob(&CBuilderManager::InitBuilder, this));
 
 	buildTasks.resize(static_cast<IBuilderTask::BT>(IBuilderTask::BuildType::_SIZE_));
 
@@ -474,7 +474,7 @@ void CBuilderManager::ReadConfig()
 	}
 }
 
-void CBuilderManager::Init()
+void CBuilderManager::InitBuilder()
 {
 	CSetupManager::StartFunc subinit = [this](const AIFloat3& pos) {
 		CScheduler* scheduler = circuit->GetScheduler().get();

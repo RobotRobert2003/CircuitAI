@@ -29,9 +29,7 @@ public:
 	CRagMatrix(int rows) {
 		Resize(rows);
 	}
-	CRagMatrix(const CRagMatrix& matrix) : nrows(matrix.nrows) {
-		data = matrix.data;
-	}
+	CRagMatrix(const CRagMatrix& matrix) : nrows(matrix.nrows), data(matrix.data) {}
 	~CRagMatrix() {}
 
 	int GetNrows() const { return nrows; }

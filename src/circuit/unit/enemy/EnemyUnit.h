@@ -238,6 +238,8 @@ public:
 	CEnemyFake(CCircuitDef* cdef, const springai::AIFloat3& pos, int timeout);
 	virtual ~CEnemyFake();
 
+	// Intentionally hide the base mutator: a fake's definition is immutable.
+	// cppcheck-suppress duplInheritedMember
 	void SetCircuitDef(CCircuitDef* cdef) = delete;
 
 	int GetTimeout() const { return timeout; }

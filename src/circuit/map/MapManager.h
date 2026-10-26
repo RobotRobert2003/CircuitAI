@@ -20,6 +20,8 @@ class CMapManager final {
 public:
 	CMapManager(CCircuitAI* circuit, float decloakRadius);
 	~CMapManager();
+	CMapManager(const CMapManager&) = delete;
+	CMapManager& operator=(const CMapManager&) = delete;
 
 	void InitMaps();
 
