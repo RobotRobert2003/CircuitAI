@@ -4786,6 +4786,9 @@ bool CTerrainManager::IsZoneAlly(const AIFloat3& pos) const
 {
 	const int x = int(pos.x) / (GRID_RATIO_ALLY * BUILD_SQUARE_SIZE);
 	const int z = int(pos.z) / (GRID_RATIO_ALLY * BUILD_SQUARE_SIZE);
+	// A position off the map has no ally cell; unchecked, the lookup read outside gridAlly
+	// (access violation from a layout candidate past the map edge, Starwatcher 2026-10-26)
+	if (x < 0 || z < 0 || x >= blockingMap.columnsAlly || z >= blockingMap.rowsAlly) return false;
 	return blockingMap.IsZoneAlly(x, z);
 }
 
