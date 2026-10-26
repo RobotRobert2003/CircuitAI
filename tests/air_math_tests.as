@@ -190,3 +190,25 @@ void test_naval_sector_halo_keeps_nearby_friendly_formation() { Check(AirMath::N
 void test_naval_sector_excludes_remote_support() { Check(!AirMath::NavalSectorContains(3100.0f*3100,3000)); }
 void test_naval_sector_includes_boundary() { Check(AirMath::NavalSectorContains(9000000,3000)); }
 void test_naval_sector_rejects_invalid_distance() { Check(!AirMath::NavalSectorContains(-1,3000)); }
+void test_first_plant_waits_for_opening_support() { Check(!AirMath::FirstPlantAllowed(false,1,2)); }
+void test_first_plant_proceeds_with_opening_support() { Check(AirMath::FirstPlantAllowed(false,2,2)); }
+void test_later_plants_ignore_the_opening_gate() { Check(AirMath::FirstPlantAllowed(true,0,2)); }
+void test_energy_floats_at_the_fraction_with_income_over_pull() { Check(AirMath::EnergyFloating(7400,7500,600,300,.85f)); }
+void test_energy_below_the_fraction_is_not_floating() { Check(!AirMath::EnergyFloating(6000,7500,600,300,.85f)); }
+void test_energy_draining_is_not_floating() { Check(!AirMath::EnergyFloating(7400,7500,300,600,.85f)); }
+void test_floating_energy_adds_one_converter_over_the_plan() { Check(AirMath::FloatingConverterTarget(true,1,1,600,70)==2); }
+void test_floating_converters_are_bounded_by_the_income() { Check(AirMath::FloatingConverterTarget(true,1,8,600,70)==8); }
+void test_no_float_keeps_the_demand_target() { Check(AirMath::FloatingConverterTarget(false,3,1,600,70)==3); }
+void test_first_plant_bay_owes_turrets_until_two_stand_or_frame() { Check(AirMath::BayTurretsOwed(0,0,2)==2 && AirMath::BayTurretsOwed(1,1,2)==0 && AirMath::BayTurretsOwed(2,0,2)==0); }
+void test_first_plant_bay_rule_off_at_zero() { Check(AirMath::BayTurretsOwed(0,0,0)==0); }
+void test_production_funded_when_the_reserve_is_banked() { Check(AirMath::ProductionFunded(1500,1500,200,50,.65f)); }
+void test_production_holds_under_the_reserve_when_pull_exceeds_the_share() { Check(!AirMath::ProductionFunded(150,1500,55,50,.65f)); }
+void test_production_continues_under_the_reserve_within_its_share() { Check(AirMath::ProductionFunded(150,1500,30,50,.65f)); }
+void test_production_zero_reserve_is_always_funded() { Check(AirMath::ProductionFunded(0,0,1000,10,0)); }
+void test_production_rejects_invalid_inputs() { Check(!AirMath::ProductionFunded(-1,1500,30,50,.65f) && !AirMath::ProductionFunded(150,1500,30,50,-.1f)); }
+void test_plants_wanted_one_below_the_second_income() { Check(AirMath::PlantsWanted(59,60,50,8)==1 && AirMath::PlantsWanted(0,60,50,8)==1); }
+void test_plants_wanted_two_at_the_second_income() { Check(AirMath::PlantsWanted(60,60,50,8)==2 && AirMath::PlantsWanted(109,60,50,8)==2); }
+void test_plants_wanted_one_more_per_step() { Check(AirMath::PlantsWanted(110,60,50,8)==3 && AirMath::PlantsWanted(300,60,50,8)==6); }
+void test_plants_wanted_is_capped() { Check(AirMath::PlantsWanted(5000,60,50,8)==8 && AirMath::PlantsWanted(5000,60,50,0)==1); }
+void test_plants_wanted_zero_step_stops_at_two() { Check(AirMath::PlantsWanted(500,60,0,8)==2); }
+void test_plant_banked_at_half_its_cost() { Check(AirMath::PlantBanked(1450,2900,.5f) && !AirMath::PlantBanked(1449,2900,.5f) && !AirMath::PlantBanked(1450,0,.5f)); }

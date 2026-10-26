@@ -342,6 +342,8 @@ namespace TechChain
         if (key == "aap") return UnitHelpers::GetT2AirPlantForSide(side);      // D-080
         if (key == "ap") return UnitHelpers::GetT1AirPlantForSide(side);       // D-103: its air constructor builds the advanced aircraft plant
         if (key == "lrpc") return UnitHelpers::GetLRPCNameForSide(side);       // D-080
+        if (key == "geo") return LocalGeothermal::Name(false);                   // D-367: SUPPORT's vent before the advanced lab
+        if (key == "t1conv") return UnitHelpers::GetEnergyConverterNameForSide(side);   // D-367
         return "";
     }
 
@@ -404,6 +406,8 @@ namespace TechChain
         if (key == "lrpc") return Task::BuildType::BIG_GUN;   // D-080
         if (key == "nano" || key == "nanot2") return Task::BuildType::NANO;
         if (key == "mstor" || key == "estor") return Task::BuildType::STORE;
+        if (key == "geo") return Task::BuildType::GEO;         // D-367
+        if (key == "t1conv") return Task::BuildType::CONVERT;  // D-367
         return Task::BuildType::ENERGY;
     }
 
@@ -520,6 +524,17 @@ namespace TechChain
         Add(energy, e1);
         Add("mex", mexes, Global::RoleSettings::Tech::ChainMexFarRadius);
         Add(energy, e2);
+        // D-367 (owner): SUPPORT with a vent within LocalGeothermalRadius takes one
+        // basic geothermal and the converters for its energy before the advanced
+        // lab (Supreme Isthmus, Forge); without a vent the recipe is unchanged.
+        // TECH keeps D-257's rule: a vent is an opportunity, never a T2 prerequisite.
+        // A vent nobody can place is skipped by the chain's ChainStepStallSeconds.
+        if (requestedObjective == "t2" && Global::AISettings::Role == AiRole::SUPPORT && LocalGeothermal::HasLocal()) {
+            Add("geo", 1);
+            Add("t1conv", AiMax(0, Global::RoleSettings::Support::GeothermalConverters));
+            GenericHelpers::LogUtil("[TECH][Chain] SUPPORT has a vent within " + int(Global::RoleSettings::Tech::LocalGeothermalRadius)
+                + ": one geothermal and " + AiMax(0, Global::RoleSettings::Support::GeothermalConverters) + " converters before the advanced lab (D-367)", 1);
+        }
         if (objective == "nuke") Add("estor", 1);
         Add("alab", 1);
         if (objective == "fusion") {
@@ -767,7 +782,25 @@ namespace TechChain
             return t;
         }
         if (key == "lab") return TechBuild::StartFactory(u);
-        if (key == "alab") return Layout::T2LabTask(300 * SECOND);
+        if (key == "alab") {
+            // INV-242 (D-367): SUPPORT's advanced lab never precedes its local geothermal
+            // while the geo step stands unskipped in the recipe
+            for (uint k = 0; k < steps.length(); ++k) {
+                if (steps[k].key != "geo" || (k < skipped.length() && skipped[k])) continue;
+                CCircuitDef@ geo = ai.GetCircuitDef(steps[k].defName);
+                if (geo !is null && geo.count == 0)
+                    Invariants::Violation("INV-242", "support-geo", "SUPPORT ordered the advanced lab with no geothermal standing or framed and a vent within reach");
+            }
+            return Layout::T2LabTask(300 * SECOND);
+        }
+        if (key == "geo") {
+            // D-367: native validates the vent and places on it; the engine's build-over
+            // upgrade is LocalGeothermal's later (advanced) business
+            if (d.maxThisUnit < 1) d.maxThisUnit = 1;
+            IUnitTask@ gt = aiEconomyMgr.EnqueueLocalGeo(u, d, Global::Map::StartPos, Global::RoleSettings::Tech::LocalGeothermalRadius);
+            if (gt !is null) GenericHelpers::LogUtil("[Geo] ordered " + d.GetName() + " by the chain (D-367)", 1);
+            return gt;
+        }
         if (key == "moho") {
             AIFloat3 at = Economy::MexTracker::GetNearestNonUpgradedMexInRange(u.GetPos(ai.frame), Global::Map::StartPos, Global::RoleSettings::MexUpgradeRadius);
             if (at.x < 0.0f) {

@@ -119,11 +119,15 @@ def engine_dir(name=None):
 def map_file_for(map_name, override=None):
     if override:
         return Path(override)
+    maps = REPO / "data" / "script" / "src" / "maps"
+    # A map version with its own file first ("Supreme Isthmus v1.7" ->
+    # supreme_isthmus_v1_7.as, since PR #28), then the unversioned name.
+    versioned = re.sub(r"[^a-z0-9]+", "_", map_name.strip().lower()).strip("_")
     base = re.sub(r"\s+v?[\d.]+$", "", map_name.strip(), flags=re.I).lower().replace(" ", "_")
-    p = REPO / "data" / "script" / "src" / "maps" / (base + ".as")
-    if not p.exists():
-        die("no AI map file for '%s' (looked for %s); pass --map-file" % (map_name, p))
-    return p
+    for candidate in (maps / (versioned + ".as"), maps / (base + ".as")):
+        if candidate.exists():
+            return candidate
+    die("no AI map file for '%s' (looked for %s and %s); pass --map-file" % (map_name, maps / (versioned + ".as"), maps / (base + ".as")))
 
 
 def map_spots(map_name, override=None):

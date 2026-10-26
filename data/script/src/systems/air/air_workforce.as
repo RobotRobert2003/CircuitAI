@@ -35,7 +35,15 @@ namespace AirWorkforce {
     float ReserveM() {
         // Save a concrete first-lab bank, while allowing an investment above it.
         CCircuitDef@ lab = ai.GetCircuitDef(UnitHelpers::GetT2AirPlantForSide(Global::AISettings::Side));
-        return AiMax(Global::RoleSettings::Air::WorkforceReserveMetal + AirBuild::LabReserve(false),
+        // D-368: the production reserve (the first plant's cost, then the growth reserve
+        // plus a wanted plant's share) is the workforce's reserve too, so turrets and
+        // constructors do not take the bank the plant is waiting for (played: nine
+        // constructors and the turrets kept the bank under 500 at +12 for twenty minutes)
+        // The starter's opening turrets are exempt: the first plant waits for them
+        // (D-365), so a reserve that held them held the plant (played: a full bank for
+        // six minutes, INV-239 five times, the plant at 16.4 instead of about 11).
+        const float production = AirEconomy::OpeningSupportNeeded() ? 0.0f : AirEconomy::ProductionReserve();
+        return AiMax(AiMax(Global::RoleSettings::Air::WorkforceReserveMetal + AirBuild::LabReserve(false), production),
             lab !is null && AirEconomy::SavingForFirstLab() ? AiMin(lab.costM, AirEconomy::bankM) : 0.0f);
     }
     float ReserveE() { return Global::RoleSettings::Air::WorkforceReserveEnergy + AirBuild::LabReserve(true); }

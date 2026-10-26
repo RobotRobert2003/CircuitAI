@@ -52,8 +52,12 @@ namespace AirProduction {
         // can miss donations or depletion between several fast factory births.
         // Keep all existing unit-choice priorities; only discretionary holds
         // below may be bypassed. Native energy starvation still pauses work.
+        // D-368 (owner): production funds growth. D-276's "live stored metal" bypass
+        // (any metal in the bank) pinned the bank at 150 of 15,100 for twenty minutes
+        // with one plant, fusions chosen and never affordable; the bypass now needs the
+        // growth reserve banked or the team's pull within the production share.
         const bool fundedProduction = advanced && Global::RoleSettings::Air::ContinuousFactoryProduction
-            && aiEconomyMgr.metal.current > 0.0f;
+            && AirEconomy::ProductionFunded();
         if (!advanced && !basic) {
             if (AirEcoLayout::Owns(u.GetPos(ai.frame))) {
                 CCircuitUnit@ frame = AirBuild::FindAssistTarget(u, false, null, true);
@@ -136,7 +140,6 @@ namespace AirProduction {
         const bool emergency = AirBaseResponse::Emergency() || airEmergency;
         CCircuitDef@ builder = ai.GetCircuitDef(cons);
         const int constructors = AirEconomy::ConstructorTarget(builder, advanced);
-        const bool saving = AirEconomy::SavingForFirstLab();
         const bool openingReady = basic && AirRaids::OpeningPending() && AirMath::T1OpeningReady(AirEconomy::CompletedConstructors(),
             Global::RoleSettings::Air::OpeningAirConstructors, AirEconomy::OpeningNanoCompleted(), AirEconomy::OpeningNanoTarget(), AirEconomy::recovery);
         const string openingBomber = side == "cortex" ? "corshad" : side == "legion" ? "legmos" : "armthund";
@@ -191,7 +194,11 @@ namespace AirProduction {
             }
         }
         if (basic && AirBuild::StarterReadyToRetire(u)) return aiFactoryMgr.Enqueue(TaskS::Wait(false, SECOND));
-        if (saving && !fundedProduction) return aiFactoryMgr.Enqueue(TaskS::Wait(false, 3 * SECOND));
+        // D-368: the discretionary orders below wait for the production budget (the first
+        // plant's cost banked, then the growth reserve), whatever the income does; the old
+        // saving hold switched off whenever the income dipped under its minimum and the
+        // plant spent the bank it was meant to fill (played: the first plant at 25 min).
+        if (!AirEconomy::ProductionFunded()) return aiFactoryMgr.Enqueue(TaskS::Wait(false, 3 * SECOND));
         // A lost scout gets another route. Utility never consumes a strike slot.
         if (basic && side != "legion" && ai.frame >= aiTerrainMgr.GetLayoutInt("air.scout.next", 0)) {
             @t = Recruit(u, UnitHelpers::GetT1AirScoutForSide(side), 1, "recon.replace", Task::Priority::NORMAL, true);

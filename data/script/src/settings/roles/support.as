@@ -72,6 +72,11 @@ namespace Support {
             float T2LabSecondMetalIncome = 80.0f;
             float T2LabMetalIncomeStep = 60.0f;
             int T2LabOverflowSeconds = 120;
+            // D-367 (owner): with a vent within Tech::LocalGeothermalRadius of the start
+            // (Supreme Isthmus, Forge) SUPPORT takes one basic geothermal and the T1
+            // converters that turn its 300 E/s into metal before the advanced lab;
+            // without a vent the lab comes as before. 4 converters x 70 E/s each.
+            int GeothermalConverters = 4;
 
             /******************** BUILDER CAP LIMITS ********************/
             // Hard caps for T1/T2 land builders used when computing income-based limits
