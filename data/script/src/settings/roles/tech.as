@@ -266,6 +266,7 @@ namespace Tech {
             array<string> HeavyPairArmada = {};
             array<string> HeavyPairCortex = {};
             array<string> HeavyPairLegion = {};
+            array<string> HeavyPairLandOnly = {"armthor"};   // owner, 2026-10-26: dropped from a pair on an amphibious map (no Thors on water maps)
             // D-288 (owner), step 400 since D-370: one land gantry per GantryScaleMetalStep of 10 s minimum
             // metal income (floor(income / step), capped at GantryScaleMax). The target
             // is a persisted high-water mark (a dip never lowers it); a new order also
