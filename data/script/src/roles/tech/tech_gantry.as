@@ -58,9 +58,12 @@ namespace TechGantry {
         CCircuitDef@ reactor = ai.GetCircuitDef(TechChain::DefFor("afus"));
         const bool economy = reactor !is null && reactor.count > aiBuilderMgr.GetUnfinishedCount(reactor);
         const float power = builder is null ? 0.0f : builder.circuitDef.GetBuildSpeed();
+        // owner, 2026-10-26: the window's mean of raw income also has to clear the 10 s minimum.
+        // Played (Glitters, Proving Grounds): an advanced lab's 2,600 metal reclaim refund
+        // landed in the window at +80 and the gantry was ordered at +85 and +94.
         return GantryMath::CanStart(economy,
             metalWindow.Ready(ai.frame, Global::RoleSettings::Tech::EarlyGantryMaximumSampleGapSeconds * SECOND),
-            metalWindow.Mean(), Global::RoleSettings::Tech::EarlyGantryMetalIncome,
+            AiMin(metalWindow.Mean(), Economy::GetMinMetalIncomeLast10s()), Global::RoleSettings::Tech::EarlyGantryMetalIncome,
             TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0,
             TechHeavyRush::Pending(), Funded(factory, FundsOpeningUnit(), true), power,
             Global::RoleSettings::Tech::GantryMinimumBuilderPower);
@@ -84,8 +87,9 @@ namespace TechGantry {
         if (reactor is null || reactor.count <= aiBuilderMgr.GetUnfinishedCount(reactor)) return "no finished advanced fusion";
         if (!metalWindow.Ready(ai.frame, Global::RoleSettings::Tech::EarlyGantryMaximumSampleGapSeconds * SECOND))
             return "income window not ready";
-        if (metalWindow.Mean() < Global::RoleSettings::Tech::EarlyGantryMetalIncome)
-            return "income " + int(metalWindow.Mean()) + " of " + int(Global::RoleSettings::Tech::EarlyGantryMetalIncome);
+        const float income = AiMin(metalWindow.Mean(), Economy::GetMinMetalIncomeLast10s());
+        if (income < Global::RoleSettings::Tech::EarlyGantryMetalIncome)
+            return "income " + int(income) + " of " + int(Global::RoleSettings::Tech::EarlyGantryMetalIncome);
         if (TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0) return "a nuke commitment";
         if (TechHeavyRush::Pending()) return "a heavy rush pending";
         if (!Funded(factory, FundsOpeningUnit(), true)) return "funding (" + FundingNote(factory, FundsOpeningUnit(), true) + ")";
