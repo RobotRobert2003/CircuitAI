@@ -252,6 +252,16 @@ inline std::vector<int> BalanceSea(const std::vector<std::vector<std::pair<int, 
     }
     return owner;
 }
+
+// D-387: capture for the owner. Ownership names who receives a spot's new
+// extractor, not who may build it: any builder takes a spot another allied
+// claimant owns, then gives the finished extractor to that claimant.
+// owner: the spot's resolved owner team (-1 nobody, -2 an ally whose team is
+// unknown). Returns the recipient, or -1 when the builder keeps the extractor
+// (unowned, its own, an unknown ally, or capture switched off).
+inline int CaptureFor(bool enabled, int owner, int ownTeam) {
+    return (enabled && owner >= 0 && owner != ownTeam) ? owner : -1;
+}
 }  // namespace circuit::mex_territory
 
 // D-358: the lane partition is the field's corridor table. A lane is one

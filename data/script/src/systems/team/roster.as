@@ -288,7 +288,7 @@ namespace Roster {
         if (isNew && e.teamId != ai.teamId) {
             // D-072: a metal spot belongs to the team whose start is nearest; the
             // ally-aware mex enqueue needs the allies' starts
-            aiEconomyMgr.AddAllyStart(e.startPos);
+            aiEconomyMgr.AddAllyStart(e.startPos, e.teamId);  // D-387: the team receives a captured spot
         }
         if (isNew) {
             GenericHelpers::LogUtil("[Team][Roster] Team " + e.teamId + " (AI " + e.skirmishAIId + "): role=" + RoleName(e.role)

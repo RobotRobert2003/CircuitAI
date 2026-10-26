@@ -1,0 +1,15 @@
+{
+  "stop_minute": 12,
+  "expect": [
+    {"key":"observer", "pattern":"\\[MexCaptureWatch\\] observer_started", "scope":"any", "by_minute":1},
+    {"key":"capture-ordered", "pattern":"\\[MexCapture\\] gave mex", "scope":"any", "by_minute":12},
+    {"key":"capture-received", "pattern":"\\[MexCaptureWatch\\] mex-given .* allied=true", "scope":"any", "by_minute":12}
+  ],
+  "forbid": [
+    {"key":"script", "pattern":": ERR\\s+:|SCRIPT CRASH|Lib exception", "scope":"any"},
+    {"key":"invariant", "pattern":"\\[INVARIANT\\]", "scope":"any"},
+    {"key":"enemy-gift", "pattern":"\\[MexCaptureWatch\\] mex-given .* allied=false", "scope":"any"},
+    {"key":"crash", "pattern":"Access violation|has crashed|Fatal:", "scope":"any"},
+    {"key":"observer-error", "pattern":"Removed widget: Mex capture watch|Error in.*mex_capture_watch", "scope":"any"}
+  ]
+}

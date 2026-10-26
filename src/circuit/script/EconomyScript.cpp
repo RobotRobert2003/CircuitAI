@@ -95,6 +95,9 @@ static float CEconomyManager_GetMetalStorageOf(CEconomyManager* mgr, const CCirc
 
 static void CEconomyManager_ClearAllyStarts(CEconomyManager* mgr) { mgr->ClearAllyStarts(); }
 static void CEconomyManager_AddAllyStart(CEconomyManager* mgr, const AIFloat3& pos) { mgr->AddAllyStart(pos); }
+static void CEconomyManager_AddAllyStartTeam(CEconomyManager* mgr, const AIFloat3& pos, int team) { mgr->AddAllyStart(pos, team); }
+static void CEconomyManager_SetMexCapture(CEconomyManager* mgr, bool enabled) { mgr->SetMexCapture(enabled); }
+static int CEconomyManager_MexCaptureOwner(CEconomyManager* mgr, const AIFloat3& pos) { return mgr->MexCaptureOwner(pos); }
 static void SetMexOwnership(CEconomyManager* mgr, bool enabled, float seconds) { mgr->SetMexOwnership(enabled, seconds); }
 static void SetMexAllyStart(CEconomyManager* mgr, int team, const AIFloat3& pos, int commander) { mgr->SetMexAllyStart(team, pos, commander); }
 static bool CanReachMex(CEconomyManager* mgr, CCircuitUnit* unit, const AIFloat3& pos) { return mgr->CanReachMex(unit, pos); }
@@ -179,7 +182,9 @@ static bool CEconomyManager_IsMexTaskUsable(CEconomyManager* mgr, IUnitTask* tas
     auto* circuit=mgr->GetCircuit();
     auto* terrain=circuit->GetTerrainManager();
     const auto& pos=mex->GetPosition();
-    if (!geom::is_valid(pos) || (mgr->IsMexNavigationEnabled() ? !mgr->IsOwnSpot(pos) : terrain->IsZoneAlly(pos))
+    // D-387: a spot captured for its owner is usable; the owner receives it.
+    if (!geom::is_valid(pos) || (mgr->IsMexNavigationEnabled() ? !mgr->IsMexSpotAdmissible(pos)
+            : (terrain->IsZoneAlly(pos) && mgr->MexCaptureOwner(pos) < 0))
         || terrain->IsAllyLayoutBlocked(mex->GetBuildDef(),pos,mex->GetFacing())) return false;
     const auto& ids=circuit->GetCallback()->GetFriendlyUnitIdsIn(pos,mex->GetBuildDef()->GetExtrRangeM(),false);
     for (int id:ids) {
@@ -249,6 +254,10 @@ CEconomyScript::CEconomyScript(CScriptManager* scr, CEconomyManager* mgr)
 	r = engine->RegisterObjectMethod("CEconomyManager", "IUnitTask@+ EnqueueMexWithin(CCircuitUnit@, const AIFloat3& in, float, int, bool allyAware)", asFUNCTION(CEconomyManager_EnqueueMexWithinAware), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "void ClearAllyStarts()", asFUNCTION(CEconomyManager_ClearAllyStarts), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "void AddAllyStart(const AIFloat3& in)", asFUNCTION(CEconomyManager_AddAllyStart), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	// D-387: the start's team names the recipient of a captured spot.
+	r = engine->RegisterObjectMethod("CEconomyManager", "void AddAllyStart(const AIFloat3& in, int)", asFUNCTION(CEconomyManager_AddAllyStartTeam), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexCapture(bool)", asFUNCTION(CEconomyManager_SetMexCapture), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEconomyManager", "int MexCaptureOwner(const AIFloat3& in)", asFUNCTION(CEconomyManager_MexCaptureOwner), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexOwnership(bool, float)", asFUNCTION(SetMexOwnership), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "void SetMexAllyStart(int, const AIFloat3& in, int)", asFUNCTION(SetMexAllyStart), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEconomyManager", "bool CanReachMex(CCircuitUnit@, const AIFloat3& in)", asFUNCTION(CanReachMex), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);

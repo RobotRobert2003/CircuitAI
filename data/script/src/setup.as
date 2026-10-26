@@ -277,6 +277,7 @@ namespace Setup {
 		CheckModOptions();
 		aiEconomyMgr.SetMexOwnership(Global::RoleSettings::MexOwnershipEnabled,
 			Global::RoleSettings::MexOwnershipSeconds);
+		aiEconomyMgr.SetMexCapture(Global::RoleSettings::MexCaptureForOwner);  // D-387
 		// Role indices used by Military's threat/cost caches. Built once here,
 		// before any role runs; without this every cached enemy threat and cost
 		// stays 0 (KI-201's history, D-002).

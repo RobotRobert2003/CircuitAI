@@ -1682,6 +1682,19 @@ void CCircuitAI::GiveUnits(std::vector<CCircuitUnit*>&& units, int newTeamId)
 	economy->SendUnits(migrants, newTeamId);
 }
 
+bool CCircuitAI::GiveUnitIfAccepted(CCircuitUnit* unit, int newTeamId)
+{
+	// D-387: GiveUnits forgets the unit before the engine answers; the engine
+	// refuses a dead or invalid recipient and the unit would stay ours,
+	// untracked. Ask first and forget it only on acceptance. The engine's
+	// capture event arrives later, after unregistration, as for GiveUnits.
+	if (unit == nullptr || unit->IsDead() || newTeamId == teamId) return false;
+	if (economy->SendUnits({unit->GetUnit()}, newTeamId) <= 0) return false;
+	UnitDestroyed(unit, nullptr);
+	UnregisterTeamUnit(unit);
+	return true;
+}
+
 void CCircuitAI::Garbage(CCircuitUnit* unit, const char* reason)
 {
 	// NOTE: Happens because engine can send EVENT_UNIT_FINISHED after EVENT_UNIT_DESTROYED.

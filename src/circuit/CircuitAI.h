@@ -157,6 +157,8 @@ private:
 	void DeleteTeamUnit(CCircuitUnit* unit);
 public:
 	void GiveUnits(std::vector<CCircuitUnit*>&& units, int newTeamId);
+	// D-387: one unit; forgotten locally only when the engine accepts it.
+	bool GiveUnitIfAccepted(CCircuitUnit* unit, int newTeamId);
 	void Garbage(CCircuitUnit* unit, const char* reason);
 	CCircuitUnit* GetTeamUnit(ICoreUnit::Id unitId) const;
 	const Units& GetTeamUnits() const { return teamUnits; }

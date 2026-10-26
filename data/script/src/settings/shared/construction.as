@@ -5,6 +5,11 @@ namespace RoleSettings {
         // At this game time, every ally may take unoccupied reachable spots.
         bool MexOwnershipEnabled = false;
         float MexOwnershipSeconds = 360.0f; // 0 disables early protection (D-352: 6 minutes, down from 10, land and water alike)
+        // D-387: capture for the owner. A builder takes a spot an allied AI owns
+        // instead of skipping it, and the finished extractor is given to that
+        // owner; ownership names the recipient, not the builder. False restores
+        // the skip. Upgrades and metal-map field sites are not captured.
+        bool MexCaptureForOwner = true;
         // D-352: mex ownership by theatre. Rules in resource/MexTerritory.h; policy
         // here. Every number an ally reads comes from the roster broadcast
         // (systems/team/mex_claim.as), never from a map config.

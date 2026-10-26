@@ -612,6 +612,9 @@ int CBuilderManager::UnitFinished(CCircuitUnit* unit)
         if (iter->second->GetBuildType()==IBuilderTask::BuildType::MEX) {
             for (auto* worker : iter->second->GetAssignees())
                 circuit->GetCommanderControl()->MexFinished(worker,unit);
+            // D-387: a new extractor on an ally's spot goes to that ally
+            // (deferred a frame; upgrades are BuildType::MEXUP, never given).
+            circuit->GetEconomyManager()->MexBuilt(unit);
         }
 		DoneTask(iter->second);
 	}
