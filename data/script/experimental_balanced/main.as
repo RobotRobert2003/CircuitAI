@@ -11,9 +11,9 @@ namespace Main {
 	// Two rolls (owner, 2026-10-17). Roll 1 picks exactly one main rush: nuke 25%, T3 35%, heavy (T2_RUSH) 25%, none 15% (Cent's standard weights, restored by the owner 2026-10-19).
 	// Roll 2, on its own: the spam rush, on top of whatever roll 1 gave (unchanged 85%).
 	namespace StrategyWeights {
-		float Tech_NUKE_RUSH = 0.25f; // roll 1
-		float Tech_T3_RUSH = 0.35f;   // roll 1
-		float Tech_T2_RUSH = 0.25f;   // roll 1: the finite heavy-delivery rush (TechHeavyRush)
+		float Tech_NUKE_RUSH = 0.0f;  // roll 1 (owner, 2026-10-26: temporarily 0, was 0.25)
+		float Tech_T3_RUSH = 1.0f;    // roll 1 (owner, 2026-10-26: temporarily 100%, was 0.35)
+		float Tech_T2_RUSH = 0.0f;    // roll 1 (owner, 2026-10-26: temporarily 0, was 0.25): the finite heavy-delivery rush (TechHeavyRush)
 		float Tech_Spam_Rush = 0.85f; // roll 2
 	}
 
