@@ -16,6 +16,10 @@ namespace Support {
             float ForwardDefenceBudgetSeconds = 30.0f;
             float ForwardDefenceSetback = 400.0f;
             int ForwardDefenceCountPerType = 2;
+            int OpeningCombatUnits = 3;
+            string ArmadaOpeningCombatUnit = "armfast";
+            string CortexOpeningCombatUnit = "corpyro";
+            string LegionOpeningCombatUnit = "legstr";
             /******************** SUPPORT BASE SETTINGS ********************/
             // All settings applied to support role at game start, logic can change throughout game
             float AllyRange = 1300.0f;
@@ -43,16 +47,6 @@ namespace Support {
             float AdvancedSolarEnergyIncomeMinimum = 600.0f;
             // Stop building advanced solars if above this energy income level
             float AdvancedSolarEnergyIncomeMaximum = 1000.0f;
-            // Owner (2026-10-16): FRONT's fusion-era reclaim for SUPPORT. Once a fusion stands SUPPORT's
-            // builders reclaim its winds and solars, those within ReclaimNearFactoryRadius of a factory first,
-            // advanced solars too at ReclaimAdvSolarMargin or with an advanced fusion, and its planner stops
-            // ordering them. Off here, on in experimental_balanced (systems/construction/front_reclaim.as).
-            bool ReclaimT1EnergyAfterFusion = false;
-            float ReclaimT1EnergyMargin = 1.25f;    // energy income without winds/solars covers the pull by this
-            float ReclaimAdvSolarMargin = 1.5f;     // ... without advanced solars as well
-            float ReclaimNearFactoryRadius = 900.0f;
-            float ReclaimEnergyRadius = 3000.0f;   // from the worker
-            int ReclaimEnergyConcurrent = 3;
             // D-359: SUPPORT scales energy with ordinary fusions, one per shortfall, and
             // offers an advanced fusion only once the 10-second minimum energy income
             // reaches this. TECH goes to the advanced fusion on its metal gate instead;
@@ -86,13 +80,13 @@ namespace Support {
 
             // Decoys are combat/deception tools, not routine mobile build power.
             int MaxDecoyCommanders = 0;
-            int MaxFastAssistBots = 10;      // a cap only: factory.json decides whether to build them
-
-            // Owner (2026-10-25): construction turrets on each finished T2 bot / vehicle lab, as AIR
-            // gives a T2 plant (Air::T2ExpansionSupport, Factory::MaxNanosPerT2Factory). 0: off.
-            int T2FactoryTurrets = 20;
-            float T2FactoryTurretMinMetalIncome = 8.0f;  // as Tech::EcoTurretMinMetalIncome
-            int T2FactoryTurretSpare = 6;                // team-wide bound: T2FactoryTurrets per lab plus these
+            int MaxFastAssistBots = 10;
+            float FastAssistMinimumMetalIncome = 40.0f;
+            float FastAssistMetalIncomePerBot = 20.0f;
+            float FastAssistFundingSeconds = 30.0f;
+            float FastAssistFundingShare = 0.70f;
+            float FastAssistEnergyReserve = 100.0f;
+            int CombatBatchesPerFastAssist = 1;
 
             /******************** FRONT TECH NANO POLICY ********************/
             float NanoEnergyPerUnit = 200.0f; // energy per nano

@@ -5,10 +5,8 @@
 // pull by Front::ReclaimT1EnergyMargin, advanced solars at Front::ReclaimAdvSolarMargin (or as soon
 // as an advanced fusion stands). Off unless the profile sets Front::ReclaimT1EnergyAfterFusion
 // (experimental_balanced/main.as).
-// SUPPORT (owner, 2026-10-16): the same reclaim for SUPPORT's builders, with its own
-// Support::ReclaimT1EnergyAfterFusion and Support::Reclaim* (SupportBuild::MakeTask). The settings
-// below are read for the AI's current role; log [SUPPORT][Reclaim]. While SUPPORT reclaims,
-// EnergyAllowed() keeps its eco planner from ordering the same winds and solars again.
+// SUPPORT used this reclaim from 2026-10-16 until 2026-10-26, when SUPPORT went back to
+// Cent's smrt-test code, which does not call it; only FRONT's settings are read now.
 // FRONT eco ladder (owner, 2026-10-16; Front::EcoLadder, systems/construction/front_eco_ladder.as):
 // T1 converters come down too once the first fusion stands (owner, 2026-10-17), and the fusions once the second
 // advanced fusion is framed, one at a time, when the bank has room for the refund (BAR pays it at
@@ -21,12 +19,12 @@ namespace FrontReclaim {
     array<IUnitTask@> tasks;
 
     bool IsSupport() { return Global::AISettings::Role == AiRole::SUPPORT; }
-    bool Enabled() { return IsSupport() ? Global::RoleSettings::Support::ReclaimT1EnergyAfterFusion : Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion; }
-    float T1Margin() { return IsSupport() ? Global::RoleSettings::Support::ReclaimT1EnergyMargin : Global::RoleSettings::Front::ReclaimT1EnergyMargin; }
-    float AdvSolarMargin() { return IsSupport() ? Global::RoleSettings::Support::ReclaimAdvSolarMargin : Global::RoleSettings::Front::ReclaimAdvSolarMargin; }
-    float NearFactoryRadius() { return IsSupport() ? Global::RoleSettings::Support::ReclaimNearFactoryRadius : Global::RoleSettings::Front::ReclaimNearFactoryRadius; }
-    float EnergyRadius() { return IsSupport() ? Global::RoleSettings::Support::ReclaimEnergyRadius : Global::RoleSettings::Front::ReclaimEnergyRadius; }
-    int Concurrent() { return IsSupport() ? Global::RoleSettings::Support::ReclaimEnergyConcurrent : Global::RoleSettings::Front::ReclaimEnergyConcurrent; }
+    bool Enabled() { return Global::RoleSettings::Front::ReclaimT1EnergyAfterFusion; }
+    float T1Margin() { return Global::RoleSettings::Front::ReclaimT1EnergyMargin; }
+    float AdvSolarMargin() { return Global::RoleSettings::Front::ReclaimAdvSolarMargin; }
+    float NearFactoryRadius() { return Global::RoleSettings::Front::ReclaimNearFactoryRadius; }
+    float EnergyRadius() { return Global::RoleSettings::Front::ReclaimEnergyRadius; }
+    int Concurrent() { return Global::RoleSettings::Front::ReclaimEnergyConcurrent; }
     string Tag() { return IsSupport() ? "SUPPORT" : "FRONT"; }
 
     void Tick()

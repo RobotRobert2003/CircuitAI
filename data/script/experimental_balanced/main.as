@@ -89,7 +89,6 @@ namespace Main {
         Global::RoleSettings::Front::T2FactoryNanosMax = 14; // owner 2026-10-25: up to 14 as the metal bank nears overflow
         Global::RoleSettings::Front::Recovery = true; // owner 2026-10-19: after losing the base, T1 eco and retake the mexes first (front_recovery.as)
         Global::RoleSettings::Front::TimeTriggerForFirstT2LabMinMetalIncome = 20.0f; // 22-min T2 lab/plant trigger needs +20 metal (AI 11 ordered legavp at +3 after losing its base)
-        Global::RoleSettings::Support::ReclaimT1EnergyAfterFusion = true;
         Global::Team::PinpointerPoolSize = 3;
         Global::Spam::EdgePorcEnabled = true;
         Global::Spam::LaneReleaseAtEnd = true;
