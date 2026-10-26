@@ -606,6 +606,12 @@ int CBuilderManager::UnitFinished(CCircuitUnit* unit)
 	}
 	auto iter = unfinishedUnits.find(unit);
 	if (iter != unfinishedUnits.end()) {
+        // Completion event, before DoneTask releases/reassigns the builders.
+        // O(assigned builders), no new world scan or recurring callback.
+        if (iter->second->GetBuildType()==IBuilderTask::BuildType::MEX) {
+            for (auto* worker : iter->second->GetAssignees())
+                circuit->GetCommanderControl()->MexFinished(worker,unit);
+        }
 		DoneTask(iter->second);
 	}
 	for (IBuilderTask* task : staleOwners) {

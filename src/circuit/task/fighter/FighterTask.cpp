@@ -17,6 +17,7 @@
 #include "unit/action/TravelAction.h"
 #include "unit/enemy/EnemyUnit.h"
 #include "CircuitAI.h"
+#include "module/CommanderControl.h"
 #include "util/Utils.h"
 
 namespace circuit {
@@ -110,6 +111,7 @@ void IFighterTask::OnUnitIdle(CCircuitUnit* unit)
 
 void IFighterTask::OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+    if(manager->GetCircuit()->GetCommanderControl()->Jammed(unit)) return;
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
 	CCircuitDef* cdef = unit->GetCircuitDef();

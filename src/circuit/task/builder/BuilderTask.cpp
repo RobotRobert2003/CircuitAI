@@ -27,6 +27,7 @@
 #include "unit/action/FightAction.h"
 #include "unit/action/MoveAction.h"
 #include "CircuitAI.h"
+#include "module/CommanderControl.h"
 #include "util/Utils.h"
 
 #include "spring/SpringCallback.h"
@@ -515,6 +516,7 @@ void IBuilderTask::OnUnitIdle(CCircuitUnit* unit)
 
 void IBuilderTask::OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+    if(manager->GetCircuit()->GetCommanderControl()->Jammed(unit)) return;
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
 	CCircuitDef* cdef = unit->GetCircuitDef();

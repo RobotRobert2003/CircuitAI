@@ -82,6 +82,19 @@ namespace CommanderCombat {
             Option("front_push_ahead",0.f);
             // D-356 push bound and end; D-357 corridor mex sweep. JSON supplies the
             // policy; the fallbacks equal the native defaults (legacy behaviour).
+            Option("front_persistent",0.f);
+            Option("front_mex_defence",0.f);
+            Option("front_line_enabled",0.f);
+            Option("front_line_fog",1000.f);
+            Option("front_fortify_bank",.5f);
+            Option("front_fortify_priority",1.f);
+            Option("front_fortify_advance",0.f);
+            Option("front_line_spacing",1.5f);
+            Option("front_line_depth",800.f);
+            Option("front_mex_offset",160.f);
+            Option("front_work_behind",400.f);
+            Option("jam_safe",0.f);
+            Option("jam_heavy_cost",900.f);
             Option("front_push_screen",0.f);
             Option("front_push_until_seconds",0.f);
             Option("front_push_home_riot",0.f);

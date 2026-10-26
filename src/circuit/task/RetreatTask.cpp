@@ -111,8 +111,24 @@ void CRetreatTask::RemoveAssignee(CCircuitUnit* unit)
 	)
 }
 
+bool CRetreatTask::HoldInJam(CCircuitUnit* unit)
+{
+    auto* circuit=manager->GetCircuit();
+    if(!circuit->GetCommanderControl()->Jammed(unit)) return false;
+    // Also veto a completed asynchronous path: coverage may have appeared
+    // since the request. Finish the travel action before it can emit a MOVE.
+    auto* travel=unit->GetTravelAct();
+    if(travel && !travel->IsFinished()) {
+        TRY_UNIT(circuit,unit,unit->CmdStop();)
+        travel->StateFinish();
+    }
+    state=State::REGROUP;
+    return true;
+}
+
 void CRetreatTask::Start(CCircuitUnit* unit)
 {
+    if(HoldInJam(unit)) return;
 	if (unit->GetTravelAct() == nullptr) {
 		return;
 	}
@@ -222,6 +238,7 @@ void CRetreatTask::Update()
 	bool isExecute = (++updCount % 2 == 0);
 	auto assignees = units;
 	for (CCircuitUnit* unit : assignees) {
+        if(HoldInJam(unit)) continue;
 		const float healthPerc = unit->GetHealthPercent();
 		bool isRepaired = unit->HasShield()
 				? (healthPerc > 0.98f) && unit->IsShieldCharged(circuit->GetSetupManager()->GetFullShield())
@@ -270,6 +287,7 @@ bool CRetreatTask::HoldValid(CCircuitUnit* unit, int frame)
 
 void CRetreatTask::OnUnitIdle(CCircuitUnit* unit)
 {
+    if(HoldInJam(unit)) return;
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
 	// D-346: at the forward repair point, wait there (idle heal plus the
@@ -389,6 +407,7 @@ void CRetreatTask::OnUnitIdle(CCircuitUnit* unit)
 
 void CRetreatTask::OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+    if(HoldInJam(unit)) return;
 	if (State::REGROUP != state) {
 		return;
 	}
@@ -468,6 +487,7 @@ void CRetreatTask::ApplyPath(const CQueryPathSingle* query)
 {
 	const std::shared_ptr<CPathInfo>& pPath = query->GetPathInfo();
 	CCircuitUnit* unit = query->GetUnit();
+    if(HoldInJam(unit)) return;
 
 	if (pPath->posPath.empty()) {
 		pPath->PushPos(query->GetEndPos(), manager->GetCircuit()->GetPathfinder());

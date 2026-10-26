@@ -1,4 +1,5 @@
 #include "terrain/CommanderCombat.h"
+#include "terrain/CommanderFortification.h"
 #include <cassert>
 #include <chrono>
 #include <iostream>
@@ -10,6 +11,45 @@ static Contact Enemy(int id,float x,float z,float cost=100) {
     Contact c; c.id=id; c.pos={x,z}; c.radius=12; c.cost=cost; c.health=500; c.damage=99999; return c;
 }
 int main(int argc,char** argv) {
+    {
+        const auto sites=TerritoryLine({0,0},{1,0},450.f,[](Point p) {
+            return p.z>=-1000 && p.z<=750;
+        });
+        std::vector<float> across;
+        for(auto p:sites) { assert(p.x==0 && p.z>=-1000 && p.z<=750);across.push_back(p.z); }
+        std::sort(across.begin(),across.end());
+        assert(across.front()<-900 && across.back()>650);
+        for(size_t i=1;i<across.size();++i) assert(across[i]-across[i-1]<=450.01f);
+        assert(TerritoryLine({0,0},{0,0},450.f,[](Point){return true;}).empty());
+        assert(TerritoryLine({0,0},{1,0},450.f,[](Point){return false;}).empty());
+        const auto wide=TerritoryLine({0,0},{1,0},450.f,[](Point p) {
+            return std::abs(p.z)<=10000;
+        },400);
+        float extent=0;for(auto p:wide) extent=std::max(extent,std::abs(p.z));
+        assert(extent>9900); // a wide territory must not silently stop at 8192
+        assert(EnemySideCover({0,0},{160,64},{1,0},300));
+        assert(!EnemySideCover({0,0},{-160,64},{1,0},300));
+        assert(!EnemySideCover({0,0},{500,64},{1,0},300));
+        CoverageSpan offLine;
+        assert(TurretCoverage({160,0},{0,0},{0,1},344,offLine));
+        std::vector<CoverageSpan> spans{offLine};
+        assert(FirstCoverageGap(spans,-200,200)==200); // mex turret covers the whole short line
+        spans={{0,100},{-100,-10}};
+        assert(FirstCoverageGap(spans,-100,100)==-10); // a genuine coverage hole
+        assert(GapBuildOffset(spans,-10,100,300)==-5); // do not build in the covered far end
+        spans={{0,100},{-100,10}};
+        assert(FirstCoverageGap(spans,-100,100)==100);
+        assert(!TurretCoverage({400,0},{0,0},{0,1},344,offLine));
+        auto edge=JamFiringPoint({0,0},500,40,{700,0});
+        assert(std::abs(edge.x-460)<.01f && edge.z==0);
+        assert(Length(Point{700,0}-edge)<=250);
+        auto inside=JamFiringPoint({0,0},500,40,{100,0});
+        assert(inside.x==100 && inside.z==0);
+        auto tiny=JamFiringPoint({0,0},10,40,{700,0});
+        assert(tiny.x==0 && tiny.z==0);
+        auto fringe=JamFiringPoint({0,0},500,4,{750,0});
+        assert(fringe.x<500 && Length(Point{750,0}-fringe)<=238+24);
+    }
     // Immediate T3 shots ignore approach/risk policy, but never the physical
     // lane, allied shot reservations, surface eligibility or friendly veto.
     {
@@ -206,6 +246,19 @@ int main(int argc,char** argv) {
         assert(LanePushAnchor(5800,7000,1,1,600,9000,6400).progress==6400);
         assert(LanePushAnchor(100,-1,0,1,600,6000,9000).progress==100);
         assert(LanePushAnchor(0,-1,0,0,600,6000,0).progress==0);
+    }
+    {
+        // Incremental line work begins locally, not at the far territory edge.
+        std::vector<CoverageSpan> spans;
+        assert(NearestCoverageGap(spans,-4000,4000,0)==0);
+        spans={{-500,500},{1000,1400}};
+        assert(FirstCoverageGap(spans,-2000,2000)==-2000);
+        assert(NearestCoverageGap(spans,-2000,2000,800)==800);
+        assert(NearestCoverageGap(spans,-2000,2000,0)==-564);
+        spans={{-100,0},{10,100}};
+        assert(NearestCoverageGap(spans,-100,100,0)==5);
+        spans={{-100,100}};
+        assert(NearestCoverageGap(spans,-100,100,0)==100);
     }
     if(argc>1 && std::string(argv[1])=="--benchmark") {
         std::vector<Attacker> crowd; for(int i=0;i<400;++i) crowd.push_back({{value(rng)*.25f,value(rng)*.25f},100});

@@ -11,6 +11,7 @@
 #include "module/EconomyManager.h"
 #include "unit/action/TravelAction.h"
 #include "CircuitAI.h"
+#include "module/CommanderControl.h"
 #include "util/Utils.h"
 
 namespace circuit {
@@ -70,6 +71,7 @@ void CBRepairTask::OnUnitIdle(CCircuitUnit* unit)
 
 void CBRepairTask::OnUnitDamaged(CCircuitUnit* unit, CEnemyInfo* attacker)
 {
+    if(manager->GetCircuit()->GetCommanderControl()->Jammed(unit)) return;
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
 	CCircuitDef* cdef = unit->GetCircuitDef();

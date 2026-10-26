@@ -609,6 +609,8 @@ namespace CoverageLanes {
         WidgetLink::SetState("strategy",WidgetLink::Line("strategy",payload));
     }
     void Clear() {
+        aiBuilderMgr.SetCommanderCombatOption("front_corridor",-1.f);
+        aiBuilderMgr.SetCommanderCombatOption("front_corridor_class",-1.f);
         array<AIFloat3> empty;aiBattle.SetFrontLane(empty,halfWidth);
         frontPublished=false;frontKey="";
         helpingTeam=-1;helpingCorridor=-1;helpingUntil=-1;helpingDead=false;forkPoints.resize(0);
@@ -656,6 +658,8 @@ namespace CoverageLanes {
         // Cache failures too; retry only after a table/endpoint change, and
         // never keep an obsolete seat while its replacement is unreachable.
         frontKey=key;routeStatus="routing";fixedClass=cls;fixedCorridor=-1;
+        aiBuilderMgr.SetCommanderCombatOption("front_corridor",-1.f);
+        aiBuilderMgr.SetCommanderCombatOption("front_corridor_class",-1.f);
         if(frontPublished) {
             EndHelp("the lane was re-routed");
             array<AIFloat3> empty;aiBattle.SetFrontLane(empty,halfWidth);
@@ -684,6 +688,8 @@ namespace CoverageLanes {
         for(uint i=0;i<enemies.length();++i)aiBattle.AddEnemyEnd(enemies[i]);
         frontKey=key;frontPublished=true;routeStatus=lastCorridor>=0?"field corridor":"fallback route";
         fixedPoints=points;fixedClass=cls;fixedCorridor=lastCorridor;
+        aiBuilderMgr.SetCommanderCombatOption("front_corridor",float(lastCorridor));
+        aiBuilderMgr.SetCommanderCombatOption("front_corridor_class",float(cls));
         PublishWidget();
         Claim(points);
         GenericHelpers::LogUtil("[CoverageLane] front assigned rank="+rank+" seats="+count+" class="+cls+" points="+points.length()+" corridor="+lastCorridor+(matched>=0?" matched":" by share")+" (revision-stable)",1);

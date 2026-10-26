@@ -83,6 +83,8 @@ IUnitTask* CCommanderControl::LadderWork(CCircuitUnit* unit,State& s,int kind,CC
             }
             return ai->GetEconomyManager()->EnqueueMexWithin(unit,pos,area,0,true);
         }
+        case WORK_TERRITORY_LINE: return holding?nullptr:TerritoryLineWork(unit,s,buildDef,frame);
+        case WORK_MEX_DEFENCE: return holding?nullptr:MexDefenceWork(unit,s,buildDef,frame);
         case WORK_MEX_LANE: return holding?nullptr:LaneMexWork(unit,s,buildDef,frame);
         case WORK_TIMED: {
             // First timed_until seconds of the game: one of buildDef every
@@ -389,7 +391,7 @@ IUnitTask* CCommanderControl::LaneMexWork(CCircuitUnit* unit,State& s,CCircuitDe
     // The turret that follows every front_mex_turret_every corridor mexes:
     // the script's line turret definition, at the last mex taken ("mex plus
     // LLT at the cluster"), once, unless one already stands or is planned there.
-    if(s.laneMexTurret && turretDef && options.frontMexTurretEvery>0 && s.laneMexLast.x>=0
+    if(options.frontMexDefence<=0 && s.laneMexTurret && turretDef && options.frontMexTurretEvery>0 && s.laneMexLast.x>=0
         && unit->GetCircuitDef()->CanBuild(turretDef)) {
         const float near2=4.f*options.lineSpacing*options.lineSpacing;
         bool standing=false;

@@ -10,17 +10,29 @@
 		"align_seconds": 0.6, "shots": 2, "margin": 150,
 		"cloak_seconds": 1.5, "escape_seconds": 4.3,
 		"friendly_margin": 12, "front_workers": 2,
-		// D-356 lane push: screen-led (front_push_screen corridor combat units before
-		// the anchor leaves the commander), capped by front_distance, ended by
-		// front_push_until_seconds or observed enemy riot metal >= front_push_home_riot
-		// ("com forward until the first riots, then home"). Offers beyond lane
-		// half-width + front_lane_margin are declined. advance_roles lists the roles
-		// whose commander leaves home at all; front_ladder orders the work rungs.
+		// Persistent FRONT lane duty after the opener. No riot/time home latch.
+		// Cross-lane LLTs start when unseen ground is within front_line_fog elmos
+		// ahead along the lane; no percentage-of-route condition. Script Override
+		// can adjust this distance at runtime. New lines are front_line_depth apart.
+		// Jam safety accepts combat risk; heavy T2 means mobile combat metal >=900.
 		"front_distance": 6000,
-		"front_push_ahead": 600, "front_push_screen": 1, "front_push_until_seconds": 0, "front_push_home_riot": 500,
+		"front_persistent": 1,
+		"front_mex_defence": 1,
+		"front_line_enabled": 1,
+		"front_line_fog": 1000,
+		"front_fortify_bank": 0,
+		"front_fortify_priority": 2,
+		"front_fortify_advance": 256,
+		"front_line_spacing": 1.5,
+		"front_line_depth": 800,
+		"front_mex_offset": 160,
+		"front_work_behind": 400,
+		"jam_safe": 1,
+		"jam_heavy_cost": 900,
+		"front_push_ahead": 600, "front_push_screen": 0, "front_push_until_seconds": 0, "front_push_home_riot": 0,
 		"front_lane_margin": 150, "front_hold_seconds": 10, "front_standoff": 650, "front_radius": 500, "front_threat": 3,
 		"advance_roles": "FRONT,TACTICAL",
-		"front_ladder": "mex_lane,line,repair_defence,repair_units,reclaim,mex_los,timed_laser,timed_aa,radar,advance,assist,factory,mex,radar_spacing,laser,base,hold,patrol",
+		"front_ladder": "mex_defence,territory_line,mex_lane,advance,repair_defence,repair_units,reclaim,radar,assist,hold",
 		// D-357 corridor mex sweep: spots within half-width + front_mex_reach (0: build
 		// distance) of the lane, front_mex_behind behind to front_mex_ahead ahead of the
 		// commander, en route every front_mex_seconds; enemy extractors there are

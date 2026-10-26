@@ -1,0 +1,68 @@
+{
+  "stop_minute": 6,
+  "expect": [
+    {
+      "key": "ready",
+      "pattern": "\\[CommanderFront\\] ready=1",
+      "scope": "any",
+      "by_minute": 1
+    },
+    {
+      "key": "continues past old front",
+      "pattern": "\\[CoverageProbe\\] advanced_in_lane team=0(?:\\D|$)",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "corridor mex taken on the way",
+      "pattern": "\\[CommanderFront\\] unit=\\d+ lane_mex ",
+      "scope": "any",
+      "by_minute": 6
+    },
+    {
+      "key": "mex fortified",
+      "pattern": "\\[CommanderFront\\] unit=\\d+ mex_defended=\\d+",
+      "scope": "any",
+      "by_minute": 3
+    },
+    {
+      "key": "second line planned",
+      "pattern": "\\[CommanderFront\\] unit=(?P<unit>\\d+) territory_line corridor=\\d+ progress=[1-9]\\d{3,} sites=",
+      "scope": "any",
+      "by_minute": 5
+    },
+    {
+      "key": "unfinished lines retained",
+      "pattern": "\\[CommanderFront\\] unit=\\d+ territory_line .* retained=[2-9]\\d*",
+      "scope": "any",
+      "by_minute": 6
+    }
+  ],
+  "forbid": [
+    {
+      "key": "script",
+      "pattern": ": ERR\\s+:|SCRIPT CRASH|Lib exception",
+      "scope": "any"
+    },
+    {
+      "key": "invariant",
+      "pattern": "\\[INVARIANT\\]",
+      "scope": "any"
+    },
+    {
+      "key": "fixture",
+      "pattern": "\\[RangedArena\\].*ERROR|Error in.*ranged_arena",
+      "scope": "any"
+    },
+    {
+      "key": "crash",
+      "pattern": "Access violation|has crashed|Fatal:",
+      "scope": "any"
+    },
+    {
+      "key": "fortification wait monopolises movement",
+      "pattern": "\\[CommanderWork\\] unit=\\d+ work=(?:17|18) task=-1",
+      "scope": "any"
+    }
+  ]
+}

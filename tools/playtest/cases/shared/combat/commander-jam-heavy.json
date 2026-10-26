@@ -1,0 +1,82 @@
+{
+  "name": "commander-jam-heavy",
+  "unit": "armcom",
+  "side": "armada",
+  "role": "TACTICAL",
+  "description": "Pursue a stationary heavy T2 from inside active friendly jammer coverage and fire the D-gun; ordinary survival withdrawal must not steal the approach.",
+  "map": "Comet Catcher Remake 1.8",
+  "map_key": "comet",
+  "starts": [
+    [
+      4300,
+      4000
+    ],
+    [
+      4000,
+      7000
+    ]
+  ],
+  "commander_initial": true,
+  "enemy_commander_home": true,
+  "enemy_destination": [
+    4700,
+    4000
+  ],
+  "commander_overrides": {
+    "retreat": 0.99
+  },
+  "camera": [
+    4400,
+    4000,
+    1200
+  ],
+  "photos": [
+    23,
+    28,
+    40
+  ],
+  "min_spawn_spacing": 60,
+  "command_breakdown": true,
+  "commander_observation": true,
+  "observation_frames": 3,
+  "groups": [
+    {
+      "unit": "armjamt",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4100,
+        4000
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armeyes",
+      "team": 0,
+      "count": 1,
+      "position": [
+        4700,
+        4200
+      ],
+      "after_seconds": 12
+    },
+    {
+      "unit": "armbull",
+      "team": 1,
+      "count": 1,
+      "position": [
+        4700,
+        4000
+      ],
+      "after_seconds": 23
+    }
+  ],
+  "assertions": {
+    "min_shooters": 1,
+    "min_kills": 1,
+    "max_losses": 0,
+    "min_damage": 4000,
+    "max_first_shot_seconds": 55
+  },
+  "checks": "commander-jam-heavy"
+}
