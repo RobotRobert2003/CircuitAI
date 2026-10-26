@@ -48,6 +48,8 @@ namespace TechGantry {
             Global::RoleSettings::Tech::GantryFundingSeconds,
             Global::RoleSettings::Tech::GantryFundingShare, 0.0f);
     }
+    // owner, 2026-10-26: the early checks fund on gross income like D-364 (net income is ~0
+    // for a TECH spending what it earns, so the 175 gantry needed its whole cost banked)
     // owner, 2026-10-25: the t3rush early check funds the gantry alone, not the gantry
     // plus its first T3 unit (played: "bank 4156/37400 metal" held the order 2-3 min past 175)
     bool FundsOpeningUnit() { return TechPlan::plan != "t3rush"; }
@@ -60,15 +62,16 @@ namespace TechGantry {
             metalWindow.Ready(ai.frame, Global::RoleSettings::Tech::EarlyGantryMaximumSampleGapSeconds * SECOND),
             metalWindow.Mean(), Global::RoleSettings::Tech::EarlyGantryMetalIncome,
             TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0,
-            TechHeavyRush::Pending(), Funded(factory, FundsOpeningUnit()), power,
+            TechHeavyRush::Pending(), Funded(factory, FundsOpeningUnit(), true), power,
             Global::RoleSettings::Tech::GantryMinimumBuilderPower);
     }
     // What Funded() weighed, for a waiting line
-    string FundingNote(CCircuitDef@ factory, bool includeOpeningUnit) {
+    string FundingNote(CCircuitDef@ factory, bool includeOpeningUnit, bool grossIncome = false) {
         CCircuitDef@ opening = includeOpeningUnit ? OpeningUnit() : null;
         const float cost = factory.costM + (opening is null ? 0.0f : opening.costM);
         return "bank " + int(aiEconomyMgr.metal.current) + "/" + int(cost) + " metal, 10 s income "
-            + int(Economy::GetMinMetalIncomeLast10s()) + " - usage " + int(TeamEconomy::OwnMetal(TeamEconomy::USAGE))
+            + int(Economy::GetMinMetalIncomeLast10s())
+            + (grossIncome ? " (gross)" : " - usage " + int(TeamEconomy::OwnMetal(TeamEconomy::USAGE)))
             + ", energy " + int(Economy::GetMinEnergyIncomeLast10s()) + " - usage " + int(TeamEconomy::OwnEnergy(TeamEconomy::USAGE))
             + " + converters " + int(ai.GetTeamRulesParam("mmUse", 0.0f));
     }
@@ -85,7 +88,7 @@ namespace TechGantry {
             return "income " + int(metalWindow.Mean()) + " of " + int(Global::RoleSettings::Tech::EarlyGantryMetalIncome);
         if (TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0) return "a nuke commitment";
         if (TechHeavyRush::Pending()) return "a heavy rush pending";
-        if (!Funded(factory, FundsOpeningUnit())) return "funding (" + FundingNote(factory, FundsOpeningUnit()) + ")";
+        if (!Funded(factory, FundsOpeningUnit(), true)) return "funding (" + FundingNote(factory, FundsOpeningUnit(), true) + ")";
         if (builder.circuitDef.GetBuildSpeed() < Global::RoleSettings::Tech::GantryMinimumBuilderPower)
             return builder.circuitDef.GetName() + " build power " + int(builder.circuitDef.GetBuildSpeed())
                 + " under " + int(Global::RoleSettings::Tech::GantryMinimumBuilderPower);
@@ -154,6 +157,10 @@ namespace TechGantry {
             return null;
         }
         if (cluster !is null) return Work(TechFactories::ReadyCluster(cluster), definition, builder);
+        // owner, 2026-10-26: only a builder that can build the gantry opens it or names the wait
+        // (played: the commander and T1 constructors ask most often, so the 30 s line only ever
+        // said "corcom cannot build corgant" and hid the real reason)
+        if (!builder.circuitDef.CanBuild(definition)) return null;
         if (!Ready(definition, builder)) { Waiting("waiting: " + ReadyWhy(definition, builder)); return null; }
         @cluster = TechFactories::ReadyCluster(TechFactories::OpenCluster(definition, TechFactories::MayPlan(definition), true));
         if (cluster is null) { Waiting("waiting for a safe reachable cluster/cap/cooldown"); return null; }
@@ -397,7 +404,7 @@ namespace TechGantry {
         if (!definition.IsAvailable(ai.frame)) return Null("gantry cap " + definition.maxThisUnit + " reached (count " + definition.count + ")");
         // The early phase rechecks funding at the actual order; support work
         // can have consumed the initial budget since cluster activation.
-        if (cluster.earlyGantry && (!Funded(definition, FundsOpeningUnit())
+        if (cluster.earlyGantry && (!Funded(definition, FundsOpeningUnit(), true)
             || !ReachableBattlefield(cluster.pos, cluster.facing)
             || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending())) return Null("early admission: funding, battlefield path or a rush commitment");
         IUnitTask@ task = TechFactories::OrderPinned(builder, Task::BuildType::FACTORY, definition,

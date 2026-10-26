@@ -818,8 +818,12 @@ namespace TechFactories {
         routed = false;
         if (!IsLandFactory(defName)) return null;
         const bool gantry = UnitHelpers::IsLandGantry(defName);
+        // owner, 2026-10-26: the t3rush gantry (due at +175) takes its front cluster below the
+        // +200 "economy online" gate too. Played: at +177 the step gantry fell to the legacy
+        // EnqueueLandGantry, native found no site, and the dead order's 120 s cooldown kept
+        // MayPlan from the planned cluster until +366.
         if (!GantryMath::ClusterEligible(TechGantry::RecoveryEnabled(), TechBuild::EcoOnline(),
-            false, gantry, Active())) return null;
+            TechPlan::plan == "t3rush", gantry, Active())) return null;
         routed = true;
         return Work(ai.GetCircuitDef(defName), u);
     }
