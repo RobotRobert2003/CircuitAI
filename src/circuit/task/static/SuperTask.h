@@ -10,7 +10,9 @@
 
 #include "task/fighter/FighterTask.h"
 
+#include <algorithm>
 #include <functional>
+#include <unordered_map>
 
 namespace circuit {
 
@@ -30,6 +32,14 @@ public:
 
 	// Script hooks
 	void SetTargetPos(const springai::AIFloat3& pos);
+	// Tiered fire (lolcannons, owner 2026-10-26): once any def has a tier the
+	// task fires only at roster defs in range, best tier first (TierTargeting.h),
+	// and otherwise stops; the script holds the unit's fire so the engine never
+	// picks a target of its own. tier <= 0 takes a def off the roster.
+	void SetTargetTier(const CCircuitDef* edef, int tier);
+	void SetTierRetarget(int frames) { tierRetargetFrames = std::max(1, frames); }
+	int GetTierTargetId() const { return tierTargetId; }
+	int GetTierCount() const { return int(tierByDef.size()); }
 
 private:
 	void ExecuteAttack(CCircuitUnit* unit);
@@ -67,6 +77,8 @@ private:
 	bool SelectSuspectedJammer(CCircuitUnit* unit, CCircuitDef* cdef);
 	// EMP: the most valuable target the shot can actually hold, structures first.
 	bool SelectEmpTarget(CCircuitUnit* unit, CCircuitDef* cdef);
+	// Tiered fire: the roster scan and the order; see SetTargetTier.
+	void UpdateTiered(CCircuitUnit* unit);
 
 	int targetFrame;
 	int lastStock = -1;  // D-124: a nuke silo's stockpile at the last update: a drop is a launch
@@ -83,6 +95,12 @@ private:
 	bool isTargetOverride;
 	int stockSinceFrame;  // first frame a shot has been waiting; -1 while the tube is empty
 	int lastStrategicLaunch = -1000000;
+	// Tiered fire. tierByDef: def id -> tier, set once per weapon by the script.
+	std::unordered_map<int, int> tierByDef;
+	int tierRetargetFrames = 60;      // a roster scan at most this often while a target lives
+	int tierTargetId = -1;            // the enemy under fire, -1 none
+	int tierOrderFrame = -1000000;    // the last attack order, re-issued before its timeout
+	bool tierOrderOnUnit = false;     // that order was on the unit (else on its ground)
 };
 
 } // namespace circuit

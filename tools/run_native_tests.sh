@@ -37,7 +37,7 @@ mkdir -p "$OUT"
 
 # The C++ tests, each a single translation unit, plus the extra sources a few need.
 tests=(mex_navigation_test mex_territory_test transport_definition_test commander_combat_test callback_buffer_test resurrection_claim_test reservation_claim_test task_reference_test dormant_task_chain_test economy_index_test route_command_test reservation_candidates_test construction_recovery_test guard_command_test target_preference_test layout_ranking_test base_layout_geometry_test allied_reservations_test local_reservations_test lane_solver_test strategic_targeting_test terrain_route_test air_geometry_test metal_field_test enemy_reclaim_policy_test naval_geometry_test air_safety_test widget_state_test ranged_geometry_test ground_cohort_test local_rush_test water_survey_test field_analysis_test)
-tests+=(task_lifetime_test escort_strike_test)
+tests+=(task_lifetime_test escort_strike_test tier_targeting_test)
 extra_sources() {
 	case "$1" in
 		lane_solver_test|terrain_route_test) echo "src/circuit/terrain/LaneSolver.cpp" ;;
@@ -69,6 +69,7 @@ as_suites=(
 	"data/script/src/helpers/math/assist_math.as tests/assist_math_tests.as"
 	"data/script/src/helpers/math/transport_math.as tests/transport_math_tests.as"
 	"data/script/src/helpers/math/scout_raid_math.as tests/scout_raid_math_tests.as"
+	"data/script/src/helpers/math/lolcannon_math.as tests/lolcannon_math_tests.as"
 	"data/script/src/helpers/common/collection_helpers.as tests/collection_helpers_tests.as --dictionary"
 )
 

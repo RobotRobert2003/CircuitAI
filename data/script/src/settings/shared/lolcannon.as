@@ -1,5 +1,5 @@
-// Lolcannons (owner, 2026-10-21): the Ragnarok (armvulc), Calamity (corbuzz) and
-// Starfall (legstarfall). Policy: systems/construction/lolcannon.as.
+// Lolcannons (owner, 2026-10-21; reworked 2026-10-26): the Ragnarok (armvulc),
+// Calamity (corbuzz) and Starfall (legstarfall). Policy: systems/construction/lolcannon.as.
 namespace Global {
 namespace LolCannon {
     // Off by default; experimental_balanced/main.as turns it on. When on, every
@@ -7,26 +7,50 @@ namespace LolCannon {
     // chain slot 21, AIR's chain, the C++ super weapon, TECH's super cluster,
     // the LRPC_HEAVY objective) and only FRONT and TECH may build one, here.
     bool Enabled = false;
-    // gates, all required (10 s minimum income, as Economy::GetMin*IncomeLast10s)
-    float MinMetalIncome = 400.0f;
-    float MinEnergyIncome = 10000.0f;
-    int MinGameSeconds = 35 * 60;
-    // the construction turret block, built first (cols x rows, biggest first; 4 to 20)
-    int MinTurrets = 4;
-    int TurretsAtOnce = 6;     // turret orders in flight at once (the crew helps the rest)
-    array<int> TurretBlocks = { 5, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2 };
-    // advanced (hardened) energy storages, built second
-    int Storages = 4;          // armuwadves, coruwadves
-    int LegionStorages = 6;    // legadvestore, for the Starfall
-    // the dedicated T2 constructor crew: CrewMin at the metal gate, one more per
-    // CrewMetalStep of 10 s metal income above it, at most CrewMax
-    int CrewMin = 7;
-    int CrewMax = 15;
-    float CrewMetalStep = 100.0f;
-    int CrewOrderSeconds = 30;      // missing crew is re-ordered this often
-    int MaxCannons = 1;             // cannons a program builds (a lost one is rebuilt)
-    float SiteMinDistance = 250.0f; // search rings round the base centre, elmos
-    float SiteMaxDistance = 2200.0f;
-    int StallSeconds = 240;         // a phase with no work for this long moves on (refused slots)
+    // gates, all required (10 s minimum income, as Economy::GetMin*IncomeLast10s).
+    // One cannon per entry of MetalIncomeGates: the first at 600 metal/s, the
+    // second at 1000. A lost cannon is rebuilt on its own site.
+    array<float> MetalIncomeGates = { 600.0f, 1000.0f };
+    float MinEnergyIncome = 5000.0f;
+    int MinGameSeconds = 0;
+    // the site: on a ring round an enemy start, just inside the cannon's range
+    // (range - SiteRangeMarginMax .. range - SiteRangeMarginMin), the candidate
+    // nearest our base first. The ground must score SiteMinScore (flat x
+    // buildable, TECH's layout measure) over the cannon, its turret block and
+    // its storage strip, and hold the cannon's footprint and MinTurrets turrets.
+    float SiteRangeMarginMin = 150.0f;
+    float SiteRangeMarginMax = 650.0f;
+    float SiteRangeStep = 125.0f;
+    int SiteAngles = 64;            // candidates per ring
+    int SiteProbes = 40;            // candidates whose footprint is actually tried, nearest our base first
+    float SiteMinScore = 0.7f;
+    // the construction turret block beside the cannon (cols x rows, across x along)
+    int TurretCols = 4;
+    int TurretRows = 4;
+    int MinTurrets = 16;
+    int TurretsAtOnce = 8;          // turret orders in flight at once (the crew helps the rest)
+    // advanced (hardened) energy storages, in a narrow strip two wide on the
+    // other side of the cannon (armuwadves / coruwadves; legadvestore for the Starfall)
+    int Storages = 6;
+    int LegionStorages = 8;
+    int StorageCols = 2;
+    // the crews. One T2 air constructor orders the cannon; AirCrew air
+    // constructors (T1 or T2) are taken off every other task, build the
+    // turret block and then assist the cannon; StoreCrew T2 air constructors
+    // build the storages, then assist. Our own air constructors are claimed
+    // first, the rest ordered from our air plants (CrewRecruitBatch a round).
+    // With no air plant that can make them, T2 ground constructors stand in.
+    int AirCrew = 50;
+    int StoreCrew = 5;
+    int CrewRecruitBatch = 10;
+    int CrewOrderSeconds = 20;      // claims and recruit orders this often
+    int StallSeconds = 240;         // turrets/storages with no work this long: the cannon is ordered anyway
+    // firing: only the roster below, best tier first (CSuperTask::SetTargetTier),
+    // fire held otherwise so the engine never spends it on spam
+    bool FireTiers = true;
+    int FireRetargetFrames = 60;
+    // when a cannon stands, AIR flies one scout sweep of this make-up
+    int ReconT1Scouts = 10;
+    int ReconRadarScouts = 3;
 }
 }

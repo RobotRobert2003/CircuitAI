@@ -19,7 +19,13 @@ namespace AirScoutSweep {
         const string side = UnitHelpers::GetSideForUnitName(name);
         return name == UnitHelpers::GetT1AirScoutForSide(side) ? 0 : name == AirRecon::Name(side) ? 1 : -1;
     }
-    int Wanted(int kind) { return kind == 0 ? Global::RoleSettings::Air::ScoutSweepT1Count : Global::RoleSettings::Air::ScoutSweepRadarCount; }
+    // A requested package's own counts (lolcannon, owner 2026-10-26): pending until the
+    // package begins, in force while it forms, -1 for the settings.
+    int pendT1 = -1, pendRadar = -1, wantT1 = -1, wantRadar = -1;
+    int Wanted(int kind) {
+        if (kind == 0) return wantT1 >= 0 ? wantT1 : Global::RoleSettings::Air::ScoutSweepT1Count;
+        return wantRadar >= 0 ? wantRadar : Global::RoleSettings::Air::ScoutSweepRadarCount;
+    }
     void Exclude(CCircuitUnit@ u) {
         if(forming && u !is null && Kind(u.circuitDef.GetName())>=0) excluded.set(""+u.id,true);
     }
@@ -40,6 +46,10 @@ namespace AirScoutSweep {
         GenericHelpers::LogUtil("[AIR][ScoutSweep] first T2 plant=" + u.id + " due=" + nextPeriodic, 1);
     }
     void Request() { if (Enabled() && AirEconomy::Active()) requested = true; }
+    void Request(int t1, int radar) {
+        if (!Enabled() || !AirEconomy::Active()) return;
+        pendT1 = AiMax(0, t1); pendRadar = AiMax(0, radar); requested = true;
+    }
 
     AIFloat3 Mean(const array<AIFloat3> &in points, const AIFloat3 &in fallback) {
         if (points.isEmpty()) return fallback;
@@ -90,7 +100,9 @@ namespace AirScoutSweep {
     }
     void Begin() {
         if (ai.frame<planAfter) return;
-        if (!Plan()) { planAfter=ai.frame+10*SECOND; return; }
+        wantT1=pendT1; wantRadar=pendRadar;
+        if (!Plan()) { wantT1=-1; wantRadar=-1; planAfter=ai.frame+10*SECOND; return; }
+        pendT1=-1; pendRadar=-1;
         excluded.deleteAll(); members.deleteAll(); arrived.deleteAll();
         array<Id>@ ids = ai.GetOwnedUnitIds();
         for (uint i=0;i<ids.length();++i) {
@@ -212,7 +224,7 @@ namespace AirScoutSweep {
             members.delete(ids[i]); arrived.delete(ids[i]);
             GenericHelpers::LogUtil("[AIR][ScoutSweep] crossing unit="+u.id+" def="+u.circuitDef.GetName()+" x="+int(goals[slot].x)+" z="+int(goals[slot].z),1);
         }
-        if (members.isEmpty()) { assembly.Abort(); @assembly=null; forming=false; excluded.deleteAll(); }
+        if (members.isEmpty()) { assembly.Abort(); @assembly=null; forming=false; excluded.deleteAll(); wantT1=-1; wantRadar=-1; }
     }
     void Reset() {
         array<string>@ controlled=members.getKeys();
@@ -228,6 +240,7 @@ namespace AirScoutSweep {
         for(uint i=0;i<ids.length();++i) { CRouteTask@ task; flying.get(ids[i],@task); if(task !is null && !task.IsDead()) task.Abort(); }
         @ids=caps.getKeys();
         for(uint i=0;i<ids.length();++i) { CCircuitDef@ def=ai.GetCircuitDef(ids[i]); int cap=0; if(def !is null && caps.get(ids[i],cap)) def.maxThisUnit=cap; }
+        pendT1=-1; pendRadar=-1; wantT1=-1; wantRadar=-1;
         @assembly=null; forming=false; dispatching=false; requested=false; firstPlantFrame=-1; nextPeriodic=-1; checked=-SECOND; planAfter=0;
         excluded.deleteAll(); members.deleteAll(); arrived.deleteAll(); flying.deleteAll(); endpoints.deleteAll(); expires.deleteAll(); caps.deleteAll(); starts.resize(0); goals.resize(0);
     }

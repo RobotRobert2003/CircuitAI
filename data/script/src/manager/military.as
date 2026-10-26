@@ -115,7 +115,9 @@ namespace Military {
 			&& u.circuitDef.IsRoleAny(Unit::Role::SUPER.mask)) {
 			GenericHelpers::LogUtil("[Military] super static " + u.circuitDef.GetName() + "(" + u.id
 				+ ") -> native CSuperTask", 1);
-			return aiMilitaryMgr.DefaultMakeTask(u);
+			IUnitTask@ st = aiMilitaryMgr.DefaultMakeTask(u);
+			LolCannon::FireControl(u, st);   // owner, 2026-10-26: a lolcannon fires at its tiered roster only
+			return st;
 		}
 
 		IUnitTask@ t = TechHeavyDelivery::MilitaryTask(u);

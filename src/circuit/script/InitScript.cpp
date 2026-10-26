@@ -1746,6 +1746,11 @@ void CInitScript::RegisterCSuperTask(asIScriptEngine* engine)
 	RegisterIFighterTask<CSuperTask>(engine, "CSuperTask");
 	RegisterCast<IFighterTask, CSuperTask>(engine, "IFighterTask", "CSuperTask");
 	int r = engine->RegisterObjectMethod("CSuperTask", "void SetTargetPos(const AIFloat3& in)", asMETHOD(CSuperTask, SetTargetPos), asCALL_THISCALL); ASSERT(r >= 0);
+	// Tiered fire (lolcannons, owner 2026-10-26): script/src/systems/construction/lolcannon.as
+	r = engine->RegisterObjectMethod("CSuperTask", "void SetTargetTier(const CCircuitDef@, int)", asMETHOD(CSuperTask, SetTargetTier), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CSuperTask", "void SetTierRetarget(int)", asMETHOD(CSuperTask, SetTierRetarget), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CSuperTask", "int GetTierTargetId() const", asMETHOD(CSuperTask, GetTierTargetId), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CSuperTask", "int GetTierCount() const", asMETHOD(CSuperTask, GetTierCount), asCALL_THISCALL); ASSERT(r >= 0);
 }
 
 static void CRouteTask_SetRoute(CRouteTask* task, const CScriptArray* array)

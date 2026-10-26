@@ -18,6 +18,7 @@
 #include "Command.h"
 #include "Sim/Units/CommandAI/Command.h"
 #include "task/static/StrategicTargeting.h"
+#include "task/static/TierTargeting.h"
 #include "unit/CircuitUnit.h"
 #include "unit/CircuitWDef.h"
 
@@ -105,6 +106,11 @@ void CSuperTask::Update()
 
 	if (unit->Blocker() != nullptr) {
 		return;  // Do not interrupt current action
+	}
+
+	if (!tierByDef.empty()) {
+		UpdateTiered(unit);
+		return;
 	}
 
 	CCircuitDef* cdef = unit->GetCircuitDef();
@@ -871,6 +877,104 @@ void CSuperTask::OnLaunch(CCircuitUnit* unit, const char* how)
 	circuit->LOG("NUKE: launched from %s(%i) at (%.0f, %.0f) (%s): a smiley on the target (D-124)",
 			unit->GetCircuitDef()->GetDef()->GetName(), unit->GetId(), at.x, at.z, how);
 	circuit->DrawSmiley(at, SMILEY_RADIUS);
+}
+
+void CSuperTask::SetTargetTier(const CCircuitDef* edef, int tier)
+{
+	if (edef == nullptr) return;
+	if (tier > 0) tierByDef[edef->GetId()] = tier;
+	else tierByDef.erase(edef->GetId());
+}
+
+/*
+ * Tiered fire (lolcannons, owner 2026-10-26). One pass over the enemy datas
+ * (hostile and peaceful: an advanced fusion is unarmed) every
+ * tierRetargetFrames, at once when the target under fire is gone: O(enemies)
+ * with one hash lookup each, per lolcannon, so a few hundred lookups every two
+ * seconds for the one or two an AI owns. Mobile roster units count only while
+ * in radar or LOS; structures also at their remembered position. Orders: one
+ * attack on a new target, else one every 30 s before the 60 s order timeout,
+ * or when a target seen only as ground comes into sight. No roster unit in
+ * range: one stop, then nothing, and the script's hold fire keeps the engine
+ * from spending the gun on spam.
+ */
+void CSuperTask::UpdateTiered(CCircuitUnit* unit)
+{
+	CCircuitAI* circuit = manager->GetCircuit();
+	const int frame = circuit->GetLastFrame();
+	if ((tierTargetId >= 0) && (circuit->GetEnemyInfo(tierTargetId) == nullptr)) {
+		targetFrame = frame - tierRetargetFrames;  // the target is gone: the next one now
+	}
+	if (targetFrame + tierRetargetFrames > frame) {
+		return;
+	}
+	targetFrame = frame;
+
+	CCircuitDef* cdef = unit->GetCircuitDef();
+	const float maxSqRange = SQUARE(cdef->GetMaxRange());
+	const int canTargetCat = cdef->GetTargetCategory();
+	tier::Candidate best{-1, 0, 0.f, 0.f};
+	const SEnemyData* bestData = nullptr;
+	const auto* enemies = circuit->GetEnemyManager();
+	for (const auto* pool : {&enemies->GetHostileDatas(), &enemies->GetPeaceDatas()}) {
+		for (const SEnemyData& e : *pool) {
+			if (e.IsFake() || e.IsDead() || e.IsDying() || e.IsIgnore() || (e.cdef == nullptr)) {
+				continue;
+			}
+			const auto it = tierByDef.find(e.cdef->GetId());
+			if ((it == tierByDef.end()) || ((bestData != nullptr) && (it->second > best.tier))) {
+				continue;
+			}
+			if (((canTargetCat & e.cdef->GetCategory()) == 0) || (e.cdef->IsMobile() && !e.IsInRadarOrLOS())) {
+				continue;
+			}
+			const float sqDist = position.SqDistance2D(e.pos);
+			if (sqDist >= maxSqRange) {
+				continue;
+			}
+			const tier::Candidate c{e.id, it->second, e.cost, sqDist};
+			if (tier::Better(c, (bestData == nullptr) ? nullptr : &best, tierTargetId)) {
+				best = c;
+				bestData = &e;
+			}
+		}
+	}
+
+	if (bestData == nullptr) {
+		if ((tierTargetId >= 0) || (State::ENGAGE == state)) {
+			TRY_UNIT(circuit, unit,
+				unit->CmdStop();
+			)
+			circuit->LOG("TIER: team=%i %s(%i): no roster target in range (%.0f); holding fire",
+					circuit->GetTeamId(), cdef->GetDef()->GetName(), unit->GetId(), cdef->GetMaxRange());
+		}
+		tierTargetId = -1;
+		SetTarget(nullptr);
+		state = State::ROAM;
+		return;
+	}
+
+	CEnemyInfo* info = circuit->GetEnemyInfo(bestData->id);
+	const bool onUnit = (info != nullptr) && info->IsInRadarOrLOS() && !circuit->IsCheating();
+	const bool isNew = (bestData->id != tierTargetId);
+	if (!isNew && (State::ENGAGE == state) && (onUnit == tierOrderOnUnit)
+		&& (frame - tierOrderFrame < FRAMES_PER_SEC * 30))
+	{
+		return;  // still on it
+	}
+	if (isNew) {
+		circuit->LOG("TIER: team=%i frame=%i %s(%i): tier %i %s(%i) cost=%.0f at (%i,%i), %.0f away%s",
+				circuit->GetTeamId(), frame, cdef->GetDef()->GetName(), unit->GetId(), best.tier, bestData->cdef->GetDef()->GetName(), bestData->id,
+				bestData->cost, int(bestData->pos.x), int(bestData->pos.z), std::sqrt(best.sqDist), onUnit ? "" : " (last seen)");
+	}
+	tierTargetId = bestData->id;
+	isTargetOverride = false;
+	SetTarget(info);
+	targetPos = bestData->pos;
+	targetPos.y = circuit->GetMap()->GetElevationAt(targetPos.x, targetPos.z);
+	ExecuteAttack(unit);
+	tierOrderFrame = frame;
+	tierOrderOnUnit = onUnit;
 }
 
 void CSuperTask::SetTargetPos(const AIFloat3& pos)
