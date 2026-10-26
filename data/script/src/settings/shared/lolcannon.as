@@ -50,6 +50,7 @@ namespace LolCannon {
     int StoreCrew = 5;
     int CrewRecruitBatch = 10;
     int CrewOrderSeconds = 20;      // claims and recruit orders this often
+    int StarterGraceSeconds = 60;   // no T2 air constructor by then: our own T2 ground constructors may start the cannon
     int StallSeconds = 240;         // turrets/storages with no work this long: the cannon is ordered anyway
     // firing: only the roster below, best tier first (CSuperTask::SetTargetTier),
     // fire held otherwise so the engine never spends it on spam

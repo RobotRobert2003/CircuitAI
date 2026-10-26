@@ -254,14 +254,18 @@ namespace LolCannon {
     void ClaimOwn()
     {
         if (crewCount[STARTER] >= 1 && crewCount[STORE] >= Wanted(STORE) && crewCount[AIR] >= Wanted(AIR)) return;
+        // no starter StarterGraceSeconds into the program: our own T2 ground
+        // constructors may start the cannon (and fill the storage crew)
+        const bool groundT2 = crewCount[STARTER] < 1 && ai.frame - started >= Global::LolCannon::StarterGraceSeconds * SECOND;
         array<Id>@ ids = ai.GetOwnedUnitIds();
         int taken = 0;
         for (uint i = 0; i < ids.length(); ++i) {
             CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
             if (u is null || u.circuitDef is null || u.GetBuildProgress() < 1.0f || crewOf.exists(Key(u.id))) continue;
             if (u.task !is null && u.task.GetType() == int(Task::Type::PLAYER)) continue;   // a player's own unit
-            const int kind = KindFor(u.circuitDef.GetName(), false);
-            if (kind < 0 || !Claim(u, kind, "taken off its task")) continue;
+            const bool standIn = groundT2 && T2_GROUND.find(u.circuitDef.GetName()) >= 0;
+            const int kind = KindFor(u.circuitDef.GetName(), standIn);
+            if (kind < 0 || !Claim(u, kind, standIn ? "taken off its task, ground stand-in" : "taken off its task")) continue;
             IUnitTask@ t = BuilderTask(u);
             if (t !is null) aiBuilderMgr.AssignTask(u, t);
             ++taken;
@@ -825,7 +829,12 @@ namespace LolCannon {
             CSuperTask@ st = (g is null || g.task is null) ? null : cast<CSuperTask>(g.task);
             const int target = (st is null) ? -1 : st.GetTierTargetId();
             const int waited = (ai.frame - watchSince[i]) / SECOND;
-            if (target < 0 && g !is null && waited < 1200) continue;
+            if (target < 0 && g !is null && waited < 1200) {
+                if (waited > 0 && waited % 120 == 0)
+                    GenericHelpers::LogUtil("[LolCannon] unit " + watchIds[i] + " no roster target yet after " + waited + "s: task "
+                        + (g.task is null ? "none" : (st is null ? "not a super task (type " + g.task.GetType() + ")" : "tiered over " + st.GetTierCount() + " defs")), 1);
+                continue;
+            }
             GenericHelpers::LogUtil("[LolCannon] REPORT first_target unit=" + watchIds[i] + " enemy=" + target + " at=" + (ai.frame / SECOND)
                 + "s after_finish=" + waited + "s" + (g is null ? " (cannon lost)" : (target < 0 ? " (none in 20 min)" : "")), 1);
             watchIds.removeAt(i); watchSince.removeAt(i);
