@@ -895,8 +895,13 @@
 				"power": 1.0
 			},
 			"legelrpcmech": {
+				// owner 2026-10-27: fire at will, at targets the flat shell can reach from where it stands
+				// (the Medusa's ranged controller, terrain-checked); no chasing commanders behind ridges.
+				// No hold_fireline: unlike the Medusa it backs off closing threats and keeps its health retreat.
+				"fire_state": 2,
 				"role": ["artillery"],
-				"attribute": ["siege"],
+				"attribute": ["siege", "ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.94, "spacing": 160, "safety_margin": 96, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false, "advance_unknown_radar": false, "fire_at_will": true, "spam_max_cost": 75, "commander_priority": 3, "move_floor_seconds": 1, "max_waypoints": 4},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
