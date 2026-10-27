@@ -39,6 +39,9 @@ namespace LolCannon {
     int GunMinTrySeconds = 30;      // a cannon order that ends sooner (its starter handed over) is not a failure
     float SiteBackStep = 500.0f;
     int SiteBackLevels = 6;
+    // a site the cannon moved back from is not tried again (nor anything this near it)
+    // for that cannon; a search that finds nothing at the last level starts over from level 0
+    float SiteAvoidRadius = 400.0f;
     // the construction turret block beside the cannon (cols x rows, across x along)
     int TurretCols = 4;
     int TurretRows = 4;

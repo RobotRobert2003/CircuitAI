@@ -146,6 +146,7 @@ namespace LolCannon {
     bool moveBack = false;           // the cannon orders failed BackOffAfter times: Advance moves the site
     int nextGunTry = 0;
     int gunOrderedAt = -1;           // the frame the current cannon order was given
+    array<AIFloat3> failedSites;     // sites this cannon moved back from: later searches keep SiteAvoidRadius off them
 
     // the fire roster: def id -> tier 1..6, 0 none
     array<int> tierByDef;
@@ -490,7 +491,15 @@ namespace LolCannon {
 
     // why the last search found nothing (the "no site" line)
     int refusedGun = 0, shortTurrets = 0, bestTurrets = 0;
-    int skipResource = 0, skipLayout = 0;
+    int skipResource = 0, skipLayout = 0, skipFailed = 0;
+
+    bool NearFailed(const AIFloat3 &in p)
+    {
+        const float r = Global::LolCannon::SiteAvoidRadius;
+        for (uint i = 0; i < failedSites.length(); ++i)
+            if (MapHelpers::SqDist(failedSites[i], p) < r * r) return true;
+        return false;
+    }
 
     // The cannon's footprint at the candidate or one of TrySite's slides: off
     // metal/geo spots and off ally layouts, reservations and structures
@@ -650,8 +659,9 @@ namespace LolCannon {
         int scored = 0, tried = 0;
         refusedGun = 0; shortTurrets = 0; bestTurrets = 0;
         bool found = false;
-        skipResource = 0; skipLayout = 0;
+        skipResource = 0; skipLayout = 0; skipFailed = 0;
         for (uint i = 0; i < best.length() && !found && tried < Global::LolCannon::SiteProbes; ++i) {
+            if (NearFailed(best[i])) { ++skipFailed; continue; }
             if (aiTerrainMgr.IsZoneAlly(best[i]) || !GunGroundFree(gun, best[i], bestF[i])) continue;
             ++scored;
             const float score = GroundScore(gun, nano, st, best[i], bestF[i]);
@@ -680,7 +690,7 @@ namespace LolCannon {
                 + starts.length() + " enemy start(s): " + best.length() + " candidates, " + scored + " scored, " + tried
                 + " tried (cannon refused " + refusedGun + ", turrets short " + shortTurrets + ", best " + bestTurrets + "/"
                 + Global::LolCannon::MinTurrets + "); skipped: " + skipResource + " on metal/geo spots, " + skipLayout
-                + " on ally layouts, reservations or structures" + backWhy + "; retry in 30 s", 1);
+                + " on ally layouts, reservations or structures, " + skipFailed + " near a failed site" + backWhy + "; retry in 30 s", 1);
         return found;
     }
 
@@ -873,6 +883,7 @@ namespace LolCannon {
         }
         if (orderFrame < 0) orderFrame = ai.frame;
         gunOrderedAt = ai.frame;
+        nextGunTry = ai.frame + 3 * SECOND;   // one order at a time: crews asking in the same frame help this one
         string why;
         Gates(why);
         GenericHelpers::LogUtil("[LolCannon] " + u.circuitDef.GetName() + " " + u.id + " orders " + gun.GetName() + " at (" + int(site.x)
@@ -907,6 +918,7 @@ namespace LolCannon {
         ReleaseAll(turretRes); ReleaseAll(storeRes);
         turretRes.resize(0); storeRes.resize(0);
         const AIFloat3 old = site;
+        failedSites.insertLast(old);
         if (rebuild) {
             for (uint i = 0; i < doneSites.length(); ++i) {
                 if (MapHelpers::SqDist(doneSites[i], old) > 1.0f) continue;
@@ -1123,7 +1135,7 @@ namespace LolCannon {
         }
         LolCannonRecon::Send(Global::LolCannon::ReconT1Scouts, Global::LolCannon::ReconRadarScouts);
         rebuild = false;
-        fails = 0; siteLevel = 0; moveBack = false;
+        fails = 0; siteLevel = 0; moveBack = false; failedSites.resize(0);
         const int stores = CountStanding(Store(), storePos, 32.0f);
         if (stores < int(storePos.length()) && Global::LolCannon::StoreFinishSeconds > 0) {
             // the storages are part of the order: the starter and storage crew stay on them
@@ -1190,7 +1202,7 @@ namespace LolCannon {
             gunRes = -1; turretRes.resize(0); storeRes.resize(0);
             for (uint k = 0; k < tp.length(); ++k) turretRes.insertLast(-1);
             for (uint k = 0; k < sp.length(); ++k) storeRes.insertLast(-1);
-            fails = 0; siteLevel = 0; moveBack = false;
+            fails = 0; siteLevel = 0; moveBack = false; failedSites.resize(0);
             GenericHelpers::LogUtil("[LolCannon] the cannon at (" + int(site.x) + ", " + int(site.z) + ") was lost; the crews rebuild it there", 1);
             Begin(true);
             return true;
@@ -1223,6 +1235,13 @@ namespace LolCannon {
             if (Gun() is null || Store() is null) return;
             if (!Plan()) {
                 ++fails;   // BackOffAfter of these move the next search's rings further out
+                // nothing even at the last level: start over from the first rings (the
+                // ground and the layouts change as the game goes); failed sites stay avoided
+                if (fails >= Global::LolCannon::BackOffAfter * (Global::LolCannon::SiteBackLevels + 1)) {
+                    fails = 0;
+                    GenericHelpers::LogUtil("[LolCannon] no site even " + int(LolCannonMath::BackShift(Global::LolCannon::SiteBackLevels,
+                        Global::LolCannon::SiteBackStep)) + " further back; the search starts over from the first rings", 1);
+                }
                 return;
             }
             GenericHelpers::LogUtil("[LolCannon] gates open: " + why, 1);
