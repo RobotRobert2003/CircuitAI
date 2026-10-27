@@ -71,14 +71,13 @@ namespace LolCannonScouts {
         return int(tasks.length());
     }
 
-    // Our plants' orders for what is still missing, every OrderSeconds.
+    // Every OrderSeconds: a plant ordered for a kind still missing that no plant
+    // of ours (finished or not) makes. The planes themselves come from Produce.
     void Order()
     {
         if (ai.frame < nextOrder) return;
         nextOrder = ai.frame + OrderSeconds * SECOND;
-        string how = "";
-        bool lacking = false;
-        array<bool> plant = { false, false };   // a plant of ours, finished or not, makes that kind
+        array<bool> plant = { false, false };
         array<string>@ all = Factory::allFactories.getKeys();
         for (uint i = 0; i < all.length(); ++i) {
             CCircuitUnit@ f = null;
@@ -89,36 +88,36 @@ namespace LolCannonScouts {
                 if (b !is null && f.circuitDef.CanBuild(b)) plant[1] = true;
             }
         }
-        for (int kind = 0; kind < 2; ++kind) {
+        GenericHelpers::LogUtil("[LolCannon][Scouts] package: " + sent[0] + "/" + wanted[0] + " T1 (" + Alive(ordersT1) + " in production"
+            + (plant[0] ? "" : ", no plant") + "), " + sent[1] + "/" + wanted[1] + " radar (" + Alive(ordersRadar) + " in production"
+            + (plant[1] ? "" : ", no plant") + ")", 1);
+        for (int kind = 0; kind < 2; ++kind)
+            if (sent[kind] < wanted[kind] && !plant[kind]) OrderPlant(kind, plant[0]);
+    }
+
+    // Factory AiMakeTask (TECH): an idle finished plant that makes a kind still
+    // missing builds one (b3: recruits queued from the tick were never taken up
+    // by TECH's plants, whose handler only takes pending recruits for gantries).
+    IUnitTask@ Produce(CCircuitUnit@ f)
+    {
+        if (Global::AISettings::Role != AiRole::TECH || f is null || f.circuitDef is null || !Busy() || f.GetBuildProgress() < 1.0f) return null;
+        for (int kind = 1; kind >= 0; --kind) {   // the radar planes first: the slower ones
             array<IUnitTask@>@ orders = ordersT1;
             array<string> names = T1_DEFS;
             if (kind == 1) { @orders = ordersRadar; names = RADAR_DEFS; }
-            const int missing = wanted[kind] - sent[kind] - Alive(orders);
-            if (missing <= 0) continue;
-            int queued = 0;
-            array<string>@ keys = Factory::allFactories.getKeys();
-            for (uint i = 0; i < keys.length() && queued < missing; ++i) {
-                CCircuitUnit@ f = null;
-                if (!Factory::allFactories.get(keys[i], @f) || f is null || f.circuitDef is null || f.GetBuildProgress() < 1.0f) continue;
-                for (uint n = 0; n < names.length() && queued < missing; ++n) {
-                    CCircuitDef@ d = ai.GetCircuitDef(names[n]);
-                    if (d is null || !f.circuitDef.CanBuild(d)) continue;
-                    const int count = missing - queued;
-                    if (d.maxThisUnit <= d.count + count) d.maxThisUnit = d.count + count + 1;
-                    if (!d.IsAvailable(ai.frame)) continue;
-                    for (int k = 0; k < count; ++k) {
-                        IUnitTask@ r = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::FIREPOWER, Task::Priority::HIGH, d, f.GetPos(ai.frame), 64.0f));
-                        if (r is null) continue;
-                        orders.insertLast(r);
-                        ++queued;
-                    }
-                }
+            if (wanted[kind] - sent[kind] - Alive(orders) <= 0) continue;
+            for (uint n = 0; n < names.length(); ++n) {
+                CCircuitDef@ d = ai.GetCircuitDef(names[n]);
+                if (d is null || !f.circuitDef.CanBuild(d)) continue;
+                if (d.maxThisUnit <= d.count + 1) d.maxThisUnit = d.count + 2;
+                if (!d.IsAvailable(ai.frame)) continue;
+                IUnitTask@ r = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::FIREPOWER, Task::Priority::HIGH, d, f.GetPos(ai.frame), 64.0f));
+                if (r is null) continue;
+                orders.insertLast(r);
+                return r;
             }
-            how += (how == "" ? "" : ", ") + queued + "/" + missing + (kind == 0 ? " T1" : " radar");
-            if (queued < missing) lacking = true;
-            if (queued == 0 && !plant[kind]) OrderPlant(kind, plant[0]);
         }
-        if (how != "") GenericHelpers::LogUtil("[LolCannon][Scouts] ordered " + how + (lacking ? " (no plant of ours makes the rest)" : ""), 1);
+        return null;
     }
 
     void Uncap(CCircuitDef@ d)

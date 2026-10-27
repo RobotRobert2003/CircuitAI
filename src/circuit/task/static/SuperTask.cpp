@@ -28,6 +28,8 @@
 #include "CircuitAI.h"
 #include "util/Utils.h"
 #include "spring/SpringCallback.h"
+#include "WeaponMount.h"
+#include "WeaponDef.h"
 
 #include "spring/SpringMap.h"
 
@@ -1027,17 +1029,33 @@ int CSuperTask::PickTierArea(CCircuitUnit* unit, const std::vector<tier::Candida
 	for (const tier::Area& a : tierAreas) tierAreaTargets.push_back(candidates[a.aim].id);
 	tierSeenNow.clear();
 	for (const tier::Candidate& c : candidates) tierSeenNow.insert(c.id);
+	// "Seen" spans TIER_SEEN_FRAMES (a3: commanders flickering in and out of
+	// radar restarted the rotation 19 times in 29): the old top still counts
+	// while it lives and was a candidate that recently; only a target new for
+	// that long is fresh news.
+	constexpr int TIER_SEEN_FRAMES = FRAMES_PER_SEC * 30;
+	auto seenLately = [this, frame](int id) {
+		const auto it = tierLastSeen.find(id);
+		return (it != tierLastSeen.end()) && (frame - it->second <= TIER_SEEN_FRAMES);
+	};
+	const int oldTop = tierRotation.topId;
+	const bool oldTopStill = (tierSeenNow.count(oldTop) > 0)
+		|| ((oldTop >= 0) && (circuit->GetEnemyInfo(oldTop) != nullptr) && seenLately(oldTop));
 	const int top = tierAreas.empty() ? -1 : tierAreas[0].seedId;
+	const bool topSeenBefore = seenLately(top);
+	for (const tier::Candidate& c : candidates) tierLastSeen[c.id] = frame;
+	for (auto it = tierLastSeen.begin(); it != tierLastSeen.end();) {
+		if (frame - it->second > TIER_SEEN_FRAMES) it = tierLastSeen.erase(it); else ++it;
+	}
 	const int oldIndex = tierRotation.index;
 	const char* why = nullptr;
-	if (tier::TopChanged(tierRotation.topId, top, tierSeenNow.count(tierRotation.topId) > 0, tierSeen.count(top) > 0)) {
+	if (tier::TopChanged(oldTop, top, oldTopStill, topSeenBefore)) {
 		tier::Restart(tierRotation, frame);
 		why = "the top area changed";
 	} else if (tier::Advance(tierRotation, int(tierAreas.size()), frame, tierDwellFrames, tierDwellShots)) {
 		why = (tierRotation.index == 0) ? "back to the top" : "next area";
 	}
 	tierRotation.topId = top;
-	std::swap(tierSeen, tierSeenNow);
 	if (tierAreas.empty()) {
 		return -1;
 	}
@@ -1057,9 +1075,26 @@ int CSuperTask::PickTierArea(CCircuitUnit* unit, const std::vector<tier::Candida
 void CSuperTask::CountTierShot(CCircuitUnit* unit, int frame)
 {
 	if (tierByDef.empty() || (tierAreaMax <= 1) || (tierDwellShots <= 0)) return;
-	// a burst raises one event per projectile: shots closer than half a reload are one shot
-	const int gap = std::max(FRAMES_PER_SEC / 2, unit->GetCircuitDef()->GetReloadTime() / 2);
-	if (frame - tierShotFrame < gap) return;
+	// A salvo raises one event per projectile: shots closer than the main
+	// weapon's salvo plus half its reload are one shot. The def's own reload
+	// time is its quickest weapon's (b3: the Starfall moved on after 1-7 s).
+	if (tierShotGap < 0) {
+		float reload = 0.f, salvo = 0.f;
+		auto mounts = unit->GetCircuitDef()->GetDef()->GetWeaponMounts();
+		for (springai::WeaponMount* mount : mounts) {
+			springai::WeaponDef* wd = mount->GetWeaponDef();
+			if (wd->GetReload() > reload) {
+				reload = wd->GetReload();
+				salvo = wd->GetSalvoDelay() * std::max(0, wd->GetSalvoSize() - 1);
+			}
+			delete wd;
+			delete mount;
+		}
+		tierShotGap = std::max(FRAMES_PER_SEC / 2, int((salvo + reload * 0.5f) * FRAMES_PER_SEC));
+		manager->GetCircuit()->LOG("TIER: %s(%i): one shot = fire events within %i frames (reload %.1f s, salvo %.1f s)",
+				unit->GetCircuitDef()->GetDef()->GetName(), unit->GetId(), tierShotGap, reload, salvo);
+	}
+	if (frame - tierShotFrame < tierShotGap) return;
 	tierShotFrame = frame;
 	if (++tierRotation.shots >= tierDwellShots) {
 		targetFrame = frame - tierRetargetFrames;  // the next area at the next update

@@ -143,6 +143,8 @@ namespace Factory {
         if (t !is null) return t;
         @t = TechFlank::Produce(u);
 		if (t !is null) return t;
+		@t = LolCannonScouts::Produce(u);   // TECH with no AIR: its lolcannon scout package (owner 2026-10-27)
+		if (t !is null) return t;
 		// Emergency AIR production must reach its role before optional spam.
 		if (AirBaseResponse::Emergency() && (UnitHelpers::IsT1AircraftPlant(u.circuitDef.GetName())
 			|| UnitHelpers::IsT2AircraftPlant(u.circuitDef.GetName()))) return AirProduction::MakeTask(u);

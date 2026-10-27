@@ -131,8 +131,10 @@ private:
 	tier::Rotation tierRotation;
 	std::vector<tier::Area> tierAreas;      // ranked, at the last scan
 	std::vector<int> tierAreaTargets;       // each area's aim, as an enemy id
-	std::unordered_set<int> tierSeen, tierSeenNow;  // candidate ids: the last scan, this one
+	std::unordered_set<int> tierSeenNow;            // candidate ids of this scan
+	std::unordered_map<int, int> tierLastSeen;      // candidate id -> the last scan that had it, kept TIER_SEEN_FRAMES
 	int tierShotFrame = -1000000;     // the last shot counted
+	int tierShotGap = -1;             // frames between two shots of the main weapon's salvos; -1 not yet known
 };
 
 } // namespace circuit
