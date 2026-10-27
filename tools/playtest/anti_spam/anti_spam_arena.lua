@@ -11,7 +11,7 @@
 --   [AntiSpamArena] breach id=.. def=.. frame=..              (a spam unit inside breach_radius of an AI start)
 --   [AntiSpamArena] finished id=.. team=.. def=.. kind=.. x=.. z=.. frame=..  (each gun, nano and parked-type unit the AIs finish)
 --   [AntiSpamStats] died id=.. team=.. def=.. kind=parked|gun|nano|other kills=.. life=..s healed=..hp heals=..
---     gave=..hp gave_heals=.. (a nano's repairs); at the end one "alive id=.." line per surviving gun, nano and parked-type unit
+--     gave=..hp gave_heals=.. (a nano's repairs, visible to spectators only), est=..hp est_sessions=.. est_gave=.. (estimated: see UnitDamaged); at the end one "alive id=.." line per surviving gun, nano and parked-type unit
 --   [AntiSpamStats] deaths_by_x ... (spam and AI deaths per 1024-elmo x slice) and summary ... (every 60 s and at the end), then [AntiSpamArena] END
 -- Cost: O(watched units) health reads every 15 frames, O(nanos) build-target reads; orders only to the spam team.
 function widget:GetInfo()
@@ -98,7 +98,8 @@ function widget:UnitFinished(id, udid, team)
     local kind = kindOf(name)
     local hp = Spring.GetUnitHealth(id)
     watched[id] = {def = name, team = team, kind = kind, born = Spring.GetGameFrame(), kills = 0,
-        lastHp = hp or 0, healed = 0, heals = 0}
+        lastHp = hp or 0, healed = 0, heals = 0, est = 0, estSessions = 0, estOn = false, hitFrame = -1,
+        regen = (UnitDefs[udid].autoHeal or 0) + (UnitDefs[udid].idleAutoHeal or 0), ally = Spring.GetUnitAllyTeam(id)}
     if kind ~= "other" then
         stat(name).n = stat(name).n + 1
         -- where and when each gun, nano and parked-type unit stands: the lane build timeline
@@ -106,7 +107,19 @@ function widget:UnitFinished(id, udid, team)
         log("AntiSpamArena", string.format("finished id=%d team=%d def=%s kind=%s x=%d z=%d frame=%d",
             id, team, name, kind, math.floor(x or -1), math.floor(z or -1), Spring.GetGameFrame()))
     end
-    if kind == "nano" then nanos[id] = {healed = 0, heals = 0, target = nil} end
+    if kind == "nano" then
+        local x, _, z = Spring.GetUnitPosition(id)
+        nanos[id] = {healed = 0, heals = 0, target = nil, x = x or 0, z = z or 0, ally = Spring.GetUnitAllyTeam(id),
+            reach = (UnitDefs[udid].buildDistance or 0) + 40, est = 0, estSessions = 0}
+    end
+end
+
+-- the spam team cannot read enemy build targets (Spring.GetUnitIsBuilding), so heals are also
+-- estimated: an HP gain beyond regeneration on a finished unit, with no damage in that 15-frame
+-- step, within reach of a live construction turret of its allyteam (the nearest one gets it)
+function widget:UnitDamaged(id, udid, team, damage)
+    local w = watched[id]
+    if w and damage > 0 then w.hitFrame = Spring.GetGameFrame() end
 end
 
 function widget:UnitDestroyed(id, udid, team, attacker, attackerDef, attackerTeam)
@@ -132,9 +145,10 @@ function widget:UnitDestroyed(id, udid, team, attacker, attackerDef, attackerTea
             local s = stat(w.def)
             s.died = s.died + 1
             local n = nanos[id]
-            log("AntiSpamStats", string.format("died id=%d team=%d def=%s kind=%s kills=%d life=%ds healed=%dhp heals=%d gave=%dhp gave_heals=%d by=%s",
+            log("AntiSpamStats", string.format("died id=%d team=%d def=%s kind=%s kills=%d life=%ds healed=%dhp heals=%d gave=%dhp gave_heals=%d est=%dhp est_sessions=%d est_gave=%dhp est_gave_sessions=%d by=%s",
                 id, w.team, w.def, w.kind, w.kills, math.floor((Spring.GetGameFrame() - w.born) / 30), math.floor(w.healed), w.heals,
-                n and math.floor(n.healed) or 0, n and n.heals or 0, attackerDef and defName(attackerDef) or "?"))
+                n and math.floor(n.healed) or 0, n and n.heals or 0, math.floor(w.est), w.estSessions,
+                n and math.floor(n.est) or 0, n and n.estSessions or 0, attackerDef and defName(attackerDef) or "?"))
         end
         local s = w.kind ~= "other" and stat(w.def) or nil
         if s then s.kills = s.kills + w.kills; s.healed = s.healed + w.healed; s.heals = s.heals + w.heals end
@@ -150,8 +164,9 @@ local function summary(final)
         for id, w in pairs(watched) do
             if w.kind ~= "other" then
                 local n = nanos[id]
-                log("AntiSpamStats", string.format("alive id=%d team=%d def=%s kind=%s kills=%d healed=%dhp heals=%d gave=%dhp gave_heals=%d",
-                    id, w.team, w.def, w.kind, w.kills, math.floor(w.healed), w.heals, n and math.floor(n.healed) or 0, n and n.heals or 0))
+                log("AntiSpamStats", string.format("alive id=%d team=%d def=%s kind=%s kills=%d healed=%dhp heals=%d gave=%dhp gave_heals=%d est=%dhp est_sessions=%d est_gave=%dhp est_gave_sessions=%d",
+                    id, w.team, w.def, w.kind, w.kills, math.floor(w.healed), w.heals, n and math.floor(n.healed) or 0, n and n.heals or 0,
+                    math.floor(w.est), w.estSessions, n and math.floor(n.est) or 0, n and n.estSessions or 0))
             end
         end
     end
@@ -171,7 +186,8 @@ local function summary(final)
             name, s.n, s.died, l.n, kills, s.died > 0 and s.kills / s.died or 0, math.floor(s.healed + l.healed), s.heals + l.heals)
     end
     local nh, nhp = 0, 0
-    for _, n in pairs(nanos) do nh = nh + n.heals; nhp = nhp + n.healed end
+    local eg, es = 0, 0
+    for _, n in pairs(nanos) do nh = nh + n.heals; nhp = nhp + n.healed; eg = eg + n.est; es = es + n.estSessions end
     local function slices(t)
         local o = {}
         for k = -1, 15 do if t[k] then o[#o + 1] = k .. ":" .. t[k] end end
@@ -179,9 +195,9 @@ local function summary(final)
     end
     log("AntiSpamStats", string.format("deaths_by_x%s frame=%d slice=%d spam=%s ai=%s", final and " final" or "",
         Spring.GetGameFrame(), SLICE, slices(spamDeathX), slices(aiDeathX)))
-    log("AntiSpamStats", string.format("summary%s frame=%d spawned=%d spam_killed=%d breached=%d ai_lost=%d ai_lost_metal=%d live_nano_heals=%d live_nano_healed=%dhp units=%s",
+    log("AntiSpamStats", string.format("summary%s frame=%d spawned=%d spam_killed=%d breached=%d ai_lost=%d ai_lost_metal=%d live_nano_heals=%d live_nano_healed=%dhp live_nano_est_gave=%dhp live_nano_est_sessions=%d units=%s",
         final and " final" or "", Spring.GetGameFrame(), tally.spawned, tally.spam_killed, tally.breached, tally.ai_lost,
-        math.floor(tally.ai_lost_metal), nh, math.floor(nhp), table.concat(parts, " ")))
+        math.floor(tally.ai_lost_metal), nh, math.floor(nhp), math.floor(eg), es, table.concat(parts, " ")))
 end
 
 function widget:GameFrame(f)
@@ -212,6 +228,25 @@ function widget:GameFrame(f)
                     w.healed = w.healed + (hp - w.lastHp)
                     nanos[nid].healed = nanos[nid].healed + (hp - w.lastHp)
                 end
+                local gain = hp - w.lastHp - w.regen * 0.5
+                local healedNow = false
+                if gain > 0.5 and f - w.hitFrame > 15 and select(5, Spring.GetUnitHealth(id)) == 1 then
+                    local x, _, z = Spring.GetUnitPosition(id)
+                    local best, bestSq = nil, math.huge
+                    for nid, n in pairs(nanos) do
+                        if nid ~= id and n.ally == w.ally then
+                            local sq = (n.x - x) ^ 2 + (n.z - z) ^ 2
+                            if sq <= n.reach * n.reach and sq < bestSq then best, bestSq = n, sq end
+                        end
+                    end
+                    if best then
+                        healedNow = true
+                        w.est = w.est + gain
+                        best.est = best.est + gain
+                        if not w.estOn then w.estSessions = w.estSessions + 1; best.estSessions = best.estSessions + 1 end
+                    end
+                end
+                w.estOn = healedNow
                 w.lastHp = hp
             end
         end
