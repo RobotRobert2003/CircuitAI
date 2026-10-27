@@ -5,6 +5,7 @@
 #include "../../helpers/spatial/map_helpers.as"
 #include "../../helpers/units/unit_helpers.as"
 #include "../../helpers/math/lolcannon_math.as"
+#include "lolcannon_scouts.as"
 
 /******************************************************************************
 
@@ -50,9 +51,10 @@ this program (owner, 2026-10-26):
   crews   taken off every other task (Builder AiMakeTask asks here first):
             starter  one T2 air constructor: orders the cannon at once;
             air      AirCrew (50) air constructors, T1 or T2: build the
-                     TurretCols x TurretRows (4x4) turret block, then assist;
+                     Turrets (22) of the TurretCols x TurretRows (4x4)
+                     block and its spare rows, then assist;
             store    StoreCrew (5) T2 air constructors: build the storages
-                     (6 armuwadves / coruwadves, 8 legadvestore for the
+                     (7 armuwadves / coruwadves, 9 legadvestore for the
                      Starfall) as a strip StorageCols (2) wide, then assist.
                      A storage slot that does not reserve, or whose orders
                      keep failing, moves to the nearest free spot within
@@ -63,10 +65,8 @@ this program (owner, 2026-10-26):
           T2 air constructor, T2 ground constructors stand in for the starter
           and storage crews.
   done    the air crew is released (the starter and storage crew first finish
-          any storages still short, up to StoreFinishSeconds), the cannon's fire is tiered (below) and the
-          AIR ally is asked for one scout sweep of ReconT1Scouts T1 scouts and
-          ReconRadarScouts radar/sonar planes (team/lolcannon_recon.as). A
-          lost cannon is rebuilt on its own site.
+          any storages still short, up to StoreFinishSeconds) and the cannon's
+          fire is tiered (below). A lost cannon is rebuilt on its own site.
   fire    Military::AiMakeTask hands each lolcannon's CSuperTask the roster
           below and sets FireState (2, fire at will, owner 2026-10-26; kept
           once a minute); a roster target in range is ordered, best tier first:
@@ -81,6 +81,23 @@ this program (owner, 2026-10-26):
           T1 constructor or commander can build, T2 what only a T2
           constructor can. Native picks the best tier in range, keeps its
           target inside a tier, else the dearest (CSuperTask::UpdateTiered).
+          Areas (owner 2026-10-27): the roster targets in range are grouped
+          into areas of AreaRadius (300) round the best target left; an area
+          ranks by its best tier, then by its roster metal, and is fired at
+          its best target. Ragnarok and Calamity work down the top GunAreas
+          (6), GunAreaSeconds (20) on each; the Starfall the top
+          StarfallAreas (3), StarfallShotsPerArea (2) shots on each; then back
+          to the top. Scouting that changes the top area (its best target
+          gone, or a better one found) sends the gun back to the top at once
+          (CSuperTask::SetTierRotation; TierTargeting.h).
+  scouts  the first strike asks the allied AIR for ReconT1Scouts (10) T1
+          scouts and ReconRadarScouts (3) radar planes at the strike, spread
+          over ReconSpread (600) round it and on to the far map edge; every
+          ReScoutSeconds (120) after, the same at the gun's current
+          highest-rated area, and at once (at most every ReScoutMinSeconds,
+          60) when that area moves further than ReconSpread from the last.
+          With no AIR on the map TECH builds and flies the package itself
+          (team/lolcannon_recon.as, lolcannon_scouts.as).
 
 Every other path is closed: each cannon def's maxThisUnit is held at its count
 (every native path - the porc chain's slot 21, AIR's chain, the C++ super
@@ -448,7 +465,11 @@ namespace LolCannon {
         return r;
     }
 
-    int TurretsWanted() { return AiMax(Global::LolCannon::MinTurrets, Global::LolCannon::TurretCols * Global::LolCannon::TurretRows); }
+    int TurretsWanted()
+    {
+        const int slots = Global::LolCannon::TurretCols * (Global::LolCannon::TurretRows + AiMax(0, Global::LolCannon::TurretSpareRows));
+        return AiMin(slots, AiMax(Global::LolCannon::MinTurrets, Global::LolCannon::Turrets));
+    }
 
     // The cannon at gp facing f: the turret block's candidate slots on side `hand`
     // (+1/-1) and the storage strip's on the other, each centre out, spare rows last.
@@ -1061,6 +1082,15 @@ namespace LolCannon {
         }
         array<int> per(7, 0);
         for (int i = 0; i < n; ++i) if (tierByDef[i] > 0 && tierByDef[i] < 7) ++per[tierByDef[i]];
+        for (int t = 1; t <= 6 && ai.teamId == ai.GetLeadTeamId(); ++t) {   // the names, once per ally team
+            string names = "";
+            for (int i = 0; i < n; ++i) {
+                if (tierByDef[i] != t) continue;
+                CCircuitDef@ d = ai.GetCircuitDef(i);
+                if (d !is null) names += (names == "" ? "" : " ") + d.GetName() + "=" + int(d.costM);
+            }
+            GenericHelpers::LogUtil("[LolCannon] fire roster tier " + t + " (" + per[t] + "): " + names, 1);
+        }
         GenericHelpers::LogUtil("[LolCannon] fire roster: tier 1 " + per[1] + ", 2 " + per[2] + ", 3 " + per[3] + ", 4 " + per[4]
             + ", 5 " + per[5] + ", 6 " + per[6] + " defs (" + t1.length() + " T1 and " + t2.length() + " T2 constructor defs, "
             + gantries.length() + " gantries)", 1);
@@ -1077,6 +1107,10 @@ namespace LolCannon {
         for (uint i = 0; i < tierByDef.length(); ++i)
             if (tierByDef[i] > 0) st.SetTargetTier(ai.GetCircuitDef(int(i)), tierByDef[i]);
         st.SetTierRetarget(Global::LolCannon::FireRetargetFrames);
+        if (u.circuitDef.GetName() == "legstarfall")
+            st.SetTierRotation(Global::LolCannon::StarfallAreas, SECOND, Global::LolCannon::StarfallShotsPerArea, Global::LolCannon::AreaRadius);
+        else
+            st.SetTierRotation(Global::LolCannon::GunAreas, Global::LolCannon::GunAreaSeconds * SECOND, 0, Global::LolCannon::AreaRadius);
         u.SetFireState(Global::LolCannon::FireState);   // owner 2026-10-26: fire at will; the tiered orders pick the target when one is in range
         GenericHelpers::LogUtil("[LolCannon] " + u.circuitDef.GetName() + " " + u.id + " fires at " + st.GetTierCount()
             + " roster defs, best tier first; fire state " + Global::LolCannon::FireState, 1);
@@ -1152,7 +1186,6 @@ namespace LolCannon {
             doneFacings.insertLast(facing);
             doneTargets.insertLast(siteTarget);
         }
-        LolCannonRecon::Send(Global::LolCannon::ReconT1Scouts, Global::LolCannon::ReconRadarScouts);
         rebuild = false;
         fails = 0; siteLevel = 0; moveBack = false; failedSites.resize(0);
         const int stores = CountStanding(Store(), storePos, 32.0f);
@@ -1303,10 +1336,76 @@ namespace LolCannon {
             if (mine[i] is null || mine[i].IsDead()) mine.removeAt(i);
         if (RoleMay()) Advance();
         if (watchIds.length() > 0) WatchFirstTargets();
+        ScoutAreas();
+        LolCannonScouts::Tick();
         if (ai.frame >= nextFireCheck) {
             nextFireCheck = ai.frame + 60 * SECOND;
             KeepFireState();
         }
+    }
+
+    // ---------------------------------------------------------------- scouting the strikes
+
+    int nextScout = -1;             // -1: no strike yet
+    int lastScoutFrame = -1;
+    AIFloat3 lastScoutAt(-1, 0, -1);
+
+    void SendScouts(const AIFloat3 &in at, const string &in why)
+    {
+        lastScoutFrame = ai.frame;
+        lastScoutAt = at;
+        nextScout = ai.frame + Global::LolCannon::ReScoutSeconds * SECOND;
+        LolCannonRecon::Send(Global::LolCannon::ReconT1Scouts, Global::LolCannon::ReconRadarScouts, at,
+            Global::LolCannon::ReconSpread, why);
+    }
+
+    // One line per cannon: its ranked areas, the one under fire marked.
+    void LogAreas(CCircuitUnit@ g, CSuperTask@ st, const string &in why)
+    {
+        string areas = "";
+        const int n = st.GetTierAreaCount(), under = st.GetTierAreaIndex();
+        for (int i = 0; i < n; ++i) {
+            const AIFloat3 p = st.GetTierAreaPos(i);
+            areas += (i > 0 ? "; " : "") + (i == under ? "*" : "") + "#" + (i + 1) + " tier " + st.GetTierAreaTier(i) + " "
+                + int(st.GetTierAreaMetal(i)) + "m (" + int(p.x) + "," + int(p.z) + ") target " + st.GetTierAreaTargetId(i);
+        }
+        GenericHelpers::LogUtil("[LolCannon] AREAS unit=" + g.id + " " + g.circuitDef.GetName() + " (" + why + "): "
+            + (n == 0 ? "no roster target in range" : areas), 1);
+    }
+
+    // main.as AiSuperWeaponFired: the first strike of any cannon of ours sends the scouts there.
+    void Fired(CCircuitUnit@ u, const AIFloat3 &in aim)
+    {
+        if (!Enabled() || u is null || u.circuitDef is null || !IsCannon(u.circuitDef.GetName())) return;
+        if (aim.x < 0.0f || aim.z < 0.0f || nextScout >= 0) return;
+        CSuperTask@ st = (u.task is null) ? null : cast<CSuperTask>(u.task);
+        if (st !is null) LogAreas(u, st, "first strike");
+        SendScouts(aim, "first strike");
+    }
+
+    // After the first strike: the scouts to the current highest-rated area of the
+    // first standing cannon that has one, every ReScoutSeconds, or sooner when
+    // that area moved. O(done sites) a second.
+    void ScoutAreas()
+    {
+        if (nextScout < 0 || Global::LolCannon::ReScoutSeconds <= 0) return;
+        const bool due = ai.frame >= nextScout;
+        if (!due && ai.frame - lastScoutFrame < Global::LolCannon::ReScoutMinSeconds * SECOND) return;
+        CCircuitDef@ gun = Gun();
+        if (gun is null) return;
+        for (uint i = 0; i < doneSites.length(); ++i) {
+            CCircuitUnit@ g = aiBuilderMgr.FindOwnNear(doneSites[i], 96.0f, gun);
+            CSuperTask@ st = (g is null || g.task is null) ? null : cast<CSuperTask>(g.task);
+            if (st is null || st.GetTierAreaCount() <= 0) continue;
+            const AIFloat3 top = st.GetTierAreaPos(0);
+            const float spread = Global::LolCannon::ReconSpread;
+            const bool moved = MapHelpers::SqDist(top, lastScoutAt) > spread * spread;
+            if (!due && !moved) return;
+            LogAreas(g, st, due ? "re-scout" : "top area moved");
+            SendScouts(top, due ? "highest-rated area" : "highest-rated area moved");
+            return;
+        }
+        if (due) nextScout = ai.frame + Global::LolCannon::ReScoutSeconds * SECOND;
     }
 
     // Every standing lolcannon of ours at its fire state, once a minute (a task or a

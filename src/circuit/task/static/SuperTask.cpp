@@ -845,6 +845,7 @@ void CSuperTask::OnLaunch(CCircuitUnit* unit, const char* how)
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
 	CCircuitDef* d = unit->GetCircuitDef();
+	CountTierShot(unit, frame);
 	const bool nuke = IsNukeSilo(d), pulse = IsPulse(d);
 	if (!nuke && !pulse) return;
 	if (frame - lastStrategicLaunch <= SMILEY_DEDUPE_EVENT) return;
@@ -905,11 +906,19 @@ void CSuperTask::UpdateTiered(CCircuitUnit* unit)
 	if ((tierTargetId >= 0) && (circuit->GetEnemyInfo(tierTargetId) == nullptr)) {
 		targetFrame = frame - tierRetargetFrames;  // the target is gone: the next one now
 	}
+	if ((tierAreaMax > 1) && (tierDwellShots <= 0) && !tierAreas.empty()
+		&& (frame - tierRotation.since >= tierDwellFrames))
+	{
+		targetFrame = frame - tierRetargetFrames;  // the dwell is up: the next area now
+	}
 	if (targetFrame + tierRetargetFrames > frame) {
 		return;
 	}
 	targetFrame = frame;
 
+	const bool byArea = (tierAreaMax > 1);
+	std::vector<tier::Candidate> candidates;
+	std::vector<const SEnemyData*> candidateDatas;
 	CCircuitDef* cdef = unit->GetCircuitDef();
 	const float maxSqRange = SQUARE(cdef->GetMaxRange());
 	const int canTargetCat = cdef->GetTargetCategory();
@@ -922,7 +931,7 @@ void CSuperTask::UpdateTiered(CCircuitUnit* unit)
 				continue;
 			}
 			const auto it = tierByDef.find(e.cdef->GetId());
-			if ((it == tierByDef.end()) || ((bestData != nullptr) && (it->second > best.tier))) {
+			if ((it == tierByDef.end()) || (!byArea && (bestData != nullptr) && (it->second > best.tier))) {
 				continue;
 			}
 			if (((canTargetCat & e.cdef->GetCategory()) == 0) || (e.cdef->IsMobile() && !e.IsInRadarOrLOS())) {
@@ -932,11 +941,23 @@ void CSuperTask::UpdateTiered(CCircuitUnit* unit)
 			if (sqDist >= maxSqRange) {
 				continue;
 			}
-			const tier::Candidate c{e.id, it->second, e.cost, sqDist};
+			const tier::Candidate c{e.id, it->second, e.cost, sqDist, e.pos.x, e.pos.z};
+			if (byArea) {
+				candidates.push_back(c);
+				candidateDatas.push_back(&e);
+				continue;
+			}
 			if (tier::Better(c, (bestData == nullptr) ? nullptr : &best, tierTargetId)) {
 				best = c;
 				bestData = &e;
 			}
+		}
+	}
+	if (byArea) {
+		const int pick = PickTierArea(unit, candidates);
+		if (pick >= 0) {
+			best = candidates[pick];
+			bestData = candidateDatas[pick];
 		}
 	}
 
@@ -975,6 +996,74 @@ void CSuperTask::UpdateTiered(CCircuitUnit* unit)
 	ExecuteAttack(unit);
 	tierOrderFrame = frame;
 	tierOrderOnUnit = onUnit;
+}
+
+void CSuperTask::SetTierRotation(int areas, int dwellFrames, int dwellShots, float radius)
+{
+	tierAreaMax = std::max(1, areas);
+	tierDwellFrames = std::max(1, dwellFrames);
+	tierDwellShots = std::max(0, dwellShots);
+	tierAreaRadius = std::max(1.f, radius);
+	tier::Restart(tierRotation, manager->GetCircuit()->GetLastFrame());
+}
+
+AIFloat3 CSuperTask::GetTierAreaPos(int i) const
+{
+	if (!ValidArea(i)) return -RgtVector;
+	return AIFloat3(tierAreas[i].x, 0.f, tierAreas[i].z);
+}
+
+/*
+ * The area rotation (owner 2026-10-27): rank the areas, restart at the top when
+ * fresh scouting changed the top one (TopChanged), else move on once the dwell
+ * is up. One log line, with the whole ranking, whenever the area changes.
+ */
+int CSuperTask::PickTierArea(CCircuitUnit* unit, const std::vector<tier::Candidate>& candidates)
+{
+	CCircuitAI* circuit = manager->GetCircuit();
+	const int frame = circuit->GetLastFrame();
+	tierAreas = tier::BuildAreas(candidates, tierAreaRadius, tierTargetId, size_t(tierAreaMax));
+	tierAreaTargets.clear();
+	for (const tier::Area& a : tierAreas) tierAreaTargets.push_back(candidates[a.aim].id);
+	tierSeenNow.clear();
+	for (const tier::Candidate& c : candidates) tierSeenNow.insert(c.id);
+	const int top = tierAreas.empty() ? -1 : tierAreas[0].seedId;
+	const int oldIndex = tierRotation.index;
+	const char* why = nullptr;
+	if (tier::TopChanged(tierRotation.topId, top, tierSeenNow.count(tierRotation.topId) > 0, tierSeen.count(top) > 0)) {
+		tier::Restart(tierRotation, frame);
+		why = "the top area changed";
+	} else if (tier::Advance(tierRotation, int(tierAreas.size()), frame, tierDwellFrames, tierDwellShots)) {
+		why = (tierRotation.index == 0) ? "back to the top" : "next area";
+	}
+	tierRotation.topId = top;
+	std::swap(tierSeen, tierSeenNow);
+	if (tierAreas.empty()) {
+		return -1;
+	}
+	if ((why != nullptr) || (oldIndex != tierRotation.index)) {
+		std::string ranking;
+		for (size_t i = 0; i < tierAreas.size(); ++i) {
+			const tier::Area& a = tierAreas[i];
+			ranking += std::format("{}#{} t{} {:.0f}m ({},{})", i ? "; " : "", i + 1, a.tier, a.metal, int(a.x), int(a.z));
+		}
+		circuit->LOG("TIER: team=%i frame=%i %s(%i): area %i of %i (%s): %s",
+				circuit->GetTeamId(), frame, unit->GetCircuitDef()->GetDef()->GetName(), unit->GetId(),
+				tierRotation.index + 1, int(tierAreas.size()), (why != nullptr) ? why : "fewer areas", ranking.c_str());
+	}
+	return tierAreas[tierRotation.index].aim;
+}
+
+void CSuperTask::CountTierShot(CCircuitUnit* unit, int frame)
+{
+	if (tierByDef.empty() || (tierAreaMax <= 1) || (tierDwellShots <= 0)) return;
+	// a burst raises one event per projectile: shots closer than half a reload are one shot
+	const int gap = std::max(FRAMES_PER_SEC / 2, unit->GetCircuitDef()->GetReloadTime() / 2);
+	if (frame - tierShotFrame < gap) return;
+	tierShotFrame = frame;
+	if (++tierRotation.shots >= tierDwellShots) {
+		targetFrame = frame - tierRetargetFrames;  // the next area at the next update
+	}
 }
 
 void CSuperTask::SetTargetPos(const AIFloat3& pos)

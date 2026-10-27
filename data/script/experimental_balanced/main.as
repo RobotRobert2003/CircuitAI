@@ -177,6 +177,7 @@ namespace Main {
     void AiSuperWeaponFired(CCircuitUnit@ unit, const AIFloat3& in aim)
     {
         ArtilleryPolicy::Fired(unit, aim);
+        LolCannon::Fired(unit, aim);   // owner 2026-10-27: the first strike's area is scouted
     }
     void AiUnitDestroyed(CCircuitUnit@ unit)
     {

@@ -42,18 +42,21 @@ namespace LolCannon {
     // a site the cannon moved back from is not tried again (nor anything this near it)
     // for that cannon; a search that finds nothing at the last level starts over from level 0
     float SiteAvoidRadius = 400.0f;
-    // the construction turret block beside the cannon (cols x rows, across x along)
+    // the construction turret block beside the cannon (cols x rows, across x along).
+    // A site must hold MinTurrets; Turrets are built, out of the block and its spare
+    // rows (owner 2026-10-27: 16 + 6 for a margin of error; the gate stays at 16)
     int TurretCols = 4;
     int TurretRows = 4;
     int MinTurrets = 16;
+    int Turrets = 22;
     // spare rows round the block, tried after the middle ones (centre out): a
     // site holds when any MinTurrets of the (rows + spare) x cols slots reserve
     int TurretSpareRows = 2;
     int TurretsAtOnce = 8;          // turret orders in flight at once (the crew helps the rest)
     // advanced (hardened) energy storages, in a narrow strip two wide on the
     // other side of the cannon (armuwadves / coruwadves; legadvestore for the Starfall)
-    int Storages = 6;
-    int LegionStorages = 8;
+    int Storages = 7;               // owner 2026-10-27: + 1 for a margin of error
+    int LegionStorages = 9;
     int StorageCols = 2;
     // spare rows round the strip; the storages never gate the site: the ones
     // that do not reserve are ordered at their spots unpinned
@@ -81,8 +84,25 @@ namespace LolCannon {
     bool FireTiers = true;
     int FireState = 2;              // owner 2026-10-26: fire at will (0 hold, 1 return, 2 fire at will)
     int FireRetargetFrames = 60;
-    // when a cannon stands, AIR flies one scout sweep of this make-up
+    // areas (owner 2026-10-27): roster targets in range grouped round the best one
+    // left; an area ranks by its best tier, then its roster metal. Ragnarok and
+    // Calamity fire at the top GunAreas in turn, GunAreaSeconds each; the Starfall
+    // at the top StarfallAreas, StarfallShotsPerArea shots each; then the top again.
+    // Scouting that changes the top area sends the gun back to it at once.
+    float AreaRadius = 300.0f;
+    int GunAreas = 6;
+    int GunAreaSeconds = 20;
+    int StarfallAreas = 3;
+    int StarfallShotsPerArea = 2;
+    // scouting (owner 2026-10-27): at the first strike, then every ReScoutSeconds at
+    // the gun's highest-rated area, AIR (TECH with no AIR on the map) flies this
+    // package, spread over ReconSpread round the area and on to the far map edge
     int ReconT1Scouts = 10;
     int ReconRadarScouts = 3;
+    float ReconSpread = 600.0f;
+    int ReScoutSeconds = 120;
+    // and at once (no more often than ReScoutMinSeconds) when the top area moves
+    // further than ReconSpread from where the last package went
+    int ReScoutMinSeconds = 60;
 }
 }
