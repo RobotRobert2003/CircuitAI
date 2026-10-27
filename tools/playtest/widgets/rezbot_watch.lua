@@ -26,7 +26,7 @@ local function st(team)
     local s = S[team]
     if not s then
         s = {lostU = 0, lostM = 0, killU = 0, killM = 0, lostAllM = 0, killAllM = 0, rezzed = 0, rezzedM = 0,
-             givenOut = 0, givenIn = 0, rezLost = 0}
+             givenOut = 0, givenIn = 0, rezLost = 0, rezLostM = 0}
         S[team] = s
     end
     return s
@@ -38,6 +38,10 @@ end
 
 function widget:Initialize()
     if Spring.GetSpectatingState() then Spring.SendCommands("specfullview 1") end
+    for id in pairs(rezDef) do
+        local ud = UnitDefs[id]
+        Spring.Echo(string.format("[RezWatch] rezdef %s metal=%.0f energy=%.0f buildtime=%.0f speed=%.1f", ud.name, ud.metalCost or 0, ud.energyCost or 0, ud.buildTime or 0, ud.speed or 0))
+    end
 end
 
 local function markRezzed(id, def, team)
@@ -69,7 +73,14 @@ function widget:UnitDestroyed(id, def, team, attackerID, attackerDefID, attacker
     local s = st(team)
     local m = allCost[def] or 0
     s.lostAllM = s.lostAllM + m
-    if rezDef[def] then s.rezLost = s.rezLost + 1 end
+    if rezDef[def] then
+        s.rezLost = s.rezLost + 1; s.rezLostM = s.rezLostM + m
+        local x, _, z = Spring.GetUnitPosition(id)
+        local cmd = Spring.GetUnitCurrentCommand(id)
+        Spring.Echo(string.format("[RezWatch] rezdeath team=%d def=%s by=%s cmd=%s x=%.0f z=%.0f frame=%d", team,
+            UnitDefs[def].name, attackerDefID and UnitDefs[attackerDefID] and UnitDefs[attackerDefID].name or "?",
+            tostring(cmd), x or -1, z or -1, Spring.GetGameFrame()))
+    end
     if armyCost[def] then
         s.lostU = s.lostU + 1
         s.lostM = s.lostM + m
@@ -107,9 +118,9 @@ local function census(tag)
                 end
             end
             local s = st(team)
-            Spring.Echo(string.format("[RezWatch] min=%.1f team=%d ally=%d rez=%d army=%.0f armyUnits=%d lostU=%d lostM=%.0f killU=%d killM=%.0f lostAllM=%.0f killAllM=%.0f rezzed=%d rezzedM=%.0f rezGivenOut=%d rezGivenIn=%d rezLost=%d%s",
+            Spring.Echo(string.format("[RezWatch] min=%.1f team=%d ally=%d rez=%d army=%.0f armyUnits=%d lostU=%d lostM=%.0f killU=%d killM=%.0f lostAllM=%.0f killAllM=%.0f rezzed=%d rezzedM=%.0f rezGivenOut=%d rezGivenIn=%d rezLost=%d rezLostM=%.0f%s",
                 f / (60 * FPS), team, a, rez, army, armyN, s.lostU, s.lostM, s.killU, s.killM, s.lostAllM, s.killAllM,
-                s.rezzed, s.rezzedM, s.givenOut, s.givenIn, s.rezLost, tag or ""))
+                s.rezzed, s.rezzedM, s.givenOut, s.givenIn, s.rezLost, s.rezLostM, tag or ""))
         end
     end
 end

@@ -52,6 +52,9 @@ namespace RezReplenish {
     int botLabs = 0;
     int vehPlants = 0;
     array<int> rezIds;      // finished rez bots, ascending id
+    array<int> botLabIds;   // finished, not retiring T1 bot labs
+    dictionary releasedAt;  // lab id -> int64 frame of the last spam release
+    int releases = 0;
 
     // production
     array<int> orderFrames;
@@ -101,6 +104,7 @@ namespace RezReplenish {
         if (rezNames.length() == 0) rezNames = UnitHelpers::GetAllRezBots();
         army = 0.0f; armyUnits = 0; rezFinished = 0; rezAll = 0; botLabs = 0; vehPlants = 0;
         rezIds.resize(0);
+        botLabIds.resize(0);
         array<Id>@ ids = ai.GetOwnedUnitIds();
         for (uint i = 0; i < ids.length(); ++i) {
             CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
@@ -121,7 +125,7 @@ namespace RezReplenish {
                 continue;
             }
             if (UnitHelpers::IsT1BotLab(name)) {
-                if (!Lifecycle::IsRetiring(u)) ++botLabs;
+                if (!Lifecycle::IsRetiring(u)) { ++botLabs; botLabIds.insertLast(int(u.id)); }
             } else if (UnitHelpers::IsT1VehicleLab(name) || UnitHelpers::IsT2VehicleLab(name)) {
                 ++vehPlants;
             }
@@ -222,12 +226,42 @@ namespace RezReplenish {
             lastTarget = target;
         }
         if (Global::RezReplenish::ShareEnabled) _Share();
+        _ReleaseSpamLab();
         if (ai.frame - lastLogFrame >= Global::RezReplenish::LogSeconds * SECOND) {
             lastLogFrame = ai.frame;
             GenericHelpers::LogUtil("[RezRep] stat army=" + int(army) + " units=" + armyUnits + " rez=" + rezFinished
                 + " rezAll=" + rezAll + " target=" + target + " want=" + Want() + " botLabs=" + botLabs
                 + " vehPlants=" + vehPlants + " native=" + int(aiMilitaryMgr.armyCost) + " orders=" + ordersTotal
                 + " given=" + giftsGiven + " received=" + received + " requests=" + requestsSent, 1);
+        }
+    }
+
+    // A T1 bot lab that Spam turned into a pump runs one repeating recruit and never asks
+    // Factory::AiMakeTask again, so FactoryMakeTask above is never reached (played: every
+    // bot-lab FRONT stopped ordering rez bots once spam took its lab, minute 15-20). While
+    // rez bots are short, end one pump's repeat the way Spam ends it itself; the lab asks
+    // again, gets the rez bot order first and is a pump again once the stock is full.
+    void _ReleaseSpamLab()
+    {
+        if (!Global::RezReplenish::Enabled && !Global::RezReplenish::ShareEnabled) return;
+        if (!RoleEligible() || !Global::RezReplenish::ReleaseSpamLabs) return;
+        const int want = Want();
+        if (want <= 0 || rezAll + int(orderFrames.length()) >= want) return;
+        if (int(orderFrames.length()) >= Global::RezReplenish::MaxOrdersInFlight) return;
+        for (uint i = 0; i < botLabIds.length(); ++i) {
+            const string key = "" + botLabIds[i];
+            if (!Spam::repeatTask.exists(key)) continue;
+            if (ai.frame - _Get(releasedAt, botLabIds[i], -100000) < Global::RezReplenish::ReleaseSpacingSeconds * SECOND) continue;
+            CCircuitUnit@ f = ai.GetTeamUnit(botLabIds[i]);
+            IUnitTask@ task;
+            if (f is null || !Spam::repeatTask.get(key, @task) || task is null || task.IsDead() || f.task !is task) continue;
+            Spam::repeatTask.delete(key);
+            task.Abort();
+            _Set(releasedAt, botLabIds[i], ai.frame);
+            ++releases;
+            GenericHelpers::LogUtil("[RezRep] release spam lab=" + key + " rez=" + rezFinished + " rezAll=" + rezAll
+                + " want=" + want + " army=" + int(army) + " releases=" + releases, 1);
+            return;   // one lab at a time
         }
     }
 

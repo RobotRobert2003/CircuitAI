@@ -23,6 +23,11 @@ namespace RezReplenish {
         // no replenishment and no donations from them unless this is set.
         bool IncludeTechSupport = false;
         int OrderTimeoutSeconds = 60;
+        // A T1 bot lab Spam runs as a repeating pump never asks for a new task; while rez bots
+        // are short, end one pump's repeat (at most once per lab per ReleaseSpacingSeconds) so the
+        // lab takes the rez bot order and then returns to spam.
+        bool ReleaseSpamLabs = true;
+        int ReleaseSpacingSeconds = 20;
 
         // Sharing: an AI with a T1 bot lab gives rez bots to allied BARb AIs that have a vehicle
         // plant and no T1 bot lab. Such an AI asks (AiSendMessage "barbrez|req") when it has fewer
