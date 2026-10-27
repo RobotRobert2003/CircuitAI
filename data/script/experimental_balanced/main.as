@@ -8,14 +8,16 @@ namespace Main {
 
     const int NukeRushSecondCallSeconds = 18 * 60;
 
-	// Two rolls (owner, 2026-10-17). Roll 1 picks exactly one main rush: nuke 25%, T3 35%, heavy (T2_RUSH) 25%, none 15% (Cent's standard weights, restored by the owner 2026-10-19).
-	// Roll 2, on its own: the spam rush, on top of whatever roll 1 gave (unchanged 85%).
+	// One roll (owner, 2026-10-27): exactly one rush, T3 70%, capital 25%, nuke 5%; any weight left below 1.0 is "none".
+	// The separate spam roll is off (SingleRoll); with SingleRoll false, roll 2 adds the spam rush at Tech_Spam_Rush as before.
+	// History: two rolls from 2026-10-17 (nuke 25%, T3 35%, heavy 25%, none 15%; spam 85%), T3 100% from 2026-10-26.
 	namespace StrategyWeights {
-		float Tech_NUKE_RUSH = 0.0f;  // roll 1 (owner, 2026-10-26: temporarily 0, was 0.25)
-		float Tech_T3_RUSH = 1.0f;    // roll 1 (owner, 2026-10-26: temporarily 100%, was 0.35)
-		float Tech_T2_RUSH = 0.0f;    // roll 1 (owner, 2026-10-26: temporarily 0, was 0.25): the finite heavy-delivery rush (TechHeavyRush)
-		float Tech_CAPITAL_RUSH = 0.0f; // roll 1 (owner, 2026-10-26): T2-plant capital bombers for AIR (TechCapitalRush); 0 until the owner sets it
-		float Tech_Spam_Rush = 0.85f; // roll 2
+		bool SingleRoll = true;
+		float Tech_NUKE_RUSH = 0.05f; // owner, 2026-10-27
+		float Tech_T3_RUSH = 0.70f;   // owner, 2026-10-27
+		float Tech_T2_RUSH = 0.0f;    // the finite heavy-delivery rush (TechHeavyRush)
+		float Tech_CAPITAL_RUSH = 0.25f; // owner, 2026-10-27: T2-plant capital bombers for AIR (TechCapitalRush)
+		float Tech_Spam_Rush = 0.85f; // roll 2, only without SingleRoll
 	}
 
 	// Decide a boolean from a probability using AiDice with two weights: off vs on.
@@ -51,8 +53,8 @@ namespace Main {
 		else if (pick == 2) Global::RoleSettings::Tech::EnableStrategy(Strategy::T2_RUSH);
 		else if (pick == 3) Global::RoleSettings::Tech::EnableStrategy(Strategy::CAPITAL_RUSH);
 
-		// Roll 2: the spam rush, on its own
-		const bool spam = DecideEnabled(StrategyWeights::Tech_Spam_Rush);
+		// Roll 2: the spam rush, on its own (none with the single roll)
+		const bool spam = !StrategyWeights::SingleRoll && DecideEnabled(StrategyWeights::Tech_Spam_Rush);
 		if (spam) {
 			Global::RoleSettings::Tech::EnableStrategy(Strategy::SPAM_RUSH);
 		}
@@ -61,7 +63,7 @@ namespace Main {
 			"[Strategy] (EXPERIMENTAL BALANCED) Decided: Tech mask=" + Global::RoleSettings::Tech::StrategyMask +
 			" (" + StrategyUtil::NamesFromMask(Global::RoleSettings::Tech::StrategyMask) + "); roll 1: "
 			+ (pick == 0 ? "NUKE_RUSH" : pick == 1 ? "T3_RUSH" : pick == 2 ? "T2_RUSH (heavy rush)" : pick == 3 ? "CAPITAL_RUSH" : "none")
-			+ ", roll 2: spam rush " + (spam ? "on" : "off"),
+			+ (StrategyWeights::SingleRoll ? " (single roll)" : ", roll 2: spam rush " + (spam ? "on" : "off")),
 			1);
 	}
 
