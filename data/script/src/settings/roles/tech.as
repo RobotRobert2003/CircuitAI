@@ -263,6 +263,25 @@ namespace Tech {
             int GantrySupportNoFrameSeconds = 30;   // a support order with a worker but no frame this long stops holding the fallback
             int GantrySupportSlotRestSeconds = 10;  // a support order that died with no frame: its slot rests this long
             int GantrySupportSlotMaxFails = 3;      // and is given up after this many such deaths (played: 157 orders on one slot)
+            // Gantry turrets first (owner, 2026-10-26: "fill the planned nanos quickly"; played: 4 of 14-17
+            // turrets stood when the t3rush gantry finished, each turret built by its one T1 placer at 55 BP).
+            // While an open gantry cluster has fewer finished turrets than it plans (the t3rush roll, else
+            // FrontT3TurretsFirst), every builder (rule gantry.nanos: T2 constructors and the commander too) and
+            // every turret in reach builds the block's turret frames before the gantry frame; a finished turret
+            // repays its build time in about 26 s, so the gantry finishes sooner with its turrets standing.
+            bool GantryNanoFirst = false;
+            float GantryNanoFirstLandRadius = 2000.0f;   // a land builder (and the commander) further than this from the block is not pulled
+            int GantryNanoFirstAssistSeconds = 15;       // a turret-frame assist ends after this, so the builder re-asks
+            int GantryNanoFirstParallel = 8;             // turret orders in flight at once from rule gantry.nanos (played: 4 left the helpers one frame each)
+            // Turrets before the drop: from this share of the gantry's income gate (t3rush 175, else the
+            // GantryScale step) the cluster opens and its turret block goes up; the gantry itself is still
+            // ordered at the gate (0 = off)
+            float GantryNanoPrebuildShare = 0.0f;
+            // Extra T1 air constructors for the block (owner, 2026-10-26: "produce more air cons just for
+            // that purpose before dropping the gantry"): the T1 air plant's target rises by this many while a
+            // gantry block is short, and from this share of the t3rush gate (0 = off)
+            int GantryNanoExtraAirCons = 0;
+            float GantryNanoExtraAirConsShare = 0.7f;
             // D-287 (owner): Marauder-class units (armmar, corshiva, legjav) only in
             // the early T3 window. Late = game time OR 10 s minimum metal income,
             // latched once (never un-latches, persisted). Late gantries build the

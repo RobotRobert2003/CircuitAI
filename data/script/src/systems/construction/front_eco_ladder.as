@@ -340,22 +340,30 @@ namespace FrontEcoLadder {
     // ladder's T1 constructors asked.
     int nanoLog = -100000;
     IUnitTask@ nanoTask = null;
+    array<IUnitTask@> nanoTasks;   // EcoLadderGantryNanoFirst: the turret orders in flight
     const float GantryNanoReach = 3000.0f;
     IUnitTask@ GantryNano(CCircuitUnit@ u, CCircuitUnit@ g)
     {
         CCircuitDef@ nano = Def(UnitHelpers::GetT1NanoNameForSide(Side()));
-        if (nano is null || g is null || !u.circuitDef.CanBuild(nano)) return null;
+        const bool first = Global::RoleSettings::Front::EcoLadderGantryNanoFirst;
+        // turrets first: a builder that cannot build the turret still helps its frame
+        if (nano is null || g is null || (!first && !u.circuitDef.CanBuild(nano))) return null;
         const int have = Factory::_GetNanoCount(g), want = Global::RoleSettings::Front::EcoLadderGantryNanos;
-        if (have >= want) return null;
+        if (have >= want && !first) return null;   // turrets first: a frame of the ordered ones still gets help
         const AIFloat3 at = g.GetPos(ai.frame);
         if (MapHelpers::SqDist(u.GetPos(ai.frame), at) > GantryNanoReach * GantryNanoReach) return null;
         CCircuitUnit@ frame = aiBuilderMgr.FindUnfinishedNear(at, GantryNanoRadius, nano);
-        if (frame !is null) return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame, 30 * SECOND));
-        if (nanoTask !is null && !nanoTask.IsDead()) return null;   // ours is ordered, not framed yet
+        if (frame !is null) return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame, (first ? 15 : 30) * SECOND));
+        if (!u.circuitDef.CanBuild(nano) || have >= want) return null;
+        if (first) {
+            for (int i = int(nanoTasks.length()) - 1; i >= 0; --i) if (nanoTasks[i] is null || nanoTasks[i].IsDead()) nanoTasks.removeAt(i);
+            if (int(nanoTasks.length()) >= AiMax(1, Global::RoleSettings::Front::EcoLadderGantryNanoParallel)) return null;
+        } else if (nanoTask !is null && !nanoTask.IsDead()) return null;   // ours is ordered, not framed yet
         // the energy-based turret cap is lifted by one for it, as for an overflow turret
         if (nano.maxThisUnit >= 0 && nano.count >= nano.maxThisUnit) nano.maxThisUnit = nano.count + 1;
         IUnitTask@ t = Factory::EnqueueNanoForFactory(g, Task::Priority::HIGH);
         @nanoTask = t;
+        if (t !is null && first) nanoTasks.insertLast(t);
         if (t !is null || ai.frame - nanoLog > 30 * SECOND) {
             nanoLog = ai.frame;
             GenericHelpers::LogUtil("[FRONT][Eco] gantry turret " + (have + 1) + " of " + want + " for " + g.circuitDef.GetName() + " " + g.id

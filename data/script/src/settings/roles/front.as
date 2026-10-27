@@ -134,6 +134,10 @@ namespace Front {
             float EcoLadderConvertFullPercent = 0.9f;     // or one more whenever the energy bank is this full
             int EcoLadderMaxAdvFusions = 8;               // past two, one after another while metal income is under the gantry's, and after it
             int EcoLadderGantryNanos = 6;                 // caretaker turrets on the gantry before advanced fusions resume
+            // owner, 2026-10-26 (gantry turrets first): every FRONT builder (T2 constructors too) helps a gantry
+            // turret frame before the gantry frame, and up to EcoLadderGantryNanoParallel turret orders go out at once
+            bool EcoLadderGantryNanoFirst = false;
+            int EcoLadderGantryNanoParallel = 3;
             int EcoLadderFrameHelpers = 4;                // the ladder's constructors on a reactor frame at a time
             float EcoLadderFrameHelpRadius = 3000.0f;     // a frame this near the constructor
             float EcoLadderConvertBankPercent = 0.6f;
