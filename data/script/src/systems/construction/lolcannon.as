@@ -37,7 +37,7 @@ this program (owner, 2026-10-26):
           and never refuse a site; the rest are ordered at their spots.
           Further back (owner 2026-10-27): every BackOffAfter (3) failures for
           one cannon - a site search that found nothing, or a cannon order that
-          died with no frame standing after GunMinTrySeconds (30) - move the
+          put no frame down over GunMinTrySeconds (30) of orders - move the
           rings SiteBackStep (500)
           further out from the enemy start, past the cannon's reach if need be
           (no enemy start in range is allowed there), up to SiteBackLevels (6).
@@ -146,6 +146,9 @@ namespace LolCannon {
     bool moveBack = false;           // the cannon orders failed BackOffAfter times: Advance moves the site
     int nextGunTry = 0;
     int gunOrderedAt = -1;           // the frame the current cannon order was given
+    int gunTryFrom = -1;             // the frame the current try (orders with no frame yet) began, -1 none
+    int quickEnds = 0;               // orders of this try that ended with no frame
+    array<AIFloat3> badStoreSpots;   // storage spots whose orders kept failing: not chosen again
     array<AIFloat3> failedSites;     // sites this cannon moved back from: later searches keep SiteAvoidRadius off them
 
     // the fire roster: def id -> tier 1..6, 0 none
@@ -699,7 +702,8 @@ namespace LolCannon {
         @gunTask = null;
         turretTask.resize(0); turretMiss.resize(0);
         for (uint i = 0; i < turretPos.length(); ++i) { turretTask.insertLast(null); turretMiss.insertLast(0); }
-        storeTask.resize(0); storeMiss.resize(0); storeDead.resize(0);
+        storeTask.resize(0); storeMiss.resize(0); storeDead.resize(0); badStoreSpots.resize(0);
+        gunTryFrom = -1; quickEnds = 0;
         for (uint i = 0; i < storePos.length(); ++i) { storeTask.insertLast(null); storeMiss.insertLast(0); storeDead.insertLast(false); }
         nextStoreFix = 0;
     }
@@ -777,6 +781,13 @@ namespace LolCannon {
             Global::LolCannon::StoreSearchRadius + 64.0f);
     }
 
+    bool BadStoreSpot(const AIFloat3 &in q)
+    {
+        for (uint i = 0; i < badStoreSpots.length(); ++i)
+            if (MapHelpers::SqDist(badStoreSpots[i], q) < 24.0f * 24.0f) return true;
+        return false;
+    }
+
     // The nearest spot round the strip, ring by ring out to StoreSearchRadius, where
     // a storage reserves (kept and pinned when `keep`); never within 24 of `avoid`.
     bool FreeStoreSpot(CCircuitDef@ st, const AIFloat3 &in avoid, bool keep, AIFloat3 &out at, int &out id)
@@ -791,7 +802,7 @@ namespace LolCannon {
                 for (int j = -r; j <= r; ++j) {
                     if (AiMax(AiMax(i, -i), AiMax(j, -j)) != r) continue;   // this ring's edge only
                     const AIFloat3 q = At(stripCentre, side, float(i) * step, fwd, float(j) * step);
-                    if (MapHelpers::SqDist(q, avoid) < 24.0f * 24.0f || !aiTerrainMgr.CanReserveBuilding(st, q, facing)) continue;
+                    if (MapHelpers::SqDist(q, avoid) < 24.0f * 24.0f || BadStoreSpot(q) || !aiTerrainMgr.CanReserveBuilding(st, q, facing)) continue;
                     if (keep) {
                         id = aiTerrainMgr.ReserveBuilding(st, q, facing);
                         if (id < 0) continue;
@@ -832,6 +843,7 @@ namespace LolCannon {
                 ok = id >= 0;
                 if (ok) at = aiTerrainMgr.GetReservationPos(id);
             }
+            if (failing) badStoreSpots.insertLast(old);   // never back to a spot whose orders kept failing
             if (!ok) ok = FreeStoreSpot(st, failing ? old : AIFloat3(-1000.0f, 0.0f, -1000.0f), layoutOn, at, id);
             if (!ok) {
                 storeDead[k] = true;
@@ -861,19 +873,26 @@ namespace LolCannon {
         CCircuitDef@ gun = Gun();
         if (gun is null || StandingGun() !is null) return null;
         CCircuitUnit@ gf = aiBuilderMgr.FindUnfinishedNear(site, 128.0f, gun);
-        if (gf !is null) return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, gf, 60 * SECOND));
+        if (gf !is null) {
+            gunTryFrom = -1; quickEnds = 0;
+            return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, gf, 60 * SECOND));
+        }
         if (!u.circuitDef.CanBuild(gun) || moveBack) return null;
         if (gunTask !is null && !gunTask.IsDead()) return gunTask;
         if (ai.frame < nextGunTry) return null;
         if (gunTask !is null) {
-            // an order that ended within GunMinTrySeconds was handed over (a starter
-            // drafted or reassigned), not tried: ordered again, not counted
-            const int lived = (ai.frame - gunOrderedAt) / SECOND;
-            if (lived < Global::LolCannon::GunMinTrySeconds) {
-                @gunTask = null;
-                GenericHelpers::LogUtil("[LolCannon] cannon order at (" + int(site.x) + ", " + int(site.z) + ") ended after " + lived
-                    + " s with no frame: handed over, not counted", 2);
-            } else if (GunFailed("its order ended after " + lived + " s with no frame standing")) return null;
+            // An order that ended with no frame: a try is GunMinTrySeconds of orders with
+            // no frame, so a handover (a starter drafted or reassigned) is ordered again,
+            // and orders that keep dying count one failure per GunMinTrySeconds.
+            @gunTask = null;
+            ++quickEnds;
+            if (gunTryFrom < 0) gunTryFrom = gunOrderedAt;
+            const int tried = (ai.frame - gunTryFrom) / SECOND;
+            if (tried >= Global::LolCannon::GunMinTrySeconds) {
+                const int n = quickEnds;
+                gunTryFrom = ai.frame; quickEnds = 0;
+                if (GunFailed(n + " order(s) over " + tried + " s, none put a frame down")) return null;
+            }
         }
         @gunTask = OrderAt(Task::BuildType::BIG_GUN, gun, site, gunRes);
         if (gunTask is null) {

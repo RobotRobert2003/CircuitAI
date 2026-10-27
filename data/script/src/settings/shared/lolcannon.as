@@ -36,7 +36,7 @@ namespace LolCannon {
     // SiteBackStep further out from the enemy start, past the cannon's reach if need be,
     // at most SiteBackLevels times. A cannon order that keeps failing moves the site at once.
     int BackOffAfter = 3;
-    int GunMinTrySeconds = 30;      // a cannon order that ends sooner (its starter handed over) is not a failure
+    int GunMinTrySeconds = 30;      // cannon orders with no frame count one failure per this long (a quick handover alone does not)
     float SiteBackStep = 500.0f;
     int SiteBackLevels = 6;
     // a site the cannon moved back from is not tried again (nor anything this near it)
