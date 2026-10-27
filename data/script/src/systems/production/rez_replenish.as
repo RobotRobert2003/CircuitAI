@@ -56,6 +56,7 @@ namespace RezReplenish {
     dictionary releasedAt;  // lab id -> int64 frame of the last spam release
     dictionary inARow;      // lab id -> int64 rez bot orders since its last own build (RezPerNormalBuild)
     int releases = 0;
+    bool spamTookOver = false;   // StopRezWhenSpam: Spam has pumped one of our T1 bot labs
 
     // production
     array<int> orderFrames;
@@ -193,7 +194,7 @@ namespace RezReplenish {
         if (!UnitHelpers::IsT1BotLab(fname) || Lifecycle::IsRetiring(factory) || !RoleEligible()) return null;
         Scan();
         const int want = Want();
-        if (want <= 0) return null;
+        if (want <= 0 || spamTookOver) return null;
         if (rezAll + int(orderFrames.length()) >= want) return null;
         if (int(orderFrames.length()) >= Global::RezReplenish::MaxOrdersInFlight) return null;
         const int every = Global::RezReplenish::RezPerNormalBuild;
@@ -234,13 +235,40 @@ namespace RezReplenish {
             lastTarget = target;
         }
         if (Global::RezReplenish::ShareEnabled) _Share();
+        _CheckSpamTakeover();
         _ReleaseSpamLab();
         if (ai.frame - lastLogFrame >= Global::RezReplenish::LogSeconds * SECOND) {
             lastLogFrame = ai.frame;
             GenericHelpers::LogUtil("[RezRep] stat army=" + int(army) + " units=" + armyUnits + " rez=" + rezFinished
                 + " rezAll=" + rezAll + " target=" + target + " want=" + Want() + " botLabs=" + botLabs
                 + " vehPlants=" + vehPlants + " native=" + int(aiMilitaryMgr.armyCost) + " orders=" + ordersTotal
-                + " given=" + giftsGiven + " received=" + received + " requests=" + requestsSent, 1);
+                + " given=" + giftsGiven + " received=" + received + " requests=" + requestsSent
+                + " spam=" + (spamTookOver ? 1 : 0), 1);
+        }
+    }
+
+    // StopRezWhenSpam (owner, 2026-10-27): once Spam pumps any of our T1 bot labs this AI
+    // builds no more rez bots, for good: no replenishment orders, no pump release, and the rez
+    // bot defs are capped at 0 every update so neither factory.json's roll (when a lab is back
+    // from the pump) nor a role cap can add one. Rez bots already alive keep working; a donor
+    // still hands over spare ones it has.
+    void _CheckSpamTakeover()
+    {
+        if (!Global::RezReplenish::StopRezWhenSpam || !RoleEligible()) return;
+        if (!spamTookOver) {
+            for (uint i = 0; i < botLabIds.length(); ++i) {
+                if (!Spam::repeatTask.exists("" + botLabIds[i])) continue;
+                spamTookOver = true;
+                orderFrames.resize(0);
+                GenericHelpers::LogUtil("[RezRep] spam-took-over lab=" + botLabIds[i] + " rez=" + rezFinished
+                    + " rezAll=" + rezAll + " army=" + int(army) + " target=" + Target(), 1);
+                break;
+            }
+            if (!spamTookOver) return;
+        }
+        for (uint i = 0; i < rezNames.length(); ++i) {
+            CCircuitDef@ d = ai.GetCircuitDef(rezNames[i]);
+            if (d !is null && d.maxThisUnit != 0) d.maxThisUnit = 0;
         }
     }
 
@@ -252,7 +280,7 @@ namespace RezReplenish {
     void _ReleaseSpamLab()
     {
         if (!Global::RezReplenish::Enabled && !Global::RezReplenish::ShareEnabled) return;
-        if (!RoleEligible() || !Global::RezReplenish::ReleaseSpamLabs) return;
+        if (!RoleEligible() || !Global::RezReplenish::ReleaseSpamLabs || Global::RezReplenish::StopRezWhenSpam) return;
         const int want = Want();
         if (want <= 0 || rezAll + int(orderFrames.length()) >= want) return;
         if (int(orderFrames.length()) >= Global::RezReplenish::MaxOrdersInFlight) return;

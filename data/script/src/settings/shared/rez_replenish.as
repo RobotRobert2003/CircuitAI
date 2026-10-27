@@ -36,6 +36,9 @@ namespace RezReplenish {
         // lab takes the rez bot order and then returns to spam.
         bool ReleaseSpamLabs = true;
         int ReleaseSpacingSeconds = 20;
+        // Owner (2026-10-27): once Spam pumps any of this AI's T1 bot labs, build no more rez bots at
+        // all (no orders, no release - it overrides ReleaseSpamLabs - and the rez bot defs capped at 0).
+        bool StopRezWhenSpam = false;
 
         // Sharing: an AI with a T1 bot lab gives rez bots to allied BARb AIs that have a vehicle
         // plant and no T1 bot lab. Such an AI asks (AiSendMessage "barbrez|req") when it has fewer
