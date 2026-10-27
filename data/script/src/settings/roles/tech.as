@@ -266,6 +266,15 @@ namespace Tech {
             int GantryScaleMax = 6;
             int GantryScaleGraceSeconds = 300;          // INV-199: due this long without progress (cooldown 120 s + turrets + order)
             int FrontT3TurretsFirst = 10;                  // D-119: the gantry is ordered once this many of its turrets stand; the rest keep filling
+            // T3RushTurretsMin / T3RushTurretsMax (owner, 2026-10-11, back on 2026-10-18): the t3rush gantry's cluster
+            // gets a random number of turrets in [Min, Max], rolled once a game, while its gantry goes up
+            // (FrontT3TurretsFirst of them before the order) (Max 0: off) ...
+            int T3RushTurretsMin = 0;
+            int T3RushTurretsMax = 0;
+            // ... and, once its gantry stands, that number climbs evenly over T3RushTurretsRampSeconds to
+            // T3RushTurretsRampTo, never past the block the layout reserved (0: it stays at the roll)
+            int T3RushTurretsRampSeconds = 0;
+            int T3RushTurretsRampTo = 0;
             int FrontReclaimAtCount = 3;                    // D-114: this many land factories on the map retire the base's land factories
             float FrontBaseRadius = 1200.0f;                // D-114: a land factory within this of the base centre is the base's
             int FrontBaseReclaimSeconds = 240;              // D-114: INV-044: a base land factory still standing this long after the count is reached
@@ -308,6 +317,7 @@ namespace Tech {
             string EndgamePlan = "auto";                   // D-080: nuke | t2rush | t3rush | lrpc | auto (deterministic from the team id) - what follows the rush objective
             float PlanCombatGate = 200.0f;                  // D-080: no mobile combat unit under this metal income (every plan)
             float PlanT3RushCombatGate = 500.0f;            // D-080: ... the t3rush plan's gate
+            float PlanT3RushEcoMetal = 1000.0f;             // owner, 2026-10-19: the t3rush plan's phase 2 keeps climbing the metal ladder to this while the gantry produces (0 = off)
             float PlanLrpcMetal = 300.0f;                   // D-080: the lrpc plan's income before the long-range cannon
             float PlanAirConstructorsFromMetal = 200.0f;    // D-080: from this income T2 construction aircraft are the mobile build power
             float PlanAirConstructorPerMetal = 40.0f;       // D-080: one T2 air constructor per this much income ...

@@ -129,11 +129,86 @@ namespace TechGantry {
         return Work(cluster, definition, builder);
     }
 
+    // Owner (2026-10-11, back on 2026-10-18): the t3rush gantry's cluster, the
+    // first gantry cluster TECH plans on that plan, gets a random
+    // T3RushTurretsMin..T3RushTurretsMax turrets while its gantry goes up (the
+    // first TurretsBeforeLab before the order, the rest beside the frame), then
+    // from the frame the gantry stands climbs evenly over T3RushTurretsRampSeconds
+    // to T3RushTurretsRampTo. One turret order in flight at a time.
+    TechFactories::Cluster@ t3Cluster;
+    int t3Turrets = -1;
+    int t3RampStart = -1;
+    IUnitTask@ t3TurretTask;
+    int T3RushTurretTarget(TechFactories::Cluster@ cluster, CCircuitUnit@ factory) {
+        if (TechPlan::plan != "t3rush" || Global::RoleSettings::Tech::T3RushTurretsMax <= 0
+            || cluster is null || cluster.ahead || cluster.tier < 3) return 0;
+        // a given-up cluster (ahead again, ground released) hands the roll to its replacement
+        if (t3Cluster is null || (t3Cluster !is cluster && (t3Cluster.ahead || t3Cluster.labRes < 0))) {
+            @t3Cluster = cluster; t3RampStart = -1; @t3TurretTask = null;
+        }
+        if (cluster !is t3Cluster) return 0;
+        if (t3Turrets < 0) {
+            const int lo = AiMax(1, Global::RoleSettings::Tech::T3RushTurretsMin);
+            const int hi = AiMax(lo, Global::RoleSettings::Tech::T3RushTurretsMax);
+            t3Turrets = AiMax(lo, AiMin(hi, AiRandom(lo, hi)));
+            GenericHelpers::LogUtil("[TECH][T3Rush] the gantry cluster gets " + t3Turrets + " turrets while the gantry goes up (block "
+                + cluster.slots + ")", 1);
+        }
+        int cap = AiMin(t3Turrets, cluster.slots);
+        const int ramp = Global::RoleSettings::Tech::T3RushTurretsRampSeconds;
+        const int top = AiMin(Global::RoleSettings::Tech::T3RushTurretsRampTo, cluster.slots);
+        if (ramp > 0 && top > cap && factory !is null && factory.GetBuildProgress() >= 1.0f) {
+            if (t3RampStart < 0) {
+                t3RampStart = ai.frame;
+                GenericHelpers::LogUtil("[TECH][T3Rush] the gantry stands: its turrets climb from " + cap + " to " + top
+                    + " over " + ramp + " s", 1);
+            }
+            const float k = AiMin(1.0f, float(ai.frame - t3RampStart) / float(ramp * SECOND));
+            cap += int(float(top - cap) * k);
+        }
+        return cap;
+    }
+    IUnitTask@ T3RushTurret(TechFactories::Cluster@ cluster, CCircuitUnit@ builder, CCircuitUnit@ factory) {
+        const int want = T3RushTurretTarget(cluster, factory);
+        if (want <= 0 || builder is null) return null;
+        CCircuitDef@ turret = TechFactories::Nano();
+        if (turret is null || !builder.circuitDef.CanBuild(turret)) return null;
+        if (t3TurretTask !is null && !t3TurretTask.IsDead()) {
+            IBuilderTask@ pending = cast<IBuilderTask>(t3TurretTask);
+            if (pending !is null && pending.target is null && pending.GetUnits().length() == 0
+                && SafeWorker(builder, pending.GetBuildPos())) return t3TurretTask;
+        } else { @t3TurretTask = null; }
+        for (uint index = 0; index < cluster.turretPos.length(); ++index) {
+            CCircuitUnit@ frame = TechFactories::TurretAt(cluster.turretPos[index]);
+            if (frame !is null && frame.GetBuildProgress() < 1.0f && SafeWorker(builder, frame.GetPos(ai.frame)))
+                return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame,
+                    Global::RoleSettings::Tech::GantryAssistSeconds * SECOND));
+        }
+        if (t3TurretTask !is null) return null;   // its order has a worker or a frame: wait for it
+        const int have = TechFactories::TurretsOf(cluster);
+        if (have >= want || Layout::TurretsCapped()) return null;
+        const int slot = aiTerrainMgr.NextSlotAny(cluster.nanoGroup, builder.GetPos(ai.frame));
+        if (slot < 0 || !SafeWorker(builder, aiTerrainMgr.GetReservationPos(slot))) return null;
+        IUnitTask@ task = TechFactories::OrderPinned(builder, Task::BuildType::NANO, turret, slot,
+            "t3rush gantry turret (" + (have + 1) + " of " + want + ")");
+        if (task is null) return null;
+        const AIFloat3 position = aiTerrainMgr.GetReservationPos(slot);
+        bool known = false;
+        for (uint index = 0; index < cluster.turretPos.length(); ++index)
+            if (MapHelpers::SqDist(position, cluster.turretPos[index]) < SQUARE_SIZE * SQUARE_SIZE) known = true;
+        if (!known) cluster.turretPos.insertLast(position);
+        cluster.turretFrame = ai.frame; cluster.started = true;
+        @t3TurretTask = task;
+        return task;
+    }
+
     IUnitTask@ Work(TechFactories::Cluster@ cluster, CCircuitDef@ definition, CCircuitUnit@ builder) {
         if (cluster is null || definition is null || builder is null) return Null("no cluster, definition or builder");
         CCircuitUnit@ factory = TechFactories::LabAt(cluster);
         // Adopt a late frame before inspecting timeouts or pending task state.
         if (factory !is null) {
+            IUnitTask@ extra = T3RushTurret(cluster, builder, factory);
+            if (extra !is null) return extra;
             if (factory.GetBuildProgress() < 1.0f) {
                 if (SafeWorker(builder, cluster.pos))
                     return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, factory,
@@ -314,7 +389,11 @@ namespace TechGantry {
         // D-370: the heavy rush no longer holds the open gantry cluster's turrets either
         if (!RecoveryEnabled() || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0) return null;
         TechFactories::Cluster@ cluster = TechFactories::ExistingGantry();
-        if (cluster is null) return null;
+        if (cluster is null) {
+            // the t3rush gantry stands: its turrets keep climbing (owner, 2026-10-18)
+            if (t3Cluster is null || t3Cluster.labRes < 0) return null;
+            return T3RushTurret(t3Cluster, builder, TechFactories::LabAt(t3Cluster));
+        }
         return Work(cluster, ai.GetCircuitDef(cluster.defName), builder);
     }
 }
@@ -580,7 +659,7 @@ namespace TechGantryScale {
         // A map limit on the gantry is the ceiling of what can be due.
         const int target = mapCeiling >= 0 ? AiMin(highWater, mapCeiling) : highWater;
         const bool newDue = have < target && energyOk && !blocked
-            && mi >= float(have + 1) * step * Global::RoleSettings::Tech::GantryScaleDropShare;
+            && mi >= (have == 0 ? first : float(have + 1) * step) * Global::RoleSettings::Tech::GantryScaleDropShare;
         if (newDue && !due) { dueSince = ai.frame; progressFrame = ai.frame; }
         due = newDue;
         if (highWater != lastLogTarget || have != lastLogHave || due != lastLogDue) {
