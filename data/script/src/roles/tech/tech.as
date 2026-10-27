@@ -1104,7 +1104,7 @@ namespace RoleTech
 			if (metalIncome > 200.0f)
 			{
 				IUnitTask @tSig = TechHeavyChoice::Late()
-					? TechHeavyChoice::LateBatch(u, side, /*count*/ 5)
+					? TechHeavyChoice::LateBatch(u, side, /*count*/ 1)   // owner, 2026-10-27: every pair batch is one unit
 					: Factory::EnqueueGantrySignatureBatch(u, side, /*count*/ 5, Task::Priority::HIGH);
 				if (tSig !is null)
 					return tSig;
