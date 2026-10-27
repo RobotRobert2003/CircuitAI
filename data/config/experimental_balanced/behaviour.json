@@ -2277,9 +2277,11 @@
 				"power": 1.0
 			},
 			"corban": {
+				// owner 2026-10-27: a commander it can hit comes before every other target (x100 also
+				// breaks the 1 s target hold). Ranged hulls take this, not the commander_snipe lock.
 				"role":	["skirmish"],
 				"attribute": ["siege", "ranged"],
-				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false},
+				"ranged": {"target_mode": "skirmish", "range_fraction": 0.94, "spacing": 128, "safety_margin": 48, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false, "commander_priority": 100},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0,
 					"vs": { "spam": 0}
 				},
