@@ -36,6 +36,7 @@ namespace LolCannon {
     // SiteBackStep further out from the enemy start, past the cannon's reach if need be,
     // at most SiteBackLevels times. A cannon order that keeps failing moves the site at once.
     int BackOffAfter = 3;
+    int GunMinTrySeconds = 30;      // a cannon order that ends sooner (its starter handed over) is not a failure
     float SiteBackStep = 500.0f;
     int SiteBackLevels = 6;
     // the construction turret block beside the cannon (cols x rows, across x along)

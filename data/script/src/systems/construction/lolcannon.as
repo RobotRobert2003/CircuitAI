@@ -37,7 +37,8 @@ this program (owner, 2026-10-26):
           and never refuse a site; the rest are ordered at their spots.
           Further back (owner 2026-10-27): every BackOffAfter (3) failures for
           one cannon - a site search that found nothing, or a cannon order that
-          died with no frame standing - move the rings SiteBackStep (500)
+          died with no frame standing after GunMinTrySeconds (30) - move the
+          rings SiteBackStep (500)
           further out from the enemy start, past the cannon's reach if need be
           (no enemy start in range is allowed there), up to SiteBackLevels (6).
           When the cannon orders are what failed, the site moves at once (the
@@ -144,6 +145,7 @@ namespace LolCannon {
     int siteLevel = 0;               // the back-off level the current site was found at
     bool moveBack = false;           // the cannon orders failed BackOffAfter times: Advance moves the site
     int nextGunTry = 0;
+    int gunOrderedAt = -1;           // the frame the current cannon order was given
 
     // the fire roster: def id -> tier 1..6, 0 none
     array<int> tierByDef;
@@ -853,7 +855,16 @@ namespace LolCannon {
         if (!u.circuitDef.CanBuild(gun) || moveBack) return null;
         if (gunTask !is null && !gunTask.IsDead()) return gunTask;
         if (ai.frame < nextGunTry) return null;
-        if (gunTask !is null && GunFailed("its order ended with no frame standing")) return null;
+        if (gunTask !is null) {
+            // an order that ended within GunMinTrySeconds was handed over (a starter
+            // drafted or reassigned), not tried: ordered again, not counted
+            const int lived = (ai.frame - gunOrderedAt) / SECOND;
+            if (lived < Global::LolCannon::GunMinTrySeconds) {
+                @gunTask = null;
+                GenericHelpers::LogUtil("[LolCannon] cannon order at (" + int(site.x) + ", " + int(site.z) + ") ended after " + lived
+                    + " s with no frame: handed over, not counted", 2);
+            } else if (GunFailed("its order ended after " + lived + " s with no frame standing")) return null;
+        }
         @gunTask = OrderAt(Task::BuildType::BIG_GUN, gun, site, gunRes);
         if (gunTask is null) {
             nextGunTry = ai.frame + 10 * SECOND;
@@ -861,6 +872,7 @@ namespace LolCannon {
             return null;
         }
         if (orderFrame < 0) orderFrame = ai.frame;
+        gunOrderedAt = ai.frame;
         string why;
         Gates(why);
         GenericHelpers::LogUtil("[LolCannon] " + u.circuitDef.GetName() + " " + u.id + " orders " + gun.GetName() + " at (" + int(site.x)
