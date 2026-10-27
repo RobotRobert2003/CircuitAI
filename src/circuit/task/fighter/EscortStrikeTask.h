@@ -18,8 +18,8 @@
  * Each member takes the best scouted roster target anywhere (in sight or only
  * remembered), the unit while in sight, else ATTACK ground on its last known
  * spot, and keeps it until it no longer exists (dead, or its spot in sight and
- * empty); an expired or finished order is given again on the same target.
- * Members with no target wait where they are.
+ * empty for SIEGE_HIDDEN_FRAMES); an expired or finished order is given again on the same target.
+ * Members with no target fly back to SetHome's spot (one MOVE) and wait there.
  *
  * Orders: one GUARD per member per escort change, one ATTACK per strike and
  * one more each time its target leaves or re-enters sight.
@@ -67,6 +67,7 @@ public:
 	 */
 	void SetStrikePolicy(float radius, int perTarget, int attackSeconds);
 	void SetSiege(bool on) { siege = on; }
+	void SetHome(const springai::AIFloat3& pos) { home = pos; }
 	bool IsSiege() const { return siege; }
 	int GetVipId() const { return vipId; }
 	int GetStriking() const { return static_cast<int>(strikes.size()); }
@@ -82,6 +83,7 @@ private:
 		bool ground;                       // the standing ATTACK is on lastSeen, not the unit
 		springai::AIFloat3 lastSeen;       // the target's position when last in sight
 		bool reissue;                      // siege: the order ended with the target alive; give it again
+		int hiddenFrame;                   // siege: first frame its last known spot was seen empty, -1 none
 	};
 	struct SCandidate {
 		CEnemyInfo* enemy;
@@ -94,6 +96,7 @@ private:
 	void GuardVip(CCircuitUnit* unit, CCircuitUnit* vip, int frame);
 	void CheckGuards(CCircuitUnit* vip, int frame);
 	bool IsTargetGone(int targetId) const;
+	bool IsSiegeTargetGone(SStrike& strike, int frame) const;
 	void FollowTarget(CCircuitUnit* unit, SStrike& strike, int frame);
 	void EndStrike(int unitId, const char* reason);
 	int StrikersOn(int targetId) const;
@@ -105,6 +108,8 @@ private:
 	int perTarget;
 	int attackFrames;
 	bool siege;                            // no escort: strike scouted roster targets anywhere
+	springai::AIFloat3 home;               // siege: where a member with no target waits (x < 0: where it is)
+	std::set<int> sentHome;                // siege: members whose standing order is the MOVE home
 	std::map<int, SStrike> strikes;        // member id -> its attack
 	std::map<int, int> guarding;           // member id -> vip id its standing GUARD names
 	std::map<int, int> lastOrder;          // member id -> frame of its last order

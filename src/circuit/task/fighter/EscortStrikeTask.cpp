@@ -32,6 +32,8 @@ using namespace springai;
 // Shortest gap between two orders to one member: absorbs an idle storm and a
 // vip swap landing in the same second; the next task update retries.
 #define ESCORT_ORDER_GAP	(FRAMES_PER_SEC / 2)
+// Siege: a target's spot seen empty this long means the target no longer exists.
+#define SIEGE_HIDDEN_FRAMES	(FRAMES_PER_SEC * 3)
 
 CEscortStrikeTask::CEscortStrikeTask(ITaskModule* mgr)
 		: IFighterTask(mgr, FightType::GUARD, 1.f)
@@ -40,6 +42,7 @@ CEscortStrikeTask::CEscortStrikeTask(ITaskModule* mgr)
 		, perTarget(2)
 		, attackFrames(FRAMES_PER_SEC * 45)
 		, siege(false)
+		, home(-1.f, 0.f, -1.f)
 		, strikesIssued(0)
 		, shotsFired(0)
 		, targetsDestroyed(0)
@@ -65,7 +68,7 @@ void CEscortStrikeTask::AssignTo(CCircuitUnit* unit)
 void CEscortStrikeTask::RemoveAssignee(CCircuitUnit* unit)
 {
 	const int id = unit->GetId();
-	strikes.erase(id); guarding.erase(id); lastOrder.erase(id); fired.erase(id);
+	strikes.erase(id); guarding.erase(id); lastOrder.erase(id); fired.erase(id); sentHome.erase(id);
 	IFighterTask::RemoveAssignee(unit);
 	if (!unit->IsDead()) {
 		// Back to the def's own states for whatever task takes it next.
@@ -81,7 +84,7 @@ void CEscortStrikeTask::RemoveAssignee(CCircuitUnit* unit)
 bool CEscortStrikeTask::ForgetUnit(CCircuitUnit* unit)
 {
 	const int id = unit->GetId();
-	strikes.erase(id); guarding.erase(id); lastOrder.erase(id); fired.erase(id);
+	strikes.erase(id); guarding.erase(id); lastOrder.erase(id); fired.erase(id); sentHome.erase(id);
 	return IFighterTask::ForgetUnit(unit);
 }
 
@@ -276,8 +279,9 @@ bool CEscortStrikeTask::TryStrike(CCircuitUnit* unit, int frame)
 	} else {
 		unit->Attack(best, false, frame + attackFrames, false);
 	}
-	strikes[id] = {bestId, frame + attackFrames, false, ground, best->GetPos(), false};
+	strikes[id] = {bestId, frame + attackFrames, false, ground, best->GetPos(), false, -1};
 	guarding[id] = -1;  // the ATTACK replaced the GUARD
+	sentHome.erase(id);
 	lastOrder[id] = frame;
 	++strikesIssued;
 	circuit->LOG("ESCORT: team=%i strike unit=%i target=%s(%i) priority=%.1f distance=%.0f radius=%.0f vip=%i los=%i strikers=%i siege=%i at=%.0f,%.0f",
@@ -333,8 +337,25 @@ bool CEscortStrikeTask::IsTargetGone(int targetId) const
 	CEnemyInfo* target = manager->GetCircuit()->GetEnemyInfo(targetId);
 	if (target == nullptr || target->GetUnit() == nullptr) return true;
 	const CEnemyUnit* data = target->GetData();
-	// Siege: its last known spot in sight and empty means it no longer exists there.
-	return data->IsDead() || data->IsDying() || (siege && data->IsHidden());
+	return data->IsDead() || data->IsDying();
+}
+
+/*
+ * Siege: its last known spot in sight and empty for SIEGE_HIDDEN_FRAMES means it no
+ * longer exists there. One frame of it is not enough: the flag is set between the
+ * target leaving and re-entering sight (2026-10-27 retest: a geo flagged, struck
+ * 22 frames later). O(1) per strike per update.
+ */
+bool CEscortStrikeTask::IsSiegeTargetGone(SStrike& strike, int frame) const
+{
+	if (IsTargetGone(strike.targetId)) return true;
+	CEnemyInfo* target = manager->GetCircuit()->GetEnemyInfo(strike.targetId);
+	if (!target->GetData()->IsHidden()) {
+		strike.hiddenFrame = -1;
+		return false;
+	}
+	if (strike.hiddenFrame < 0) strike.hiddenFrame = frame;
+	return frame - strike.hiddenFrame >= SIEGE_HIDDEN_FRAMES;
 }
 
 void CEscortStrikeTask::EndStrike(int unitId, const char* reason)
@@ -360,7 +381,7 @@ void CEscortStrikeTask::Update()
 	// Settle strikes whose target is gone or whose order expired.
 	std::vector<int> over;
 	for (auto& strike : strikes) {
-		const bool gone = IsTargetGone(strike.second.targetId);
+		const bool gone = siege ? IsSiegeTargetGone(strike.second, frame) : IsTargetGone(strike.second.targetId);
 		if (siege) {
 			if (escort_strike::SiegeStrikeOver(gone)) {
 				over.push_back(strike.first);
@@ -399,7 +420,20 @@ void CEscortStrikeTask::Update()
 		if (vip != nullptr) {
 			GuardVip(unit, vip, frame);
 		} else if (siege) {
-			continue;  // no scouted target yet: wait where it is
+			// No scouted target: fly home once and wait there, not over the enemy base
+			// (2026-10-27 test: Liches hovering where their target died were shot down).
+			const int id = unit->GetId();
+			auto last = lastOrder.find(id);
+			if (home.x >= 0.f && sentHome.count(id) == 0
+				&& (last == lastOrder.end() || escort_strike::OrderAllowed(last->second, frame, ESCORT_ORDER_GAP))) {
+				TRY_UNIT(circuit, unit,
+					unit->CmdMoveTo(home);
+				)
+				sentHome.insert(id);
+				lastOrder[id] = frame;
+				circuit->LOG("ESCORT: team=%i siege unit=%i no scouted target: home %.0f,%.0f", circuit->GetTeamId(), id, home.x, home.z);
+			}
+			continue;
 		} else {
 			// No escort target alive: the raid is over for this member. Hand it
 			// to the idle task (ITaskModule::AssignTask(unit) would only add a

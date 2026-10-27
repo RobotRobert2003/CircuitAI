@@ -279,6 +279,7 @@ namespace TechCapitalRush {
         AirLiches::InitRoster();
         AirLiches::_Allow(et);
         et.SetSiege(true);
+        et.SetHome(Global::Map::StartPos);   // a Liche with no scouted target waits at home
         et.SetStrikePolicy(0.0f, Global::RoleSettings::Tech::CapitalRushLichesPerTarget,
             Global::RoleSettings::Tech::CapitalRushLicheOrderSeconds);
         int n = 0;
