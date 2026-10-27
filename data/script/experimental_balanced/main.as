@@ -215,6 +215,7 @@ namespace Main {
 		Team::Ferry::Update();   // transport ferry: hand-over on arrival, run polling
 		Team::SeaAssist::Update();  // SEA seeds a TACTICAL ally with a construction ship
 		Team::Donation::Update();   // a teammate without T2 asks TECH for a constructor
+		RezReplenish::Update();     // rez bot stat lines; replenishment state and sharing (owner, 2026-10-26)
 		Team::CheckOrphaned();   // recover lost mobile constructors through TECH
 	}
 

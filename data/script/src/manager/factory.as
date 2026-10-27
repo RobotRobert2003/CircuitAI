@@ -8,6 +8,7 @@
 #include "builder.as"
 #include "../systems/team/ferry.as"
 #include "../systems/production/gantry_fallback.as"
+#include "../systems/production/rez_replenish.as"
 
 namespace Factory {
 
@@ -151,6 +152,8 @@ namespace Factory {
 		// Emergency AIR production must reach its role before optional spam.
 		if (AirBaseResponse::Emergency() && (UnitHelpers::IsT1AircraftPlant(u.circuitDef.GetName())
 			|| UnitHelpers::IsT2AircraftPlant(u.circuitDef.GetName()))) return AirProduction::MakeTask(u);
+		@t = RezReplenish::FactoryMakeTask(u);   // owner, 2026-10-26: T1 bot labs keep rez bots up once the army is big
+		if (t !is null) return t;
 		@t = SeaCoast::Produce(u);
 		if (t is null) @t = Spam::FactoryMakeTask(u);   // coastal recovery owns its land labs
 		if (t !is null) return t;
