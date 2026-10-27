@@ -9,7 +9,9 @@
 -- Lines:
 --   [AntiSpamArena] wave minute=.. unit=.. count=.. spawned=..
 --   [AntiSpamArena] breach id=.. def=.. frame=..              (a spam unit inside breach_radius of an AI start)
+--   [AntiSpamArena] finished id=.. team=.. def=.. kind=.. x=.. z=.. frame=..  (each gun, nano and parked-type unit the AIs finish)
 --   [AntiSpamStats] died id=.. team=.. def=.. kind=parked|gun|nano|other kills=.. life=..s healed=..hp heals=..
+--     gave=..hp gave_heals=.. (a nano's repairs); at the end one "alive id=.." line per surviving gun, nano and parked-type unit
 --   [AntiSpamStats] deaths_by_x ... (spam and AI deaths per 1024-elmo x slice) and summary ... (every 60 s and at the end), then [AntiSpamArena] END
 -- Cost: O(watched units) health reads every 15 frames, O(nanos) build-target reads; orders only to the spam team.
 function widget:GetInfo()
@@ -97,7 +99,13 @@ function widget:UnitFinished(id, udid, team)
     local hp = Spring.GetUnitHealth(id)
     watched[id] = {def = name, team = team, kind = kind, born = Spring.GetGameFrame(), kills = 0,
         lastHp = hp or 0, healed = 0, heals = 0}
-    if kind ~= "other" then stat(name).n = stat(name).n + 1 end
+    if kind ~= "other" then
+        stat(name).n = stat(name).n + 1
+        -- where and when each gun, nano and parked-type unit stands: the lane build timeline
+        local x, _, z = Spring.GetUnitPosition(id)
+        log("AntiSpamArena", string.format("finished id=%d team=%d def=%s kind=%s x=%d z=%d frame=%d",
+            id, team, name, kind, math.floor(x or -1), math.floor(z or -1), Spring.GetGameFrame()))
+    end
     if kind == "nano" then nanos[id] = {healed = 0, heals = 0, target = nil} end
 end
 
@@ -123,9 +131,10 @@ function widget:UnitDestroyed(id, udid, team, attacker, attackerDef, attackerTea
         if w.kind ~= "other" then
             local s = stat(w.def)
             s.died = s.died + 1
-            log("AntiSpamStats", string.format("died id=%d team=%d def=%s kind=%s kills=%d life=%ds healed=%dhp heals=%d by=%s",
+            local n = nanos[id]
+            log("AntiSpamStats", string.format("died id=%d team=%d def=%s kind=%s kills=%d life=%ds healed=%dhp heals=%d gave=%dhp gave_heals=%d by=%s",
                 id, w.team, w.def, w.kind, w.kills, math.floor((Spring.GetGameFrame() - w.born) / 30), math.floor(w.healed), w.heals,
-                attackerDef and defName(attackerDef) or "?"))
+                n and math.floor(n.healed) or 0, n and n.heals or 0, attackerDef and defName(attackerDef) or "?"))
         end
         local s = w.kind ~= "other" and stat(w.def) or nil
         if s then s.kills = s.kills + w.kills; s.healed = s.healed + w.healed; s.heals = s.heals + w.heals end
@@ -136,6 +145,16 @@ function widget:UnitDestroyed(id, udid, team, attacker, attackerDef, attackerTea
 end
 
 local function summary(final)
+    if final then
+        -- the survivors one by one, so a lane's own units can be told from the rest of their type
+        for id, w in pairs(watched) do
+            if w.kind ~= "other" then
+                local n = nanos[id]
+                log("AntiSpamStats", string.format("alive id=%d team=%d def=%s kind=%s kills=%d healed=%dhp heals=%d gave=%dhp gave_heals=%d",
+                    id, w.team, w.def, w.kind, w.kills, math.floor(w.healed), w.heals, n and math.floor(n.healed) or 0, n and n.heals or 0))
+            end
+        end
+    end
     local live = {}
     for _, w in pairs(watched) do
         if w.kind ~= "other" then
