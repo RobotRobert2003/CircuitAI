@@ -1092,10 +1092,11 @@ namespace RoleTech
             IUnitTask@ amphib = AmphibiousOps::Produce(u, botLabGate);
             if (amphib !is null) return amphib;
 			// owner, 2026-10-26: with a HeavyPair<Side> set the pair alternates from the
-			// gantry's first unit (after the t3rush units on that plan), whatever the income
+			// gantry's first unit (after the t3rush units on that plan), whatever the income;
+			// one unit per ask (owner, 2026-10-27), so it goes Sol, Astraeus, Sol ... not five of each
 			if (TechHeavyChoice::HasPair(side))
 			{
-				IUnitTask @tPair = TechHeavyChoice::LateBatch(u, side, /*count*/ 5);
+				IUnitTask @tPair = TechHeavyChoice::LateBatch(u, side, /*count*/ 1);
 				if (tPair !is null)
 					return tPair;
 			}
