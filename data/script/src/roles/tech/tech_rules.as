@@ -284,7 +284,8 @@ namespace TechRules {
     }
     IUnitTask@ DoWait(Ctx@ c)           { return TechBuild::Wait(3 * SECOND); }
     IUnitTask@ DoGantrySupport(Ctx@ c) { return TechGantry::SupportWork(c.u); }
-    bool GantryScaleDue(Ctx@ c)        { return TechGantryScale::Due(); }        // D-288: O(1), set at 1 Hz
+    bool GantryScaleDue(Ctx@ c)        { return TechGantryScale::Due() || TechGantryScale::PrebuildDue(); }   // D-288: O(1), set at 1 Hz
+    IUnitTask@ DoGantryNanos(Ctx@ c)   { return TechGantry::NanoFirstWork(c.u); }   // GantryNanoFirst (owner, 2026-10-26)
     IUnitTask@ DoGantryScale(Ctx@ c)   { return TechGantryScale::Work(c.u); }    // D-288
     IUnitTask@ DoKeepCurrent(Ctx@ c)    { return TechBuild::KeepCurrent(c.u); }
     IUnitTask@ DoRecovery(Ctx@ c)       { return TechBuild::RecoverEconomy(c.u); }
@@ -487,6 +488,7 @@ namespace TechRules {
         table.insertLast(Rule("eco.flak", CON_T2, W0(), @DoEcoFlak, "D-321: perimeter flak minimum, air response and replacement; shared cooldown and per-cluster cap"));
         if (Global::Map::Config.TechCompactEconomy)
             table.insertLast(Rule("eco.compact.support", CON_T1, W0(), @DoCompactSupport, "D-307: one local turret for an active compact economy bank"));
+        table.insertLast(Rule("gantry.nanos", MOBILE, W0(), @DoGantryNanos, "owner 2026-10-26 (GantryNanoFirst, off unless the profile sets it): the open gantry cluster is short of its planned turrets: help its turret frame furthest along, or order the next turret"));
         table.insertLast(Rule("gantry.support", CON_T1, W0(), @DoGantrySupport, "D-281: capable constructors carry an admitted gantry turret assignment before discretionary forward work"));
         table.insertLast(Rule("air.dedicated",     CON_T2,       W0(), @DoAirDedicated, "D-107: the first two T2 air constructors: one only advanced energy converters, the other only advanced fusions, always"));
         table.insertLast(Rule("gantry.scale",      CON_T2,       W1(@GantryScaleDue), @DoGantryScale, "D-288 (owner): one gantry per GantryScaleMetalStep of 10 s minimum metal income: opens and feeds the front T3 cluster; lab.front and gantry.support also finish it"));

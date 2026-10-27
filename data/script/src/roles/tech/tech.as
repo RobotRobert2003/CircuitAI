@@ -1139,7 +1139,7 @@ namespace RoleTech
 		// D-109 (owner's rule): and keeps T1AirConstructorTarget of them: more than
 		// T1AirReleaseAbove carry the base so the T1 land constructors go forward
 		if (facDef.GetName() == UnitHelpers::GetT1AirPlantForSide(side)
-			&& (TechChain::AirConstructors() == 0 || TechForward::T1AirCons() < Global::RoleSettings::Tech::T1AirConstructorTarget))
+			&& (TechChain::AirConstructors() == 0 || TechForward::T1AirCons() < Global::RoleSettings::Tech::T1AirConstructorTarget + TechGantry::ExtraAirCons()))
 		{
 			CCircuitDef @airCon = ai.GetCircuitDef(UnitHelpers::GetT1AirConstructorNameForSide(side));
 			if (airCon !is null && airCon.IsAvailable(ai.frame))
@@ -2138,6 +2138,11 @@ namespace RoleTech
 		// step 2: nothing under construction within build distance + the largest
 		// frame radius means no ordered scan below can find one
 		if (Tech_TurretNearFrame(u) is null) return null;
+		// GantryNanoFirst (owner, 2026-10-26): a gantry block short of its turrets: a turret frame in reach first
+		if (!nukeRush && TechGantry::ShortCluster() !is null) {
+			CCircuitUnit@ nanoFrame = aiBuilderMgr.FindUnfinishedFor(u, TechFactories::Nano());
+			if (nanoFrame !is null) return Tech_TurretRepair(nanoFrame, factorySide, Task::Priority::HIGH);
+		}
 		if (nukeRush) {
 			// A silo is not in TECH's ordinary economic assist list. Native
 			// fallback can refuse a large frame while metal is low, leaving

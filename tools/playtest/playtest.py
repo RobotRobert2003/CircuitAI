@@ -410,7 +410,7 @@ def choose_teams(args, spots):
                 continue
             if ally == 0 and others is None:
                 continue
-            kind = others if ally == 0 else (others or "test")
+            kind = others if ally == 0 else (getattr(args, "enemies", None) or others or "test")
             side = SIDES[k % len(SIDES)]
             k += 1
             teams.append((i, ally, kind, side))
@@ -977,6 +977,8 @@ def add_script_args(p):
     p.add_argument("--prod-version", help="version of --prod-ai (default stable)")
     p.add_argument("--opponent-dll", help="head-to-head: 'prod' teams play this pinned build of the AI (staged as BARbBase/base)")
     p.add_argument("--opponent-data", help="data/ for --opponent-dll (default: the repo's data/)")
+    p.add_argument("--enemies", choices=["test", "prod"], help="the enemy side's AIs only (default: as --others); "
+                   "--others test --enemies prod --opponent-dll <pin> plays this build's side against the pinned build's side")
     p.add_argument("--side", default="cortex", choices=SIDES, help="the side of the AI under test")
     p.add_argument("--ally-spots", help="1-based spot numbers of the ally side, e.g. '1,2,3,4,5,6,7,8' (default: first half)")
     p.add_argument("--modoption", action="append", help="key=value override in [MODOPTIONS]")

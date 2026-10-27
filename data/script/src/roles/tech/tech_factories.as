@@ -102,6 +102,9 @@ namespace TechFactories {
         Row@ row;                    // D-117: a T1 spam lab's row
         int rowK = 0;                // D-117: its place in the row (0 = the row's first lab)
         int invOpenLog = -100000;    // INV-046
+        bool prebuild = false;       // GantryNanoPrebuildShare: opened for its turrets ahead of the gantry's income gate
+        int nanoWant = -1;           // GantryNanoFirst: the turrets it plans while its gantry goes up (logged on change)
+        bool nanoFull = false;       // ... and they all stood once
     }
     array<Cluster@> clusters;
     // Existing order is chosen in stable cluster insertion order. Planning-only
@@ -856,6 +859,12 @@ namespace TechFactories {
         if (c is null) return null;
         if (c.tier == 1 && !u.IsAttrAny(NO_DISRUPT.mask)) u.AddAttribute(NO_DISRUPT.type);   // D-117
         CCircuitUnit@ l = LabAt(c);
+        // GantryNanoFirst: the gantry block's next turret frame before the gantry frame
+        if (c.tier >= 3 && (l is null || l.GetBuildProgress() < 1.0f)) {
+            CCircuitUnit@ nf = TechGantry::BlockFrameInReach(c, u);
+            if (nf !is null) return factorySide ? aiFactoryMgr.Enqueue(TaskS::Repair(Task::Priority::HIGH, nf))
+                : aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, nf, Global::RoleSettings::Tech::GantryNanoFirstAssistSeconds * SECOND));
+        }
         if (l is null) {
             if (c.tier != 1) return null;   // the factory is not up yet: other work (its block, its frame)
             // D-117: a spam lab's turrets wait for their lab

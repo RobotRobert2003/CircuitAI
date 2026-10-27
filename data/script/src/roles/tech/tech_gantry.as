@@ -121,6 +121,101 @@ namespace TechGantry {
     // waiting line and INV-199; never per frame.
     string why = "none";
     IUnitTask@ Null(const string& in reason) { why = reason; return null; }
+
+    // GantryNanoFirst / GantryNanoPrebuildShare (owner, 2026-10-26: fill the gantry's planned
+    // turrets quickly). The open gantry cluster short of the turrets it plans, once per frame:
+    // ExistingGantry O(clusters) + FinishedTurrets O(block slots), cached for the frame's asks.
+    bool prebuildOpen = false;   // set by TechGantryScale::Work around a cluster opened ahead of its income gate
+    int shortAt = -1;
+    TechFactories::Cluster@ shortCluster;
+    int NanoWant(TechFactories::Cluster@ cluster) {
+        const int want = AiMax(TechFactories::TurretsBeforeLab(cluster), T3RushTurretTarget(cluster, TechFactories::LabAt(cluster)));
+        return AiMin(want, cluster.slots);
+    }
+    TechFactories::Cluster@ ShortCluster() {
+        return Global::RoleSettings::Tech::GantryNanoFirst ? BlockShort() : null;
+    }
+    // GantryNanoExtraAirCons: the T1 air plant keeps this many more T1 air constructors (the only
+    // aircraft that build the T1 turret) while a gantry block is short, and from
+    // GantryNanoExtraAirConsShare of the t3rush gate before its gantry drops
+    int ExtraAirCons() {
+        const int extra = Global::RoleSettings::Tech::GantryNanoExtraAirCons;
+        if (extra <= 0 || !RecoveryEnabled()) return 0;
+        if (BlockShort() !is null) return extra;
+        if (EarlyEnabled() && !EarlyComplete() && Economy::GetMinMetalIncomeLast10s()
+            >= Global::RoleSettings::Tech::GantryNanoExtraAirConsShare * Global::RoleSettings::Tech::EarlyGantryMetalIncome) return extra;
+        return TechGantryScale::PrebuildDue() || TechGantryScale::Due() ? extra : 0;
+    }
+    TechFactories::Cluster@ BlockShort() {
+        if (!RecoveryEnabled()) return null;
+        if (shortAt == ai.frame) return shortCluster;
+        shortAt = ai.frame;
+        @shortCluster = null;
+        TechFactories::Cluster@ cluster = TechFactories::ExistingGantry();
+        if (cluster is null) return null;
+        const int want = NanoWant(cluster);
+        const int done = TechFactories::FinishedTurrets(cluster);
+        if (want != cluster.nanoWant) {
+            cluster.nanoWant = want;
+            GenericHelpers::LogUtil("[TECH][GantryNano] cluster slot=" + cluster.labRes + " plans " + want + " turrets ("
+                + done + " stand, block " + cluster.slots + (cluster.prebuild ? ", prebuild" : "") + ")", 1);
+        }
+        if (done >= want) {
+            if (!cluster.nanoFull) {
+                cluster.nanoFull = true;
+                CCircuitUnit@ factory = TechFactories::LabAt(cluster);
+                GenericHelpers::LogUtil("[TECH][GantryNano] cluster slot=" + cluster.labRes + ": all " + want + " turrets stand (gantry "
+                    + (factory is null ? "not framed" : "" + int(factory.GetBuildProgress() * 100.0f) + "%") + ")", 1);
+            }
+            return null;
+        }
+        @shortCluster = cluster;
+        return cluster;
+    }
+    // A turret frame of the short block `builder` can safely work on: the one furthest along
+    CCircuitUnit@ BlockFrame(TechFactories::Cluster@ cluster, CCircuitUnit@ builder) {
+        CCircuitUnit@ best = null;
+        float bestProgress = -1.0f;
+        for (uint index = 0; index < cluster.turretPos.length(); ++index) {
+            CCircuitUnit@ frame = TechFactories::TurretAt(cluster.turretPos[index]);
+            if (frame is null) continue;
+            const float progress = frame.GetBuildProgress();
+            if (progress >= 1.0f || progress <= bestProgress || !SafeWorker(builder, frame.GetPos(ai.frame))) continue;
+            @best = frame; bestProgress = progress;
+        }
+        return best;
+    }
+    // For a static turret: a turret frame within its exact reach while the block is short
+    CCircuitUnit@ BlockFrameInReach(TechFactories::Cluster@ cluster, CCircuitUnit@ turret) {
+        if (cluster is null || turret is null || ShortCluster() !is cluster) return null;
+        return aiBuilderMgr.FindUnfinishedFor(turret, TechFactories::Nano());
+    }
+    // Rule gantry.nanos: any builder near enough (an air constructor from anywhere) helps the block's
+    // turret frame furthest along, else a builder that can build the turret orders the next one
+    IUnitTask@ NanoFirstWork(CCircuitUnit@ builder) {
+        if (builder is null || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0) return null;
+        TechFactories::Cluster@ cluster = ShortCluster();
+        if (cluster is null) return null;
+        if (UnitHelpers::IsCommander(builder.circuitDef) || !UnitHelpers::IsAirConstructor(builder.circuitDef)) {
+            const float radius = Global::RoleSettings::Tech::GantryNanoFirstLandRadius;
+            if (MapHelpers::SqDist(builder.GetPos(ai.frame), cluster.pos) > radius * radius) return null;
+        }
+        CCircuitUnit@ frame = BlockFrame(cluster, builder);
+        if (frame !is null)
+            return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame, Global::RoleSettings::Tech::GantryNanoFirstAssistSeconds * SECOND));
+        string reason;
+        return SupportOrder(cluster, builder, TechFactories::Nano(), cluster.nanoWant, "gantry turret first (of " + cluster.nanoWant + ")", reason,
+            Global::RoleSettings::Tech::GantryNanoFirstParallel);
+    }
+    // The t3rush cluster may open for its turrets alone from GantryNanoPrebuildShare of the income gate
+    bool PrebuildReady() {
+        const float share = Global::RoleSettings::Tech::GantryNanoPrebuildShare;
+        if (share <= 0.0f || TechChain::NukeRush() || TechChain::nukeFundingSilo >= 0 || TechHeavyRush::Pending()) return false;
+        CCircuitDef@ reactor = ai.GetCircuitDef(TechChain::DefFor("afus"));
+        if (reactor is null || reactor.count <= aiBuilderMgr.GetUnfinishedCount(reactor)) return false;
+        if (!metalWindow.Ready(ai.frame, Global::RoleSettings::Tech::EarlyGantryMaximumSampleGapSeconds * SECOND)) return false;
+        return AiMin(metalWindow.Mean(), Economy::GetMinMetalIncomeLast10s()) >= share * Global::RoleSettings::Tech::EarlyGantryMetalIncome;
+    }
     string Threat(const AIFloat3& in position) {
         return "threat " + aiBattle.SurfThreat(position) + " of " + Global::RoleSettings::Tech::GantryMaximumSurfaceThreat;
     }
@@ -151,7 +246,7 @@ namespace TechGantry {
             committed = factory !is null || (cluster.labTask !is null && !cluster.labTask.IsDead());
             bool supportFrame = false, supportWorker = false;
             SupportHolds(cluster, supportFrame, supportWorker);
-            committed = committed || supportFrame || supportWorker;
+            committed = committed || supportFrame || supportWorker || cluster.prebuild;
             progressFrame = AiMax(progressFrame, cluster.gantryProgressFrame);
         }
         if (!committed && progressFrame >= 0
@@ -165,9 +260,17 @@ namespace TechGantry {
         // (played: the commander and T1 constructors ask most often, so the 30 s line only ever
         // said "corcom cannot build corgant" and hid the real reason)
         if (!builder.circuitDef.CanBuild(definition)) return null;
-        if (!Ready(definition, builder)) { Waiting("waiting: " + ReadyWhy(definition, builder)); return null; }
+        const bool ready = Ready(definition, builder);
+        if (!ready && !PrebuildReady()) { Waiting("waiting: " + ReadyWhy(definition, builder)); return null; }
+        // a prebuild opens under the gantry's cap; the order itself stays behind Ready() in Work
+        if (!ready && definition.maxThisUnit >= 0 && definition.maxThisUnit <= definition.count) definition.maxThisUnit = definition.count + 1;
         @cluster = TechFactories::ReadyCluster(TechFactories::OpenCluster(definition, TechFactories::MayPlan(definition), true));
         if (cluster is null) { Waiting("waiting for a safe reachable cluster/cap/cooldown"); return null; }
+        if (!ready && !cluster.prebuild) {
+            cluster.prebuild = true;
+            GenericHelpers::LogUtil("[TECH][GantryNano] prebuild: the t3rush cluster slot=" + cluster.labRes + " opens for its turrets at +"
+                + int(Economy::GetMinMetalIncomeLast10s()) + " (gate +" + int(Global::RoleSettings::Tech::EarlyGantryMetalIncome) + ")", 1);
+        }
         return Work(cluster, definition, builder);
     }
 
@@ -279,7 +382,7 @@ namespace TechGantry {
     // (standing or ordered): an order left without a worker, a turret frame, or
     // a new order. `why` says why there is none.
     IUnitTask@ SupportOrder(TechFactories::Cluster@ cluster, CCircuitUnit@ builder, CCircuitDef@ turret, int want,
-        const string& in what, string &out why) {
+        const string& in what, string &out why, int parallel = -1) {
         why = "";
         if (cluster is null || builder is null || turret is null) { why = "no cluster, builder or turret definition"; return null; }
         if (!builder.circuitDef.CanBuild(turret)) { why = builder.circuitDef.GetName() + " cannot build the turret"; return null; }
@@ -300,7 +403,7 @@ namespace TechGantry {
                 Global::RoleSettings::Tech::GantryAssistSeconds * SECOND));
         }
         // 3. a new order
-        if (live >= AiMax(1, Global::RoleSettings::Tech::GantrySupportParallel)) { why = "" + live + " turret orders in flight"; return null; }
+        if (live >= AiMax(1, parallel > 0 ? parallel : Global::RoleSettings::Tech::GantrySupportParallel)) { why = "" + live + " turret orders in flight"; return null; }
         if (TechFactories::TurretsOf(cluster) + live >= want) { why = "the block's " + want + " turrets stand or are ordered"; return null; }
         if (Layout::TurretsCapped()) { why = "turret cap: " + Layout::TurretsInFlight() + " in flight"; return null; }
         const int slot = aiTerrainMgr.NextSlotAny(cluster.nanoGroup, builder.GetPos(ai.frame));
@@ -342,14 +445,21 @@ namespace TechGantry {
             IUnitTask@ extra = T3RushTurret(cluster, builder, factory);
             if (extra !is null) return extra;
             if (factory.GetBuildProgress() < 1.0f) {
+                // GantryNanoFirst: while the block is short a gantry helper re-asks soon, for the next turret frame
+                const int assist = ShortCluster() is cluster ? Global::RoleSettings::Tech::GantryNanoFirstAssistSeconds
+                    : Global::RoleSettings::Tech::GantryAssistSeconds;
                 if (SafeWorker(builder, cluster.pos))
-                    return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, factory,
-                        Global::RoleSettings::Tech::GantryAssistSeconds * SECOND));
+                    return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, factory, assist * SECOND));
                 return Null(Unsafe(builder, cluster.pos, "gantry frame " + factory.id));
             }
             return Null("gantry " + factory.id + " stands: nothing to do");
         }
         if (!SafeWorker(builder, cluster.pos)) return Null(Unsafe(builder, cluster.pos, "cluster site"));
+        if (prebuildOpen && !cluster.prebuild && (cluster.labTask is null || cluster.labTask.IsDead())) {
+            cluster.prebuild = true;
+            GenericHelpers::LogUtil("[TECH][GantryNano] prebuild: gantry cluster slot=" + cluster.labRes + " opens for its turrets at +"
+                + int(Economy::GetMinMetalIncomeLast10s()) + " (GantryScale step not due yet)", 1);
+        }
         if (cluster.gantryProgressFrame < 0) cluster.gantryProgressFrame = ai.frame;
         const int completed = TechFactories::FinishedTurrets(cluster);
         if (completed > cluster.gantryCompletedTurrets) {
@@ -404,6 +514,14 @@ namespace TechGantry {
             cluster.labRes = aiTerrainMgr.ReserveBuilding(definition, cluster.pos, cluster.facing);
             if (cluster.labRes < 0) return Null("rebuild: the gantry's ground could not be re-reserved");
             cluster.built = false; cluster.labSeen = false;
+        }
+        if (cluster.prebuild) {
+            // GantryNanoPrebuildShare: the turrets went up first; the gantry still waits for its own gate
+            if (cluster.earlyGantry ? !Ready(definition, builder) : !TechGantryScale::Due())
+                return Null("prebuild: " + completed + " turrets stand; the gantry waits for its income gate");
+            cluster.prebuild = false;
+            GenericHelpers::LogUtil("[TECH][GantryNano] prebuild ends: cluster slot=" + cluster.labRes + " orders its gantry with "
+                + completed + " turrets standing at +" + int(Economy::GetMinMetalIncomeLast10s()), 1);
         }
         if (!definition.IsAvailable(ai.frame)) return Null("gantry cap " + definition.maxThisUnit + " reached (count " + definition.count + ")");
         // The early phase rechecks funding at the actual order; support work
@@ -653,6 +771,7 @@ namespace TechGantryScale {
     const string TargetKey = "tech.gantry.target";
     int highWater = 0;           // persisted target: floor(income / step), capped, never lowered
     bool loaded = false, due = false, capRaised = false;
+    bool prebuild = false;       // GantryNanoPrebuildShare: the next gantry's block may go up ahead of its step
     int have = 0, mapCeiling = -1;
     int dueSince = -1, progressFrame = -1, lastHave = -1, lastOpen = -1, lastTurretProgress = -1;
     int lastLogTarget = -1, lastLogHave = -1;
@@ -676,6 +795,7 @@ namespace TechGantryScale {
         if (landDef !is null && Global::Map::MergedUnitLimits.get(landDef.GetName(), cap)) mapCeiling = cap;
     }
     bool Due() { return Enabled() && due; }
+    bool PrebuildDue() { return Enabled() && prebuild && !due; }
 
     // The first gantry's income: GantryScaleFirstMetal, or on the t3rush plan
     // GantryScaleFirstMetalT3Rush (owner, 2026-10-22) (0 = the step), never
@@ -713,6 +833,7 @@ namespace TechGantryScale {
     // stay TechHarbour's (D-121): counted in Have(), their cap untouched.
     void RaiseCaps() {
         int wanted = highWater;
+        if (prebuild && !due) wanted = AiMax(wanted, have + 1);   // the prebuild's cluster plans under the cap; its order waits for Due()
         if (mapCeiling >= 0) wanted = AiMin(wanted, mapCeiling);
         if (landDef is null || landDef.maxThisUnit >= wanted) return;
         if (capRaised)
@@ -753,6 +874,17 @@ namespace TechGantryScale {
             && mi >= (have == 0 ? first : float(have + 1) * step) * Global::RoleSettings::Tech::GantryScaleDropShare;
         if (newDue && !due) { dueSince = ai.frame; progressFrame = ai.frame; }
         due = newDue;
+        // GantryNanoPrebuildShare: the next step's turret block opens from this share of its income
+        const float share = Global::RoleSettings::Tech::GantryNanoPrebuildShare;
+        const int ceiling = mapCeiling >= 0 ? AiMin(Global::RoleSettings::Tech::GantryScaleMax, mapCeiling) : Global::RoleSettings::Tech::GantryScaleMax;
+        // (the t3rush plan's first gantry at GantryScaleFirstMetalT3Rush too: played, its order comes from
+        // gantry.scale at +175 before the chain's earlygantry step asks)
+        const bool newPrebuild = share > 0.0f && !due && !blocked && energyOk && have < ceiling;
+        const float prebuildAt = share * (have == 0 ? first : float(have + 1) * step);
+        if (newPrebuild && mi >= prebuildAt && !prebuild)
+            GenericHelpers::LogUtil("[TECH][GantryScale] prebuild due: mi=" + int(mi) + " >= " + int(prebuildAt) + " (have=" + have + ")", 1);
+        prebuild = newPrebuild && mi >= prebuildAt;
+        if (prebuild) RaiseCaps();
         if (highWater != lastLogTarget || have != lastLogHave || due != lastLogDue) {
             lastLogTarget = highWater; lastLogHave = have; lastLogDue = due;
             GenericHelpers::LogUtil("[TECH][GantryScale] target=" + highWater + " have=" + have + " mi=" + int(mi)
@@ -777,10 +909,13 @@ namespace TechGantryScale {
         return "units " + units + "/" + limit + (limit > 0 && units >= limit - 2 ? " UNIT LIMIT" : "");
     }
     IUnitTask@ Work(CCircuitUnit@ builder) {
-        if (!Due() || builder is null || landDef is null) return null;
+        if ((!Due() && !PrebuildDue()) || builder is null || landDef is null) return null;
         bool routed = false;
         TechGantry::why = "none";
+        TechGantry::prebuildOpen = !Due();
         IUnitTask@ task = TechFactories::Route(landDef.GetName(), builder, routed);
+        TechGantry::prebuildOpen = false;
+        if (!Due()) return task;   // a prebuild never falls to the legacy placement or the waiting line
         if (task !is null) return task;
         if (routed) {
             // Route found or opened a cluster and TechGantry::Work refused:
