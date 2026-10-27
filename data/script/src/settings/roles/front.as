@@ -254,6 +254,24 @@ namespace Front {
             float MexUpgradeRadius = 100000.0f;   // from the start position; every mex we hold
             int MexUpgradeMaxConcurrent = 3;      // MEXUP tasks of ours at once
             int MexUpgradeScanSeconds = 3;        // how often busy helpers are reconsidered
+            // No ping-pong (owner, 2026-10-27): native re-evaluates a walking builder by asking for new
+            // work and swaps when the kind differs, so a T2 constructor on its way to an upgrade was sent
+            // to help a fusion frame or assist, and the scan above pulled it back 3 s later. A FRONT T2
+            // constructor on a MEXUP is now kept on it for up to MexUpgradeCommitSeconds (0: off); the
+            // task's own failure, abort and retreat handling still apply. The scan never pulls the same
+            // constructor again within MexUpgradeRepullSeconds.
+            int MexUpgradeCommitSeconds = 150;
+            int MexUpgradeRepullSeconds = 45;
+            // Owner (2026-10-27): with the eco ladder on, every T1 mex of ours goes T2 before the second
+            // fusion. From the first fusion standing, the ladder's T2 constructors upgrade first (up to
+            // MexUpgradeGateConcurrent at once) and the second fusion waits, the native eco capped too,
+            // until no T1 mex of ours is left, metal is full, no upgrade has been under way for
+            // MexUpgradeGateIdleSeconds (the rest are unreachable or unsafe), or MexUpgradeGateMaxSeconds
+            // have passed. Log [FRONT][Eco] mex gate.
+            bool EcoLadderMexUpBeforeSecondFusion = true;
+            int MexUpgradeGateConcurrent = 4;
+            int MexUpgradeGateIdleSeconds = 45;
+            int MexUpgradeGateMaxSeconds = 420;
 
             // T2 lab turrets (owner, 2026-10-25; systems/construction/front_factory_nanos.as): from the moment
             // a T2 bot lab or vehicle plant of ours is framed, FRONT T1 constructors asking for work within

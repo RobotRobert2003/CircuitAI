@@ -2008,6 +2008,9 @@ namespace Builder {
 				return null;
 			}
 		}
+		// owner, 2026-10-27: a FRONT T2 constructor walking to its mex upgrade stays on it (no ping-pong
+		// between the upgrade and an assist; front_mex_upgrade.as Keep)
+		if (FrontMexUp::Keep(u)) return null;
 		// owner, 2026-10-21: the lolcannon crew builds only the lolcannon program
 		{ IUnitTask@ lc = LolCannon::BuilderTask(u); if (lc !is null) return lc; }
 		// New gating via BuilderTaskTrack: grace window, then gate if added, else allow; hard timeout clears

@@ -3,7 +3,9 @@
 //   1. one fusion (the fusion the T2 vehicle plant's build chain puts behind it counts: every fusion
 //      of ours, framed or queued, is one of the ladder's)
 //   2. a second fusion; from the first fusion standing, winds, solars, advanced solars and T1
-//      converters come down (systems/construction/front_reclaim.as) and T2 converters go up
+//      converters come down (systems/construction/front_reclaim.as) and T2 converters go up. The
+//      second fusion waits until every T1 mex of ours is upgraded (Front::EcoLadderMexUpBeforeSecondFusion,
+//      MexGate below; owner, 2026-10-27: FRONTs metal-stalled at T2 with T1 mexes and two fusions)
 //   3. a third fusion
 //   4. an advanced fusion
 //   5. a second advanced fusion; the fusions are reclaimed as it builds (their metal pays for it)
@@ -224,6 +226,66 @@ namespace FrontEcoLadder {
         return n;
     }
 
+    // Mex gate (owner, 2026-10-27): played, FRONTs at T2 ordered their second fusion with most of their
+    // mexes still T1 and metal-stalled through it. From the first fusion standing (stage 2), the
+    // ladder's T2 constructors upgrade our T1 mexes first and the second fusion waits (the native eco
+    // capped at the fusions we have) until none is left, metal is full, no upgrade has been under way for
+    // Front::MexUpgradeGateIdleSeconds, or Front::MexUpgradeGateMaxSeconds have passed. Once open it stays
+    // open. Updated with the caps (each economy update); Work and FrontMexUp read it.
+    int mexGate = 0;            // 0 not reached, 1 holding, 2 open
+    int mexGateFrom = -1;
+    int mexGateBusy = -1;       // last frame an upgrade of ours was under way
+    int mexGateLog = -100000;
+    int mexGateT1 = 0;          // T1 mexes of ours when the gate closed
+    bool MexGateHolds() { return mexGate == 1; }
+    string MexName() { const string side = Side(); return side == "armada" ? "armmex" : (side == "cortex" ? "cormex" : "legmex"); }
+    string Clock(int frame) { const int sec = frame / SECOND; return "" + (sec / 60) + ":" + (sec % 60 < 10 ? "0" : "") + (sec % 60); }
+    void UpdateMexGate(int s)
+    {
+        if (mexGate == 2) return;
+        if (!Global::RoleSettings::Front::EcoLadderMexUpBeforeSecondFusion || !Global::RoleSettings::Front::MexUpgradeFirst) { mexGate = 2; return; }
+        if (s < S_FUS2) return;
+        const int t1 = Done(MexName());
+        CCircuitDef@ moho = Def(UnitHelpers::GetT2MexNameForSide(Side()));
+        const int running = moho is null ? 0 : FrontMexUp::Running(moho) + aiBuilderMgr.GetUnfinishedCount(moho);
+        if (mexGate == 0) {
+            mexGate = 1; mexGateFrom = ai.frame; mexGateBusy = ai.frame; mexGateT1 = t1;
+            GenericHelpers::LogUtil("[FRONT][Eco] mex gate: the second fusion waits for " + t1 + " T1 mexes (" + (moho is null ? 0 : moho.count)
+                + " T2) at " + Clock(ai.frame) + " | M +" + int(Economy::GetMinMetalIncomeLast10s()) + " bank " + int(aiEconomyMgr.metal.current), 1);
+        }
+        if (running > 0) mexGateBusy = ai.frame;
+        string why = "";
+        if (s > S_FUS2 || FusionsPlanned() >= 2) why = "a second fusion is already planned";
+        else if (t1 <= 0) why = "every T1 mex is upgraded";
+        else if (aiEconomyMgr.isMetalFull) why = "metal is full";
+        else if (ai.frame - mexGateBusy >= Global::RoleSettings::Front::MexUpgradeGateIdleSeconds * SECOND)
+            why = "no upgrade under way for " + Global::RoleSettings::Front::MexUpgradeGateIdleSeconds + " s (the rest unreachable or unsafe)";
+        else if (ai.frame - mexGateFrom >= Global::RoleSettings::Front::MexUpgradeGateMaxSeconds * SECOND)
+            why = "held " + Global::RoleSettings::Front::MexUpgradeGateMaxSeconds + " s";
+        if (why.length() == 0) {
+            if (ai.frame - mexGateLog >= 30 * SECOND) {
+                mexGateLog = ai.frame;
+                GenericHelpers::LogUtil("[FRONT][Eco] mex gate holding: " + t1 + " T1 mexes left, " + running + " upgrades under way"
+                    + " | M +" + int(Economy::GetMinMetalIncomeLast10s()) + " bank " + int(aiEconomyMgr.metal.current), 1);
+            }
+            return;
+        }
+        mexGate = 2;
+        GenericHelpers::LogUtil("[FRONT][Eco] mex gate open: " + why + " | T1 mexes " + mexGateT1 + " -> " + t1 + ", T2 " + (moho is null ? 0 : moho.count)
+            + " in " + ((ai.frame - mexGateFrom) / SECOND) + " s, at " + Clock(ai.frame)
+            + " | M +" + int(Economy::GetMinMetalIncomeLast10s()) + " bank " + int(aiEconomyMgr.metal.current), 1);
+    }
+
+    // Metal stall time (native's isMetalEmpty), for the stage log
+    int stallFrames = 0;
+    int stallFramesLog = 0;
+    int stallLast = -1;
+    void CountStall()
+    {
+        if (stallLast >= 0 && aiEconomyMgr.isMetalEmpty) stallFrames += AiMin(ai.frame - stallLast, 10 * SECOND);
+        stallLast = ai.frame;
+    }
+
     int lastStage = 0;
     int lastLog = -100000;
     // Front_IncomeLimits, before the map limits
@@ -233,7 +295,11 @@ namespace FrontEcoLadder {
         const string side = Side();
         const int s = Stage();
         const bool fusionEra = s >= S_FUS2;
-        Cap(UnitHelpers::GetFusionNameForSide(side), (s >= S_GANTRY || ReclaimFusions()) ? 0 : Fusions_Wanted);   // none rebuilt while they come down
+        CountStall();
+        UpdateMexGate(s);
+        // the mex gate: no fusion past the ones we have (native and the build chain too)
+        const int fusionCap = MexGateHolds() ? AiMax(1, FusionsTotal()) : Fusions_Wanted;
+        Cap(UnitHelpers::GetFusionNameForSide(side), (s >= S_GANTRY || ReclaimFusions()) ? 0 : fusionCap);   // none rebuilt while they come down
         Cap(UnitHelpers::GetAdvFusionNameForSide(side), s >= S_GANTRY ? Global::RoleSettings::Front::EcoLadderMaxAdvFusions : 2);
         Cap(UnitHelpers::GetEnergyConverterNameForSide(side), fusionEra ? 0 : -1);
         const int t2Target = T2ConverterTarget(s);
@@ -253,10 +319,13 @@ namespace FrontEcoLadder {
                 + " | ladder T2 ctors " + (Builder::primaryT2BotConstructor !is null ? "B" : "-") + (Builder::secondaryT2BotConstructor !is null ? "b" : "-")
                 + (Builder::primaryT2VehConstructor !is null ? "V" : "-") + (Builder::secondaryT2VehConstructor !is null ? "v" : "-")
                 + " of " + (UnitDefHelpers::SumUnitDefCounts(UnitHelpers::GetAllT2BotConstructors()) + UnitDefHelpers::SumUnitDefCounts(UnitHelpers::GetAllT2VehicleConstructors()))
-                + " | M +" + int(Economy::GetMinMetalIncomeLast10s()) + " bank " + int(aiEconomyMgr.metal.current)
+                + " | M +" + int(Economy::GetMinMetalIncomeLast10s()) + " pull " + int(aiEconomyMgr.metal.pull) + " bank " + int(aiEconomyMgr.metal.current)
+                + " stalled " + ((stallFrames - stallFramesLog) / SECOND) + " s (" + (stallFrames / SECOND) + " s total)"
+                + " | mexes T1 " + Done(MexName()) + " T2 " + Total(UnitHelpers::GetT2MexNameForSide(side))
+                + (MexGateHolds() ? " (mex gate holding)" : "")
                 + " | E +" + int(aiEconomyMgr.energy.income) + " pull " + int(aiEconomyMgr.energy.pull)
                 + " bank " + int(aiEconomyMgr.energy.current) + "/" + int(aiEconomyMgr.energy.storage), 1);
-            lastStage = s; lastLog = ai.frame;
+            lastStage = s; lastLog = ai.frame; stallFramesLog = stallFrames;
         }
     }
 
@@ -504,6 +573,12 @@ namespace FrontEcoLadder {
             IUnitTask@ store = Storage(u);
             if (store !is null) return store;
         }
+        // the mex gate: our T1 mexes go T2 before the second fusion
+        const bool mexFirst = s == S_FUS2 && MexGateHolds();
+        if (mexFirst) {
+            IUnitTask@ up = FrontMexUp::Upgrade(u, "before the second fusion", true);
+            if (up !is null) return up;
+        }
         const float mi = Economy::GetMinMetalIncomeLast10s();
         const bool fusionStep = s <= S_FUS3;
         CCircuitDef@ reactor = Def(fusionStep ? UnitHelpers::GetFusionNameForSide(side) : UnitHelpers::GetAdvFusionNameForSide(side));
@@ -511,7 +586,9 @@ namespace FrontEcoLadder {
         // fusions: every one of ours counts, framed or queued by the build chain or the native eco
         const int have = fusionStep ? FusionsPlanned() : AdvFusionsTotal();
         if (reactor !is null) WatchReactor(reactor);
-        if (reactor !is null && u.circuitDef.CanBuild(reactor) && have < want) {
+        if (mexFirst && reactor !is null && have < want)
+            ReactorHeld(reactor.GetName() + " " + (have + 1) + "/" + want + ": mex gate, " + Done(MexName()) + " T1 mexes still to upgrade");
+        else if (reactor !is null && u.circuitDef.CanBuild(reactor) && have < want) {
             const float need = fusionStep ? Global::RoleSettings::Front::EcoLadderFusionMetalIncome : Global::RoleSettings::Front::EcoLadderAdvFusionMetalIncome;
             if (reactorTask !is null) ReactorHeld(reactor.GetName() + " " + (have + 1) + "/" + want + ": our order is open, not framed yet ("
                 + ((ai.frame - reactorOrdered) / SECOND) + " of " + ReactorFrameSeconds + " s)");
