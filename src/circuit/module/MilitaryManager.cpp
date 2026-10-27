@@ -1990,8 +1990,14 @@ void CMilitaryManager::UpdateCommanderSnipe()
 		if (commSnipeInfo.defs.count(unit->GetCircuitDef()->GetId()) == 0) continue;
 		const int locked = unit->GetCommanderTarget();
 		IUnitTask* task = unit->GetTask();
+		// Owner 2026-10-27: a `ranged` hull's controller only picks targets its
+		// shell can reach from where it stands (terrain-checked trajectory) and
+		// weights commanders by commander_priority. This lock checks range only,
+		// so a T3 flat-trajectory gun (Astraeus) held a commander behind a ridge
+		// and never fired. O(1) per unit; the existing release path runs.
 		if (unit->IsDead() || task == nullptr || task->GetType() == IUnitTask::Type::NIL
-			|| task->GetType() == IUnitTask::Type::PLAYER || task->IsExternalControlled())
+			|| task->GetType() == IUnitTask::Type::PLAYER || task->IsExternalControlled()
+			|| unit->GetCircuitDef()->IsAttrRanged())
 		{
 			if (locked >= 0) unit->SetCommanderTarget(-1, frame);
 			continue;
