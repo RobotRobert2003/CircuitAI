@@ -619,6 +619,7 @@ namespace TechHeavyChoice {
     array<string> cached;        // reused candidate list; rebuilt only when side or terrain changes
     string cachedSide;
     int cachedTerrain = -1;      // 0 land, 1 amphibious
+    bool cachedRotates = true;   // false for a HeavyMoated<Side> list: always its first buildable unit
 
     bool Enabled() {
         return Global::AISettings::Role == AiRole::TECH && Global::RoleSettings::Tech::HeavyChoiceEnabled;
@@ -683,12 +684,19 @@ namespace TechHeavyChoice {
             if (side == "cortex") { land = Global::RoleSettings::Tech::HeavyLandCortex; amph = Global::RoleSettings::Tech::HeavyAmphCortex; }
             else if (side == "legion") { land = Global::RoleSettings::Tech::HeavyLandLegion; amph = Global::RoleSettings::Tech::HeavyAmphLegion; }
             array<string> pair = Global::RoleSettings::Tech::HeavyPairArmada;
-            if (side == "cortex") pair = Global::RoleSettings::Tech::HeavyPairCortex;
-            else if (side == "legion") pair = Global::RoleSettings::Tech::HeavyPairLegion;
+            array<string> moatedList = Global::RoleSettings::Tech::HeavyMoatedArmada;
+            if (side == "cortex") { pair = Global::RoleSettings::Tech::HeavyPairCortex; moatedList = Global::RoleSettings::Tech::HeavyMoatedCortex; }
+            else if (side == "legion") { pair = Global::RoleSettings::Tech::HeavyPairLegion; moatedList = Global::RoleSettings::Tech::HeavyMoatedLegion; }
             cached.resize(0);
-            if (pair.length() > 0) {
+            cachedRotates = true;
+            if (pair.length() > 0 && terrain == 1 && moatedList.length() > 0) {
+                // HeavyMoated<Side> (owner, 2026-10-27): a moated start, in priority order (Armada: Thor)
+                cachedRotates = false;
+                for (uint i = 0; i < moatedList.length(); ++i)
+                    if (moatedList[i].length() > 0 && cached.find(moatedList[i]) < 0) cached.insertLast(moatedList[i]);
+            } else if (pair.length() > 0) {
                 // HeavyPair<Side> (owner, 2026-10-26): the pair on a map with a land route; a
-                // moated start builds only the pair's first unit (Titan, Juggernaut, Sol Invictus)
+                // moated start without HeavyMoated<Side> builds only the pair's first unit
                 for (uint i = 0; i < pair.length(); ++i) {
                     if (pair[i].length() == 0 || cached.find(pair[i]) >= 0) continue;
                     cached.insertLast(pair[i]);
@@ -702,22 +710,24 @@ namespace TechHeavyChoice {
         }
         return @cached;
     }
-    // HeavyAlternate (owner, 2026-10-22): every other batch starts with the other unit of the pair
-    // (Thor, Titan, Thor ...), land and amphibious alike. The pair's second unit is still the
-    // fallback when the first cannot be built. Candidates() itself stays unchanged: the transport
-    // check reads it.
+    // HeavyAlternate (owner, 2026-10-22): each batch starts with the unit after the one the
+    // gantry built last, wrapping round (Thor, Titan, Vanguard, Thor ...; a pair alternates),
+    // land and amphibious alike. The units after it are still the fallback when it cannot be
+    // built. A HeavyMoated<Side> list never rotates. Candidates() itself stays unchanged: the
+    // transport check reads it.
     array<string> alternated;    // reused ordering for LateBatch
     // owner, 2026-10-26: per gantry, so each gantry starts with the pair's first unit and
-    // alternates on its own (one AI-wide memory left one gantry on Titans and the next on Thors)
+    // rotates on its own (one AI-wide memory left one gantry on Titans and the next on Thors)
     dictionary lastBatchUnit;    // gantry id -> the unit its last successful late batch built
     array<string>@ BatchOrder(const string& in side, int gantryId) {
         array<string>@ c = Candidates(side);
+        if (!Global::RoleSettings::Tech::HeavyAlternate || !cachedRotates || c.length() < 2) return @c;
         string last;
         lastBatchUnit.get("" + gantryId, last);
-        if (!Global::RoleSettings::Tech::HeavyAlternate || c.length() < 2 || last != c[0]) return @c;
+        const int at = c.find(last);
+        if (at < 0 || uint(at) + 1 == c.length()) return @c;   // a new gantry, or after the last unit: the first
         alternated.resize(0);
-        for (uint i = 1; i < c.length(); ++i) alternated.insertLast(c[i]);
-        alternated.insertLast(c[0]);
+        for (uint i = 1; i <= c.length(); ++i) alternated.insertLast(c[(uint(at) + i) % c.length()]);
         return @alternated;
     }
     // One level-1 line per batch (one batch per gantry ask, five units each).

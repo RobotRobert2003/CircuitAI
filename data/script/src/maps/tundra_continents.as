@@ -7,8 +7,8 @@ namespace TundraContinents {
 	// Role determination and factory selection now occur in Main::AiMain using shared helpers.
 
 	// landLocked (owner, 2026-10-26): every spot - the two continents have no land
-	// crossing, so no land army reaches the enemy (moated: TECH heavies Titan,
-	// Juggernaut, Sol Invictus only).
+	// crossing, so no land army reaches the enemy (moated: TECH heavies HeavyMoated<Side>,
+	// else Titan, Juggernaut, Sol Invictus only; armthor is capped here, so Armada falls to Titan).
 	// Start spots for Eight Horses map (converted from YAML, roles matched to AiRole enum)
 	StartSpot@[] spots = {
 		StartSpot(AIFloat3(  300, 0,  460), AiRole::TACTICAL, true),       

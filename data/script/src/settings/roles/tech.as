@@ -299,13 +299,20 @@ namespace Tech {
             string HeavyAmphCortex = "corkorg";
             string HeavyLandLegion = "legerailtank";
             string HeavyAmphLegion = "legeheatraymech";
-            // HeavyPair<Side> (owner, 2026-10-26): when set, the late gantry batches use this pair,
+            // HeavyPair<Side> (owner, 2026-10-26): when set, the late gantry batches use this list,
             // first unit first, instead of the land/amphibious pair above; with HeavyAlternate on,
-            // the batches alternate between the two. A moated start (no land route to any enemy
-            // start, StrategicSites::Moated) builds only the first unit. Empty = the terrain pair.
+            // the batches rotate through it, any length (owner, 2026-10-27: Thor, Titan, Vanguard).
+            // A moated start (no land route to any enemy start, StrategicSites::Moated) builds
+            // HeavyMoated<Side>, or only the first unit when that is empty. Empty = the terrain pair.
             array<string> HeavyPairArmada = {};
             array<string> HeavyPairCortex = {};
             array<string> HeavyPairLegion = {};
+            // HeavyMoated<Side> (owner, 2026-10-27): a moated start with a HeavyPair<Side> builds the
+            // first of these the gantry can build, never rotated; the later ones are only the
+            // fallback for a map cap (armthor = 0 on three water maps).
+            array<string> HeavyMoatedArmada = {};
+            array<string> HeavyMoatedCortex = {};
+            array<string> HeavyMoatedLegion = {};
             // D-288 (owner), step 400 since D-364: one land gantry per GantryScaleMetalStep of 10 s minimum
             // metal income (floor(income / step), capped at GantryScaleMax). The target
             // is a persisted high-water mark (a dip never lowers it); a new order also
