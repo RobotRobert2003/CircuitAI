@@ -14,8 +14,16 @@ namespace RezReplenish {
         // Scale = true: the target is the last ScaleTargets entry whose ScaleArmy entry the
         // army exceeds (both ascending, same length; the first ScaleArmy should be ArmyMinMetal).
         bool Scale = false;
-        array<float> ScaleArmy = {1200.0f, 3000.0f, 3600.0f, 4200.0f};
-        array<int> ScaleTargets = {11, 15, 18, 20};
+        // Proposed table (headless 2026-10-26, Flats and Forests 8v8 +55, see the exp/rezbot-replenish
+        // commit message): start low - every rez bot ordered at a 1200-3000 army is metal the army
+        // misses while trades are close - and reach 15-20 only once the army is far past 4000.
+        array<float> ScaleArmy = {1200.0f, 1500.0f, 2000.0f, 2500.0f, 3000.0f, 3500.0f, 4000.0f, 6000.0f, 9000.0f, 12000.0f};
+        array<int> ScaleTargets = {3, 4, 5, 6, 8, 10, 12, 15, 18, 20};
+        // 0 = off. N > 0: after N rez bot orders in a row a lab lets one build of its own production
+        // through (unless fewer than InterleaveCriticalBelow rez bots are left), so a big deficit does
+        // not stall constructors, openers and the army. Untested in games.
+        int RezPerNormalBuild = 0;
+        int InterleaveCriticalBelow = 2;
         // Rez bot orders still waiting for the lab to start them; at most this many at a time
         // across all our labs, and an order not started within OrderTimeoutSeconds is forgotten.
         int MaxOrdersInFlight = 2;

@@ -54,6 +54,7 @@ namespace RezReplenish {
     array<int> rezIds;      // finished rez bots, ascending id
     array<int> botLabIds;   // finished, not retiring T1 bot labs
     dictionary releasedAt;  // lab id -> int64 frame of the last spam release
+    dictionary inARow;      // lab id -> int64 rez bot orders since its last own build (RezPerNormalBuild)
     int releases = 0;
 
     // production
@@ -195,6 +196,12 @@ namespace RezReplenish {
         if (want <= 0) return null;
         if (rezAll + int(orderFrames.length()) >= want) return null;
         if (int(orderFrames.length()) >= Global::RezReplenish::MaxOrdersInFlight) return null;
+        const int every = Global::RezReplenish::RezPerNormalBuild;
+        if (every > 0 && rezAll >= Global::RezReplenish::InterleaveCriticalBelow
+            && _Get(inARow, factory.id, 0) >= every) {
+            _Set(inARow, factory.id, 0);
+            return null;   // one build of the lab's own production
+        }
         array<string> defs = UnitHelpers::GetRezBots(UnitHelpers::GetSideForUnitName(fname));
         if (defs.length() == 0) return null;
         CCircuitDef@ d = ai.GetCircuitDef(defs[0]);
@@ -206,6 +213,7 @@ namespace RezReplenish {
         if (t is null) return null;
         orderFrames.insertLast(ai.frame);
         ++ordersTotal;
+        _Set(inARow, factory.id, _Get(inARow, factory.id, 0) + 1);
         GenericHelpers::LogUtil("[RezRep] order def=" + defs[0] + " lab=" + factory.id + " rez=" + rezFinished
             + " rezAll=" + rezAll + " want=" + want + " target=" + Target() + " army=" + int(army)
             + " orders=" + ordersTotal, 1);

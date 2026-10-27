@@ -272,6 +272,12 @@ namespace Main {
 		// FRONT (owner, 2026-10-17): two FRONTs each build a spam lab for an edge lane, left and right
 		// (src/settings/shared/spam.as EdgeLanesEnabled, off there; systems/combat/edge_lanes.as)
 		Global::Spam::EdgeLanesEnabled = true;
+		// Rez bots (owner, 2026-10-26; src/settings/shared/rez_replenish.as, off there): a FRONT T1 bot lab keeps
+		// rez bots at the army-metal table (3 above 1200 ... 12 above 4000, 15/18/20 above 6000/9000/12000),
+		// taking a Spam pump lab back while short; vehicle-plant allies below 3 ask a bot-lab ally for some
+		Global::RezReplenish::Enabled = true;
+		Global::RezReplenish::Scale = true;
+		Global::RezReplenish::ShareEnabled = true;
 	}
 
 }  // namespace Main
