@@ -39,9 +39,16 @@ an allied SMRTBARb reported), is not under enemy surface threat above
 MaxThreat and is reachable. Radars of the porc chain count like any other, so
 a front point that already has its chain radar is not doubled. One order
 lives at a time, joined by at most one more constructor; an order that dies
-with no radar near its site blocks that site for FailSeconds. A lost radar
-simply drops the count and is rebuilt; when the front moves on, radars left
-behind stop counting and new ones go up at the new front.
+with no radar near its site blocks that site for FailSeconds. The native task
+timeout counts from the task's last touch, which each joining builder renews,
+so an order still alive OrderSeconds after it was placed with no radar frame
+near its site is aborted here and its site blocked for FailSeconds; one with
+a frame is left to finish. A radar (or frame) of ours that was there at the
+last scan and is gone at this one (tracked by unit id) was lost: its spot is
+blocked for LostSeconds, doubled for each earlier loss within Spacing/2 of it
+(capped at LostMaxSeconds), so the count drops and the next radar goes to the
+next front anchor instead of the spot that keeps dying. When the front moves
+on, radars left behind stop counting and new ones go up at the new front.
 
 Every AI with the step on (any role) sends its radar list to the allies at
 least every BroadcastSeconds and whenever it changes (frontradar|have|x,z;..),
@@ -62,6 +69,10 @@ namespace FrontRadar {
     }
     dictionary allies;               // sender team id -> AllyRadars@
     array<AIFloat3> ours;            // our long-range radars, finished or not (last scan)
+    array<Id> oursIds;               // their unit ids, same order (a radar gone at the next scan was lost)
+    array<AIFloat3> lostSpots;       // spots where one of our radars died, with the loss count there
+    array<int> lostCount;
+    int orderFrame = -1;             // when the live order was placed
     array<AIFloat3> anchors;         // front anchors, nearest the enemy first (last scan)
     float frontDist = -1.0f;         // our front-most anchor's distance to the nearest enemy start
     int frontCount = 0;              // our radars within the front band (last scan)
@@ -149,12 +160,36 @@ namespace FrontRadar {
         return false;
     }
 
+    void Block(const AIFloat3 &in site, int seconds)
+    {
+        failed.insertLast(site);
+        failedUntil.insertLast(ai.frame + seconds * SECOND);
+    }
+
+    // One of our radars (finished or a frame) was there at the last scan and is gone:
+    // its spot is skipped LostSeconds, doubled for each earlier loss within Spacing/2
+    void Lost(const AIFloat3 &in at)
+    {
+        const float r2 = Global::FrontRadar::Spacing * Global::FrontRadar::Spacing * 0.25f;
+        int k = -1;
+        for (uint i = 0; i < lostSpots.length(); ++i)
+            if (MapHelpers::SqDist(lostSpots[i], at) <= r2) { k = int(i); break; }
+        if (k < 0) { lostSpots.insertLast(at); lostCount.insertLast(0); k = int(lostSpots.length()) - 1; }
+        int seconds = Global::FrontRadar::LostSeconds;
+        for (int n = 0; n < lostCount[k] && seconds < Global::FrontRadar::LostMaxSeconds; ++n) seconds *= 2;
+        seconds = AiMin(seconds, Global::FrontRadar::LostMaxSeconds);
+        ++lostCount[k];
+        Block(at, seconds);
+        GenericHelpers::LogUtil("[FrontRadar] radar at (" + int(at.x) + "," + int(at.z) + ") lost; site skipped " + seconds + " s", 1);
+    }
+
     // Our radars and the front anchors, from our own units
     void Scan()
     {
         const CCircuitDef@ rd = RadarDef();
         const int radarDefId = (rd is null) ? -1 : int(rd.id);
         array<AIFloat3> radars;
+        array<Id> radarIds;
         array<AIFloat3> cand;
         array<float> candDist;
         float best = -1.0f;
@@ -164,7 +199,7 @@ namespace FrontRadar {
             if (u is null) continue;
             const CCircuitDef@ d = u.circuitDef;
             if (d is null || d.IsMobile()) continue;
-            if (int(d.id) == radarDefId) { radars.insertLast(u.GetPos(ai.frame)); continue; }
+            if (int(d.id) == radarDefId) { radars.insertLast(u.GetPos(ai.frame)); radarIds.insertLast(u.id); continue; }
             if (u.GetBuildProgress() < 1.0f) continue;
             if (d.GetExtractsMetal() <= 0.0f && d.GetMaxRange() <= 0.0f) continue;
             const AIFloat3 p = u.GetPos(ai.frame);
@@ -174,7 +209,10 @@ namespace FrontRadar {
             candDist.insertLast(dist);
             if (best < 0.0f || dist < best) best = dist;
         }
+        for (uint i = 0; i < oursIds.length(); ++i)
+            if (radarIds.find(oursIds[i]) < 0) Lost(ours[i]);
         ours = radars;
+        oursIds = radarIds;
         frontDist = best;
         anchors.resize(0);
         frontCount = 0;
@@ -242,12 +280,22 @@ namespace FrontRadar {
         Scan();
         if (order !is null && order.IsDead()) {
             if (!Near(ours, orderSite, 600.0f)) {
-                failed.insertLast(orderSite);
-                failedUntil.insertLast(ai.frame + Global::FrontRadar::FailSeconds * SECOND);
+                Block(orderSite, Global::FrontRadar::FailSeconds);
                 GenericHelpers::LogUtil("[FrontRadar] order at (" + int(orderSite.x) + "," + int(orderSite.z) + ") died with no radar; site skipped "
                     + Global::FrontRadar::FailSeconds + " s", 1);
             }
             @order = null;
+        } else if (order !is null && ai.frame - orderFrame >= Global::FrontRadar::OrderSeconds * SECOND) {
+            // The native timeout counts from the task's last touch, which every joining
+            // builder renews, so an order that never starts its frame can live for ever.
+            IBuilderTask@ bt = cast<IBuilderTask>(order);
+            if ((bt is null || bt.target is null) && !Near(ours, orderSite, 600.0f)) {
+                aiBuilderMgr.AbortTask(order);
+                @order = null;
+                Block(orderSite, Global::FrontRadar::FailSeconds);
+                GenericHelpers::LogUtil("[FrontRadar] order at (" + int(orderSite.x) + "," + int(orderSite.z) + ") aborted: no radar frame after "
+                    + Global::FrontRadar::OrderSeconds + " s; site skipped " + Global::FrontRadar::FailSeconds + " s", 1);
+            }
         }
         for (int i = int(failed.length()) - 1; i >= 0; --i) {
             if (ai.frame < failedUntil[i]) continue;
@@ -288,9 +336,10 @@ namespace FrontRadar {
             if (aiBattle.SurfThreat(site) > Global::FrontRadar::MaxThreat) continue;
             if (!aiTerrainMgr.CanReachAt(u, site, u.circuitDef.GetBuildDistance())) continue;
             @order = aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::DEFENCE, Task::Priority::NORMAL, rd, site,
-                Global::FrontRadar::Shake, true, 300 * SECOND));
+                Global::FrontRadar::Shake, true, Global::FrontRadar::OrderSeconds * SECOND));
             if (order is null) return null;
             orderSite = site;
+            orderFrame = ai.frame;
             GenericHelpers::LogUtil("[FrontRadar] " + u.circuitDef.GetName() + " " + u.id + " orders " + rd.GetName() + " " + (frontCount + 1)
                 + " of " + want + " at (" + int(site.x) + "," + int(site.z) + "), " + int(EnemyDist(site)) + " from the enemy (front "
                 + int(frontDist) + ", anchor " + int(EnemyDist(anchors[i])) + "; mi=" + int(mi) + " ei=" + int(ei) + ")", 1);

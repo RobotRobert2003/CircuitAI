@@ -15,6 +15,9 @@ namespace Global { namespace FrontRadar {
     float MaxThreat = 1.0f;     // enemy surface threat at the site above this: that anchor is skipped for now
     float Shake = 200.0f;       // native looks this far round the site for room
     int FailSeconds = 180;      // a site whose order died with no radar is skipped this long
+    int LostSeconds = 600;      // a spot where one of our long-range radars died is skipped this long, doubled per further loss there
+    int LostMaxSeconds = 2400;  // cap on that doubling
+    int OrderSeconds = 300;     // an order with no radar frame near its site this long after it was placed is aborted
     int ReportSeconds = 120;    // census line interval
     int BroadcastSeconds = 60;  // our radar list goes to the allies at least this often
 } }
