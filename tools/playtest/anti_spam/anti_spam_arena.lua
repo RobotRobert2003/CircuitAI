@@ -154,7 +154,8 @@ end
 
 function widget:GameFrame(f)
     if ended then return end
-    if pendingWave and f - pendingWave.frame >= 2 then orderWave() end
+    -- the give lands a few to ~30 frames after the command: order once the whole wave stands (or after 3 s)
+    if pendingWave and (#pendingWave.ids >= pendingWave.w.count or f - pendingWave.frame >= 90) then orderWave() end
     if not pendingWave and #waves > 0 and f >= waves[1].minute * 60 * 30 then
         spawnWave(table.remove(waves, 1))
     end
