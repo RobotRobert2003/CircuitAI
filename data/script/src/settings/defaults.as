@@ -9,6 +9,7 @@
 #include "shared/pinpointer.as"
 #include "shared/spam.as"
 #include "shared/edge_porc.as"
+#include "shared/front_radar.as"
 #include "shared/scout_raid.as"
 #include "shared/gremlin_eco_fire.as"
 #include "shared/construction.as"

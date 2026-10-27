@@ -12,6 +12,7 @@
 #include "ally_clear.as"
 #include "nuke_recon.as"
 #include "lolcannon_recon.as"
+#include "../combat/front_radar.as"
 #include "../world/coverage_lanes.as"
 
 namespace Team {
@@ -55,6 +56,7 @@ namespace Team {
         if (SeaTech::Handle(msg, fromTeamId)) return;
         if (NukeRecon::Handle(msg, fromTeamId)) return;
         if (LolCannonRecon::Handle(msg, fromTeamId)) return;
+        if (FrontRadar::HandleMessage(msg, fromTeamId)) return;   // owner, 2026-10-27: allied long-range radars
         if (Roster::HandleMessage(msg, fromTeamId)) return;
         if (CoverageLanes::HandleMessage(msg, fromTeamId)) return;   // D-357: a FRONT ally's corridor claim
         if (CommanderEnergy::HandleMessage(msg, fromTeamId)) return;

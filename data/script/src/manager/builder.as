@@ -2036,6 +2036,7 @@ namespace Builder {
 		if (t is null) @t = Team::AllyClear::BuilderTask(u); // owner, 2026-10-17: reclaim allied buildings given to us
 		if (t is null) @t = EdgeLanes::BuilderTask(u); // owner, 2026-10-17: two FRONTs build the edge lane labs
 		if (t is null) @t = EdgePorc::BuilderTask(u); // owner, 2026-10-19: ... and their edge's forward porc
+		if (t is null) @t = FrontRadar::BuilderTask(u); // owner, 2026-10-27: long-range radars just behind the front
 		if (t is null) @t = Spam::BuilderMakeTask(u);
 		if (t is null && MetalEconomy::Active() && !SeaLayout::Active() && Global::AISettings::Role != AiRole::AIR && Global::AISettings::Role != AiRole::TECH
 			&& !UnitHelpers::IsCommander(u.circuitDef) && u.circuitDef.IsMobile()) @t = MetalEconomy::EconomyTask(u);
