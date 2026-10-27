@@ -11,6 +11,11 @@ namespace LolCannon {
     // One cannon per entry of MetalIncomeGates: the first at 600 metal/s, the
     // second at 1000. A lost cannon is rebuilt on its own site.
     array<float> MetalIncomeGates = { 600.0f, 1000.0f };
+    // past the last gate one more cannon every ExtraCannonMetalStep metal/s (owner
+    // 2026-10-27: the third at 1050, the fourth at 1100, ...; 0 none); MaxCannons caps
+    // the count (0 no cap)
+    float ExtraCannonMetalStep = 50.0f;
+    int MaxCannons = 0;
     float MinEnergyIncome = 5000.0f;
     int MinGameSeconds = 0;
     // the site: on a ring round an enemy start, just inside the cannon's range
@@ -26,6 +31,13 @@ namespace LolCannon {
                                     // 4 x SiteProbes nearest; ones whose cannon footprint sits on a metal/geo spot or
                                     // an ally layout, reservation or structure are skipped before they count
     float SiteMinScore = 0.7f;
+    // further back (owner 2026-10-27): every BackOffAfter failures for one cannon (a site
+    // search that found nothing, or a cannon order that came to nothing) move the rings
+    // SiteBackStep further out from the enemy start, past the cannon's reach if need be,
+    // at most SiteBackLevels times. A cannon order that keeps failing moves the site at once.
+    int BackOffAfter = 3;
+    float SiteBackStep = 500.0f;
+    int SiteBackLevels = 6;
     // the construction turret block beside the cannon (cols x rows, across x along)
     int TurretCols = 4;
     int TurretRows = 4;

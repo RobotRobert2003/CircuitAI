@@ -9,11 +9,32 @@ namespace LolCannonMath {
         const float r = range - marginMin - float(k) * (step > 1.0f ? step : 1.0f);
         return (r < range - marginMax || r <= 0.0f) ? -1.0f : r;
     }
-    // Cannon k (0 = the first) may start: one gate per cannon, all required.
-    bool GateOpen(int built, float metal, float energy, const array<float>@ metalGates, float minEnergy)
+    // Metal gate of cannon k (0 = the first): the listed gates, then one more cannon
+    // every extraStep metal/s past the last of them (owner 2026-10-27); -1 none.
+    float GateFor(int built, const array<float>@ metalGates, float extraStep)
     {
-        if (metalGates is null || built < 0 || built >= int(metalGates.length())) return false;
-        return metal >= metalGates[built] && energy >= minEnergy;
+        if (metalGates is null || built < 0 || metalGates.length() == 0) return -1.0f;
+        const int n = int(metalGates.length());
+        if (built < n) return metalGates[built];
+        return (extraStep > 0.0f) ? metalGates[n - 1] + float(built - n + 1) * extraStep : -1.0f;
+    }
+    // Cannon k (0 = the first) may start: its metal gate and the energy gate.
+    bool GateOpen(int built, float metal, float energy, const array<float>@ metalGates, float minEnergy, float extraStep)
+    {
+        const float gate = GateFor(built, metalGates, extraStep);
+        return gate >= 0.0f && metal >= gate && energy >= minEnergy;
+    }
+    // How far the site rings move out from the enemy start at back-off level `level`.
+    float BackShift(int level, float step)
+    {
+        return (level > 0 && step > 0.0f) ? float(level) * step : 0.0f;
+    }
+    // Back-off level after `fails` failures, one level per `per`, at most `maxLevel`.
+    int BackLevel(int fails, int per, int maxLevel)
+    {
+        if (fails <= 0 || per <= 0 || maxLevel <= 0) return 0;
+        const int l = fails / per;
+        return l > maxLevel ? maxLevel : l;
     }
     // Native facing (SOUTH 0 +z, EAST 1 +x, NORTH 2 -z, WEST 3 -x) nearest a direction.
     int Facing(float dx, float dz)

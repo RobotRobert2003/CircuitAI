@@ -15,9 +15,11 @@ Starfall), "lolcannons", are built by FRONT and TECH only, and only through
 this program (owner, 2026-10-26):
 
   gates   one cannon per MetalIncomeGates entry: the first at 600 metal/s, the
-          second at 1000, each also at MinEnergyIncome (5000) energy/s, as 10 s
-          minima (Economy::GetMin*IncomeLast10s, so sustained over 10 s). A
-          further cannon starts only while every earlier one stands.
+          second at 1000, then one more every ExtraCannonMetalStep (50) metal/s
+          past the last gate (1050, 1100, ...; owner 2026-10-27, MaxCannons caps
+          it), each also at MinEnergyIncome (5000) energy/s, as 10 s minima
+          (Economy::GetMin*IncomeLast10s, so sustained over 10 s). A further
+          cannon starts only while every earlier one stands.
   site    on rings round each enemy FRONT spawn (StartSpot role; every enemy
           spawn on a map without roles) that no earlier cannon was sited
           against, so the second covers a different spawn (TargetStarts),
@@ -30,7 +32,15 @@ this program (owner, 2026-10-26):
           the cannon's footprint and MinTurrets (16) turrets out of the block
           and its TurretSpareRows, centre out: each footprint is reserved
           through the layout reservations. The storages reserve where they can
-          and never refuse a site; the rest are ordered at their spots. TECH
+          and never refuse a site; the rest are ordered at their spots.
+          Further back (owner 2026-10-27): every BackOffAfter (3) failures for
+          one cannon - a site search that found nothing, or a cannon order that
+          died with no frame standing - move the rings SiteBackStep (500)
+          further out from the enemy start, past the cannon's reach if need be
+          (no enemy start in range is allowed there), up to SiteBackLevels (6).
+          When the cannon orders are what failed, the site moves at once (the
+          crews stay); a rebuild on a done site that keeps failing gives the
+          site up and the cannon is planned afresh. TECH
           keeps the reservations and pins its orders to them; FRONT runs no layout, so
           its reservations are taken only for the search and its orders go to
           the same spots unpinned.
@@ -127,6 +137,11 @@ namespace LolCannon {
     array<AIFloat3> doneTargets;     // the enemy spawn each finished cannon was sited against
     AIFloat3 siteTarget(-1.0f, 0.0f, -1.0f);   // ... and the one the current site is against
     int nextFireCheck = 0;
+    // further back (owner 2026-10-27)
+    int fails = 0;                   // failed site searches and cannon orders for this cannon
+    int siteLevel = 0;               // the back-off level the current site was found at
+    bool moveBack = false;           // the cannon orders failed BackOffAfter times: Advance moves the site
+    int nextGunTry = 0;
 
     // the fire roster: def id -> tier 1..6, 0 none
     array<int> tierByDef;
@@ -172,11 +187,27 @@ namespace LolCannon {
         const float m = Economy::GetMinMetalIncomeLast10s(), e = Economy::GetMinEnergyIncomeLast10s();
         const int secs = ai.frame / SECOND;
         const array<float>@ gates = @Global::LolCannon::MetalIncomeGates;
-        const int gate = (built < int(gates.length())) ? int(gates[built]) : -1;
+        const int gate = int(Gate());
         why = "cannon " + (built + 1) + ": metal " + int(m) + "/" + gate + ", energy " + int(e) + "/"
             + int(Global::LolCannon::MinEnergyIncome) + " (10 s minima)";
-        return Economy::IncomeWindowReady() && secs >= Global::LolCannon::MinGameSeconds
-            && LolCannonMath::GateOpen(built, m, e, gates, Global::LolCannon::MinEnergyIncome);
+        return Economy::IncomeWindowReady() && secs >= Global::LolCannon::MinGameSeconds && MoreCannons()
+            && LolCannonMath::GateOpen(built, m, e, gates, Global::LolCannon::MinEnergyIncome, Global::LolCannon::ExtraCannonMetalStep);
+    }
+
+    // The next cannon's metal gate, -1 none.
+    float Gate()
+    {
+        return LolCannonMath::GateFor(built, Global::LolCannon::MetalIncomeGates, Global::LolCannon::ExtraCannonMetalStep);
+    }
+
+    bool MoreCannons()
+    {
+        return Gate() >= 0.0f && (Global::LolCannon::MaxCannons <= 0 || built < Global::LolCannon::MaxCannons);
+    }
+
+    int Level()
+    {
+        return LolCannonMath::BackLevel(fails, Global::LolCannon::BackOffAfter, Global::LolCannon::SiteBackLevels);
     }
 
     // ---------------------------------------------------------------- the lock
@@ -571,6 +602,12 @@ namespace LolCannon {
         const AIFloat3 home = Home();
         const float range = gun.GetMaxRange();
         const float margin = 160.0f;
+        // further back after repeated failures: the rings move out, past the cannon's reach if need be
+        const int level = Level();
+        const float back = LolCannonMath::BackShift(level, Global::LolCannon::SiteBackStep);
+        const float marginMin = Global::LolCannon::SiteRangeMarginMin - back, marginMax = Global::LolCannon::SiteRangeMarginMax - back;
+        const string backWhy = (level == 0) ? "" : "; back level " + level + " (rings " + int(back) + " further out after " + fails
+            + " failures" + (marginMin < 0.0f ? ", the enemy start may be out of reach" : "") + ")";
         const float w = float(AiTerrainWidth()), h = float(AiTerrainHeight());
         // The SiteProbes candidates nearest home, kept sorted (insertion; n = starts x rings x angles).
         array<AIFloat3> best; array<float> bestD; array<int> bestF, bestS;
@@ -578,8 +615,7 @@ namespace LolCannon {
         const int probes = AiMax(1, Global::LolCannon::SiteProbes) * 4;
         for (uint s = 0; s < starts.length(); ++s) {
             for (int k = 0; ; ++k) {
-                const float r = LolCannonMath::RingRadius(range, Global::LolCannon::SiteRangeMarginMin, Global::LolCannon::SiteRangeMarginMax,
-                    Global::LolCannon::SiteRangeStep, k);
+                const float r = LolCannonMath::RingRadius(range, marginMin, marginMax, Global::LolCannon::SiteRangeStep, k);
                 if (r < 0.0f) break;
                 for (int a = 0; a < Global::LolCannon::SiteAngles; ++a) {
                     const float ang = float(a) * 6.2831853f / float(AiMax(1, Global::LolCannon::SiteAngles));
@@ -613,14 +649,14 @@ namespace LolCannon {
             if (score < Global::LolCannon::SiteMinScore) continue;
             ++tried;
             found = TrySite(gun, nano, st, best[i], bestF[i], layoutOn);
-            if (found) siteTarget = starts[bestS[i]];
+            if (found) { siteTarget = starts[bestS[i]]; siteLevel = level; }
             if (found)
                 GenericHelpers::LogUtil("[LolCannon] site for " + gun.GetName() + " (range " + int(range) + ") at (" + int(site.x) + ", " + int(site.z)
                     + "), facing " + facing + ", " + int(sqrt(bestD[i])) + " from home, ground " + int(score * 100.0f) + "%; "
                     + turretPos.length() + " turrets and " + storePos.length() + " " + st.GetName() + " beside it ("
                     + storesReserved + " storage slots reserved)"
                     + (layoutOn ? " (reserved)" : " (FRONT: unpinned)") + "; against the enemy spawn at (" + int(siteTarget.x) + ", "
-                    + int(siteTarget.z) + "): " + targetWhy, 1);
+                    + int(siteTarget.z) + "), " + int(sqrt(MapHelpers::SqDist(site, siteTarget))) + " away: " + targetWhy + backWhy, 1);
         }
         if (!found && refusedGun > 0) {
             // one non-quiet try: native logs "RESERVE: refused <def> ...: <why>" (terrain, a blocked cell, the engine's ground test)
@@ -635,7 +671,7 @@ namespace LolCannon {
                 + starts.length() + " enemy start(s): " + best.length() + " candidates, " + scored + " scored, " + tried
                 + " tried (cannon refused " + refusedGun + ", turrets short " + shortTurrets + ", best " + bestTurrets + "/"
                 + Global::LolCannon::MinTurrets + "); skipped: " + skipResource + " on metal/geo spots, " + skipLayout
-                + " on ally layouts, reservations or structures; retry in 30 s", 1);
+                + " on ally layouts, reservations or structures" + backWhy + "; retry in 30 s", 1);
         return found;
     }
 
@@ -807,17 +843,71 @@ namespace LolCannon {
         if (gun is null || StandingGun() !is null) return null;
         CCircuitUnit@ gf = aiBuilderMgr.FindUnfinishedNear(site, 128.0f, gun);
         if (gf !is null) return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, gf, 60 * SECOND));
-        if (!u.circuitDef.CanBuild(gun)) return null;
+        if (!u.circuitDef.CanBuild(gun) || moveBack) return null;
         if (gunTask !is null && !gunTask.IsDead()) return gunTask;
+        if (ai.frame < nextGunTry) return null;
+        if (gunTask !is null && GunFailed("its order ended with no frame standing")) return null;
         @gunTask = OrderAt(Task::BuildType::BIG_GUN, gun, site, gunRes);
-        if (gunTask !is null) {
-            if (orderFrame < 0) orderFrame = ai.frame;
-            string why;
-            Gates(why);
-            GenericHelpers::LogUtil("[LolCannon] " + u.circuitDef.GetName() + " " + u.id + " orders " + gun.GetName() + " at (" + int(site.x)
-                + ", " + int(site.z) + "); " + why, 1);
+        if (gunTask is null) {
+            nextGunTry = ai.frame + 10 * SECOND;
+            GunFailed("the order was refused");
+            return null;
         }
+        if (orderFrame < 0) orderFrame = ai.frame;
+        string why;
+        Gates(why);
+        GenericHelpers::LogUtil("[LolCannon] " + u.circuitDef.GetName() + " " + u.id + " orders " + gun.GetName() + " at (" + int(site.x)
+            + ", " + int(site.z) + "); " + why, 1);
         return gunTask;
+    }
+
+    // A cannon order that came to nothing; true when the site is to move further back.
+    bool GunFailed(const string &in why)
+    {
+        @gunTask = null;
+        const int before = Level();
+        ++fails;
+        const bool back = Level() > before || (rebuild && fails >= Global::LolCannon::BackOffAfter);
+        GenericHelpers::LogUtil("[LolCannon] cannon order at (" + int(site.x) + ", " + int(site.z) + ") failed: " + why + " (" + fails
+            + " failures" + (back ? "; moving further back" : "") + ")", 1);
+        if (back) moveBack = true;
+        return back;
+    }
+
+    // The cannon orders keep failing: a new site further back (the crews stay), or,
+    // for a rebuild on a done site, that site given up and the cannon planned afresh.
+    void MoveBack()
+    {
+        moveBack = false;
+        if (gunTask !is null && !gunTask.IsDead()) aiBuilderMgr.AbortTask(gunTask);
+        @gunTask = null;
+        for (uint k = 0; k < turretTask.length(); ++k) if (turretTask[k] !is null && !turretTask[k].IsDead()) aiBuilderMgr.AbortTask(turretTask[k]);
+        for (uint k = 0; k < storeTask.length(); ++k) if (storeTask[k] !is null && !storeTask[k].IsDead()) aiBuilderMgr.AbortTask(storeTask[k]);
+        if (gunRes >= 0) aiTerrainMgr.ReleaseReservation(gunRes);
+        gunRes = -1;
+        ReleaseAll(turretRes); ReleaseAll(storeRes);
+        turretRes.resize(0); storeRes.resize(0);
+        const AIFloat3 old = site;
+        if (rebuild) {
+            for (uint i = 0; i < doneSites.length(); ++i) {
+                if (MapHelpers::SqDist(doneSites[i], old) > 1.0f) continue;
+                doneSites.removeAt(i); doneFacings.removeAt(i); doneTargets.removeAt(i);
+                break;
+            }
+            if (built > 0) --built;
+            rebuild = false;
+            GenericHelpers::LogUtil("[LolCannon] the rebuild at (" + int(old.x) + ", " + int(old.z) + ") keeps failing; that site is given up and cannon "
+                + (built + 1) + " is planned afresh", 1);
+        } else if (Plan()) {
+            ResetSlots();
+            orderFrame = -1; frameFrame = -1;
+            GenericHelpers::LogUtil("[LolCannon] site moved back from (" + int(old.x) + ", " + int(old.z) + ") to (" + int(site.x) + ", " + int(site.z)
+                + "), back level " + siteLevel + "; the crews stay", 1);
+            return;
+        }
+        ReleaseCrew("the cannon's site moved");
+        phase = IDLE;
+        nextPlan = ai.frame + 30 * SECOND;
     }
 
     // Builder AiMakeTask, asked first: a crew member's next piece of work.
@@ -956,7 +1046,8 @@ namespace LolCannon {
         CCircuitDef@ st = Store();
         GenericHelpers::LogUtil("[LolCannon] program " + (again ? "rebuilds the lost cannon" : "starts cannon " + (built + 1)) + ": crews of 1 + "
             + Wanted(AIR) + " air + " + Wanted(STORE) + " storage; " + turretPos.length() + " turrets, " + storePos.length() + " "
-            + (st is null ? "storages" : st.GetName()) + ", " + (Gun() is null ? "cannon" : Gun().GetName()), 1);
+            + (st is null ? "storages" : st.GetName()) + ", " + (Gun() is null ? "cannon" : Gun().GetName())
+            + (siteLevel > 0 ? "; site at back level " + siteLevel : ""), 1);
     }
 
     int CountStanding(CCircuitDef@ d, const array<AIFloat3> &in at, float radius)
@@ -974,7 +1065,7 @@ namespace LolCannon {
             + " def=" + g.circuitDef.GetName() + " unit=" + g.id + " role=" + (Global::AISettings::Role == AiRole::TECH ? "TECH" : "FRONT")
             + " site=" + int(site.x) + "," + int(site.z) + " program=" + (started / SECOND) + "s ordered=" + (orderFrame < 0 ? -1 : orderFrame / SECOND)
             + "s framed=" + (frameFrame < 0 ? -1 : frameFrame / SECOND) + "s finished=" + (ai.frame / SECOND) + "s build=" + int(secs)
-            + "s nanos=" + CountStanding(Nano(), turretPos, 24.0f) + "/" + turretPos.length()
+            + "s back=" + siteLevel + " fails=" + fails + " nanos=" + CountStanding(Nano(), turretPos, 24.0f) + "/" + turretPos.length()
             + " storages=" + CountStanding(Store(), storePos, 32.0f) + "/" + storePos.length()
             + " crews=" + crewCount[STARTER] + "+" + crewCount[AIR] + "+" + crewCount[STORE]
             + " metal=" + int(Economy::GetMinMetalIncomeLast10s()) + " energy=" + int(Economy::GetMinEnergyIncomeLast10s()), 1);
@@ -1013,6 +1104,7 @@ namespace LolCannon {
         }
         LolCannonRecon::Send(Global::LolCannon::ReconT1Scouts, Global::LolCannon::ReconRadarScouts);
         rebuild = false;
+        fails = 0; siteLevel = 0; moveBack = false;
         const int stores = CountStanding(Store(), storePos, 32.0f);
         if (stores < int(storePos.length()) && Global::LolCannon::StoreFinishSeconds > 0) {
             // the storages are part of the order: the starter and storage crew stay on them
@@ -1021,7 +1113,7 @@ namespace LolCannon {
             storesUntil = ai.frame + Global::LolCannon::StoreFinishSeconds * SECOND;
             return;
         }
-        ReleaseCrew(Gun().GetName() + " stands (" + built + " of " + Global::LolCannon::MetalIncomeGates.length() + ")");
+        ReleaseCrew(Gun().GetName() + " stands (" + built + " built; the next at " + int(Gate()) + " metal/s)");
         phase = IDLE;
         nextPlan = ai.frame + 30 * SECOND;
     }
@@ -1079,6 +1171,7 @@ namespace LolCannon {
             gunRes = -1; turretRes.resize(0); storeRes.resize(0);
             for (uint k = 0; k < tp.length(); ++k) turretRes.insertLast(-1);
             for (uint k = 0; k < sp.length(); ++k) storeRes.insertLast(-1);
+            fails = 0; siteLevel = 0; moveBack = false;
             GenericHelpers::LogUtil("[LolCannon] the cannon at (" + int(site.x) + ", " + int(site.z) + ") was lost; the crews rebuild it there", 1);
             Begin(true);
             return true;
@@ -1095,23 +1188,31 @@ namespace LolCannon {
         }
         if (phase == IDLE) {
             if (CheckLost()) return;
-            if (built >= int(Global::LolCannon::MetalIncomeGates.length()) || ai.frame < nextPlan) return;
+            if (!MoreCannons() || ai.frame < nextPlan) return;
             // a further cannon only while every earlier one stands (a lost one is rebuilt first, above)
             for (uint i = 0; i < doneSites.length(); ++i)
                 if (aiBuilderMgr.FindOwnNear(doneSites[i], 96.0f, Gun()) is null) return;
             string why;
             if (!Gates(why)) {
-                if (ai.frame >= nextGateLog && Economy::GetMinMetalIncomeLast10s() >= Global::LolCannon::MetalIncomeGates[built] * 0.5f) {
+                if (ai.frame >= nextGateLog && Economy::GetMinMetalIncomeLast10s() >= Gate() * 0.5f) {
                     nextGateLog = ai.frame + 60 * SECOND;
                     GenericHelpers::LogUtil("[LolCannon] waiting for the gates: " + why, 1);
                 }
                 return;
             }
             nextPlan = ai.frame + 30 * SECOND;
-            if (Gun() is null || Store() is null || !Plan()) return;
+            if (Gun() is null || Store() is null) return;
+            if (!Plan()) {
+                ++fails;   // BackOffAfter of these move the next search's rings further out
+                return;
+            }
             GenericHelpers::LogUtil("[LolCannon] gates open: " + why, 1);
             Begin(false);
             return;
+        }
+        if (moveBack && phase == BUILD) {
+            MoveBack();
+            if (phase != BUILD) return;
         }
         OrderCrews();
         if (frameFrame < 0 && Gun() !is null && aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun()) !is null) {

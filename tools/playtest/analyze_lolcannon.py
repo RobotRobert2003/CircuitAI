@@ -33,12 +33,15 @@ re_stores = re.compile(AI + r'\[LolCannon\] REPORT storages (\d+)/(\d+) at=(\d+)
 re_sweep = re.compile(AI + r'\[LolCannon\] scout sweep asked of AIR=(\d+): (\d+) T1 scouts, (\d+) radar')
 re_air = re.compile(AI + r'\[AIR\]\[ScoutSweep\] lolcannon request from (\d+)')
 re_tier = re.compile(r'TIER: team=(\d+) frame=(\d+) (\S+)\((\d+)\): tier (\d) (\S+)\((\d+)\) cost=(\d+) at \((-?\d+),(-?\d+)\), (\d+) away(.*)')
+re_failed = re.compile(AI + r'\[LolCannon\] cannon order at \((\d+), (\d+)\) failed: ')
+re_moved = re.compile(AI + r'\[LolCannon\] site moved back from \((\d+), (\d+)\) to \((\d+), (\d+)\), back level (\d+)')
 re_kv = re.compile(r'(\w+)=(\S+)')
 
 teams = {}
 def team(t):
     return teams.setdefault(int(t), {'gates': None, 'site': None, 'no_site': 0, 'no_site_why': None, 'cannons': [], 'framed': [], 'tiers': {},
-                                     'first': [], 'sweep': None, 'air_got_sweep': False})
+                                     'first': [], 'sweep': None, 'air_got_sweep': False,
+                                     'order_fails': 0, 'moved_back': []})
 
 with open(a.infolog, encoding='utf-8', errors='replace') as f:
     for line in f:
@@ -50,6 +53,10 @@ with open(a.infolog, encoding='utf-8', errors='replace') as f:
             team(m[1])['site'] = {'def': m[3], 'range': int(m[4]), 'x': int(m[5]), 'z': int(m[6]), 'from_home': int(m[8]), 'ground': int(m[9])}
         elif m := re_nosite.search(line):
             t = team(m[1]); t['no_site'] += 1; t['no_site_why'] = '; '.join(x for x in (m[3], m[4] and 'skipped ' + m[4]) if x) or t['no_site_why']
+        elif m := re_failed.search(line):
+            team(m[1])['order_fails'] += 1
+        elif m := re_moved.search(line):
+            team(m[1])['moved_back'].append({'at': int(m[2]) // 30, 'to': (int(m[5]), int(m[6])), 'level': int(m[7])})
         elif m := re_framed.search(line):
             team(m[1])['framed'].append({'framed': int(m[3]), 'ordered': int(m[4])})
         elif m := re_done.search(line):
@@ -83,18 +90,20 @@ for tid, t in sorted(teams.items()):
                      'gates_s': (t['gates'] or {}).get('second'), 'ordered': c.get('ordered'), 'framed': c.get('framed'),
                      'finished': c.get('finished'), 'build': c.get('build'), 'nanos': c.get('nanos'), 'storages': c.get('storages'),
                      'crews': c.get('crews'), 'storages_final': c.get('storages_final'), 'site': t['site'], 'no_site_logs': t['no_site'], 'no_site_why': t['no_site_why'],
-                     'first_target': tier, 'first_target_report': first, 'sweep': t['sweep'], 'air_got_sweep': t['air_got_sweep']})
+                     'first_target': tier, 'first_target_report': first, 'sweep': t['sweep'], 'air_got_sweep': t['air_got_sweep'],
+                     'back': c.get('back'), 'order_fails': t['order_fails'], 'moved_back': t['moved_back']})
 
 print(f"lolcannon {a.label} ({a.infolog})")
-print(f"{'team':>4} {'#':>2} {'def':<12} {'gates':>6} {'ordered':>8} {'framed':>7} {'finished':>8} {'build':>6} {'nanos':>6} {'stores':>6}  first target")
+print(f"{'team':>4} {'#':>2} {'def':<12} {'gates':>6} {'ordered':>8} {'framed':>7} {'finished':>8} {'build':>6} {'nanos':>6} {'stores':>6} {'back':>4}  first target")
 for r in rows:
     ft = r['first_target']
     ftxt = f"t{ft['tier']} {ft['def']} {ft['distance']}" if ft else ('none' if r['finished'] else '-')
     if not r['site'] and r['no_site_logs']:
         ftxt = f"no site x{r['no_site_logs']} ({r['no_site_why'] or 'no reason logged'})"
     print(f"{r['team']:>4} {r['cannon']:>2} {r['def']:<12} {str(r['gates_s']):>6} {str(r['ordered']):>8} {str(r['framed']):>7} "
-          f"{str(r['finished']):>8} {str(r['build']):>6} {str(r['nanos']):>6} {str(r['storages']):>6}  {ftxt}"
-          + (f"  [storages after: {r['storages_final']}]" if r['storages_final'] else ''))
+          f"{str(r['finished']):>8} {str(r['build']):>6} {str(r['nanos']):>6} {str(r['storages']):>6} {str(r['back']):>4}  {ftxt}"
+          + (f"  [storages after: {r['storages_final']}]" if r['storages_final'] else '')
+          + (f"  [order fails {r['order_fails']}, moved back x{len(r['moved_back'])}]" if r['order_fails'] or r['moved_back'] else ''))
 out = a.infolog.parent / 'lolcannon.json'
 out.write_text(json.dumps({'label': a.label, 'rows': rows}, indent=1))
 print(f"written {out}")
