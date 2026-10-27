@@ -135,7 +135,7 @@ void CRangedEngagement::SelectTarget(CCircuitUnit* unit,int selected,int weapon,
 }
 bool CRangedEngagement::Spam(const RangedPolicy& p,const CRangedWorld::Contact& c)
 {
-    return p.spamMaxCost>0.f && c.def && c.mobile && c.cost<=p.spamMaxCost
+    return c.def && c.mobile && ((p.spamMaxCost>0.f && c.cost<=p.spamMaxCost) || p.spamDefs.count(c.def->GetId()))
         && !c.def->IsEnemyRoleAny(CCircuitDef::COMM);
 }
 void CRangedEngagement::UpdateFireState(CCircuitUnit* unit,bool open)

@@ -2,6 +2,7 @@
 #define CIRCUIT_RANGED_POLICY_H
 
 #include <string>
+#include <unordered_set>
 
 namespace circuit {
 namespace ranged_policy_defaults {
@@ -121,6 +122,9 @@ struct RangedPolicy {
     // fire at will always, spamMaxCost unused (owner 2026-10-19, Thug/Mace).
     bool fireAtWill = false;
     float spamMaxCost = 0.f;
+    // Owner 2026-10-27: named spam ("spam_units", def ids resolved at load),
+    // in addition to spamMaxCost. Same rules: mobile, never a commander.
+    std::unordered_set<int> spamDefs;
     float assistMargin = 150.f; // ally counts as engaged within its ground range + margin + contact radius
     bool assistScreen = true;   // assist firing sites require an allied screen toward the target
 };
