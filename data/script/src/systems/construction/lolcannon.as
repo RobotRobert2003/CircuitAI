@@ -14,10 +14,12 @@ The three super cannons (armvulc Ragnarok, corbuzz Calamity, legstarfall
 Starfall), "lolcannons", are built by FRONT and TECH only, and only through
 this program (owner, 2026-10-26):
 
-  gates   one cannon per MetalIncomeGates entry: the first at 600 metal/s, the
-          second at 1000, then one more every ExtraCannonMetalStep (50) metal/s
-          past the last gate (1050, 1100, ...; owner 2026-10-27, MaxCannons caps
-          it), each also at MinEnergyIncome (5000) energy/s, as 10 s minima
+  gates   one cannon per entry of the role's gates, then one more every step
+          metal/s past the last (owner 2026-10-27): TECH MetalIncomeGates (600)
+          + ExtraCannonMetalStep (80), so 600, 680, 760, ...; FRONT
+          FrontMetalIncomeGates (500) + FrontExtraCannonMetalStep (500), so
+          500, 1000, 1500, ...; MaxCannons caps the count. Each also at
+          MinEnergyIncome (5000) energy/s, as 10 s minima
           (Economy::GetMin*IncomeLast10s, so sustained over 10 s). A further
           cannon starts only while every earlier one stands.
   site    on rings round each enemy FRONT spawn (StartSpot role; every enemy
@@ -186,18 +188,23 @@ namespace LolCannon {
     {
         const float m = Economy::GetMinMetalIncomeLast10s(), e = Economy::GetMinEnergyIncomeLast10s();
         const int secs = ai.frame / SECOND;
-        const array<float>@ gates = @Global::LolCannon::MetalIncomeGates;
+        const array<float>@ gates = GateList();
         const int gate = int(Gate());
         why = "cannon " + (built + 1) + ": metal " + int(m) + "/" + gate + ", energy " + int(e) + "/"
             + int(Global::LolCannon::MinEnergyIncome) + " (10 s minima)";
         return Economy::IncomeWindowReady() && secs >= Global::LolCannon::MinGameSeconds && MoreCannons()
-            && LolCannonMath::GateOpen(built, m, e, gates, Global::LolCannon::MinEnergyIncome, Global::LolCannon::ExtraCannonMetalStep);
+            && LolCannonMath::GateOpen(built, m, e, gates, Global::LolCannon::MinEnergyIncome, GateStep());
     }
+
+    // The role's metal gates (owner 2026-10-27: TECH from 600 every 80, FRONT every 500).
+    bool IsFront() { return Global::AISettings::Role == AiRole::FRONT; }
+    array<float>@ GateList() { return IsFront() ? @Global::LolCannon::FrontMetalIncomeGates : @Global::LolCannon::MetalIncomeGates; }
+    float GateStep() { return IsFront() ? Global::LolCannon::FrontExtraCannonMetalStep : Global::LolCannon::ExtraCannonMetalStep; }
 
     // The next cannon's metal gate, -1 none.
     float Gate()
     {
-        return LolCannonMath::GateFor(built, Global::LolCannon::MetalIncomeGates, Global::LolCannon::ExtraCannonMetalStep);
+        return LolCannonMath::GateFor(built, GateList(), GateStep());
     }
 
     bool MoreCannons()

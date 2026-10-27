@@ -8,14 +8,14 @@ namespace LolCannon {
     // the LRPC_HEAVY objective) and only FRONT and TECH may build one, here.
     bool Enabled = false;
     // gates, all required (10 s minimum income, as Economy::GetMin*IncomeLast10s).
-    // One cannon per entry of MetalIncomeGates: the first at 600 metal/s, the
-    // second at 1000. A lost cannon is rebuilt on its own site.
-    array<float> MetalIncomeGates = { 600.0f, 1000.0f };
-    // past the last gate one more cannon every ExtraCannonMetalStep metal/s (owner
-    // 2026-10-27: the third at 1050, the fourth at 1100, ...; 0 none); MaxCannons caps
-    // the count (0 no cap)
-    float ExtraCannonMetalStep = 50.0f;
-    int MaxCannons = 0;
+    // One cannon per entry of the role's gates, then one more every step metal/s
+    // past the last of them (0: none). Owner 2026-10-27: TECH at 600, 680, 760, ...;
+    // FRONT at 500, 1000, 1500, ... A lost cannon is rebuilt on its own site.
+    array<float> MetalIncomeGates = { 600.0f };          // TECH
+    float ExtraCannonMetalStep = 80.0f;                  // TECH
+    array<float> FrontMetalIncomeGates = { 500.0f };
+    float FrontExtraCannonMetalStep = 500.0f;
+    int MaxCannons = 0;                                  // a cap on the count, 0 none
     float MinEnergyIncome = 5000.0f;
     int MinGameSeconds = 0;
     // the site: on a ring round an enemy start, just inside the cannon's range
