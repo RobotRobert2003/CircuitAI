@@ -10,7 +10,7 @@
 --   [AntiSpamArena] wave minute=.. unit=.. count=.. spawned=..
 --   [AntiSpamArena] breach id=.. def=.. frame=..              (a spam unit inside breach_radius of an AI start)
 --   [AntiSpamStats] died id=.. team=.. def=.. kind=parked|gun|nano|other kills=.. life=..s healed=..hp heals=..
---   [AntiSpamStats] summary ... (every 60 s and at the end), then [AntiSpamArena] END
+--   [AntiSpamStats] deaths_by_x ... (spam and AI deaths per 1024-elmo x slice) and summary ... (every 60 s and at the end), then [AntiSpamArena] END
 -- Cost: O(watched units) health reads every 15 frames, O(nanos) build-target reads; orders only to the spam team.
 function widget:GetInfo()
     return {name = "Anti-spam arena", layer = 118, enabled = true}
@@ -30,6 +30,8 @@ local watched = {}       -- AI unit id -> {def, team, kind, born, kills, lastHp,
 local nanos = {}         -- AI nano id -> {healed, heals, target}
 local spam = {}          -- spam unit id -> {def, born, breached}
 local tally = {spawned = 0, spam_killed = 0, breached = 0, ai_lost = 0, ai_lost_metal = 0}
+local SLICE = 1024
+local spamDeathX, aiDeathX = {}, {}  -- deaths per SLICE-elmo x slice: where the fighting is
 local byDef = {}         -- def -> {n, died, kills, healed, heals}
 local ended = false
 
@@ -79,8 +81,8 @@ end
 function widget:UnitCreated(id, udid, team)
     if team == SPAM_TEAM then
         local name = defName(udid)
-        spam[id] = {def = name, born = Spring.GetGameFrame(), breached = false}
         if pendingWave and name == pendingWave.w.unit then
+            spam[id] = {def = name, born = Spring.GetGameFrame(), breached = false}
             local ids = pendingWave.ids
             ids[#ids + 1] = id
             tally.spawned = tally.spawned + 1
@@ -106,13 +108,17 @@ function widget:UnitDestroyed(id, udid, team, attacker, attackerDef, attackerTea
     end
     local a = attacker and watched[attacker]
     if a and team == SPAM_TEAM then a.kills = a.kills + 1 end
+    local dx = Spring.GetUnitPosition(id)
+    local slice = dx and math.floor(dx / SLICE) or -1
     if spam[id] then
+        spamDeathX[slice] = (spamDeathX[slice] or 0) + 1
         tally.spam_killed = tally.spam_killed + 1
         spam[id] = nil
     end
     local w = watched[id]
     if w then
         tally.ai_lost = tally.ai_lost + 1
+        aiDeathX[slice] = (aiDeathX[slice] or 0) + 1
         tally.ai_lost_metal = tally.ai_lost_metal + (UnitDefs[udid] and UnitDefs[udid].metalCost or 0)
         if w.kind ~= "other" then
             local s = stat(w.def)
@@ -147,6 +153,13 @@ local function summary(final)
     end
     local nh, nhp = 0, 0
     for _, n in pairs(nanos) do nh = nh + n.heals; nhp = nhp + n.healed end
+    local function slices(t)
+        local o = {}
+        for k = -1, 15 do if t[k] then o[#o + 1] = k .. ":" .. t[k] end end
+        return table.concat(o, ",")
+    end
+    log("AntiSpamStats", string.format("deaths_by_x%s frame=%d slice=%d spam=%s ai=%s", final and " final" or "",
+        Spring.GetGameFrame(), SLICE, slices(spamDeathX), slices(aiDeathX)))
     log("AntiSpamStats", string.format("summary%s frame=%d spawned=%d spam_killed=%d breached=%d ai_lost=%d ai_lost_metal=%d live_nano_heals=%d live_nano_healed=%dhp units=%s",
         final and " final" or "", Spring.GetGameFrame(), tally.spawned, tally.spam_killed, tally.breached, tally.ai_lost,
         math.floor(tally.ai_lost_metal), nh, math.floor(nhp), table.concat(parts, " ")))
