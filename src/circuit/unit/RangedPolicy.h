@@ -2,6 +2,7 @@
 #define CIRCUIT_RANGED_POLICY_H
 
 #include <string>
+#include <unordered_set>
 
 namespace circuit {
 namespace ranged_policy_defaults {
@@ -102,6 +103,16 @@ struct RangedPolicy {
     bool fireAtWill = false;
     bool fireInRange = false; // automatic response without changing coordinated movement
     bool commanderFocus = false; // strict shot priority for a peer-spotted commander
+    // Owner 2026-10-19 (ported for the Astraeus, 2026-10-27): individual
+    // controller with fire_at_will. Engine auto-fire is allowed while no spam
+    // contact (mobile, not a commander, metal cost at most spamMaxCost or named
+    // in spamDefs) is in weapon reach and a non-spam target is; otherwise fire
+    // is held (our priority target still fires). Spam is never our priority
+    // target. 0 / empty = no spam class.
+    float spamMaxCost = 0.f;
+    // Owner 2026-10-27: named spam ("spam_units", def ids resolved at load),
+    // in addition to spamMaxCost. Same rules: mobile, never a commander.
+    std::unordered_set<int> spamDefs;
     // Owner 2026-10-19: 0 = off. Armed static defences of this tech level or
     // lower (BAR customparams.techlevel, 1 when absent) are not coverage this
     // hull avoids: it picks firing sites, paths and stays inside their reach

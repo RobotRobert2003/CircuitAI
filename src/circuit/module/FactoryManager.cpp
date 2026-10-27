@@ -535,6 +535,19 @@ void CFactoryManager::ReadConfig()
 			boolean("fire_at_will", policy.fireAtWill);
             boolean("fire_in_range", policy.fireInRange);
             boolean("commander_focus", policy.commanderFocus);
+			number("spam_max_cost", policy.spamMaxCost, 0.f, 2000.f);
+			{
+				// Owner 2026-10-27: an explicit spam roster. A name this game
+				// does not have is logged and skipped, not a malformed policy.
+				const auto& spam = settings["spam_units"];
+				if (!spam.isNull() && !spam.isArray()) valid = false;
+				else for (const auto& name : spam) {
+					if (!name.isString()) { valid = false; continue; }
+					CCircuitDef* spamDef = circuit->GetCircuitDef(name.asCString());
+					if (spamDef == nullptr) circuit->LOG("CONFIG %s: %s spam_units has unknown unit '%s'", cfgName.c_str(), defName.c_str(), name.asCString());
+					else policy.spamDefs.insert(spamDef->GetId());
+				}
+			}
             number("commander_priority", policy.commanderPriority, 1.f, 100.f);
 			boolean("coordinated", policy.coordinated);
             // Fireline holding is an individual forward-arc doctrine. Reject

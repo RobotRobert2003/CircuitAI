@@ -1,6 +1,7 @@
 #ifndef CIRCUIT_RANGED_ENGAGEMENT_H
 #define CIRCUIT_RANGED_ENGAGEMENT_H
 #include "task/fighter/RangedWorld.h"
+#include "unit/RangedPolicy.h"
 #include <memory>
 
 namespace springai { class Weapon; }
@@ -21,6 +22,8 @@ private:
     void SelectTarget(CCircuitUnit* unit,int id,int weapon,float damage,float score=-1.f);
     bool Move(CCircuitUnit* unit,const springai::AIFloat3& destination,bool escape,bool urgent=false);
     void Hold(CCircuitUnit* unit,bool unsafe=false);
+    static bool Spam(const RangedPolicy& policy,const CRangedWorld::Contact& c);
+    void UpdateFireState(CCircuitUnit* unit,bool open);
     void Disperse(CCircuitUnit* unit);
     void UpdateCohort(CCircuitUnit* unit);
     bool LegalPath(CCircuitUnit* unit,const std::vector<springai::AIFloat3>& route,bool escape);
@@ -36,6 +39,7 @@ private:
     int lastProgressFrame=0, lastMoveFrame=-10000;
     int lastShotFrame=0, orientUntil=0;
     int traceFrame=-150;
+    bool fireOpen=false; int fireStateFrame=-10000; // individual fire_at_will: last state sent
     size_t pathCursor=0;
     springai::AIFloat3 lastPos, destination;
     std::unique_ptr<springai::Weapon> liveWeapon;
