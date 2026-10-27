@@ -743,12 +743,13 @@ namespace AntiSpam {
             if (!aiTerrainMgr.CanReachAt(u, l.anchor, u.circuitDef.GetBuildDistance() + 200.0f)) continue;
             for (int s = 0; s < steps; ++s) {
                 bool due = false;
-                for (int t = 0; t < 3 && !due; ++t) due = l.standing[t] < Want(t, s) && (l.orders[t] is null || l.orders[t].IsDead());
+                // a dead order waits for Census to count it (the slot shift and back-off), so no new one before then
+                for (int t = 0; t < 3 && !due; ++t) due = l.standing[t] < Want(t, s) && l.orders[t] is null;
                 if (!due) continue;
                 if (mi < Global::AntiSpam::LadderMetal[s] || ei < Global::AntiSpam::LadderEnergy[s]) break;
                 for (uint m = 0; m < kinds.length(); ++m) {
                     const int kind = kinds[m];
-                    if (l.standing[kind] >= Want(kind, s) || (l.orders[kind] !is null && !l.orders[kind].IsDead())) continue;
+                    if (l.standing[kind] >= Want(kind, s) || l.orders[kind] !is null) continue;
                     CCircuitDef@ d = ai.GetCircuitDef(KindName(kind));
                     if (d is null || !u.circuitDef.CanBuild(d)) continue;   // left to a constructor that can
                     if (s != l.lastStep) {
