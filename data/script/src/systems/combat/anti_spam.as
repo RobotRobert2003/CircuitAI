@@ -709,6 +709,13 @@ namespace AntiSpam {
     IUnitTask@ BuilderTask(CCircuitUnit@ u)
     {
         if (!Enabled() || lanes.length() == 0 || u is null || !u.circuitDef.IsMobile() || UnitHelpers::IsCommander(u.circuitDef)) return null;
+        // native re-asks busy builders and swaps them onto any other kind of task: one on a lane order keeps it
+        // (arena 2026-10-27: FRONT's lab turrets took the gun order's armcv the same frame; the order sat unbuilt 9 min)
+        if (u.task !is null) {
+            for (uint j = 0; j < lanes.length(); ++j)
+                for (int k = 0; k < 3; ++k)
+                    if (lanes[j].orders[k] is u.task && !u.task.IsDead()) return u.task;
+        }
         IBuilderTask@ current = u.task is null ? null : cast<IBuilderTask>(u.task);
         if (current !is null && Task::BuildType(current.GetBuildType()) < Task::BuildType::REPAIR) return null;
         // join a live lane order first
