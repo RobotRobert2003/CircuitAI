@@ -21,8 +21,8 @@ Spotting (Tick, every 2 s): the shared ground-contact snapshot is walked once;
 every contact of a spam unit (Global::AntiSpam::SpamDefs) is remembered by id,
 and at most once per 10 s per unit its position is kept as a sighting when it
 stands in our half (MinShare..MaxShare along the axis from our starts' centre
-to the enemy's). Once TriggerCount different spam units were seen within
-WindowSeconds, the sightings are binned sideways across the axis; a bin (with
+to the enemy's). Once TriggerCount different spam units were sighted inside
+our half within WindowSeconds, the sightings are binned sideways across the axis; a bin (with
 its neighbours) holding LaneMinShare of them and LaneMinUnits different units
 is a lane. Its anchor stands AnchorShare along the axis, on the lane's mean
 sideways offset, pulled toward the axis until a bot can walk there.
@@ -208,7 +208,7 @@ namespace AntiSpam {
         for (uint i = 0; i < keys.length(); ++i) {
             Sighting@ s;
             if (!seen.get(keys[i], @s) || s is null || ai.frame - s.last > window) seen.delete(keys[i]);
-            else ++fresh;
+            else if (ai.frame - s.lastSample <= window) ++fresh;   // only units sighted inside our half count
         }
         windowCount = fresh;
     }
