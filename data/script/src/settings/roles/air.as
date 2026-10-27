@@ -108,6 +108,13 @@ namespace Air {
             int HomeFighterFloor = 6;
             int HomeFighterCeiling = 60;
             int OpeningAirConstructors = 3;
+            // Owner 2026-10-27 (Moonshine Run: the first T2 air plant started with 4 T1 air constructors
+            // and took 200 s): the first T2 air plant waits for this many completed T1 air constructors,
+            // and the T1 air plant keeps building them up to this count until it stands (0 = off).
+            int FirstLabMinT1Constructors = 6;
+            // ... then this many construction turrets are built (complete) on the plant's own bay
+            // support pins before the plant is ordered, so they help finish it (0 = off).
+            int FirstLabPreNanos = 2;
             float CommanderEconomyRadius = 900.0f;
             float HomeAirValueRatio = 1.2f;
             int BomberOrdersClear = 6; // discretionary orders per ten, not resource percentages

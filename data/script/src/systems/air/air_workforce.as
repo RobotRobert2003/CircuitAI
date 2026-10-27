@@ -276,7 +276,8 @@ namespace AirWorkforce {
     int ConstructorTarget(CCircuitDef@ d, bool advanced) {
         if (d is null) return 0;
         const int present = AirProduction::Projected(d);
-        const int floor = advanced ? 2 : Global::RoleSettings::Air::OpeningAirConstructors;
+        const int floor = advanced ? 2 : AiMax(Global::RoleSettings::Air::OpeningAirConstructors,
+            AirEconomy::t2 == 0 ? Global::RoleSettings::Air::FirstLabMinT1Constructors : 0);
         const int ordinary = advanced ? Global::RoleSettings::Air::MaxT2EconomyBuilders : Global::RoleSettings::Air::MaxT1EconomyBuilders;
         const int cap = pressure ? AiMax(ordinary, Global::RoleSettings::Air::WorkforceSafetyConstructors) : ordinary;
         if (present < floor) return floor;

@@ -642,6 +642,47 @@ namespace AirBuild {
         }
         return null;
     }
+    int firstLabTraceFrame = -100000;
+    void FirstLabTrace(const string &in why)
+    {
+        if (ai.frame - firstLabTraceFrame < 30 * SECOND) return;
+        firstLabTraceFrame = ai.frame;
+        GenericHelpers::LogUtil("[AIR][FirstLab] waiting: " + why, 1);
+    }
+    // Owner 2026-10-27: FirstLabPreNanos complete turrets on the first T2 plant's own
+    // support pins before the plant is ordered, so they help finish it. While short,
+    // out pre orders the next turret or helps a turret frame; the plant waits.
+    bool FirstLabTurretsReady(CCircuitUnit@ u, AirLayout::Bay@ bay, IUnitTask@ &out pre)
+    {
+        @pre = null;
+        const int wanted = Global::RoleSettings::Air::FirstLabPreNanos;
+        if (wanted <= 0) return true;
+        int ordered = 0, complete = 0;
+        for (uint s = 0; s < bay.nanos.length(); ++s) {
+            const int state = aiTerrainMgr.GetReservationState(bay.nanos[s]);
+            if (state == 3) ++complete;
+            if (state >= 1 && state <= 3) ++ordered;
+        }
+        if (complete >= wanted) return true;
+        CCircuitDef@ nano = ai.GetCircuitDef(UnitHelpers::GetT1NanoNameForSide(Global::AISettings::Side));
+        if (ordered < wanted && Can(u, nano)) {
+            for (uint s = 0; s < bay.nanos.length() && pre is null; ++s) {
+                const int slot = bay.nanos[s];
+                if (aiTerrainMgr.GetReservationState(slot) != 0
+                    || !aiTerrainMgr.CanReachAt(u, aiTerrainMgr.GetReservationPos(slot), u.circuitDef.GetBuildDistance())) continue;
+                @pre = AirLayout::Pinned(Task::BuildType::NANO, Task::Priority::HIGH, nano, slot);
+            }
+            if (pre !is null) {
+                AirWorkforce::Admit(nano);
+                GenericHelpers::LogUtil("[AIR][FirstLab] turret " + (ordered + 1) + "/" + wanted + " ordered on "
+                    + bay.key + " by " + u.id + " (" + complete + " complete)", 1);
+                return false;
+            }
+        }
+        @pre = Assist(u, false, nano);
+        FirstLabTrace("turrets " + complete + "/" + wanted + " complete, " + ordered + " ordered");
+        return false;
+    }
     IUnitTask@ Factory(CCircuitUnit@ u, bool advanced)
     {
         const string name = advanced ? UnitHelpers::GetT2AirPlantForSide(Global::AISettings::Side) : UnitHelpers::GetT1AirPlantForSide(Global::AISettings::Side);
@@ -664,6 +705,12 @@ namespace AirBuild {
                 ai.frame - AirEconomy::stableSince, Global::RoleSettings::Air::CapacityStableSeconds * SECOND,
                 AirEconomy::bankM, d.costM * 0.6f))) return null;
             if (count == 0) { firstLabAttemptFrame = ai.frame; firstLabAttemptBuilder = u.id; }
+            // Owner 2026-10-27: no first T2 air plant before the T1 crew (AirProduction recruits it).
+            if (count == 0 && AirEconomy::t2 == 0
+                && AirEconomy::CompletedConstructors() < Global::RoleSettings::Air::FirstLabMinT1Constructors) {
+                FirstLabTrace("crew " + AirEconomy::CompletedConstructors() + "/" + Global::RoleSettings::Air::FirstLabMinT1Constructors);
+                return null;
+            }
         }
         AirLayout::Bay@ bay = null;
         for (uint b = 0; b < AirLayout::bays.length(); ++b) {
@@ -682,6 +729,10 @@ namespace AirBuild {
         @bay = AirLayout::Activate(bay);
         if (bay is null) return null;
         if (!aiTerrainMgr.CanReachAtSafe(u, aiTerrainMgr.GetReservationPos(bay.slot), u.circuitDef.GetBuildDistance())) return null;
+        if (advanced && count == 0 && AirEconomy::t2 == 0) {
+            IUnitTask@ pre = null;
+            if (!FirstLabTurretsReady(u, bay, pre)) return pre;
+        }
         if (advanced) GenericHelpers::LogUtil("[AIR][LabGate] M10=" + int(Economy::GetMinMetalIncomeLast10s())
             + " window=" + Economy::IncomeWindowReady() + " bank=" + int(aiEconomyMgr.metal.current)
             + " cost=" + int(d.costM) + " reason=" + (AirEconomy::BankedLab(d) ? "bank" : AirEconomy::Transition(d) ? "income" : "funded-first"), 1);

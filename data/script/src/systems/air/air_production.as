@@ -135,6 +135,12 @@ namespace AirProduction {
         const float homeValue = AvailableFighterValue();
         const bool airEmergency = AirMath::Emergency(intrusion, homeValue, Global::RoleSettings::Air::InterceptCostRatio);
         const bool emergency = AirBaseResponse::Emergency() || airEmergency;
+        // Owner 2026-10-27: the crew the first T2 air plant waits for (AirBuild::Factory), ahead of
+        // discretionary fighters once the opening screen stands; an emergency keeps its fighters.
+        if (basic && !emergency && AirEconomy::t2 == 0 && aiTerrainMgr.GetLayoutInt("air.screen.established", 0) != 0) {
+            @t = Recruit(u, cons, Global::RoleSettings::Air::FirstLabMinT1Constructors, "constructor.firstlab", Task::Priority::HIGH, true);
+            if (t !is null) return t;
+        }
         // A requested, sustained-income scout package precedes discretionary
         // workforce growth. Actual base/air emergencies keep their reserve.
         if (!emergency) {
