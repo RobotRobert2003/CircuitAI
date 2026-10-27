@@ -40,6 +40,8 @@ namespace Global { namespace AntiSpam {
     float ArriveRadius = 48.0f;
     float Shake = 120.0f;                  // native looks this far round a gun or nano slot for room
     float ClusterRadius = 700.0f;          // our guns and nanos within this of the anchor belong to the lane
+    float NanoSlotRadius = 250.0f;         // ... a turret only within this of one of the lane's turret slots
+    int OrderBuilders = 3;                 // constructors on each live lane order (one order per kind at a time)
     // Structures, by the lane's owner only. Light gun per side (Beamer / Twin Guard /
     // Cacophony), Dragon per side (Claw / Maw / Jaw).
     dictionary LightGun = { {"armada", "armbeamer"}, {"cortex", "corhllt"}, {"legion", "legmg"} };

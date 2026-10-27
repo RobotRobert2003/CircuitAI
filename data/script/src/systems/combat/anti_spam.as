@@ -37,7 +37,11 @@ The owner's constructors (BuilderTask) build the lane, step by step on the
 sustained income (settings LadderLight / LadderDragon / LadderNano): light guns
 (Beamer / Twin Guard / Cacophony) in a line GunAlong ahead of the anchor, two
 Dragon's teeth (Claw / Maw / Jaw) between them, and 2 to 4 construction turrets
-NanoAlong behind. One order lives at a time, joined by one more constructor.
+NanoAlong behind. Each kind has its own order, so a gun, a turret and a Dragon
+go up together, each joined by up to OrderBuilders constructors (arena
+2026-10-27: one order at a time took 34 min to reach step 2 at +131 metal).
+A turret counts for the lane only within NanoSlotRadius of a turret slot, so
+the AI's ordinary turrets nearby are not mistaken for the lane's.
 
 Every SMRTBARb parks units on every known lane (MilitaryMakeTask): at most
 HeavyLimit of each of Razorback, Incinerator, Mammoth, Demon, Prometheus and
@@ -91,6 +95,9 @@ namespace AntiSpam {
         array<int> standing = { 0, 0, 0 };   // light, dragon, nano
         array<CCircuitUnit@> frames(3);
         array<int> staticIds;     // our guns and nanos of this lane
+        array<IUnitTask@> orders(3);         // the live order of each kind
+        array<int> orderBefore = { 0, 0, 0 };
+        array<bool> orderRepair = { false, false, false };
         int fails = 0;
         int shift = 0;
         int backoffUntil = -1;
@@ -119,11 +126,6 @@ namespace AntiSpam {
     array<Lane@> lanes;
     array<Candidate@> candidates;
     array<Pending@> pending;
-    IUnitTask@ order;
-    Lane@ orderLane;
-    int orderKind = -1;
-    int orderBefore = 0;
-    bool orderRepair = false;
     int lastTick = -100000, lastSearch = -100000, lastPrune = -100000, lastPublish = -100000, lastReport = -100000;
     int detectedFrame = -1;
     int windowCount = 0;
@@ -662,28 +664,38 @@ namespace AntiSpam {
                 if (sq <= bestSq) { bestSq = sq; @best = lanes[j]; }
             }
             if (best is null) continue;
+            if (t == 2 && !NearNanoSlot(best, q)) continue;   // an ordinary turret near the lane
             best.staticIds.insertLast(int(u.id));
             if (t == 3) continue;
             best.standing[t] += 1;
             if (u.GetBuildProgress() < 1.0f) @best.frames[t] = u;
         }
-        if (order !is null && order.IsDead()) {
-            Lane@ l = orderLane;
-            if (l !is null) {
-                if (l.standing[orderKind] > orderBefore || (orderRepair && l.standing[orderKind] >= orderBefore)) { l.fails = 0; l.shift = 0; }
+        for (uint j = 0; j < lanes.length(); ++j) {
+            Lane@ l = lanes[j];
+            if (!l.mine) continue;
+            for (int k = 0; k < 3; ++k) {
+                if (l.orders[k] is null || !l.orders[k].IsDead()) continue;
+                if (l.standing[k] > l.orderBefore[k] || (l.orderRepair[k] && l.standing[k] >= l.orderBefore[k])) { l.fails = 0; l.shift = 0; }
                 else {
                     l.shift += 1;
                     l.fails += 1;
                     if (l.fails >= 3) {
                         l.backoffUntil = ai.frame + 90 * SECOND;
                         l.fails = 0;
-                        GenericHelpers::LogUtil("[AntiSpam] lane " + l.key + ": three orders died with no " + names[orderKind] + "; waiting 90 s", 1);
+                        GenericHelpers::LogUtil("[AntiSpam] lane " + l.key + ": three orders died with no " + names[k] + "; waiting 90 s", 1);
                     }
                 }
+                @l.orders[k] = null;
             }
-            @order = null;
-            @orderLane = null;
         }
+    }
+
+    bool NearNanoSlot(Lane@ l, const AIFloat3 &in q)
+    {
+        const float r2 = Global::AntiSpam::NanoSlotRadius * Global::AntiSpam::NanoSlotRadius;
+        for (int k = 0; k < 5; ++k)
+            if (MapHelpers::SqDist(q, GunSlot(l, 2, k)) <= r2) return true;
+        return false;
     }
 
     int Want(int kind, int step)
@@ -699,12 +711,17 @@ namespace AntiSpam {
         if (!Enabled() || lanes.length() == 0 || u is null || !u.circuitDef.IsMobile() || UnitHelpers::IsCommander(u.circuitDef)) return null;
         IBuilderTask@ current = u.task is null ? null : cast<IBuilderTask>(u.task);
         if (current !is null && Task::BuildType(current.GetBuildType()) < Task::BuildType::REPAIR) return null;
-        if (order !is null && !order.IsDead()) {
-            if (orderLane !is null && order.GetUnits().length() < 2 && aiTerrainMgr.CanReachAt(u, orderLane.anchor, u.circuitDef.GetBuildDistance())) {
-                IBuilderTask@ b = cast<IBuilderTask>(order);
-                if (b is null || b.buildDef is null || u.circuitDef.CanBuild(b.buildDef)) return order;
+        // join a live lane order first
+        for (uint j = 0; j < lanes.length(); ++j) {
+            Lane@ l = lanes[j];
+            if (!l.mine) continue;
+            for (int k = 0; k < 3; ++k) {
+                IUnitTask@ o = l.orders[k];
+                if (o is null || o.IsDead() || int(o.GetUnits().length()) >= Global::AntiSpam::OrderBuilders) continue;
+                if (!aiTerrainMgr.CanReachAt(u, l.anchor, u.circuitDef.GetBuildDistance() + 200.0f)) break;
+                IBuilderTask@ b = cast<IBuilderTask>(o);
+                if (b is null || b.buildDef is null || u.circuitDef.CanBuild(b.buildDef)) return o;
             }
-            return null;
         }
         const float mi = Economy::GetMinMetalIncomeLast10s();
         const float ei = Economy::GetMinEnergyIncomeLast10s();
@@ -717,12 +734,12 @@ namespace AntiSpam {
             if (!aiTerrainMgr.CanReachAt(u, l.anchor, u.circuitDef.GetBuildDistance() + 200.0f)) continue;
             for (int s = 0; s < steps; ++s) {
                 bool due = false;
-                for (int t = 0; t < 3 && !due; ++t) due = l.standing[t] < Want(t, s);
+                for (int t = 0; t < 3 && !due; ++t) due = l.standing[t] < Want(t, s) && (l.orders[t] is null || l.orders[t].IsDead());
                 if (!due) continue;
                 if (mi < Global::AntiSpam::LadderMetal[s] || ei < Global::AntiSpam::LadderEnergy[s]) break;
                 for (uint m = 0; m < kinds.length(); ++m) {
                     const int kind = kinds[m];
-                    if (l.standing[kind] >= Want(kind, s)) continue;
+                    if (l.standing[kind] >= Want(kind, s) || (l.orders[kind] !is null && !l.orders[kind].IsDead())) continue;
                     CCircuitDef@ d = ai.GetCircuitDef(KindName(kind));
                     if (d is null || !u.circuitDef.CanBuild(d)) continue;   // left to a constructor that can
                     if (s != l.lastStep) {
@@ -730,6 +747,7 @@ namespace AntiSpam {
                         GenericHelpers::LogUtil("[AntiSpam] lane " + l.key + " step " + (s + 1) + " of " + steps + " (stand: light " + l.standing[0]
                             + ", dragon " + l.standing[1] + ", nano " + l.standing[2] + "; mi=" + int(mi) + " ei=" + int(ei) + ")", 1);
                     }
+                    IUnitTask@ order = null;
                     if (l.frames[kind] !is null && ai.GetTeamUnit(l.frames[kind].id) !is null) {
                         @order = aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, l.frames[kind], 120 * SECOND));
                     } else {
@@ -742,10 +760,9 @@ namespace AntiSpam {
                             + " " + (l.standing[kind] + 1) + " of lane " + l.key + " at (" + int(p.x) + "," + int(p.z) + ")", 1);
                     }
                     if (order is null) return null;
-                    @orderLane = l;
-                    orderKind = kind;
-                    orderBefore = l.standing[kind];
-                    orderRepair = l.frames[kind] !is null;
+                    @l.orders[kind] = order;
+                    l.orderBefore[kind] = l.standing[kind];
+                    l.orderRepair[kind] = l.frames[kind] !is null;
                     return order;
                 }
                 break;   // this step is due but this constructor builds none of it
