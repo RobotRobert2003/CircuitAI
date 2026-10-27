@@ -141,6 +141,12 @@ public:
     // D-296: economy kind flags of a ground contact (static only), O(1).
     enum ContactKind: int {K_MEX = 1, K_WIND = 2, K_NANO = 4, K_OTHER_ECO = 8};
     int GetGroundContactKind(int index) const;
+    // Owner 2026-10-27: last-known images of identified enemy structures that
+    // neither our ally team's radar nor LOS covers now (not hidden, not dead),
+    // per Update. The front radar step covers them with a commander radar.
+    int GetGhostCount() const { return static_cast<int>(ghosts.size()); }
+    springai::AIFloat3 GetGhostPos(int index) const;
+    int GetGhostDefId(int index) const;
     // D-296: observed armed-ground-weapon coverage dilated by margin, from the
     // current ground snapshot; independent of profile threat multipliers.
     // Lazily rebuilt at most once per Update publication (and per margin).
@@ -281,6 +287,8 @@ private:
     struct GroundContact { springai::AIFloat3 pos; float cost; bool economy; int id; int defId;
         int kind = 0; float hazardRange = 0.f; }; // D-296: ContactKind flags; LAND reach when armed
     std::vector<GroundContact> groundContacts;
+    struct Ghost { springai::AIFloat3 pos; int defId; };
+    std::vector<Ghost> ghosts;
     std::vector<springai::AIFloat3> navalContacts;
     std::vector<AirContact> allyAssets;
     int allyAssetFrame = -100000;

@@ -83,6 +83,7 @@ namespace CommanderFront {
         if(name=="timed_laser") return aiBuilderMgr.CommanderFrontWork(unit,WORK_TIMED,laser,0.f);
         if(name=="timed_aa") return aiBuilderMgr.CommanderFrontWork(unit,WORK_TIMED,aa,0.f);
         if(name=="radar") return aiBuilderMgr.CommanderFrontWork(unit,WORK_RADAR,radar,0.f);
+        if(name=="radar_ghost") return FrontRadar::GhostTask(unit); // owner 2026-10-27: reach scouted enemy structures out of radar
         if(name=="factory") return aiBuilderMgr.CommanderFrontWork(unit,WORK_FACTORY,null,Global::Commander::FrontRadius);
         if(name=="base") return aiBuilderMgr.CommanderFrontWork(unit,WORK_BASE,null,0.f);
         if(unknownRungs.find(name)<0) {

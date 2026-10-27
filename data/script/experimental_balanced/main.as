@@ -104,6 +104,7 @@ namespace Main {
         Global::Spam::EdgePorcEnabled = true;
         Global::AntiSpam::Enabled = true;  // owner 2026-10-27: hold enemy spam lanes (systems/combat/anti_spam.as)
         Global::FrontRadar::Enabled = true; // owner 2026-10-27: long-range radars just behind the front (systems/combat/front_radar.as)
+        Global::FrontRadar::GhostEnabled = true; // owner 2026-10-27: the FRONT commander radars scouted enemy structures out of radar
         Global::Spam::LaneReleaseAtEnd = true;
 		Global::RoleSettings::MexOwnershipEnabled = true;
 		// Also initialize before setupMap (and when reconstructing a saved game).

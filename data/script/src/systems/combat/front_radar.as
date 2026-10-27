@@ -59,9 +59,37 @@ BuilderTask returns at the first guard for every builder that cannot build
 the radar, and otherwise loops over the front anchors (a few dozen at most);
 a loop that finds no site holds every builder off for 5 s.
 
+GHOST RADARS (owner, 2026-10-27)
+
+The FRONT commander's "radar_ghost" ladder rung (commander.json front_ladder,
+right after "radar") puts a T1 radar (armrad / corrad / legrad) where it
+reaches the last-known images of enemy structures that neither our team's
+radar nor LOS covers now (CBattleAnalysis ghosts: identified, static, out of
+radar and LOS, spot not seen empty). So scouted enemy porc and mexes stay on
+radar, and artillery on the ranged controller (Mauser, Quaker, Tremor,
+Astraeus) can shell them from max range instead of walking in for vision.
+
+An image counts as reached when it lies within GhostCoverage x the T1 radar's
+range of one of our T1 radars (or GhostCoverage x the long-range radar's range
+of one of those), finished or a frame, of our live order, or of an allied
+SMRTBARb's ghost order of the last GhostAllySeconds (frontradar|ghost|x,z): a
+jammed or terrain-hidden image is not chased with a second radar. For each
+unreached image within reach + GhostTravel of the commander the site is the
+nearest point to the commander that reaches it (the commander's own spot when
+it already does); sites under enemy surface threat above GhostMaxThreat,
+unreachable ones and ones near a failed order are skipped, and the site that
+reaches the most unreached images wins (ties: the shorter walk). One order at
+a time per AI, the commander that placed it keeps it, at most one order per
+GhostIntervalSeconds; an order that dies with no radar near its site blocks
+that spot for GhostFailSeconds. Cost per ladder offer: one pass over the
+ghost list, then O(k^2) over the k unreached images near the commander
+(capped at GhostMaxCandidates); a pass that finds nothing holds the rung off
+for 5 s.
+
 ******************************************************************************/
 namespace FrontRadar {
     const string PREFIX = "frontradar|have|";
+    const string GHOST_PREFIX = "frontradar|ghost|";
 
     class AllyRadars {
         array<AIFloat3> at;
@@ -84,8 +112,20 @@ namespace FrontRadar {
     int lastScan = -100000, lastReport = -100000, lastBroadcast = -100000;
     string lastSent = "";
     int idleUntil = -1;              // no site was found: builders stop asking until then
+    // Ghost radars (owner, 2026-10-27)
+    array<AIFloat3> oursT1;          // our T1 radars, finished or not (last scan)
+    IUnitTask@ ghostOrder;
+    AIFloat3 ghostSite(-1.0f, 0.0f, -1.0f);
+    int ghostOwner = -1;             // the commander that placed the live ghost order
+    int ghostNext = 0;               // no new ghost order before this frame
+    int ghostOpen = 0;               // unreached images near the last asking commander
+    array<AIFloat3> ghostFailed;
+    array<int> ghostFailedUntil;
+    array<AIFloat3> allyGhost;       // allied SMRTBARb ghost orders, with the frame they arrived
+    array<int> allyGhostFrame;
 
     bool Enabled() { return Global::FrontRadar::Enabled; }
+    bool GhostEnabled() { return Global::FrontRadar::GhostEnabled; }
     bool Orders()
     {
         return Enabled() && (!Global::FrontRadar::FrontRoleOnly || Global::AISettings::Role == AiRole::FRONT);
@@ -188,6 +228,9 @@ namespace FrontRadar {
     {
         const CCircuitDef@ rd = RadarDef();
         const int radarDefId = (rd is null) ? -1 : int(rd.id);
+        const CCircuitDef@ rd1 = ai.GetCircuitDef(UnitHelpers::GetStaticRadarNameForSide(Global::AISettings::Side));
+        const int radarT1Id = (rd1 is null) ? -1 : int(rd1.id);
+        array<AIFloat3> radarsT1;
         array<AIFloat3> radars;
         array<Id> radarIds;
         array<AIFloat3> cand;
@@ -200,6 +243,7 @@ namespace FrontRadar {
             const CCircuitDef@ d = u.circuitDef;
             if (d is null || d.IsMobile()) continue;
             if (int(d.id) == radarDefId) { radars.insertLast(u.GetPos(ai.frame)); radarIds.insertLast(u.id); continue; }
+            if (int(d.id) == radarT1Id) { radarsT1.insertLast(u.GetPos(ai.frame)); continue; }
             if (u.GetBuildProgress() < 1.0f) continue;
             if (d.GetExtractsMetal() <= 0.0f && d.GetMaxRange() <= 0.0f) continue;
             const AIFloat3 p = u.GetPos(ai.frame);
@@ -213,6 +257,7 @@ namespace FrontRadar {
             if (radarIds.find(oursIds[i]) < 0) Lost(ours[i]);
         ours = radars;
         oursIds = radarIds;
+        oursT1 = radarsT1;
         frontDist = best;
         anchors.resize(0);
         frontCount = 0;
@@ -254,6 +299,14 @@ namespace FrontRadar {
     // Team::HandleMessage: an allied SMRTBARb's radar list
     bool HandleMessage(const string &in msg, int fromTeamId)
     {
+        if (msg.findFirst(GHOST_PREFIX) == 0) {
+            array<string>@ xz = msg.substr(GHOST_PREFIX.length()).split(",");
+            if (xz.length() == 2) {
+                allyGhost.insertLast(AIFloat3(float(parseInt(xz[0])), 0.0f, float(parseInt(xz[1]))));
+                allyGhostFrame.insertLast(ai.frame);
+            }
+            return true;
+        }
         if (msg.findFirst(PREFIX) != 0) return false;
         AllyRadars@ a = AllyRadars();
         a.frame = ai.frame;
@@ -273,7 +326,7 @@ namespace FrontRadar {
     // Main::AiUpdate, every 30 frames; the work runs every 5 s
     void Update()
     {
-        if (!Enabled() && !Global::FrontRadar::Report) return;
+        if (!Enabled() && !Global::FrontRadar::Report && !GhostEnabled()) return;
         if (ai.frame - lastScan < 5 * SECOND) return;
         lastScan = ai.frame;
         if (enemyStarts.length() == 0) enemyStarts = Lanes::EnemyStarts();
@@ -302,6 +355,7 @@ namespace FrontRadar {
             failed.removeAt(i);
             failedUntil.removeAt(i);
         }
+        GhostUpdate();
         if (Enabled()) Broadcast();
         if (ai.frame - lastReport >= Global::FrontRadar::ReportSeconds * SECOND) {
             lastReport = ai.frame;
@@ -309,7 +363,108 @@ namespace FrontRadar {
                 + int(frontDist) + " from the enemy, " + anchors.length() + " anchors); wanted "
                 + Wanted(Economy::GetMinMetalIncomeLast10s(), Economy::GetMinEnergyIncomeLast10s())
                 + (Orders() ? "" : " (not ordering)"), 1);
+            if (GhostEnabled())
+                GenericHelpers::LogUtil("[FrontRadar] ghosts: " + aiBattle.GetGhostCount() + " enemy structure images out of radar, "
+                    + oursT1.length() + " T1 radars of ours, " + ghostOpen + " unreached near the commander at its last ask", 1);
         }
+    }
+
+    // Ghost radars: an image already in reach of one of our radars (finished or a
+    // frame), of our live order or of an ally's recent order
+    bool GhostReached(const AIFloat3 &in g)
+    {
+        const float r1 = Global::FrontRadar::GhostRadarRange * Global::FrontRadar::GhostCoverage;
+        if (Near(oursT1, g, r1)) return true;
+        if (Near(ours, g, Global::FrontRadar::GhostT2RadarRange * Global::FrontRadar::GhostCoverage)) return true;
+        if (ghostOrder !is null && !ghostOrder.IsDead() && MapHelpers::SqDist(ghostSite, g) <= r1 * r1) return true;
+        return Near(allyGhost, g, r1);
+    }
+
+    bool GhostFailed(const AIFloat3 &in site)
+    {
+        const float r = Global::FrontRadar::GhostFailRadius;
+        for (uint i = 0; i < ghostFailed.length(); ++i)
+            if (ai.frame < ghostFailedUntil[i] && MapHelpers::SqDist(ghostFailed[i], site) <= r * r) return true;
+        return false;
+    }
+
+    // Update, after the scan: a dead order with no radar near its site blocks the spot
+    void GhostUpdate()
+    {
+        if (ghostOrder !is null && ghostOrder.IsDead()) {
+            if (!Near(oursT1, ghostSite, 400.0f)) {
+                ghostFailed.insertLast(ghostSite);
+                ghostFailedUntil.insertLast(ai.frame + Global::FrontRadar::GhostFailSeconds * SECOND);
+                GenericHelpers::LogUtil("[FrontRadar] ghost radar order at (" + int(ghostSite.x) + "," + int(ghostSite.z)
+                    + ") died with no radar; spot skipped " + Global::FrontRadar::GhostFailSeconds + " s", 1);
+            }
+            @ghostOrder = null;
+            ghostOwner = -1;
+        }
+        for (int i = int(ghostFailed.length()) - 1; i >= 0; --i) {
+            if (ai.frame < ghostFailedUntil[i]) continue;
+            ghostFailed.removeAt(i);
+            ghostFailedUntil.removeAt(i);
+        }
+        const int stale = Global::FrontRadar::GhostAllySeconds * SECOND;
+        for (int i = int(allyGhost.length()) - 1; i >= 0; --i) {
+            if (ai.frame - allyGhostFrame[i] <= stale) continue;
+            allyGhost.removeAt(i);
+            allyGhostFrame.removeAt(i);
+        }
+    }
+
+    // CommanderFront "radar_ghost" rung: a T1 radar that reaches scouted enemy
+    // structures our radar does not cover
+    IUnitTask@ GhostTask(CCircuitUnit@ u)
+    {
+        if (!GhostEnabled() || u is null || u.circuitDef is null) return null;
+        if (ghostOrder !is null && !ghostOrder.IsDead()) return (int(u.id) == ghostOwner) ? ghostOrder : null;
+        if (ai.frame < ghostNext) return null;
+        CCircuitDef@ rd = ai.GetCircuitDef(UnitHelpers::GetStaticRadarNameForSide(UnitHelpers::GetSideForUnitName(u.circuitDef.GetName())));
+        if (rd is null || !u.circuitDef.CanBuild(rd) || !rd.IsAvailable(ai.frame)) return null;
+        if (aiEconomyMgr.metal.current < rd.costM * 0.5f) return null;
+        const AIFloat3 pos = u.GetPos(ai.frame);
+        const float reach = Global::FrontRadar::GhostRadarRange * Global::FrontRadar::GhostCoverage;
+        const float scan = reach + Global::FrontRadar::GhostTravel;
+        array<AIFloat3> open;
+        const int n = aiBattle.GetGhostCount();
+        for (int i = 0; i < n && int(open.length()) < Global::FrontRadar::GhostMaxCandidates; ++i) {
+            const AIFloat3 g = aiBattle.GetGhostPos(i);
+            if (MapHelpers::SqDist(pos, g) > scan * scan || GhostReached(g)) continue;
+            open.insertLast(g);
+        }
+        ghostOpen = int(open.length());
+        int bestCount = 0;
+        float bestWalk = 0.0f;
+        AIFloat3 best;
+        const float m = 64.0f;
+        for (uint i = 0; i < open.length(); ++i) {
+            const float d = sqrt(MapHelpers::SqDist(pos, open[i]));
+            const float t = (d <= reach) ? 0.0f : (d - reach * 0.98f) / d;   // 2% inside, so rounding keeps the image reached
+            const AIFloat3 site(AiMax(m, AiMin(float(AiTerrainWidth()) - m, pos.x + (open[i].x - pos.x) * t)), 0.0f,
+                AiMax(m, AiMin(float(AiTerrainHeight()) - m, pos.z + (open[i].z - pos.z) * t)));
+            int count = 0;
+            for (uint k = 0; k < open.length(); ++k)
+                if (MapHelpers::SqDist(site, open[k]) <= reach * reach) ++count;
+            const float walk = sqrt(MapHelpers::SqDist(pos, site));
+            if (count < bestCount || (count == bestCount && walk >= bestWalk)) continue;
+            if (GhostFailed(site) || aiBattle.SurfThreat(site) > Global::FrontRadar::GhostMaxThreat) continue;
+            if (!aiTerrainMgr.CanReachAt(u, site, u.circuitDef.GetBuildDistance())) continue;
+            bestCount = count; bestWalk = walk; best = site;
+        }
+        if (bestCount == 0) { ghostNext = ai.frame + 5 * SECOND; return null; }
+        @ghostOrder = aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::DEFENCE, Task::Priority::NORMAL, rd, best,
+            Global::FrontRadar::GhostShake, true, Global::FrontRadar::GhostOrderSeconds * SECOND));
+        if (ghostOrder is null) { ghostNext = ai.frame + 5 * SECOND; return null; }
+        ghostSite = best;
+        ghostOwner = int(u.id);
+        ghostNext = ai.frame + Global::FrontRadar::GhostIntervalSeconds * SECOND;
+        AiSendMessage(GHOST_PREFIX + int(best.x) + "," + int(best.z));
+        GenericHelpers::LogUtil("[FrontRadar] commander " + u.circuitDef.GetName() + " " + u.id + " orders ghost radar " + rd.GetName()
+            + " at (" + int(best.x) + "," + int(best.z) + "), walk " + int(bestWalk) + ", reaches " + bestCount + " of " + open.length()
+            + " unreached enemy structure images (" + n + " out of radar)", 1);
+        return ghostOrder;
     }
 
     // Builder::AiMakeTask asks here after EdgePorc

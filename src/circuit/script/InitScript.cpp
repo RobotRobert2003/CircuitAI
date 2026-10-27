@@ -1500,6 +1500,9 @@ void CInitScript::RegisterMgr()
     r = engine->RegisterObjectMethod("CBattleAnalysis", "bool IsGroundContactEconomy(int) const", asMETHOD(CBattleAnalysis, IsGroundContactEconomy), asCALL_THISCALL); ASSERT(r >= 0);
     // D-296 scout raids: economy kind flags, observed ground hazard, raid route.
     r = engine->RegisterObjectMethod("CBattleAnalysis", "int GetGroundContactKind(int) const", asMETHOD(CBattleAnalysis, GetGroundContactKind), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CBattleAnalysis", "int GetGhostCount() const", asMETHOD(CBattleAnalysis, GetGhostCount), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CBattleAnalysis", "AIFloat3 GetGhostPos(int) const", asMETHOD(CBattleAnalysis, GetGhostPos), asCALL_THISCALL); ASSERT(r >= 0);
+    r = engine->RegisterObjectMethod("CBattleAnalysis", "int GetGhostDefId(int) const", asMETHOD(CBattleAnalysis, GetGhostDefId), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "float GroundHazard(const AIFloat3& in, float)", asMETHOD(CBattleAnalysis, GroundHazard), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "void SetUnknownHazardRange(float)", asMETHOD(CBattleAnalysis, SetUnknownHazardRange), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CBattleAnalysis", "array<AIFloat3>@ GetUnitRaidRoute(const CCircuitDef@, const AIFloat3& in, const AIFloat3& in, float, float, bool avoidHazards = false)", asFUNCTION(CBattleAnalysis_GetUnitRaidRoute), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);

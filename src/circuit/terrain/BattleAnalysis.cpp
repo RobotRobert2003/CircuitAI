@@ -544,6 +544,7 @@ void CBattleAnalysis::Update(int frame)
 	EnsureGrid();
 	airContacts.clear();
     groundContacts.clear();
+    ghosts.clear();
     radarDots.clear();
     navalContacts.clear();
     observedWaterWeapons.assign(height.size(), 0.f);
@@ -597,6 +598,13 @@ void CBattleAnalysis::Update(int frame)
                 d->HasSurfToLand() ? d->GetMaxRange(CCircuitDef::RangeType::LAND) : 0.f,
                 (!d->IsMobile() && d->IsAbleToReclaim()) ? d->GetBuildDistance() : 0.f);
             groundContacts.push_back({e->GetPos(), m, economy, e->GetId(), d->GetId(), kind, hazardRange});
+        }
+        // Owner 2026-10-27: an identified structure out of radar and LOS whose
+        // spot has not been seen empty (HostileInLOS/PeaceInLOS set HIDDEN then).
+        if (!d->IsMobile() && !d->IsAbleToFly() && e->NotInRadarAndLOS() && !e->IsIgnore()
+            && !(e->GetData().losStatus & (SEnemyData::LosMask::HIDDEN | SEnemyData::LosMask::DYING | SEnemyData::LosMask::DEAD))
+            && std::isfinite(e->GetPos().x) && std::isfinite(e->GetPos().z) && Height(e->GetPos()) >= 0.f) {
+            ghosts.push_back({e->GetPos(), d->GetId()});
         }
         if (observed && !d->IsAbleToFly() && d->IsMobile()
             && (d->IsFloater() || d->IsSubmarine()) && Height(e->GetPos()) < 0.f) {
@@ -704,6 +712,12 @@ float CBattleAnalysis::AmphThreat(const AIFloat3& pos) const {
 }
 AIFloat3 CBattleAnalysis::GetGroundContactPos(int i) const {
     return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].pos : AIFloat3(-1.f, 0.f, -1.f);
+}
+AIFloat3 CBattleAnalysis::GetGhostPos(int i) const {
+    return i >= 0 && i < int(ghosts.size()) ? ghosts[i].pos : AIFloat3(-1.f, 0.f, -1.f);
+}
+int CBattleAnalysis::GetGhostDefId(int i) const {
+    return i >= 0 && i < int(ghosts.size()) ? ghosts[i].defId : -1;
 }
 int CBattleAnalysis::GetGroundContactId(int i) const {
     return i >= 0 && i < int(groundContacts.size()) ? groundContacts[i].id : -1;

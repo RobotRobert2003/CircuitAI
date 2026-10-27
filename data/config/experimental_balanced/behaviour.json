@@ -1698,8 +1698,13 @@
 				"retreat": 0.65
 			},
 			"armmart": {
+				// owner 2026-10-27: Mauser on the ranged controller (Tremor/Astraeus target logic): it fires
+				// from near max range at whatever its terrain-checked low arc reaches, radar dots included,
+				// and never walks in on an unidentified dot for vision. Firing sites stay outside known guns.
+				"fire_state": 2,
 				"role": ["artillery"],
-				"attribute": ["siege"],
+				"attribute": ["siege", "ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.97, "spacing": 128, "safety_margin": 64, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false, "advance_unknown_radar": false, "low_trajectory": true, "move_floor_seconds": 1, "max_waypoints": 4},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},
@@ -2260,7 +2265,11 @@
 				"retreat": 0
 			},
 			"cormart": {
+				// owner 2026-10-27: Quaker on the ranged controller, as the Mauser above.
+				"fire_state": 2,
 				"role": ["artillery"],
+				"attribute": ["ranged"],
+				"ranged": {"target_mode": "bombardment", "range_fraction": 0.97, "spacing": 128, "safety_margin": 64, "reaction_seconds": 1.0, "move_min_seconds": 1, "target_min_seconds": 1, "prefer_heavy": false, "advance_unknown_radar": false, "low_trajectory": true, "move_floor_seconds": 1, "max_waypoints": 4},
 				"threat": {"air": 0.0, "surf": 0.0, "water": 0.0, "default": 0.0},
 				"power": 1.0
 			},

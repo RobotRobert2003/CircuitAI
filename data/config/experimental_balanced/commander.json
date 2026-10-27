@@ -16,11 +16,12 @@
 		// ("com forward until the first riots, then home"). Offers beyond lane
 		// half-width + front_lane_margin are declined. advance_roles lists the roles
 		// whose commander leaves home at all; front_ladder orders the work rungs.
+		// radar_ghost (owner 2026-10-27): a T1 radar reaching scouted enemy structures out of radar.
 		"front_distance": 6000,
 		"front_push_ahead": 600, "front_push_screen": 1, "front_push_until_seconds": 0, "front_push_home_riot": 500,
 		"front_lane_margin": 150, "front_hold_seconds": 10, "front_standoff": 650, "front_radius": 500, "front_threat": 3,
 		"advance_roles": "FRONT,TACTICAL",
-		"front_ladder": "mex_lane,line,repair_defence,repair_units,reclaim,mex_los,timed_laser,timed_aa,radar,advance,assist,factory,mex,radar_spacing,laser,base,hold,patrol",
+		"front_ladder": "mex_lane,line,repair_defence,repair_units,reclaim,mex_los,timed_laser,timed_aa,radar,radar_ghost,advance,assist,factory,mex,radar_spacing,laser,base,hold,patrol",
 		// D-357 corridor mex sweep: spots within half-width + front_mex_reach (0: build
 		// distance) of the lane, front_mex_behind behind to front_mex_ahead ahead of the
 		// commander, en route every front_mex_seconds; enemy extractors there are
