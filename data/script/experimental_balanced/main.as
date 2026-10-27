@@ -230,6 +230,13 @@ namespace Main {
         // T1 eco, T1 construction turrets, T2 flak and T2 pop-up artillery around it (src/settings/shared/t3_unstick.as, off there)
         Global::T3Unstick::Enabled = true;
         Global::RoleSettings::Tech::EarlyGantryEnabled = true;
+        // Gantry turrets (owner, 2026-10-26; tested 2026-10-27 in 69 headless 8v8 games): every builder and
+        // turret builds the gantry block's turret frames first, the block opens at 80% of the gantry's income gate, and
+        // the T1 air plant keeps 4 more T1 air constructors for it (src/settings/roles/tech.as GantryNano*, off there)
+        Global::RoleSettings::Tech::GantryNanoFirst = true;
+        Global::RoleSettings::Tech::GantryNanoPrebuildShare = 0.8f;
+        Global::RoleSettings::Tech::GantryNanoExtraAirCons = 4;
+        Global::RoleSettings::Front::EcoLadderGantryNanoFirst = true;
         // TECH t3rush gantry turrets (owner, 2026-10-18): a random 14-20 construction turrets while the gantry goes up,
         // then a slower climb to 40 over the 5 minutes after it stands (src/settings/roles/tech.as T3RushTurrets*, off there)
         Global::RoleSettings::Tech::T3RushTurretsMin = 14;
