@@ -12,11 +12,15 @@ point spread round the area and on to the far edge (LolCannonRecon::Route),
 then is let go. One package at a time: a request while one is still being
 built retargets the planes still to come; a package that cannot finish lapses
 after PackageSeconds.
+With no plant to make them (a TECH often has none), TECH builds them: a T1
+air plant for the T1 scouts; for the radar planes a T2 air plant, which only
+an air constructor builds, so first one T1 air constructor from the T1 plant.
+One order of each at a time, a plant still being built counts as there.
 */
 namespace LolCannonScouts {
     const array<string> T1_DEFS = { "armpeep", "corfink", "legfig" };
     const array<string> RADAR_DEFS = { "armawac", "corawac", "legwhisper" };
-    const int PackageSeconds = 300;
+    const int PackageSeconds = 600;     // time for the plants too
     const int OrderSeconds = 20;
     const int FlightSeconds = 240;
 
@@ -25,6 +29,7 @@ namespace LolCannonScouts {
     array<int> wanted = { 0, 0 }, sent = { 0, 0 };
     int since = -1, nextOrder = 0;
     array<IUnitTask@> ordersT1, ordersRadar;
+    IUnitTask@ plantT1, plantT2, airCon;
     dictionary flights, ends, deadlines;   // unit id -> its route task, the route's end, when it is let go
 
     int Kind(const string &in name)
@@ -73,6 +78,17 @@ namespace LolCannonScouts {
         nextOrder = ai.frame + OrderSeconds * SECOND;
         string how = "";
         bool lacking = false;
+        array<bool> plant = { false, false };   // a plant of ours, finished or not, makes that kind
+        array<string>@ all = Factory::allFactories.getKeys();
+        for (uint i = 0; i < all.length(); ++i) {
+            CCircuitUnit@ f = null;
+            if (!Factory::allFactories.get(all[i], @f) || f is null || f.circuitDef is null) continue;
+            for (uint n = 0; n < T1_DEFS.length(); ++n) {
+                CCircuitDef@ a = ai.GetCircuitDef(T1_DEFS[n]), b = ai.GetCircuitDef(RADAR_DEFS[n]);
+                if (a !is null && f.circuitDef.CanBuild(a)) plant[0] = true;
+                if (b !is null && f.circuitDef.CanBuild(b)) plant[1] = true;
+            }
+        }
         for (int kind = 0; kind < 2; ++kind) {
             array<IUnitTask@>@ orders = ordersT1;
             array<string> names = T1_DEFS;
@@ -86,9 +102,10 @@ namespace LolCannonScouts {
                 if (!Factory::allFactories.get(keys[i], @f) || f is null || f.circuitDef is null || f.GetBuildProgress() < 1.0f) continue;
                 for (uint n = 0; n < names.length() && queued < missing; ++n) {
                     CCircuitDef@ d = ai.GetCircuitDef(names[n]);
-                    if (d is null || !f.circuitDef.CanBuild(d) || !d.IsAvailable(ai.frame)) continue;
+                    if (d is null || !f.circuitDef.CanBuild(d)) continue;
                     const int count = missing - queued;
                     if (d.maxThisUnit <= d.count + count) d.maxThisUnit = d.count + count + 1;
+                    if (!d.IsAvailable(ai.frame)) continue;
                     for (int k = 0; k < count; ++k) {
                         IUnitTask@ r = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::FIREPOWER, Task::Priority::HIGH, d, f.GetPos(ai.frame), 64.0f));
                         if (r is null) continue;
@@ -99,8 +116,46 @@ namespace LolCannonScouts {
             }
             how += (how == "" ? "" : ", ") + queued + "/" + missing + (kind == 0 ? " T1" : " radar");
             if (queued < missing) lacking = true;
+            if (queued == 0 && !plant[kind]) OrderPlant(kind, plant[0]);
         }
         if (how != "") GenericHelpers::LogUtil("[LolCannon][Scouts] ordered " + how + (lacking ? " (no plant of ours makes the rest)" : ""), 1);
+    }
+
+    void Uncap(CCircuitDef@ d)
+    {
+        if (d !is null && d.maxThisUnit <= d.count) d.maxThisUnit = d.count + 1;
+    }
+
+    bool Pending(IUnitTask@ t) { return t !is null && !t.IsDead(); }
+
+    void OrderPlant(int kind, bool hasT1Plant)
+    {
+        const string side = Global::AISettings::Side;
+        const AIFloat3 at = Factory::GetPreferredFactoryPos();
+        if (kind == 0 || !hasT1Plant) {
+            if (Pending(plantT1)) return;
+            Uncap(ai.GetCircuitDef(UnitHelpers::GetT1AirPlantForSide(side)));
+            @plantT1 = Builder::EnqueueT1AirFactory(side, at, SQUARE_SIZE * 24, 120 * SECOND, Task::Priority::HIGH);
+            GenericHelpers::LogUtil("[LolCannon][Scouts] no air plant: T1 air plant ordered " + (plantT1 is null ? "no (cooldown or unavailable)" : "yes"), 1);
+            return;
+        }
+        if (Pending(plantT2)) return;
+        CCircuitDef@ con = ai.GetCircuitDef(UnitHelpers::GetT1AirConstructorNameForSide(side));
+        if (con !is null && con.count == 0 && !Pending(airCon)) {
+            array<string>@ keys = Factory::allFactories.getKeys();
+            for (uint i = 0; i < keys.length(); ++i) {
+                CCircuitUnit@ f = null;
+                if (!Factory::allFactories.get(keys[i], @f) || f is null || f.circuitDef is null || f.GetBuildProgress() < 1.0f
+                    || !f.circuitDef.CanBuild(con)) continue;
+                Uncap(con);
+                @airCon = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::BUILDPOWER, Task::Priority::HIGH, con, f.GetPos(ai.frame), 64.0f));
+                break;
+            }
+        }
+        Uncap(ai.GetCircuitDef(UnitHelpers::GetT2AirPlantForSide(side)));
+        @plantT2 = Builder::EnqueueT2AirPlant(side, at, SQUARE_SIZE * 20, 300 * SECOND);
+        GenericHelpers::LogUtil("[LolCannon][Scouts] no T2 air plant: ordered " + (plantT2 is null ? "no (cooldown or unavailable)" : "yes")
+            + "; air constructors " + (con is null ? 0 : con.count) + (Pending(airCon) ? " (one ordered)" : ""), 1);
     }
 
     // Military AiMakeTask (TECH): a finished plane of a package still short flies its route.
