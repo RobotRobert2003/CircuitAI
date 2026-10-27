@@ -6,7 +6,7 @@ enum Strategy {
     T3_RUSH = 1,      // Prioritize reaching T3/experimental (e.g., Gantry)
     NUKE_RUSH = 2,    // Prioritize early nuclear capabilities (within safe eco bounds)
     T2_RUSH = 3,      // Finite heavy T2 delivery; original flag positions preserved
-    CAPITAL_RUSH = 4, // TECH: the T2 aircraft plant's capital bombers (Liche, Dragon, Tyrannus) for AIR
+    CAPITAL_RUSH = 4, // TECH: the T2 aircraft plant's capital ships (Liche, Dragon, Tyrannus) and their fighters
 }
 
 // Utilities for logging and display of strategy sets

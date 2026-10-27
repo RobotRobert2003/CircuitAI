@@ -1874,6 +1874,7 @@ void CInitScript::RegisterCEscortStrikeTask(asIScriptEngine* engine)
 	// TechCapitalRush (roles/tech/tech_capital_rush.as): no escort, scouted roster targets anywhere
 	r = engine->RegisterObjectMethod("CEscortStrikeTask", "void SetSiege(bool)", asMETHOD(CEscortStrikeTask, SetSiege), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEscortStrikeTask", "void SetHome(const AIFloat3& in)", asMETHOD(CEscortStrikeTask, SetHome), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CEscortStrikeTask", "void SetFighterEscort(bool)", asMETHOD(CEscortStrikeTask, SetFighterEscort), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEscortStrikeTask", "int GetVipId() const", asMETHOD(CEscortStrikeTask, GetVipId), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEscortStrikeTask", "int GetStriking() const", asMETHOD(CEscortStrikeTask, GetStriking), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CEscortStrikeTask", "int GetStrikesIssued() const", asMETHOD(CEscortStrikeTask, GetStrikesIssued), asCALL_THISCALL); ASSERT(r >= 0);

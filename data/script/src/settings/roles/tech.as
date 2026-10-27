@@ -35,11 +35,12 @@ namespace Tech {
             float HeavyDeliveryFrontRadius = 128.0f;
             // Capital rush (owner, 2026-10-26; Strategy::CAPITAL_RUSH, roles/tech/tech_capital_rush.as):
             // once the 10 s minimum metal income reaches CapitalRushMetalIncome and the T2 aircraft
-            // plant has its dedicated constructors (D-108), it builds only the side's capital bomber,
-            // CapitalRushFirstBatch of them, then CapitalRushNextBatch more for every
-            // CapitalRushMetalStep of income above that. A finished batch goes to an AIR ally; with
-            // none it is one wave: Liches strike scouted Liche-roster targets, CapitalRushLichesPerTarget
-            // on each (ATTACK ground where it is no longer in sight), the others go to native attack.
+            // plant has its dedicated constructors (D-108), it builds only the side's capital ship and
+            // CapitalRushFightersPerShip T2 fighters for each, CapitalRushFirstBatch ships, then CapitalRushNextBatch
+            // more for every CapitalRushMetalStep of income above that. A finished batch is one wave (owner,
+            // 2026-10-27: no trades to AIR): Liches strike scouted Liche-roster targets, CapitalRushLichesPerTarget
+            // on each (ATTACK ground where it is no longer in sight), Dragons/Tyrannus go to native attack,
+            // and each ship's fighters guard it.
             bool CapitalRushEnabled = true;
             float CapitalRushMetalIncome = 150.0f;
             float CapitalRushMetalStep = 100.0f;
@@ -47,6 +48,7 @@ namespace Tech {
             int CapitalRushNextBatch = 10;
             float CapitalRushEcoMetal = 1000.0f;   // the plan's phase 2 climbs the metal ladder to this (0 = off)
             int CapitalRushLichesPerTarget = 5;
+            int CapitalRushFightersPerShip = 2;    // owner, 2026-10-27: twice as many T2 fighters as capital ships
             int CapitalRushLicheOrderSeconds = 60; // a siege ATTACK is given again this often while its target exists
             dictionary CapitalRushUnits = {{"armada", "armliche"}, {"cortex", "corcrwh"}, {"legion", "legfort"}};
             bool LocalGeothermalEnabled = true;

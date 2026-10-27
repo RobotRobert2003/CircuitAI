@@ -21,6 +21,11 @@
  * empty for SIEGE_HIDDEN_FRAMES); an expired or finished order is given again on the same target.
  * Members with no target fly back to SetHome's spot (one MOVE) and wait there.
  *
+ * Fighter mode (SetFighterEscort, the capital rush's T2 fighters, owner 2026-10-27): the
+ * members only guard (script allows no strike defs), keep their def's fire and move
+ * states so the engine's air GUARD engages whatever attacks the vip, and are not
+ * re-guarded when it does.
+ *
  * Orders: one GUARD per member per escort change, one ATTACK per strike and
  * one more each time its target leaves or re-enters sight.
  * Nothing is re-issued while a member's order stands (lag fix, 2026-10-23).
@@ -68,6 +73,7 @@ public:
 	void SetStrikePolicy(float radius, int perTarget, int attackSeconds);
 	void SetSiege(bool on) { siege = on; }
 	void SetHome(const springai::AIFloat3& pos) { home = pos; }
+	void SetFighterEscort(bool on) { fighterEscort = on; }
 	bool IsSiege() const { return siege; }
 	int GetVipId() const { return vipId; }
 	int GetStriking() const { return static_cast<int>(strikes.size()); }
@@ -110,6 +116,7 @@ private:
 	bool siege;                            // no escort: strike scouted roster targets anywhere
 	springai::AIFloat3 home;               // siege: where a member with no target waits (x < 0: where it is)
 	std::set<int> sentHome;                // siege: members whose standing order is the MOVE home
+	bool fighterEscort;                    // guard only, fire at will, engine guard responses kept
 	std::map<int, SStrike> strikes;        // member id -> its attack
 	std::map<int, int> guarding;           // member id -> vip id its standing GUARD names
 	std::map<int, int> lastOrder;          // member id -> frame of its last order

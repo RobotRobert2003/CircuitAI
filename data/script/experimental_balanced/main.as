@@ -16,7 +16,7 @@ namespace Main {
 		float Tech_NUKE_RUSH = 0.05f; // owner, 2026-10-27
 		float Tech_T3_RUSH = 0.70f;   // owner, 2026-10-27
 		float Tech_T2_RUSH = 0.0f;    // the finite heavy-delivery rush (TechHeavyRush)
-		float Tech_CAPITAL_RUSH = 0.25f; // owner, 2026-10-27: T2-plant capital bombers for AIR (TechCapitalRush)
+		float Tech_CAPITAL_RUSH = 0.25f; // owner, 2026-10-27: T2-plant capital ships with fighter escorts (TechCapitalRush)
 		float Tech_Spam_Rush = 0.85f; // roll 2
 	}
 

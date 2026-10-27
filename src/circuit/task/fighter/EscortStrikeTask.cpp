@@ -43,6 +43,7 @@ CEscortStrikeTask::CEscortStrikeTask(ITaskModule* mgr)
 		, attackFrames(FRAMES_PER_SEC * 45)
 		, siege(false)
 		, home(-1.f, 0.f, -1.f)
+		, fighterEscort(false)
 		, strikesIssued(0)
 		, shotsFired(0)
 		, targetsDestroyed(0)
@@ -98,8 +99,14 @@ void CEscortStrikeTask::Start(CCircuitUnit* unit)
 	// the attacker is outside the weapon's reach (2026-10-25: Liches left the
 	// guard for the flak that shot their bomber and died without firing).
 	unit->TrySetIdleMode(0);
-	unit->TrySetFireState(CCircuitDef::FireType::HOLD);
-	unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
+	if (fighterEscort) {
+		// Fighters: the engine's air GUARD answers whatever shoots the vip; that is the job.
+		unit->TrySetFireState(unit->GetCircuitDef()->GetFireState());
+		unit->TrySetMoveState(unit->GetCircuitDef()->GetMoveState());
+	} else {
+		unit->TrySetFireState(CCircuitDef::FireType::HOLD);
+		unit->TrySetMoveState(CCircuitDef::MoveType::HOLD_POS);
+	}
 	const int frame = manager->GetCircuit()->GetLastFrame();
 	CCircuitUnit* vip = ResolveVip(frame);
 	if (vip != nullptr) {
@@ -404,7 +411,7 @@ void CEscortStrikeTask::Update()
 	}
 
 	CCircuitUnit* vip = ResolveVip(frame);
-	if (vip != nullptr && frame >= nextGuardCheck) {
+	if (vip != nullptr && !fighterEscort && frame >= nextGuardCheck) {
 		nextGuardCheck = frame + FRAMES_PER_SEC;
 		CheckGuards(vip, frame);
 	}
