@@ -14,6 +14,13 @@
  * and the attack time; this task owns the orders. Decisions that need no
  * engine are in EscortStrikeRules.h.
  *
+ * Siege mode (SetSiege, the TECH capital rush with no AIR ally): no escort.
+ * Each member takes the best scouted roster target anywhere (in sight or only
+ * remembered), the unit while in sight, else ATTACK ground on its last known
+ * spot, and keeps it until it no longer exists (dead, or its spot in sight and
+ * empty); an expired or finished order is given again on the same target.
+ * Members with no target wait where they are.
+ *
  * Orders: one GUARD per member per escort change, one ATTACK per strike and
  * one more each time its target leaves or re-enters sight.
  * Nothing is re-issued while a member's order stands (lag fix, 2026-10-23).
@@ -59,6 +66,8 @@ public:
 	 * attackSeconds  an ATTACK not resolved by then ends and the member rejoins
 	 */
 	void SetStrikePolicy(float radius, int perTarget, int attackSeconds);
+	void SetSiege(bool on) { siege = on; }
+	bool IsSiege() const { return siege; }
 	int GetVipId() const { return vipId; }
 	int GetStriking() const { return static_cast<int>(strikes.size()); }
 	int GetStrikesIssued() const { return strikesIssued; }
@@ -72,6 +81,7 @@ private:
 		bool fired;
 		bool ground;                       // the standing ATTACK is on lastSeen, not the unit
 		springai::AIFloat3 lastSeen;       // the target's position when last in sight
+		bool reissue;                      // siege: the order ended with the target alive; give it again
 	};
 	struct SCandidate {
 		CEnemyInfo* enemy;
@@ -94,6 +104,7 @@ private:
 	float strikeRadius;
 	int perTarget;
 	int attackFrames;
+	bool siege;                            // no escort: strike scouted roster targets anywhere
 	std::map<int, SStrike> strikes;        // member id -> its attack
 	std::map<int, int> guarding;           // member id -> vip id its standing GUARD names
 	std::map<int, int> lastOrder;          // member id -> frame of its last order

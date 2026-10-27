@@ -6,6 +6,7 @@ enum Strategy {
     T3_RUSH = 1,      // Prioritize reaching T3/experimental (e.g., Gantry)
     NUKE_RUSH = 2,    // Prioritize early nuclear capabilities (within safe eco bounds)
     T2_RUSH = 3,      // Finite heavy T2 delivery; original flag positions preserved
+    CAPITAL_RUSH = 4, // TECH: the T2 aircraft plant's capital bombers (Liche, Dragon, Tyrannus) for AIR
 }
 
 // Utilities for logging and display of strategy sets
@@ -25,6 +26,7 @@ namespace StrategyUtil {
             case Strategy::T2_RUSH: return "T2_RUSH";
             case Strategy::T3_RUSH: return "T3_RUSH";
             case Strategy::NUKE_RUSH: return "NUKE_RUSH";
+            case Strategy::CAPITAL_RUSH: return "CAPITAL_RUSH";
         }
         return "UNKNOWN";
     }

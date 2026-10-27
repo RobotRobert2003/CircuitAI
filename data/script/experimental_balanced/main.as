@@ -14,6 +14,7 @@ namespace Main {
 		float Tech_NUKE_RUSH = 0.0f;  // roll 1 (owner, 2026-10-26: temporarily 0, was 0.25)
 		float Tech_T3_RUSH = 1.0f;    // roll 1 (owner, 2026-10-26: temporarily 100%, was 0.35)
 		float Tech_T2_RUSH = 0.0f;    // roll 1 (owner, 2026-10-26: temporarily 0, was 0.25): the finite heavy-delivery rush (TechHeavyRush)
+		float Tech_CAPITAL_RUSH = 0.0f; // roll 1 (owner, 2026-10-26): T2-plant capital bombers for AIR (TechCapitalRush); 0 until the owner sets it
 		float Tech_Spam_Rush = 0.85f; // roll 2
 	}
 
@@ -37,15 +38,18 @@ namespace Main {
 		const float wNuke = AiMax(0.0f, StrategyWeights::Tech_NUKE_RUSH);
 		const float wT3 = AiMax(0.0f, StrategyWeights::Tech_T3_RUSH);
 		const float wT2 = AiMax(0.0f, StrategyWeights::Tech_T2_RUSH);
-		array<float>@ w = array<float>(4);
+		const float wCapital = AiMax(0.0f, StrategyWeights::Tech_CAPITAL_RUSH);
+		array<float>@ w = array<float>(5);
 		w[0] = wNuke;
 		w[1] = wT3;
 		w[2] = wT2;
-		w[3] = AiMax(0.0f, 1.0f - wNuke - wT3 - wT2);
+		w[3] = wCapital;
+		w[4] = AiMax(0.0f, 1.0f - wNuke - wT3 - wT2 - wCapital);
 		const int pick = AiDice(w);
 		if (pick == 0) Global::RoleSettings::Tech::EnableStrategy(Strategy::NUKE_RUSH);
 		else if (pick == 1) Global::RoleSettings::Tech::EnableStrategy(Strategy::T3_RUSH);
 		else if (pick == 2) Global::RoleSettings::Tech::EnableStrategy(Strategy::T2_RUSH);
+		else if (pick == 3) Global::RoleSettings::Tech::EnableStrategy(Strategy::CAPITAL_RUSH);
 
 		// Roll 2: the spam rush, on its own
 		const bool spam = DecideEnabled(StrategyWeights::Tech_Spam_Rush);
@@ -56,7 +60,7 @@ namespace Main {
 		GenericHelpers::LogUtil(
 			"[Strategy] (EXPERIMENTAL BALANCED) Decided: Tech mask=" + Global::RoleSettings::Tech::StrategyMask +
 			" (" + StrategyUtil::NamesFromMask(Global::RoleSettings::Tech::StrategyMask) + "); roll 1: "
-			+ (pick == 0 ? "NUKE_RUSH" : pick == 1 ? "T3_RUSH" : pick == 2 ? "T2_RUSH (heavy rush)" : "none")
+			+ (pick == 0 ? "NUKE_RUSH" : pick == 1 ? "T3_RUSH" : pick == 2 ? "T2_RUSH (heavy rush)" : pick == 3 ? "CAPITAL_RUSH" : "none")
 			+ ", roll 2: spam rush " + (spam ? "on" : "off"),
 			1);
 	}

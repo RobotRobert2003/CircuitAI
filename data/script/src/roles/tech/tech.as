@@ -28,6 +28,7 @@
 #include "tech_chain.as"
 #include "tech_plan.as"
 #include "tech_heavy_rush.as"
+#include "tech_capital_rush.as"
 #include "tech_transport.as"
 
 namespace RoleTech
@@ -225,6 +226,7 @@ namespace RoleTech
 			GenericHelpers::LogUtil("[TECH][Build] experimental build system on: direct range "
 				+ int(aiBuilderMgr.experimentalDirectRange) + ", search radius " + int(aiBuilderMgr.experimentalSearchRadius), 1);
             TechHeavyRush::Init();
+            TechCapitalRush::Init();
 			TechChain::Init();   // D-070: the rush chain, after the opening so it can take the opening over
 			TechPlan::Init();    // D-080: what follows the objective
 			@Global::energyAllowed = @TechBuild::EnergyAllowed;   // D-077: no T1 energy in the fusion era, whoever orders it
@@ -612,6 +614,7 @@ namespace RoleTech
         NukeRecon::Finished(unit);
 		Invariants::OnUnitAdded(unit);   // D-076: INV-001
         if (TechHeavyRush::OnFinished(unit)) return;
+        if (TechCapitalRush::OnFinished(unit)) return;   // held for its wave, never donated
         // D-158: keep the amphibious wave together; constructor donations are separate.
         if (!AmphibiousOps::Active() || unit is null || AmphibiousOps::Kind(unit.circuitDef)<0)
             Team::Donation::OnCombatBotBuilt(unit);
@@ -666,6 +669,7 @@ namespace RoleTech
 		TechBuild::Tick();
 		TechChain::Tick();
         TechHeavyRush::Tick();
+        TechCapitalRush::Tick();
         TechGantry::SampleIncome();
         TechHeavyChoice::Tick();   // D-287: the late latch, O(1), stops once latched
         TechGantryScale::Tick();   // D-288: gantry target/cap/due, O(tier-3 clusters)
@@ -1164,6 +1168,9 @@ namespace RoleTech
 			}
 		}
 
+        // owner, 2026-10-26: the capital rush's batch is all the T2 aircraft plant builds while it is owed
+        IUnitTask@ capital = TechCapitalRush::Produce(u, side);
+        if (capital !is null) return capital;
         IUnitTask@ heavyRush = TechHeavyRush::Produce(u);
         if (heavyRush !is null) return heavyRush;
 

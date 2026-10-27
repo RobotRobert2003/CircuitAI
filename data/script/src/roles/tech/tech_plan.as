@@ -22,10 +22,12 @@ namespace TechPlan {
     {
         const string want = Global::RoleSettings::Tech::EndgamePlan;
         if (want == "t2rush") return "spamrush"; // legacy explicit plan alias
-        if (want == "nuke" || want == "spamrush" || want == "t3rush" || want == "lrpc") return want;
+        if (want == "nuke" || want == "spamrush" || want == "t3rush" || want == "lrpc" || want == "capitalrush") return want;
         if (Global::RoleSettings::Tech::HasStrategy(Strategy::NUKE_RUSH)) return "nuke";
         // owner, 2026-10-19: a T3_RUSH roll wins over the spam rush (spam is rolled on its own at 85%, so checked first it left T3 at about 5%)
         if (Global::RoleSettings::Tech::HasStrategy(Strategy::T3_RUSH)) return "t3rush";
+        // owner, 2026-10-26: roll 1's capital rush (TechCapitalRush) also wins over the spam rush
+        if (Global::RoleSettings::Tech::HasStrategy(Strategy::CAPITAL_RUSH)) return "capitalrush";
         if (Global::RoleSettings::Tech::HasStrategy(Strategy::SPAM_RUSH)) return "spamrush";
         return "eco";
 
@@ -126,6 +128,16 @@ namespace TechPlan {
             } else if (phase == 2 && Global::RoleSettings::Tech::PlanT3RushEcoMetal > 0.0f) {
                 // owner, 2026-10-19: the economy keeps climbing (AFUS, mex upgrades) while the gantry produces
                 s.insertLast(TechChain::Step("income", "", int(Global::RoleSettings::Tech::PlanT3RushEcoMetal)));
+            }
+        } else if (plan == "capitalrush") {
+            if (phase == 1) {
+                // owner, 2026-10-26: the T2 aircraft plant, then the capital rush's income gate
+                s.insertLast(TechChain::Step("ap", TechChain::DefFor("ap"), 1));   // D-103: only an air constructor builds the advanced aircraft plant
+                s.insertLast(TechChain::Step("aap", TechChain::DefFor("aap"), 1));
+                s.insertLast(TechChain::Step("income", "", int(Global::RoleSettings::Tech::CapitalRushMetalIncome)));
+            } else if (phase == 2 && Global::RoleSettings::Tech::CapitalRushEcoMetal > 0.0f) {
+                // every CapitalRushMetalStep of income above the gate pays for another batch
+                s.insertLast(TechChain::Step("income", "", int(Global::RoleSettings::Tech::CapitalRushEcoMetal)));
             }
         } else if (plan == "lrpc") {
             if (phase == 1) {

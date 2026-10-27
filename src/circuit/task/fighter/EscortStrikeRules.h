@@ -18,6 +18,21 @@ inline bool StrikeCandidate(float priority, bool visible, float distanceSq, floa
 		&& distanceSq >= 0.f && distanceSq <= radius * radius;
 }
 
+// Siege mode (TECH capital rush without an AIR ally, owner 2026-10-26): any
+// allowed def that has been scouted, wherever it is and whether or not it is in
+// sight now; out of sight the strike bombs its last known spot (as a Juno does).
+inline bool SiegeCandidate(float priority, bool scouted)
+{
+	return priority > 0.f && scouted;
+}
+
+// A siege strike ends only when its target no longer exists; an expired or
+// finished order is given again on the same target.
+inline bool SiegeStrikeOver(bool targetGone)
+{
+	return targetGone;
+}
+
 // A strike follows its target by unit while it is in sight; once it drops out
 // of sight it bombs the spot where it was last seen (one ATTACK ground), and
 // takes the unit again if it is seen again.

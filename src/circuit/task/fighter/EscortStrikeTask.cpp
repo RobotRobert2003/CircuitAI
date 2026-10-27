@@ -39,6 +39,7 @@ CEscortStrikeTask::CEscortStrikeTask(ITaskModule* mgr)
 		, strikeRadius(600.f)
 		, perTarget(2)
 		, attackFrames(FRAMES_PER_SEC * 45)
+		, siege(false)
 		, strikesIssued(0)
 		, shotsFired(0)
 		, targetsDestroyed(0)
@@ -219,7 +220,7 @@ void CEscortStrikeTask::CheckGuards(CCircuitUnit* vip, int frame)
 void CEscortStrikeTask::CollectCandidates()
 {
 	candidates.clear();
-	if (allowedStrikeDefs.empty() || strikeRadius <= 0.f) return;
+	if (allowedStrikeDefs.empty() || (!siege && strikeRadius <= 0.f)) return;
 	CCircuitAI* circuit = manager->GetCircuit();
 	for (const auto& entry : circuit->GetEnemyInfos()) {
 		CEnemyInfo* enemy = entry.second;
@@ -254,7 +255,9 @@ bool CEscortStrikeTask::TryStrike(CCircuitUnit* unit, int frame)
 	for (const SCandidate& candidate : candidates) {
 		CEnemyInfo* enemy = candidate.enemy;
 		const float distance = pos.SqDistance2D(enemy->GetPos());
-		if (!escort_strike::StrikeCandidate(candidate.priority, enemy->IsInLOS(), distance, strikeRadius)) continue;
+		// Siege: a known def means the unit was seen at least once (radar alone carries no def).
+		if (siege ? !escort_strike::SiegeCandidate(candidate.priority, enemy->GetCircuitDef() != nullptr)
+			: !escort_strike::StrikeCandidate(candidate.priority, enemy->IsInLOS(), distance, strikeRadius)) continue;
 		const int enemyId = enemy->GetId();
 		if (!escort_strike::HasStrikeRoom(StrikersOn(enemyId), perTarget)) continue;
 		if (escort_strike::BetterStrike(candidate.priority, distance, enemyId, bestPriority, bestDistance, bestId)) {
@@ -263,15 +266,23 @@ bool CEscortStrikeTask::TryStrike(CCircuitUnit* unit, int frame)
 	}
 	if (best == nullptr) return false;
 	CCircuitAI* circuit = manager->GetCircuit();
-	// The target is in sight (StrikeCandidate): take the unit itself.
-	unit->Attack(best, false, frame + attackFrames, false);
-	strikes[id] = {bestId, frame + attackFrames, false, false, best->GetPos()};
+	// In sight (always, outside siege): take the unit itself. A siege target out
+	// of sight: bomb its last known spot, as a Juno does.
+	const bool ground = !best->IsInLOS();
+	if (ground) {
+		TRY_UNIT(circuit, unit,
+			unit->CmdAttackGround(best->GetPos(), UNIT_COMMAND_OPTION_RIGHT_MOUSE_KEY, frame + attackFrames);
+		)
+	} else {
+		unit->Attack(best, false, frame + attackFrames, false);
+	}
+	strikes[id] = {bestId, frame + attackFrames, false, ground, best->GetPos(), false};
 	guarding[id] = -1;  // the ATTACK replaced the GUARD
 	lastOrder[id] = frame;
 	++strikesIssued;
-	circuit->LOG("ESCORT: team=%i strike unit=%i target=%s(%i) priority=%.1f distance=%.0f radius=%.0f vip=%i los=%i strikers=%i",
+	circuit->LOG("ESCORT: team=%i strike unit=%i target=%s(%i) priority=%.1f distance=%.0f radius=%.0f vip=%i los=%i strikers=%i siege=%i at=%.0f,%.0f",
 			circuit->GetTeamId(), id, best->GetCircuitDef()->GetDef()->GetName(), bestId, bestPriority, std::sqrt(bestDistance),
-			strikeRadius, vipId, int(best->IsInLOS()), StrikersOn(bestId));
+			strikeRadius, vipId, int(best->IsInLOS()), StrikersOn(bestId), int(siege), best->GetPos().x, best->GetPos().z);
 	return true;
 }
 
@@ -288,11 +299,16 @@ void CEscortStrikeTask::FollowTarget(CCircuitUnit* unit, SStrike& strike, int fr
 	if (visible) {
 		strike.lastSeen = target->GetPos();
 	}
-	const bool toGround = escort_strike::NeedsGroundStrike(strike.ground, visible);
-	if (!toGround && !escort_strike::NeedsUnitStrike(strike.ground, visible)) return;
+	// Siege: a finished or expired order on a living target is given again.
+	const bool toGround = strike.reissue ? !visible : escort_strike::NeedsGroundStrike(strike.ground, visible);
+	if (!toGround && !strike.reissue && !escort_strike::NeedsUnitStrike(strike.ground, visible)) return;
 	const int id = unit->GetId();
 	auto last = lastOrder.find(id);
 	if (last != lastOrder.end() && !escort_strike::OrderAllowed(last->second, frame, ESCORT_ORDER_GAP)) return;
+	if (strike.reissue) {
+		strike.until = frame + attackFrames;
+		strike.reissue = false;
+	}
 	if (toGround) {
 		// Out of sight: bomb where it was last seen, not a radar dot or an engine guess.
 		TRY_UNIT(circuit, unit,
@@ -317,7 +333,8 @@ bool CEscortStrikeTask::IsTargetGone(int targetId) const
 	CEnemyInfo* target = manager->GetCircuit()->GetEnemyInfo(targetId);
 	if (target == nullptr || target->GetUnit() == nullptr) return true;
 	const CEnemyUnit* data = target->GetData();
-	return data->IsDead() || data->IsDying();
+	// Siege: its last known spot in sight and empty means it no longer exists there.
+	return data->IsDead() || data->IsDying() || (siege && data->IsHidden());
 }
 
 void CEscortStrikeTask::EndStrike(int unitId, const char* reason)
@@ -342,13 +359,20 @@ void CEscortStrikeTask::Update()
 
 	// Settle strikes whose target is gone or whose order expired.
 	std::vector<int> over;
-	for (const auto& strike : strikes) {
-		if (escort_strike::StrikeOver(IsTargetGone(strike.second.targetId), frame, strike.second.until)) {
+	for (auto& strike : strikes) {
+		const bool gone = IsTargetGone(strike.second.targetId);
+		if (siege) {
+			if (escort_strike::SiegeStrikeOver(gone)) {
+				over.push_back(strike.first);
+			} else if (frame >= strike.second.until) {
+				strike.second.reissue = true;  // same target, fresh order (FollowTarget)
+			}
+		} else if (escort_strike::StrikeOver(gone, frame, strike.second.until)) {
 			over.push_back(strike.first);
 		}
 	}
 	for (int unitId : over) {
-		EndStrike(unitId, frame >= strikes[unitId].until ? "timeout" : "target gone");
+		EndStrike(unitId, (!siege && frame >= strikes[unitId].until) ? "timeout" : "target gone");
 	}
 	// Standing strikes follow their target in and out of sight.
 	for (auto& strike : strikes) {
@@ -374,6 +398,8 @@ void CEscortStrikeTask::Update()
 		if (TryStrike(unit, frame)) continue;
 		if (vip != nullptr) {
 			GuardVip(unit, vip, frame);
+		} else if (siege) {
+			continue;  // no scouted target yet: wait where it is
 		} else {
 			// No escort target alive: the raid is over for this member. Hand it
 			// to the idle task (ITaskModule::AssignTask(unit) would only add a
@@ -392,7 +418,12 @@ void CEscortStrikeTask::OnUnitIdle(CCircuitUnit* unit)
 	const int id = unit->GetId();
 	// The ATTACK finished (target dead) or the GUARD ended (vip dead). Either
 	// way the standing order is gone; the next update re-issues one, once.
-	if (strikes.count(id) != 0) {
+	auto strike = strikes.find(id);
+	if (strike != strikes.end() && siege && !IsTargetGone(strike->second.targetId)) {
+		strike->second.reissue = true;  // siege keeps its target while it exists
+		return;
+	}
+	if (strike != strikes.end()) {
 		EndStrike(id, "idle");
 	} else {
 		guarding[id] = -1;

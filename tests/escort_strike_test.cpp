@@ -16,6 +16,14 @@ int main()
 	assert(!StrikeCandidate(1.f, true, 100.f, 0.f));           // disabled
 	assert(!StrikeCandidate(1.f, true, -1.f, r));
 
+	// Siege (TECH capital rush, no AIR ally): any scouted roster target, at any
+	// range, in sight or not; it is kept until it no longer exists.
+	assert(SiegeCandidate(1.f, true));
+	assert(!SiegeCandidate(1.f, false));                       // a radar dot was never seen
+	assert(!SiegeCandidate(0.f, true));                        // not on the roster
+	assert(SiegeStrikeOver(true));
+	assert(!SiegeStrikeOver(false));                           // an expired order is given again
+
 	// A strike on the unit turns to its last seen spot when it leaves sight,
 	// and back to the unit when it is seen again; nothing while it stays.
 	assert(!NeedsGroundStrike(false, true));
