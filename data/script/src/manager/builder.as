@@ -2034,6 +2034,7 @@ namespace Builder {
 		if (t is null) @t = SeaCoast::Build(u); // SEA-only lost-water recovery precedes discretionary spam.
 		if (t is null) @t = T3Unstick::BuilderTask(u); // preserve pending-all T3 recovery
 		if (t is null) @t = Team::AllyClear::BuilderTask(u); // owner, 2026-10-17: reclaim allied buildings given to us
+		if (t is null) @t = AntiSpam::BuilderTask(u); // owner, 2026-10-27: the FRONT nearest an enemy spam lane holds it
 		if (t is null) @t = EdgeLanes::BuilderTask(u); // owner, 2026-10-17: two FRONTs build the edge lane labs
 		if (t is null) @t = EdgePorc::BuilderTask(u); // owner, 2026-10-19: ... and their edge's forward porc
 		if (t is null) @t = FrontRadar::BuilderTask(u); // owner, 2026-10-27: long-range radars just behind the front

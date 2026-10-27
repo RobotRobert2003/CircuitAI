@@ -13,6 +13,7 @@
 #include "nuke_recon.as"
 #include "lolcannon_recon.as"
 #include "../combat/front_radar.as"
+#include "../combat/anti_spam.as"
 #include "../world/coverage_lanes.as"
 
 namespace Team {
@@ -57,6 +58,7 @@ namespace Team {
         if (NukeRecon::Handle(msg, fromTeamId)) return;
         if (LolCannonRecon::Handle(msg, fromTeamId)) return;
         if (FrontRadar::HandleMessage(msg, fromTeamId)) return;   // owner, 2026-10-27: allied long-range radars
+        if (AntiSpam::HandleMessage(msg, fromTeamId)) return;     // owner, 2026-10-27: allied anti-spam lanes and counts
         if (Roster::HandleMessage(msg, fromTeamId)) return;
         if (CoverageLanes::HandleMessage(msg, fromTeamId)) return;   // D-357: a FRONT ally's corridor claim
         if (CommanderEnergy::HandleMessage(msg, fromTeamId)) return;
