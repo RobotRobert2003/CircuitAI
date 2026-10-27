@@ -9,6 +9,7 @@
 #define SRC_CIRCUIT_TASK_STATIC_SUPERTASK_H_
 
 #include "task/fighter/FighterTask.h"
+#include "task/static/TierTargeting.h"
 
 #include <algorithm>
 #include <functional>
@@ -40,6 +41,18 @@ public:
 	void SetTierRetarget(int frames) { tierRetargetFrames = std::max(1, frames); }
 	int GetTierTargetId() const { return tierTargetId; }
 	int GetTierCount() const { return int(tierByDef.size()); }
+	// Area rotation (owner 2026-10-27): with areas > 0 the roster targets in range
+	// are grouped into at most `areas` areas (radius round each area's best target)
+	// and the fire moves on from one area to the next after dwellFrames (> 0) or
+	// shotsPerArea shots (> 0), back to the best area after the last; it starts
+	// over at the best area whenever the highest-rated target changes.
+	void SetTierRotation(int areas, int dwellFrames, int shotsPerArea, float radius);
+	int GetTierAreaCount() const { return int(tierAreaList.size()); }
+	springai::AIFloat3 GetTierAreaPos(int i) const;
+	int GetTierAreaTargetId(int i) const;
+	int GetTierAreaIndex() const { return tierAreaList.empty() ? -1 : tierRot.index; }
+	// a shot seen (the weapon-fired event): counts toward shotsPerArea
+	void OnTierShot(CCircuitUnit* unit);
 
 private:
 	void ExecuteAttack(CCircuitUnit* unit);
@@ -101,6 +114,13 @@ private:
 	int tierTargetId = -1;            // the enemy under fire, -1 none
 	int tierOrderFrame = -1000000;    // the last attack order, re-issued before its timeout
 	bool tierOrderOnUnit = false;     // that order was on the unit (else on its ground)
+	int tierAreas = 0;                // area rotation: 0 off
+	int tierDwellFrames = 0;
+	int tierShotsPerArea = 0;
+	float tierAreaRadius = 600.f;
+	int tierLastShotFrame = -1000000;
+	std::vector<tier::Area> tierAreaList;
+	tier::Rotation tierRot;
 };
 
 } // namespace circuit

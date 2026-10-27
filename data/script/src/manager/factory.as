@@ -146,6 +146,8 @@ namespace Factory {
 		// Emergency AIR production must reach its role before optional spam.
 		if (AirBaseResponse::Emergency() && (UnitHelpers::IsT1AircraftPlant(u.circuitDef.GetName())
 			|| UnitHelpers::IsT2AircraftPlant(u.circuitDef.GetName()))) return AirProduction::MakeTask(u);
+		@t = LolCannonStrikeScout::Produce(u);   // owner 2026-10-27: the scouts a lolcannon's best area is waiting for
+		if (t !is null) return t;
 		@t = SeaCoast::Produce(u);
 		if (t is null) @t = Spam::FactoryMakeTask(u);   // coastal recovery owns its land labs
 		if (t !is null) return t;

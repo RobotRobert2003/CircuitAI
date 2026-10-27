@@ -50,7 +50,7 @@ this program (owner, 2026-10-26):
   crews   taken off every other task (Builder AiMakeTask asks here first):
             starter  one T2 air constructor: orders the cannon at once;
             air      AirCrew (50) air constructors, T1 or T2: build the
-                     TurretCols x TurretRows (4x4) turret block, then assist;
+                     Turrets (22) of the 4-wide turret block and its spare rows, then assist;
             store    StoreCrew (5) T2 air constructors: build the storages
                      (6 armuwadves / coruwadves, 8 legadvestore for the
                      Starfall) as a strip StorageCols (2) wide, then assist.
@@ -79,8 +79,18 @@ this program (owner, 2026-10-26):
             6 T1 porc, T1 economy
           Porc is any armed structure that is not a super weapon; T1 is what a
           T1 constructor or commander can build, T2 what only a T2
-          constructor can. Native picks the best tier in range, keeps its
-          target inside a tier, else the dearest (CSuperTask::UpdateTiered).
+          constructor can. Native picks the best tier in range, else the
+          dearest, then the nearest (CSuperTask::UpdateTiered).
+          Areas (owner 2026-10-27): the targets in range are grouped round
+          each area's best target (FireAreaRadius), best area first; Ragnarok
+          and Calamity fire RapidDwellSeconds (20) at each of RapidAreas (6),
+          the Starfall StarfallShotsPerArea (2) shots at each of StarfallAreas
+          (3), then back to the best. A new highest-rated target starts the
+          rotation over. Like the nuke: never the same site twice in a row.
+  scout   each standing cannon's best area is scouted by StrikeRadarScouts
+          T2 radar planes and StrikeT1Scouts T1 scouts (AIR, else TECH;
+          team/lolcannon_strike_scout.as): fresh sight drops a destroyed
+          structure from the list and the rotation moves on.
 
 Every other path is closed: each cannon def's maxThisUnit is held at its count
 (every native path - the porc chain's slot 21, AIR's chain, the C++ super
@@ -448,7 +458,7 @@ namespace LolCannon {
         return r;
     }
 
-    int TurretsWanted() { return AiMax(Global::LolCannon::MinTurrets, Global::LolCannon::TurretCols * Global::LolCannon::TurretRows); }
+    int TurretsWanted() { return AiMax(Global::LolCannon::MinTurrets, AiMax(Global::LolCannon::Turrets, Global::LolCannon::TurretCols * Global::LolCannon::TurretRows)); }
 
     // The cannon at gp facing f: the turret block's candidate slots on side `hand`
     // (+1/-1) and the storage strip's on the other, each centre out, spare rows last.
@@ -1061,6 +1071,15 @@ namespace LolCannon {
         }
         array<int> per(7, 0);
         for (int i = 0; i < n; ++i) if (tierByDef[i] > 0 && tierByDef[i] < 7) ++per[tierByDef[i]];
+        for (int t = 1; t <= 6 && ai.teamId == ai.GetLeadTeamId(); ++t) {   // the names once per ally team
+            string names = "";
+            for (int i = 0; i < n; ++i) {
+                if (tierByDef[i] != t) continue;
+                CCircuitDef@ d = ai.GetCircuitDef(i);
+                if (d !is null) names += (names == "" ? "" : " ") + d.GetName() + "=" + int(d.costM);
+            }
+            GenericHelpers::LogUtil("[LolCannon] fire roster tier " + t + " (" + per[t] + "): " + names, 1);
+        }
         GenericHelpers::LogUtil("[LolCannon] fire roster: tier 1 " + per[1] + ", 2 " + per[2] + ", 3 " + per[3] + ", 4 " + per[4]
             + ", 5 " + per[5] + ", 6 " + per[6] + " defs (" + t1.length() + " T1 and " + t2.length() + " T2 constructor defs, "
             + gantries.length() + " gantries)", 1);
@@ -1077,9 +1096,15 @@ namespace LolCannon {
         for (uint i = 0; i < tierByDef.length(); ++i)
             if (tierByDef[i] > 0) st.SetTargetTier(ai.GetCircuitDef(int(i)), tierByDef[i]);
         st.SetTierRetarget(Global::LolCannon::FireRetargetFrames);
+        const bool starfall = u.circuitDef.GetName() == "legstarfall";
+        if (starfall) st.SetTierRotation(Global::LolCannon::StarfallAreas, 0, Global::LolCannon::StarfallShotsPerArea, Global::LolCannon::FireAreaRadius);
+        else st.SetTierRotation(Global::LolCannon::RapidAreas, Global::LolCannon::RapidDwellSeconds * SECOND, 0, Global::LolCannon::FireAreaRadius);
+        LolCannonStrikeScout::Watch(u);
         u.SetFireState(Global::LolCannon::FireState);   // owner 2026-10-26: fire at will; the tiered orders pick the target when one is in range
         GenericHelpers::LogUtil("[LolCannon] " + u.circuitDef.GetName() + " " + u.id + " fires at " + st.GetTierCount()
-            + " roster defs, best tier first; fire state " + Global::LolCannon::FireState, 1);
+            + " roster defs, best tier first; fire state " + Global::LolCannon::FireState + "; rotation "
+            + (starfall ? Global::LolCannon::StarfallShotsPerArea + " shots at each of " + Global::LolCannon::StarfallAreas
+                : Global::LolCannon::RapidDwellSeconds + " s at each of " + Global::LolCannon::RapidAreas) + " areas", 1);
     }
 
     // ---------------------------------------------------------------- the program
@@ -1299,6 +1324,8 @@ namespace LolCannon {
         for (uint i = 0; i < pendingAbort.length(); ++i)
             if (pendingAbort[i] !is null && !pendingAbort[i].IsDead() && !Mine(pendingAbort[i])) aiBuilderMgr.AbortTask(pendingAbort[i]);
         pendingAbort.resize(0);
+        BuildRoster();                         // once a game: the fire roster and its names in the log
+        LolCannonStrikeScout::CannonTick();    // each standing cannon's best area scouted (AIR, else TECH)
         for (int i = int(mine.length()) - 1; i >= 0; --i)
             if (mine[i] is null || mine[i].IsDead()) mine.removeAt(i);
         if (RoleMay()) Advance();

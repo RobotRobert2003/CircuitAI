@@ -45,15 +45,16 @@ namespace LolCannon {
     // the construction turret block beside the cannon (cols x rows, across x along)
     int TurretCols = 4;
     int TurretRows = 4;
-    int MinTurrets = 16;
+    int MinTurrets = 16;            // a site holds when this many reserve
+    int Turrets = 22;               // turrets built (owner 2026-10-27: 16 + 6 for a margin), from the block and its spare rows
     // spare rows round the block, tried after the middle ones (centre out): a
     // site holds when any MinTurrets of the (rows + spare) x cols slots reserve
     int TurretSpareRows = 2;
     int TurretsAtOnce = 8;          // turret orders in flight at once (the crew helps the rest)
     // advanced (hardened) energy storages, in a narrow strip two wide on the
     // other side of the cannon (armuwadves / coruwadves; legadvestore for the Starfall)
-    int Storages = 6;
-    int LegionStorages = 8;
+    int Storages = 7;               // owner 2026-10-27: one more than the 6 needed, a margin
+    int LegionStorages = 9;
     int StorageCols = 2;
     // spare rows round the strip; the storages never gate the site: the ones
     // that do not reserve are ordered at their spots unpinned
@@ -81,8 +82,31 @@ namespace LolCannon {
     bool FireTiers = true;
     int FireState = 2;              // owner 2026-10-26: fire at will (0 hold, 1 return, 2 fire at will)
     int FireRetargetFrames = 60;
+    // area rotation (owner 2026-10-27, like the nuke: never the same site twice in a
+    // row). The roster targets in range are grouped into areas (FireAreaRadius round
+    // each area's best target), best area first. Ragnarok and Calamity fire at one
+    // area for RapidDwellSeconds, then the next, down to the RapidAreas-th, then
+    // back to the best; the Starfall fires StarfallShotsPerArea shots at each of
+    // StarfallAreas areas. A change of the highest-rated target (it died, was
+    // scouted gone, or a better one was seen) starts the rotation over at the best.
+    int RapidAreas = 6;
+    int RapidDwellSeconds = 20;
+    int StarfallAreas = 3;
+    int StarfallShotsPerArea = 2;
+    float FireAreaRadius = 600.0f;
     // when a cannon stands, AIR flies one scout sweep of this make-up
     int ReconT1Scouts = 10;
     int ReconRadarScouts = 3;
+    // strike scouting (owner 2026-10-27): the cannon's highest-rated area is scouted
+    // by a squad of StrikeRadarScouts T2 radar planes and StrikeT1Scouts T1 scouts,
+    // each flying to its own point round the area (StrikeSpread across) and on to
+    // the map edge beyond it. The allied AIR flies it, else a TECH ally (or this
+    // TECH). Asked when the best area first appears, when it changes (more than
+    // FireAreaRadius away), and every StrikeScoutSeconds while the cannon fires.
+    bool StrikeScout = true;
+    int StrikeRadarScouts = 3;
+    int StrikeT1Scouts = 10;
+    float StrikeSpread = 900.0f;
+    int StrikeScoutSeconds = 90;
 }
 }

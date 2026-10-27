@@ -1761,6 +1761,11 @@ void CInitScript::RegisterCSuperTask(asIScriptEngine* engine)
 	r = engine->RegisterObjectMethod("CSuperTask", "void SetTierRetarget(int)", asMETHOD(CSuperTask, SetTierRetarget), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CSuperTask", "int GetTierTargetId() const", asMETHOD(CSuperTask, GetTierTargetId), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CSuperTask", "int GetTierCount() const", asMETHOD(CSuperTask, GetTierCount), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CSuperTask", "void SetTierRotation(int, int, int, float)", asMETHOD(CSuperTask, SetTierRotation), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CSuperTask", "int GetTierAreaCount() const", asMETHOD(CSuperTask, GetTierAreaCount), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CSuperTask", "AIFloat3 GetTierAreaPos(int) const", asMETHOD(CSuperTask, GetTierAreaPos), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CSuperTask", "int GetTierAreaTargetId(int) const", asMETHOD(CSuperTask, GetTierAreaTargetId), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CSuperTask", "int GetTierAreaIndex() const", asMETHOD(CSuperTask, GetTierAreaIndex), asCALL_THISCALL); ASSERT(r >= 0);
 }
 
 static void CRouteTask_SetRoute(CRouteTask* task, const CScriptArray* array)

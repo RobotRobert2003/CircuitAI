@@ -120,7 +120,9 @@ namespace Military {
 			return st;
 		}
 
-		IUnitTask@ t = TechCapitalRush::MilitaryTask(u);   // a capital bomber waits at home for its wave
+		IUnitTask@ t = LolCannonStrikeScout::TaskFor(u);   // owner 2026-10-27: scouts of a lolcannon's best area
+		if (t !is null) return t;
+		@t = TechCapitalRush::MilitaryTask(u);   // a capital bomber waits at home for its wave
 		if (t !is null) return t;
 		@t = TechHeavyDelivery::MilitaryTask(u);
         if (t !is null) return t;

@@ -845,6 +845,9 @@ void CSuperTask::OnLaunch(CCircuitUnit* unit, const char* how)
 	CCircuitAI* circuit = manager->GetCircuit();
 	const int frame = circuit->GetLastFrame();
 	CCircuitDef* d = unit->GetCircuitDef();
+	if (!tierByDef.empty()) {
+		OnTierShot(unit);
+	}
 	const bool nuke = IsNukeSilo(d), pulse = IsPulse(d);
 	if (!nuke && !pulse) return;
 	if (frame - lastStrategicLaunch <= SMILEY_DEDUPE_EVENT) return;
@@ -915,6 +918,9 @@ void CSuperTask::UpdateTiered(CCircuitUnit* unit)
 	const int canTargetCat = cdef->GetTargetCategory();
 	tier::Candidate best{-1, 0, 0.f, 0.f};
 	const SEnemyData* bestData = nullptr;
+	const bool rotate = (tierAreas > 0);
+	std::vector<tier::Ranked> ranked;
+	std::unordered_map<int, const SEnemyData*> byId;
 	const auto* enemies = circuit->GetEnemyManager();
 	for (const auto* pool : {&enemies->GetHostileDatas(), &enemies->GetPeaceDatas()}) {
 		for (const SEnemyData& e : *pool) {
@@ -922,7 +928,7 @@ void CSuperTask::UpdateTiered(CCircuitUnit* unit)
 				continue;
 			}
 			const auto it = tierByDef.find(e.cdef->GetId());
-			if ((it == tierByDef.end()) || ((bestData != nullptr) && (it->second > best.tier))) {
+			if ((it == tierByDef.end()) || (!rotate && (bestData != nullptr) && (it->second > best.tier))) {
 				continue;
 			}
 			if (((canTargetCat & e.cdef->GetCategory()) == 0) || (e.cdef->IsMobile() && !e.IsInRadarOrLOS())) {
@@ -933,9 +939,33 @@ void CSuperTask::UpdateTiered(CCircuitUnit* unit)
 				continue;
 			}
 			const tier::Candidate c{e.id, it->second, e.cost, sqDist};
+			if (rotate) {
+				ranked.push_back(tier::Ranked{c, e.pos.x, e.pos.z});
+				byId[e.id] = &e;
+			}
 			if (tier::Better(c, (bestData == nullptr) ? nullptr : &best, tierTargetId)) {
 				best = c;
 				bestData = &e;
+			}
+		}
+	}
+
+	if (rotate) {
+		tierAreaList = tier::BuildAreas(ranked, tierAreaRadius, tierAreas);
+		bool restarted = false, moved = false;
+		const int k = tierRot.Pick(tierAreaList, frame, tierDwellFrames, tierShotsPerArea, restarted, moved);
+		if (k >= 0) {
+			const tier::Area& a = tierAreaList[k];
+			const auto found = byId.find(a.bestId);
+			if (found != byId.end()) {
+				bestData = found->second;
+				best = tier::Candidate{a.bestId, a.tier, a.cost, position.SqDistance2D(bestData->pos)};
+			}
+			if (restarted || moved) {
+				circuit->LOG("TIER: team=%i frame=%i %s(%i): area %i of %i%s at (%i,%i), best %s(%i) tier %i, %i target(s)",
+						circuit->GetTeamId(), frame, cdef->GetDef()->GetName(), unit->GetId(), k + 1, int(tierAreaList.size()),
+						restarted ? " (the highest-rated target changed: starting over)" : "",
+						int(a.x), int(a.z), (bestData != nullptr) ? bestData->cdef->GetDef()->GetName() : "?", a.bestId, a.tier, a.members);
 			}
 		}
 	}
@@ -975,6 +1005,51 @@ void CSuperTask::UpdateTiered(CCircuitUnit* unit)
 	ExecuteAttack(unit);
 	tierOrderFrame = frame;
 	tierOrderOnUnit = onUnit;
+}
+
+void CSuperTask::SetTierRotation(int areas, int dwellFrames, int shotsPerArea, float radius)
+{
+	tierAreas = std::max(0, areas);
+	tierDwellFrames = std::max(0, dwellFrames);
+	tierShotsPerArea = std::max(0, shotsPerArea);
+	tierAreaRadius = std::max(1.f, radius);
+	if (tierAreas == 0) {
+		tierAreaList.clear();
+		tierRot = tier::Rotation();
+	}
+}
+
+AIFloat3 CSuperTask::GetTierAreaPos(int i) const
+{
+	if ((i < 0) || (i >= int(tierAreaList.size()))) {
+		return -RgtVector;
+	}
+	const tier::Area& a = tierAreaList[i];
+	return AIFloat3(a.x, manager->GetCircuit()->GetMap()->GetElevationAt(a.x, a.z), a.z);
+}
+
+int CSuperTask::GetTierAreaTargetId(int i) const
+{
+	return ((i < 0) || (i >= int(tierAreaList.size()))) ? -1 : tierAreaList[i].bestId;
+}
+
+void CSuperTask::OnTierShot(CCircuitUnit* unit)
+{
+	if ((tierAreas <= 0) || (tierShotsPerArea <= 0) || tierAreaList.empty()) {
+		return;
+	}
+	// a salvo (Starfall) raises the event once per projectile: shots closer than
+	// half the reload (at least a second) are one shot
+	const int frame = manager->GetCircuit()->GetLastFrame();
+	const int gap = std::max(FRAMES_PER_SEC, unit->GetCircuitDef()->GetReloadTime() / 2);
+	if (frame - tierLastShotFrame < gap) {
+		return;
+	}
+	tierLastShotFrame = frame;
+	tierRot.OnShot();
+	if (tierRot.shots >= tierShotsPerArea) {
+		targetFrame = frame - tierRetargetFrames;  // on to the next area at the next update
+	}
 }
 
 void CSuperTask::SetTargetPos(const AIFloat3& pos)

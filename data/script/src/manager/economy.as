@@ -31,6 +31,7 @@ namespace Economy {
 			Invariants::Violation("INV-128", "turret.enemy", "eligible construction turret failed to take highest-priority enemy reclaim");
 		IdleReclaim::Tick(); // idle con wreck runs: end, abort unsafe, expire sites (every 2 s)
 		LolCannon::Tick();   // lolcannon caps, vetoes and the FRONT/TECH program (every 1 s)
+		LolCannonStrikeScout::Tick();   // the strike scout squad this AI flies for a lolcannon (AIR or TECH)
 		const SResourceInfo@ metal = aiEconomyMgr.metal;
 		const SResourceInfo@ energy = aiEconomyMgr.energy;
 
