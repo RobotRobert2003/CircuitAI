@@ -77,6 +77,14 @@ namespace RezReplenish {
     int lastUpdateFrame = -100000;
     int lastLogFrame = -100000;
 
+    // A role that keeps its T1 bot lab (TECH and SUPPORT retire theirs at T2).
+    bool RoleEligible()
+    {
+        if (Global::RezReplenish::IncludeTechSupport) return true;
+        const AiRole r = Global::AISettings::Role;
+        return r != AiRole::TECH && r != AiRole::SUPPORT;
+    }
+
     int64 _Get(dictionary@ d, int team, int64 dflt) {
         const string key = "" + team;
         if (!d.exists(key)) return dflt;
@@ -132,7 +140,7 @@ namespace RezReplenish {
     // The own target for the current army; 0 = no replenishment (below the threshold or off).
     int Target()
     {
-        if (!Global::RezReplenish::Enabled || army <= Global::RezReplenish::ArmyMinMetal) return 0;
+        if (!Global::RezReplenish::Enabled || !RoleEligible() || army <= Global::RezReplenish::ArmyMinMetal) return 0;
         if (!Global::RezReplenish::Scale) return Global::RezReplenish::Target;
         int t = 0;
         const int n = AiMin(int(Global::RezReplenish::ScaleArmy.length()), int(Global::RezReplenish::ScaleTargets.length()));
@@ -166,7 +174,7 @@ namespace RezReplenish {
     // Rez bots (finished + in production) our labs keep.
     int Want()
     {
-        const int gifts = (Global::RezReplenish::ShareEnabled && botLabs > 0) ? GiftOutstanding() : 0;
+        const int gifts = (Global::RezReplenish::ShareEnabled && _IsDonor()) ? GiftOutstanding() : 0;
         if (gifts > 0) return Keep() + gifts;
         return Target();
     }
@@ -177,7 +185,7 @@ namespace RezReplenish {
         if (!Global::RezReplenish::Enabled && !Global::RezReplenish::ShareEnabled) return null;
         if (factory is null || factory.circuitDef is null) return null;
         const string fname = factory.circuitDef.GetName();
-        if (!UnitHelpers::IsT1BotLab(fname) || Lifecycle::IsRetiring(factory)) return null;
+        if (!UnitHelpers::IsT1BotLab(fname) || Lifecycle::IsRetiring(factory) || !RoleEligible()) return null;
         Scan();
         const int want = Want();
         if (want <= 0) return null;
@@ -223,7 +231,7 @@ namespace RezReplenish {
         }
     }
 
-    bool _IsDonor() { return botLabs > 0; }
+    bool _IsDonor() { return botLabs > 0 && RoleEligible(); }
     bool _IsRequester() { return botLabs == 0 && vehPlants > 0; }
 
     void _Share()
@@ -314,8 +322,13 @@ namespace RezReplenish {
                 AiSendMessage(MSG + "|lab|0", fromTeamId);
                 return true;
             }
-            const int64 n = AiMin(int(parseInt(p[3])), 4);
             const int64 had = _Get(giftPending, fromTeamId, 0);
+            const int room = Global::RezReplenish::ShareMaxOutstanding - (GiftOutstanding() - int(had));
+            const int64 n = AiMin(AiMin(int(parseInt(p[3])), 4), room);
+            if (n <= 0) {
+                GenericHelpers::LogUtil("[RezRep] request-full team=" + fromTeamId + " outstanding=" + GiftOutstanding(), 1);
+                return true;
+            }
             _Set(giftPending, fromTeamId, (n > had) ? n : had);
             _Set(giftExpiry, fromTeamId, ai.frame + Global::RezReplenish::RequestExpirySeconds * SECOND);
             if (giftQueue.find(fromTeamId) < 0) giftQueue.insertLast(fromTeamId);

@@ -19,6 +19,9 @@ namespace RezReplenish {
         // Rez bot orders still waiting for the lab to start them; at most this many at a time
         // across all our labs, and an order not started within OrderTimeoutSeconds is forgotten.
         int MaxOrdersInFlight = 2;
+        // TECH and SUPPORT build their T1 bot lab as a throwaway opening lab and retire it at T2:
+        // no replenishment and no donations from them unless this is set.
+        bool IncludeTechSupport = false;
         int OrderTimeoutSeconds = 60;
 
         // Sharing: an AI with a T1 bot lab gives rez bots to allied BARb AIs that have a vehicle
@@ -33,6 +36,7 @@ namespace RezReplenish {
         int RequestCooldownSeconds = 60;
         int RequestExpirySeconds = 240;   // the donor forgets an unfilled request after this
         int ShareKeepMin = 2;
+        int ShareMaxOutstanding = 8;      // rez bots a donor owes all requesters together, at most
         int GiftSpacingSeconds = 4;
         int AnnounceSeconds = 60;         // bot-lab AIs announce themselves to allies this often
 
