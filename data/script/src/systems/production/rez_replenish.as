@@ -60,6 +60,7 @@ namespace RezReplenish {
     bool cut = false;            // CutoffMetalIncome / CutoffMinutesAfterT2 reached
     int cutFrame = -1;
     int t2Frame = -1;            // our first finished T2 factory
+    int incomeAboveSince = -1;   // first frame of the current run at or above CutoffMetalIncome
     dictionary capBeforeCut;     // rez def -> int64 maxThisUnit before the cutoff capped it (non-sticky undo)
 
     // production
@@ -256,7 +257,8 @@ namespace RezReplenish {
                 + " rezAll=" + rezAll + " target=" + target + " want=" + Want() + " botLabs=" + botLabs
                 + " vehPlants=" + vehPlants + " native=" + int(aiMilitaryMgr.armyCost) + " orders=" + ordersTotal
                 + " given=" + giftsGiven + " received=" + received + " requests=" + requestsSent
-                + " spam=" + (spamTookOver ? 1 : 0) + " cut=" + (cut ? 1 : 0), 1);
+                + " spam=" + (spamTookOver ? 1 : 0) + " cut=" + (cut ? 1 : 0)
+                + " income=" + int(Economy::GetMinMetalIncomeLast10s()), 1);
         }
     }
 
@@ -271,7 +273,10 @@ namespace RezReplenish {
         const float mins = Global::RezReplenish::CutoffMinutesAfterT2;
         if (inc <= 0.0f && mins <= 0.0f) return;
         const float income = Economy::GetMinMetalIncomeLast10s();
-        const bool byIncome = inc > 0.0f && income >= inc;
+        if (inc > 0.0f && income >= inc) { if (incomeAboveSince < 0) incomeAboveSince = ai.frame; }
+        else incomeAboveSince = -1;
+        const bool byIncome = incomeAboveSince >= 0
+            && ai.frame - incomeAboveSince >= int(Global::RezReplenish::CutoffIncomeSeconds * SECOND);
         const bool byT2 = mins > 0.0f && t2Frame >= 0 && ai.frame - t2Frame >= int(mins * MINUTE);
         const bool now = byIncome || byT2;
         if (now && !cut) {

@@ -45,6 +45,9 @@ namespace RezReplenish {
         float CutoffMetalIncome = 0.0f;
         float CutoffMinutesAfterT2 = 0.0f;
         bool CutoffSticky = true;
+        // The income has to stay at or above CutoffMetalIncome this long (played: reclaim spikes put
+        // two AIs over 65 m/s for 10 s at minute 2.7 while the sustained income was ~22).
+        float CutoffIncomeSeconds = 60.0f;
 
         // Sharing: an AI with a T1 bot lab gives rez bots to allied BARb AIs that have a vehicle
         // plant and no T1 bot lab. Such an AI asks (AiSendMessage "barbrez|req") when it has fewer
