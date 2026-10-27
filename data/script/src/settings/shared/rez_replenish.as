@@ -39,6 +39,12 @@ namespace RezReplenish {
         // Owner (2026-10-27): once Spam pumps any of this AI's T1 bot labs, build no more rez bots at
         // all (no orders, no release - it overrides ReleaseSpamLabs - and the rez bot defs capped at 0).
         bool StopRezWhenSpam = false;
+        // Owner (2026-10-27): done with rez bots from this metal income (m/s, 10 s minimum; 0 = off)
+        // or this many minutes after the AI's first T2 factory finished (0 = off): no orders, no
+        // Spam-lab take-back, no gifts or requests, rez bot defs capped at 0. Sticky = stays cut.
+        float CutoffMetalIncome = 0.0f;
+        float CutoffMinutesAfterT2 = 0.0f;
+        bool CutoffSticky = true;
 
         // Sharing: an AI with a T1 bot lab gives rez bots to allied BARb AIs that have a vehicle
         // plant and no T1 bot lab. Such an AI asks (AiSendMessage "barbrez|req") when it has fewer

@@ -57,6 +57,10 @@ namespace RezReplenish {
     dictionary inARow;      // lab id -> int64 rez bot orders since its last own build (RezPerNormalBuild)
     int releases = 0;
     bool spamTookOver = false;   // StopRezWhenSpam: Spam has pumped one of our T1 bot labs
+    bool cut = false;            // CutoffMetalIncome / CutoffMinutesAfterT2 reached
+    int cutFrame = -1;
+    int t2Frame = -1;            // our first finished T2 factory
+    dictionary capBeforeCut;     // rez def -> int64 maxThisUnit before the cutoff capped it (non-sticky undo)
 
     // production
     array<int> orderFrames;
@@ -131,6 +135,13 @@ namespace RezReplenish {
             } else if (UnitHelpers::IsT1VehicleLab(name) || UnitHelpers::IsT2VehicleLab(name)) {
                 ++vehPlants;
             }
+            if (t2Frame < 0 && (UnitHelpers::IsT2BotLab(name) || UnitHelpers::IsT2VehicleLab(name)
+                || UnitHelpers::IsT2AircraftPlant(name) || UnitHelpers::IsT2Shipyard(name))) {
+                t2Frame = ai.frame;
+                GenericHelpers::LogUtil("[RezRep] t2-finished def=" + name + " min=" + (float(ai.frame) / MINUTE)
+                    + " cutoffAt=" + (Global::RezReplenish::CutoffMinutesAfterT2 > 0.0f
+                        ? "" + (float(ai.frame) / MINUTE + Global::RezReplenish::CutoffMinutesAfterT2) : "off"), 1);
+            }
         }
         rezIds.sortAsc();
         // a lab picked up an order when the rez count rose
@@ -146,7 +157,7 @@ namespace RezReplenish {
     // The own target for the current army; 0 = no replenishment (below the threshold or off).
     int Target()
     {
-        if (!Global::RezReplenish::Enabled || !RoleEligible() || army <= Global::RezReplenish::ArmyMinMetal) return 0;
+        if (!Global::RezReplenish::Enabled || !RoleEligible() || cut || army <= Global::RezReplenish::ArmyMinMetal) return 0;
         if (!Global::RezReplenish::Scale) return Global::RezReplenish::Target;
         int t = 0;
         const int n = AiMin(int(Global::RezReplenish::ScaleArmy.length()), int(Global::RezReplenish::ScaleTargets.length()));
@@ -180,6 +191,7 @@ namespace RezReplenish {
     // Rez bots (finished + in production) our labs keep.
     int Want()
     {
+        if (cut) return 0;
         const int gifts = (Global::RezReplenish::ShareEnabled && _IsDonor()) ? GiftOutstanding() : 0;
         if (gifts > 0) return Keep() + gifts;
         return Target();
@@ -235,6 +247,7 @@ namespace RezReplenish {
             lastTarget = target;
         }
         if (Global::RezReplenish::ShareEnabled) _Share();
+        _CheckCutoff();
         _CheckSpamTakeover();
         _ReleaseSpamLab();
         if (ai.frame - lastLogFrame >= Global::RezReplenish::LogSeconds * SECOND) {
@@ -243,7 +256,50 @@ namespace RezReplenish {
                 + " rezAll=" + rezAll + " target=" + target + " want=" + Want() + " botLabs=" + botLabs
                 + " vehPlants=" + vehPlants + " native=" + int(aiMilitaryMgr.armyCost) + " orders=" + ordersTotal
                 + " given=" + giftsGiven + " received=" + received + " requests=" + requestsSent
-                + " spam=" + (spamTookOver ? 1 : 0), 1);
+                + " spam=" + (spamTookOver ? 1 : 0) + " cut=" + (cut ? 1 : 0), 1);
+        }
+    }
+
+    // Cutoffs (owner, 2026-10-27): from CutoffMetalIncome m/s (10 s minimum income) or
+    // CutoffMinutesAfterT2 minutes after our first T2 factory finished, the AI is done with
+    // rez bots: no orders, no Spam-lab take-back (its labs stay Spam pumps on their routes),
+    // no gifts, no requests, rez bot defs capped at 0. Rez bots alive keep working.
+    // CutoffSticky: stays cut once crossed; otherwise it undoes when the condition clears.
+    void _CheckCutoff()
+    {
+        const float inc = Global::RezReplenish::CutoffMetalIncome;
+        const float mins = Global::RezReplenish::CutoffMinutesAfterT2;
+        if (inc <= 0.0f && mins <= 0.0f) return;
+        const float income = Economy::GetMinMetalIncomeLast10s();
+        const bool byIncome = inc > 0.0f && income >= inc;
+        const bool byT2 = mins > 0.0f && t2Frame >= 0 && ai.frame - t2Frame >= int(mins * MINUTE);
+        const bool now = byIncome || byT2;
+        if (now && !cut) {
+            cut = true;
+            cutFrame = ai.frame;
+            orderFrames.resize(0);
+            GenericHelpers::LogUtil("[RezRep] cutoff on reason=" + (byIncome ? "income" : "t2") + " min="
+                + (float(ai.frame) / MINUTE) + " income=" + int(income) + " t2min="
+                + (t2Frame < 0 ? "-" : "" + (float(t2Frame) / MINUTE)) + " rez=" + rezFinished + " army=" + int(army)
+                + " botLabs=" + botLabs + " vehPlants=" + vehPlants, 1);
+        } else if (!now && cut && !Global::RezReplenish::CutoffSticky) {
+            cut = false;
+            for (uint i = 0; i < rezNames.length(); ++i) {
+                CCircuitDef@ d = ai.GetCircuitDef(rezNames[i]);
+                if (d is null || !capBeforeCut.exists(rezNames[i])) continue;
+                int64 c = 0;
+                capBeforeCut.get(rezNames[i], c);
+                d.maxThisUnit = int(c);
+            }
+            capBeforeCut.deleteAll();
+            GenericHelpers::LogUtil("[RezRep] cutoff off min=" + (float(ai.frame) / MINUTE) + " income=" + int(income), 1);
+        }
+        if (!cut || !RoleEligible()) return;
+        for (uint i = 0; i < rezNames.length(); ++i) {
+            CCircuitDef@ d = ai.GetCircuitDef(rezNames[i]);
+            if (d is null || d.maxThisUnit == 0) continue;
+            if (!capBeforeCut.exists(rezNames[i])) capBeforeCut.set(rezNames[i], int64(d.maxThisUnit));
+            d.maxThisUnit = 0;
         }
     }
 
@@ -301,7 +357,7 @@ namespace RezReplenish {
         }
     }
 
-    bool _IsDonor() { return botLabs > 0 && RoleEligible(); }
+    bool _IsDonor() { return botLabs > 0 && RoleEligible() && !cut; }
     bool _IsRequester() { return botLabs == 0 && vehPlants > 0; }
 
     void _Share()
@@ -362,6 +418,7 @@ namespace RezReplenish {
 
     void _Request()
     {
+        if (cut) return;
         if (rezAll >= Global::RezReplenish::RequestBelow) return;
         if (army <= Global::RezReplenish::RequestMinArmy) return;
         if (ai.frame - lastRequestFrame < Global::RezReplenish::RequestCooldownSeconds * SECOND) return;
