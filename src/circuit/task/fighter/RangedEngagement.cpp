@@ -787,7 +787,13 @@ void CRangedEngagement::Update(CCircuitUnit* unit)
             // early: a volley fired just before it walks in still lands on it.
             const bool spam=Spam(policy,c);
             const float reach=maxRange+c.radius+(spam?200.f:64.f);
-            if(pos.SqDistance2D(c.pos)<=reach*reach) (spam?spamInRange:otherInRange)=true;
+            // Owner 2026-10-27: a low_trajectory hull's non-spam contact opens
+            // fire only if its shell clears the terrain; an unreachable commander
+            // behind a ridge otherwise opened fire and engine autofire took spam.
+            // One terrain walk (distance/32 samples) per such contact in reach.
+            if(pos.SqDistance2D(c.pos)<=reach*reach && (spam || !policy.lowTrajectory
+                || std::any_of(caps.weapons.begin(),caps.weapons.end(),[&](const auto& w){return world.Trajectory(w,pos,c.pos);})))
+                (spam?spamInRange:otherInRange)=true;
         }
         if(Spam(policy,c)) continue; // owner 2026-10-19: never a priority target
         if(!c.los && !policy.allowRadar) continue;

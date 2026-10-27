@@ -116,7 +116,9 @@ const CRangedWorld::Capabilities& CRangedWorld::CapabilitiesFor(CCircuitDef* def
             w.beamTargetBorder=std::max(0.f,wd->GetTargetBorder());
         }
         w.guided=wd->IsTracks();
-        w.high=w.def && w.def->IsHighTrajectory();
+        // highTrajectory 2 = switchable, fired low unless toggled (RangedPolicy::lowTrajectory).
+        w.high=w.def && w.def->IsHighTrajectory()
+            && !(def->GetRangedPolicy().lowTrajectory && w.ballistic && wd->GetHighTrajectory()==2);
         w.speed=wd->GetProjectileSpeed();
         w.gravity=wd->GetMyGravity()>0.f ? wd->GetMyGravity() : -circuit->GetMap()->GetGravity();
         c.weapons.push_back(std::move(w));

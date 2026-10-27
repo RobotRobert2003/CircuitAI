@@ -52,6 +52,13 @@ struct RangedPolicy {
     bool preferScreen = true;
     bool allowRadar = true;
     bool advanceUnknownRadar = true;
+    // Owner 2026-10-27: "low_trajectory". A Cannon without highTrajectory in
+    // its def gets the engine default 2 (player-switchable), which CWeaponDef
+    // counts as high, so Trajectory() skipped the terrain check. The AI never
+    // toggles a mobile unit's trajectory, so such a gun fires low: opt-in hulls
+    // get the low-arc terrain check. Off by default (the other ranged cannons
+    // keep their current targeting until tested).
+    bool lowTrajectory = false;
     bool holdFireline = false; // opt-in forward-fire policy: hold under pressure, never kite
     bool stageWhenBlocked = false; // opt-in: deploy outside coverage if no firing band fits
     bool coordinated = false; // local same-type firing cohorts, not legacy siege
