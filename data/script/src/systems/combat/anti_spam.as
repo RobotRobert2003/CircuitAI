@@ -597,7 +597,9 @@ namespace AntiSpam {
             if (f is null || ai.GetTeamUnit(f.id) is null || MapHelpers::SqDist(p, f.GetPos(ai.frame)) > r2) continue;
             return aiFactoryMgr.Enqueue(TaskS::Repair(Task::Priority::NORMAL, f));
         }
-        return aiFactoryMgr.Enqueue(TaskS::Wait(false, SECOND));
+        // Allies' parked units: the script only reaches our own units, native
+        // assist also repairs (and helps build) friendly units in reach
+        return aiFactoryMgr.DefaultMakeTask(nano);
     }
 
     // Factory::AiMakeTask asks here first: our lane turrets, then lane production
