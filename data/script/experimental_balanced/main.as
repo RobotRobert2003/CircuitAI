@@ -8,15 +8,15 @@ namespace Main {
 
     const int NukeRushSecondCallSeconds = 18 * 60;
 
-	// One roll (owner, 2026-10-27): exactly one rush, T3 70%, capital 25%, nuke 5%; any weight left below 1.0 is "none".
+	// One roll (owner, 2026-10-27 evening): exactly one rush, T3 35%, heavy T2 25%, nuke 25%, capital 10%; the 5% left is "none".
 	// Roll 2, on its own, adds the spam rush at Tech_Spam_Rush (85%); SingleRoll true would skip it.
 	// History: two rolls from 2026-10-17 (nuke 25%, T3 35%, heavy 25%, none 15%; spam 85%), T3 100% from 2026-10-26.
 	namespace StrategyWeights {
 		bool SingleRoll = false;      // owner, 2026-10-27: the separate spam roll stays on
-		float Tech_NUKE_RUSH = 0.05f; // owner, 2026-10-27
-		float Tech_T3_RUSH = 0.70f;   // owner, 2026-10-27
-		float Tech_T2_RUSH = 0.0f;    // the finite heavy-delivery rush (TechHeavyRush)
-		float Tech_CAPITAL_RUSH = 0.25f; // owner, 2026-10-27: T2-plant capital ships with fighter escorts (TechCapitalRush)
+		float Tech_NUKE_RUSH = 0.25f; // owner, 2026-10-27 evening (was 0.05)
+		float Tech_T3_RUSH = 0.35f;   // owner, 2026-10-27 evening (was 0.70)
+		float Tech_T2_RUSH = 0.25f;   // owner, 2026-10-27 evening: the finite heavy-delivery rush (TechHeavyRush)
+		float Tech_CAPITAL_RUSH = 0.10f; // owner, 2026-10-27 evening (was 0.25): T2-plant capital ships with fighter escorts (TechCapitalRush)
 		float Tech_Spam_Rush = 0.85f; // roll 2
 	}
 
