@@ -79,7 +79,9 @@ nearest point to the commander that reaches it (the commander's own spot when
 it already does); sites under enemy surface threat above GhostMaxThreat,
 unreachable ones and ones near a failed order are skipped, and the site that
 reaches the most unreached images wins (ties: the shorter walk). One order at
-a time per AI, the commander that placed it keeps it, at most one order per
+a time per AI, the commander that placed it keeps it (adopted as FRONT
+ladder work out to its walk, CommanderFrontAdopt, so the front deployment
+does not walk it back to the anchor), at most one order per
 GhostIntervalSeconds; an order that dies with no radar near its site blocks
 that spot for GhostFailSeconds. Cost per ladder offer: one pass over the
 ghost list, then O(k^2) over the k unreached images near the commander
@@ -90,6 +92,7 @@ for 5 s.
 namespace FrontRadar {
     const string PREFIX = "frontradar|have|";
     const string GHOST_PREFIX = "frontradar|ghost|";
+    const float GHOST_ADOPT_SLACK = 128.0f;   // the commander's walk to the site, plus this, keeps the order
 
     class AllyRadars {
         array<AIFloat3> at;
@@ -437,6 +440,11 @@ namespace FrontRadar {
     IUnitTask@ GhostKeep(CCircuitUnit@ u)
     {
         if (!GhostEnabled() || u is null || ghostOrder is null || ghostOrder.IsDead() || int(u.id) != ghostOwner) return null;
+        // Combat or a retreat may have taken the commander further off: adopt again
+        // from where it stands, within the distance an order may be placed at
+        const float walk = sqrt(MapHelpers::SqDist(u.GetPos(ai.frame), ghostSite));
+        const float cap = Global::FrontRadar::GhostRadarRange * Global::FrontRadar::GhostCoverage + Global::FrontRadar::GhostTravel;
+        if (walk > cap || !aiBuilderMgr.CommanderFrontAdopt(u, ghostOrder, walk + GHOST_ADOPT_SLACK)) return null;
         return ghostOrder;
     }
 
@@ -445,7 +453,7 @@ namespace FrontRadar {
     IUnitTask@ GhostTask(CCircuitUnit@ u)
     {
         if (!GhostEnabled() || u is null || u.circuitDef is null) return null;
-        if (ghostOrder !is null && !ghostOrder.IsDead()) return (int(u.id) == ghostOwner) ? ghostOrder : null;
+        if (ghostOrder !is null && !ghostOrder.IsDead()) return GhostKeep(u);
         if (ai.frame < ghostNext) return null;
         CCircuitDef@ rd = ai.GetCircuitDef(UnitHelpers::GetStaticRadarNameForSide(UnitHelpers::GetSideForUnitName(u.circuitDef.GetName())));
         if (rd is null || !u.circuitDef.CanBuild(rd) || !rd.IsAvailable(ai.frame)) return null;
@@ -483,6 +491,14 @@ namespace FrontRadar {
         @ghostOrder = aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::DEFENCE, Task::Priority::NORMAL, rd, best,
             Global::FrontRadar::GhostShake, true, Global::FrontRadar::GhostOrderSeconds * SECOND));
         if (ghostOrder is null) { ghostNext = ai.frame + 5 * SECOND; return null; }
+        // The site is off the front anchor: adopted as ladder work, else the front
+        // deployment walks the commander back every 2 s and the order times out
+        if (!aiBuilderMgr.CommanderFrontAdopt(u, ghostOrder, bestWalk + GHOST_ADOPT_SLACK)) {
+            aiBuilderMgr.AbortTask(ghostOrder);
+            @ghostOrder = null;
+            ghostNext = ai.frame + 5 * SECOND;
+            return null;
+        }
         ghostSite = best;
         ghostOwner = int(u.id);
         ghostFrame = ai.frame;

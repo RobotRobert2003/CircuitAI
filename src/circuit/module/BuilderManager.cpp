@@ -1234,6 +1234,9 @@ int CBuilderManager::GetCommanderOperation() const { return circuit->GetCommande
 IUnitTask* CBuilderManager::CommanderFrontWork(CCircuitUnit* unit,int kind,CCircuitDef* def,float radius) {
     return circuit->GetCommanderControl()->FrontWork(unit,kind,def,radius);
 }
+bool CBuilderManager::CommanderFrontAdopt(CCircuitUnit* unit,IUnitTask* task,float reach) {
+    return circuit->GetCommanderControl()->AdoptFrontWork(unit,task,reach);
+}
 
 IUnitTask* CBuilderManager::Enqueue(const TaskB::SServBTask& ti)
 {

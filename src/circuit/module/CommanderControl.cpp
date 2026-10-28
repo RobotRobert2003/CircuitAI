@@ -908,9 +908,12 @@ bool CCommanderControl::Deploy(CCircuitUnit* unit,State& s,int frame) {
         // reclaim ladder task has no build definition and is still finishing
         // work (D-356: the moving anchor no longer abandons it).
         if(build && !build->IsDead()) {
+            // An adopted task (AdoptFrontWork: the ghost radar) is kept out to its reach.
+            const float keep=(build==s.workTask?std::max(options.frontRadius,s.workReach):options.frontRadius)
+                +unit->GetCircuitDef()->GetBuildDistance();
             const bool finishing=(build==s.workTask
                     || (build->GetBuildDef() && build->GetTarget() && !build->GetTarget()->IsFinished()))
-                && build->GetPosition().SqDistance2D(pos)<=std::pow(options.frontRadius+unit->GetCircuitDef()->GetBuildDistance(),2.f);
+                && build->GetPosition().SqDistance2D(pos)<=keep*keep;
             const bool local=pos.SqDistance2D(goal)<=options.frontRadius*options.frontRadius*.25f
                 && build->GetPosition().SqDistance2D(goal)<=options.frontRadius*options.frontRadius;
             if(options.frontPushAhead>0 ? (finishing || local)

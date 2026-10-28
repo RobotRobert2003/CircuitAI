@@ -312,6 +312,7 @@ public:
     float GetCommanderEnergyDeficit() const;
     int GetCommanderOperation() const;
     IUnitTask* CommanderFrontWork(CCircuitUnit* unit,int kind,CCircuitDef* def,float radius);
+    bool CommanderFrontAdopt(CCircuitUnit* unit,IUnitTask* task,float reach);
 	void AddBuildPower(CCircuitUnit* unit);
 	void DelBuildPower(CCircuitUnit* unit);
 	float GetBuildPower() const { return buildPower; }

@@ -137,6 +137,21 @@ AIFloat3 CCommanderControl::FrontPosition(CCircuitUnit* unit,State& s,int frame)
     s.front=anchor; return anchor;
 }
 
+// Owner 2026-10-28: the ghost radar's site lies up to GhostTravel off the
+// front anchor. Unadopted, Deploy took the walking commander back to its
+// front every yield (2 s) and GhostKeep handed the order back: 2026-10-28,
+// 55 orders, 39 died with no frame. Declined under a fallback (INV-218).
+bool CCommanderControl::AdoptFrontWork(CCircuitUnit* unit,IUnitTask* task,float reach) {
+    if(!task || task->IsDead() || !Handles(unit) || !options.frontDuty) return false;
+    auto found=commanders.find(unit->GetId()); if(found==commanders.end()) return false;
+    auto& s=found->second; const int frame=ai->GetLastFrame();
+    if(FallbackActive(s,frame)) return false;
+    s.workTask=task; s.workReach=std::max(0.f,reach); s.workHeld=false; s.workBoundary=s.fallbackBoundary;
+    ai->LOG("[CommanderWork] unit=%i adopt task=%i reach=%.0f",unit->GetId(),
+        task->GetType()==IUnitTask::Type::BUILDER?int(static_cast<IBuilderTask*>(task)->GetBuildType()):-1,s.workReach);
+    return true;
+}
+
 IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef* buildDef,float radius) {
     if(!Handles(unit) || !options.frontDuty || !options.frontReady || !unit->IsFinished()
         || unit->GetHealthPercent()<options.recover) return nullptr;
@@ -161,7 +176,7 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
             if(build->GetAssignees().empty()) ai->GetBuilderManager()->AbortTask(build);
             task=nullptr;
         }
-        s.workTask=task; s.workHeld=FallbackActive(s,frame); s.workBoundary=s.fallbackBoundary;
+        s.workTask=task; s.workReach=0; s.workHeld=FallbackActive(s,frame); s.workBoundary=s.fallbackBoundary;
         if(task) ai->LOG("[CommanderWork] unit=%i work=%i task=%i",unit->GetId(),kind,
             task->GetType()==IUnitTask::Type::BUILDER?int(static_cast<IBuilderTask*>(task)->GetBuildType()):-1);
         return task;
@@ -177,7 +192,8 @@ IUnitTask* CCommanderControl::FrontWork(CCircuitUnit* unit,int kind,CCircuitDef*
         auto* build=dynamic_cast<IBuilderTask*>(unit->GetTask());
         if(build && !build->IsDead() && build->GetBuildDef()
             && ((build->GetTarget() && !build->GetTarget()->IsFinished()) || build==s.workTask)
-            && build->GetPosition().SqDistance2D(pos)<=std::pow(options.frontRadius+unit->GetCircuitDef()->GetBuildDistance(),2.f)) return build;
+            && build->GetPosition().SqDistance2D(pos)<=std::pow((build==s.workTask?std::max(options.frontRadius,s.workReach)
+                :options.frontRadius)+unit->GetCircuitDef()->GetBuildDistance(),2.f)) return build;
         if(dynamic_cast<CCommanderTask*>(unit->GetTask())) return unit->GetTask();
         // INV-235 (D-357): the commander advances by taking the next corridor
         // mex. The script ladder offers mex_lane before advance; if an admitted
