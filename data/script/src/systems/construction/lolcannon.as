@@ -57,6 +57,9 @@ this program (owner, 2026-10-26):
           (a live game put up 20+ storages per cannon). A cannon order alive GunFrameSeconds (300)
           with no frame down is aborted as a failure; a site whose turret
           block stands moves back only after BlockSiteFailures (6) of them.
+          The engine drops a build order silently when the site has enemy
+          threat on it or the builder cannot reach it, so the cannon is not
+          ordered then (logged "held back"); GunFrameSeconds of that is a failure.
   crews   taken off every other task (Builder AiMakeTask asks here first):
             starter  one T2 air constructor: orders the cannon once
                      TurretsBeforeCannon (16) turrets stand (owner
@@ -192,6 +195,8 @@ namespace LolCannon {
     int gunOrderedAt = -1;           // the frame the current cannon order was given
     int gunTryFrom = -1;             // the frame the current try (orders with no frame yet) began, -1 none
     int quickEnds = 0;               // orders of this try that ended with no frame
+    int unsafeFrom = -1;             // the frame the site was first found unsafe for an order, -1 safe
+    int nextUnsafeLog = 0;
     array<AIFloat3> badStoreSpots;   // storage spots whose orders kept failing: not chosen again
     array<AIFloat3> failedSites;     // sites this cannon moved back from: later searches keep SiteAvoidRadius off them
 
@@ -302,6 +307,8 @@ namespace LolCannon {
             if (u is null || u.task is gunTask) continue;
             IUnitTask@ t = u.task;
             if (t !is null && Mine(t)) continue;   // on a turret or storage of ours
+            string unsafe;
+            if (!SiteSafe(u, unsafe)) continue;   // the engine would drop it straight off the order again
             GenericHelpers::LogUtil("[LolCannon] starter " + u.circuitDef.GetName() + " " + u.id + " taken back to its cannon order", 1);
             aiBuilderMgr.AssignTask(u, gunTask);
         }
@@ -1157,6 +1164,27 @@ namespace LolCannon {
         }
         if (!mayOrder) return null;
         if (ai.frame < nextGunTry || !TurretsReady()) return null;
+        string unsafe;
+        if (!SiteSafe(u, unsafe)) {
+            // The engine's build-site search only takes ground with no enemy threat
+            // that the builder can reach, and drops the order silently otherwise
+            // (97cf37d7 test: most FRONT orders never started). Held, not ordered.
+            if (unsafeFrom < 0) unsafeFrom = ai.frame;
+            const int held = (ai.frame - unsafeFrom) / SECOND;
+            nextGunTry = ai.frame + 5 * SECOND;
+            if (held >= Global::LolCannon::GunFrameSeconds) {
+                unsafeFrom = -1;
+                GunFailed("the site stayed " + unsafe + " for " + held + " s");
+                return null;
+            }
+            if (ai.frame >= nextUnsafeLog) {
+                nextUnsafeLog = ai.frame + 60 * SECOND;
+                GenericHelpers::LogUtil("[LolCannon] cannon order at (" + int(site.x) + ", " + int(site.z) + ") held back: the site is "
+                    + unsafe + " for " + u.circuitDef.GetName() + " " + u.id + " (" + held + " s); the engine only builds on safe, reachable ground", 1);
+            }
+            return null;
+        }
+        unsafeFrom = -1;
         if (gunTask !is null) {
             // An order that ended with no frame: a try is GunMinTrySeconds of orders with
             // no frame, so a handover (a starter drafted or reassigned) is ordered again,
@@ -1218,6 +1246,16 @@ namespace LolCannon {
     }
 
     // A cannon order that came to nothing; true when the site is to move further back.
+    // The engine's own test for a build site (IBuilderTask::FindBuildSite): no
+    // enemy threat on it and the builder can reach it.
+    bool SiteSafe(CCircuitUnit@ u, string &out why)
+    {
+        const float bd = u.circuitDef.GetBuildDistance();
+        if (aiTerrainMgr.CanReachAtSafe(u, site, bd)) return true;
+        why = aiTerrainMgr.CanReachAt(u, site, bd) ? "under enemy threat" : "out of reach";
+        return false;
+    }
+
     bool GunFailed(const string &in why)
     {
         @gunTask = null;
