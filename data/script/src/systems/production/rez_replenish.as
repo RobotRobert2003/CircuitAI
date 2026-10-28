@@ -701,7 +701,7 @@ namespace RezReplenish {
             }
             const int64 had = _Get(giftPending, fromTeamId, 0);
             const int room = Global::RezReplenish::ShareMaxOutstanding - (GiftOutstanding() - int(had));
-            const int64 n = AiMin(AiMin(int(parseInt(p[3])), 4), room);
+            const int64 n = AiMin(AiMin(int(parseInt(p[3])), Global::RezReplenish::RequestUpTo), room);
             if (n <= 0) {
                 GenericHelpers::LogUtil("[RezRep] request-full team=" + fromTeamId + " outstanding=" + GiftOutstanding(), 1);
                 return true;

@@ -72,10 +72,11 @@ namespace RezReplenish {
         // plant and no T1 bot lab. Such an AI asks (AiSendMessage "barbrez|req") when it has fewer
         // than RequestBelow rez bots and an alive army above RequestMinArmy, for enough to reach
         // RequestUpTo. The bot-lab AI builds them on top of its own target and hands each one over
-        // with ai.GiveUnits as it finishes, keeping at least max(own target, ShareKeepMin).
+        // with ai.GiveUnits as it finishes, keeping at least max(own target, ShareKeepMin). A donor
+        // takes on at most RequestUpTo rez bots per request (owner, 2026-10-28: 6, was 4).
         bool ShareEnabled = false;
         int RequestBelow = 3;
-        int RequestUpTo = 4;
+        int RequestUpTo = 6;
         float RequestMinArmy = 1200.0f;
         int RequestCooldownSeconds = 60;
         int RequestExpirySeconds = 240;   // the donor forgets an unfilled request after this
