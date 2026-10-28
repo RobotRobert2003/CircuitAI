@@ -86,6 +86,9 @@ namespace LolCannon {
     // a storage slot that does not reserve, or whose orders keep coming to nothing,
     // moves to the nearest free spot within this of the strip's centre
     float StoreSearchRadius = 400.0f;
+    // our advanced storages within this of the cannon count toward its storages,
+    // wherever they went up (an unpinned FRONT order goes where native finds room)
+    float StoreCountRadius = 900.0f;
     // the crews. One T2 air constructor orders the cannon; AirCrew air
     // constructors (T1 or T2) are taken off every other task, build the
     // turret block and then assist the cannon; StoreCrew T2 air constructors

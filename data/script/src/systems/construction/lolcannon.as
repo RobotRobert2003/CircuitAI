@@ -283,6 +283,30 @@ namespace LolCannon {
         }
     }
 
+    // Public: a lolcannon crew member (other systems leave these alone).
+    bool IsCrew(int id) { return phase != IDLE && CrewKind(id) >= 0; }
+
+    // The starter taken off its cannon order by another system (c18e812e test:
+    // FRONT's mex upgrades pulled it as a "helper" of the shared order, for up to
+    // 15 min): handed the order back while it stands with no frame. Every 5 s.
+    int nextTakeBack = 0;
+    void TakeBackStarter()
+    {
+        if (ai.frame < nextTakeBack || phase != BUILD || gunTask is null || gunTask.IsDead()) return;
+        nextTakeBack = ai.frame + 5 * SECOND;
+        if (Gun() is null || aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun()) !is null) return;
+        array<string>@ keys = crewOf.getKeys();
+        for (uint i = 0; i < keys.length(); ++i) {
+            if (CrewKind(parseInt(keys[i])) != STARTER) continue;
+            CCircuitUnit@ u = ai.GetTeamUnit(parseInt(keys[i]));
+            if (u is null || u.task is gunTask) continue;
+            IUnitTask@ t = u.task;
+            if (t !is null && Mine(t)) continue;   // on a turret or storage of ours
+            GenericHelpers::LogUtil("[LolCannon] starter " + u.circuitDef.GetName() + " " + u.id + " taken back to its cannon order", 1);
+            aiBuilderMgr.AssignTask(u, gunTask);
+        }
+    }
+
     bool Mine(IUnitTask@ t)
     {
         for (uint i = 0; i < mine.length(); ++i) if (mine[i] is t) return true;
@@ -871,8 +895,12 @@ namespace LolCannon {
 
     IUnitTask@ StoreWork(CCircuitUnit@ u)
     {
+        // full counts the orders in flight too (each may not have its frame down yet):
+        // short for a moment at worst, never over
+        int flying = 0;
+        for (uint k = 0; k < storeTask.length(); ++k) if (storeTask[k] !is null && !storeTask[k].IsDead()) ++flying;
         return SlotWork(u, Store(), Task::BuildType::STORE, storePos, storeRes, storeTask, storeMiss, stripCentre, 2, "storage",
-            storesNearAll >= int(storePos.length()), Global::LolCannon::StoreSearchRadius + 64.0f);
+            storesNearAll + flying >= int(storePos.length()), Global::LolCannon::StoreSearchRadius + 64.0f);
     }
 
     // Our units of d within r of c: finished, and all (frames too).
@@ -895,7 +923,9 @@ namespace LolCannon {
     void CountSite()
     {
         CountNear(Nano(), blockCentre, 260.0f, nanosNear, nanosNearAll);
-        CountNear(Store(), stripCentre, Global::LolCannon::StoreSearchRadius + 64.0f, storesNear, storesNearAll);
+        // the storages over a wider ring round the cannon: an unpinned order whose
+        // spot was taken goes up wherever native finds room (c18e812e test: 1-6 extra)
+        CountNear(Store(), site, Global::LolCannon::StoreCountRadius, storesNear, storesNearAll);
     }
 
     // Turret slots neither standing nor given up (three orders came to nothing);
@@ -1601,6 +1631,7 @@ namespace LolCannon {
             if (phase != BUILD) return;
         }
         OrderCrews();
+        TakeBackStarter();
         if (frameFrame < 0 && Gun() !is null && aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun()) !is null) {
             frameFrame = ai.frame;
             GenericHelpers::LogUtil("[LolCannon] REPORT framed at=" + (ai.frame / SECOND) + "s ordered=" + (orderFrame < 0 ? -1 : orderFrame / SECOND) + "s", 1);

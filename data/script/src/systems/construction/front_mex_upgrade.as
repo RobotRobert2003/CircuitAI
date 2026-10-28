@@ -77,7 +77,7 @@ namespace FrontMexUp {
     // task"). An idle constructor asking for work is not on a live MEXUP, so this never blocks new work.
     bool Keep(CCircuitUnit@ u) {
         if (!On() || Global::AISettings::Role != AiRole::FRONT || Global::RoleSettings::Front::MexUpgradeCommitSeconds <= 0
-            || !IsT2Constructor(u)) return false;
+            || !IsT2Constructor(u) || LolCannon::IsCrew(u.id)) return false;
         IBuilderTask@ b = cast<IBuilderTask>(u.task);
         if (b is null || b.IsDead() || Task::BuildType(b.GetBuildType()) != Task::BuildType::MEXUP) { Forget(u.id); return false; }
         int i = CommitIndex(u.id);
@@ -136,7 +136,9 @@ namespace FrontMexUp {
         array<int>@ ids = ai.GetOwnedUnitIds();
         for (uint i = 0; i < ids.length(); ++i) {
             CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
-            if (!IsT2Constructor(u) || !Helper(u) || PulledRecently(u.id)) continue;
+            // the lolcannon crew is never a helper here (owner 2026-10-28: a FRONT starter
+            // was pulled off its cannon order, shared with its crew, for 15 min)
+            if (!IsT2Constructor(u) || LolCannon::IsCrew(u.id) || !Helper(u) || PulledRecently(u.id)) continue;
             IUnitTask@ up = Upgrade(u, "left a helper's job");
             if (up is null) return;   // nothing open or the cap is reached: no other helper fares better
             Pulled(u.id);
