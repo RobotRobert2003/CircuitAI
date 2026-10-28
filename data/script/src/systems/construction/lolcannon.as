@@ -31,7 +31,9 @@ this program (owner, 2026-10-26):
           candidate nearest our base first, facing that start. The ground is
           measured the way TECH's layout measures its turret box (flat x
           buildable fraction, LayoutBoxMaxSlope) over the cannon, the turret
-          block on one side and the storage strip on the other, and must hold
+          block on one side and the storage strip on the other (FRONT keeps
+          FrontBlockGap (64) of ground between them and the cannon, for the
+          engine's own site search; TECH 16), and must hold
           the cannon's footprint and MinTurrets (16) turrets out of the block
           and its TurretSpareRows, centre out: each footprint is reserved
           through the layout reservations. The storages reserve where they can
@@ -601,6 +603,16 @@ namespace LolCannon {
         return AiMin(slots, AiMax(Global::LolCannon::MinTurrets, Global::LolCannon::Turrets));
     }
 
+    // Ground between the cannon and its turret block / storage strip. TECH's pinned
+    // order goes straight onto its slot; FRONT's unpinned order goes through the
+    // engine's site search, which also wants the cannon's block_map yard
+    // (_default_: 3 cells, 48 elmos, each side) clear of turrets and of held
+    // slots - with 16 it found no site once the turrets stood (fix 6 test).
+    float BlockGap()
+    {
+        return aiTerrainMgr.IsLayoutEnabled() ? 16.0f : Global::LolCannon::FrontBlockGap;
+    }
+
     // The cannon at gp facing f: the turret block's candidate slots on side `hand`
     // (+1/-1) and the storage strip's on the other, each centre out, spare rows last.
     void Slots(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in gp, int f, float hand,
@@ -610,7 +622,7 @@ namespace LolCannon {
         const float gunHalf = LolCannonMath::Pitch(Layout::Across(gun, f)) * 0.5f;
         const int cols = Global::LolCannon::TurretCols, rows = Global::LolCannon::TurretRows + AiMax(0, Global::LolCannon::TurretSpareRows);
         const float nA = LolCannonMath::Pitch(Layout::Across(nano, f)), nL = LolCannonMath::Pitch(Layout::Along(nano, f));
-        block = At(gp, side, hand * (gunHalf + 16.0f + float(cols) * nA * 0.5f), fwd, 0.0f);
+        block = At(gp, side, hand * (gunHalf + BlockGap() + float(cols) * nA * 0.5f), fwd, 0.0f);
         turrets.resize(0);
         for (int i = 0; i < rows; ++i) {
             const int r = LolCannonMath::CentreOut(i, rows);
@@ -620,7 +632,7 @@ namespace LolCannon {
         const int sc = Global::LolCannon::StorageCols;
         const int sr = LolCannonMath::Rows(StoresNeeded(), sc) + AiMax(0, Global::LolCannon::StorageSpareRows);
         const float sA = LolCannonMath::Pitch(Layout::Across(st, f)), sL = LolCannonMath::Pitch(Layout::Along(st, f));
-        strip = At(gp, side, -hand * (gunHalf + 16.0f + float(sc) * sA * 0.5f), fwd, 0.0f);
+        strip = At(gp, side, -hand * (gunHalf + BlockGap() + float(sc) * sA * 0.5f), fwd, 0.0f);
         stores.resize(0);
         for (int i = 0; i < sr; ++i) {
             const int r = LolCannonMath::CentreOut(i, sr);
@@ -635,7 +647,7 @@ namespace LolCannon {
         const float gunHalf = LolCannonMath::Pitch(Layout::Across(gun, f)) * 0.5f;
         const float blockW = float(Global::LolCannon::TurretCols) * LolCannonMath::Pitch(Layout::Across(nano, f));
         const float stripW = float(Global::LolCannon::StorageCols) * LolCannonMath::Pitch(Layout::Across(st, f));
-        const float halfAcross = gunHalf + 16.0f + AiMax(blockW, stripW);
+        const float halfAcross = gunHalf + BlockGap() + AiMax(blockW, stripW);
         const float blockL = float(Global::LolCannon::TurretRows) * LolCannonMath::Pitch(Layout::Along(nano, f));
         const float stripL = float(LolCannonMath::Rows(StoresNeeded(), Global::LolCannon::StorageCols)) * LolCannonMath::Pitch(Layout::Along(st, f));
         const float halfAlong = AiMax(LolCannonMath::Pitch(Layout::Along(gun, f)), AiMax(blockL, stripL)) * 0.5f;
