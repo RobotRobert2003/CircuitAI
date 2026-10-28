@@ -61,7 +61,10 @@ this program (owner, 2026-10-26):
           block stands moves back only after BlockSiteFailures (6) of them.
           The engine drops a build order silently when the site has enemy
           threat on it or the builder cannot reach it, so the cannon is not
-          ordered then (logged "held back"); GunFrameSeconds of that is a failure.
+          ordered (logged "held back"); GunFrameSeconds of that is a failure.
+          FRONT orders no storage before the cannon's frame is down (unpinned,
+          one can land in the cannon's yard), and a starter within 400 of a
+          45 s old order with no frame is given the order afresh once a minute.
   crews   taken off every other task (Builder AiMakeTask asks here first):
             starter  one T2 air constructor: orders the cannon once
                      TurretsBeforeCannon (16) turrets stand (owner
@@ -307,7 +310,11 @@ namespace LolCannon {
         for (uint i = 0; i < keys.length(); ++i) {
             if (CrewKind(parseInt(keys[i])) != STARTER) continue;
             CCircuitUnit@ u = ai.GetTeamUnit(parseInt(keys[i]));
-            if (u is null || u.task is gunTask) continue;
+            if (u is null) continue;
+            if (u.task is gunTask) {
+                NudgeStarter(u);
+                continue;
+            }
             IUnitTask@ t = u.task;
             if (t !is null && Mine(t)) continue;   // on a turret or storage of ours
             string unsafe;
@@ -349,6 +356,23 @@ namespace LolCannon {
                 + (Mine(t) ? " (ours)" : "")));
         }
         GenericHelpers::LogUtil(s, 1);
+    }
+
+    // A starter on the order near the site with no frame for a while had never
+    // been given the build command (fix 8 replay: T13's moved round the site and
+    // repaired other units for minutes, 135-182 from it). Taken off for a moment;
+    // TakeBackStarter hands it the order again, which starts it afresh.
+    int nextNudge = 0;
+    void NudgeStarter(CCircuitUnit@ u)
+    {
+        if (ai.frame < nextNudge || ai.frame - gunOrderedAt < 45 * SECOND) return;
+        if (u.GetPos(ai.frame).distance2D(site) > 400.0f) return;   // still on its way
+        nextNudge = ai.frame + 60 * SECOND;
+        GenericHelpers::LogUtil("[LolCannon] starter " + u.circuitDef.GetName() + " " + u.id + " "
+            + int(u.GetPos(ai.frame).distance2D(site)) + " from its cannon order with no frame after "
+            + ((ai.frame - gunOrderedAt) / SECOND) + " s: given the order afresh", 1);
+        aiBuilderMgr.AssignTask(u, Wait(2));
+        nextTakeBack = ai.frame + 3 * SECOND;
     }
 
     bool Mine(IUnitTask@ t)
@@ -954,6 +978,11 @@ namespace LolCannon {
 
     IUnitTask@ StoreWork(CCircuitUnit@ u)
     {
+        // FRONT: no storage before the cannon's frame is down. Unpinned, the engine
+        // put T13's next to the footprint, inside the cannon's yard, while the
+        // cannon was being ordered (fix 8 test: 18 orders refused the ground).
+        if (phase == BUILD && !aiTerrainMgr.IsLayoutEnabled() && StandingGun() is null
+            && (Gun() is null || aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun()) is null)) return null;
         // full counts the orders in flight too (each may not have its frame down yet):
         // short for a moment at worst, never over
         int flying = 0;
