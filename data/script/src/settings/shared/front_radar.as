@@ -30,6 +30,8 @@ namespace Global { namespace FrontRadar {
     float GhostTravel = 800.0f;         // the commander walks at most this far to the site
     float GhostMaxThreat = 1.0f;        // enemy surface threat at the site above this: skipped
     float GhostShake = 96.0f;           // native looks this far round the site for room
+    float GhostSiteRadius = 192.0f;     // the radar goes no further than this from the shaken site (with GhostShake under the 315 range margin); no room there fails the order
+    float GhostSpacing = 1000.0f;       // no ghost radar within this of another radar of ours (T1 or long-range, frames too) or an ally's
     float GhostFailRadius = 400.0f;     // a failed order blocks sites this close to it
     int GhostMaxCandidates = 48;        // unreached images considered per ask
     int GhostIntervalSeconds = 20;      // least time between two ghost radar orders of this AI

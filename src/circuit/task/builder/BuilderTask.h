@@ -189,6 +189,7 @@ protected:
 	bool pinRequired;
 	bool pinFailed;
 	bool layoutOwned;
+	float siteRadius;  // > 0: the site search stays this close to position, and an empty search aborts the task
 	void TakeReservation(CTerrainManager* terrainMgr);  // after a FindBuildSite that may have served one
 public:
 	bool PinReservation(int id);

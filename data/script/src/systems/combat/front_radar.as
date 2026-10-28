@@ -77,11 +77,14 @@ jammed or terrain-hidden image is not chased with a second radar. For each
 unreached image within reach + GhostTravel of the commander the site is the
 nearest point to the commander that reaches it (the commander's own spot when
 it already does); sites under enemy surface threat above GhostMaxThreat,
-unreachable ones and ones near a failed order are skipped, and the site that
+unreachable ones, ones within GhostSpacing of another radar (ours, frames
+included, or an ally's) and ones near a failed order are skipped, and the site that
 reaches the most unreached images wins (ties: the shorter walk). One order at
 a time per AI, the commander that placed it keeps it (adopted as FRONT
 ladder work out to its walk, CommanderFrontAdopt, so the front deployment
-does not walk it back to the anchor), at most one order per
+does not walk it back to the anchor, and no other rung takes it until the
+radar is finished; the radar is built within GhostSiteRadius of the site or
+the order fails), at most one order per
 GhostIntervalSeconds; an order that dies with no radar near its site blocks
 that spot for GhostFailSeconds. Cost per ladder offer: one pass over the
 ghost list, then O(k^2) over the k unreached images near the commander
@@ -384,6 +387,23 @@ namespace FrontRadar {
         return Near(allyGhost, g, r1);
     }
 
+    // Owner 2026-10-28: radars not too close together. Any radar of ours (finished
+    // or a frame), an ally's recent ghost order or an ally's long-range radar
+    // within GhostSpacing of the site.
+    bool GhostCrowded(const AIFloat3 &in site)
+    {
+        const float r = Global::FrontRadar::GhostSpacing;
+        if (Near(oursT1, site, r) || Near(ours, site, r) || Near(allyGhost, site, r)) return true;
+        const int stale = 3 * AiMax(1, Global::FrontRadar::BroadcastSeconds) * SECOND;
+        array<string>@ keys = allies.getKeys();
+        for (uint i = 0; i < keys.length(); ++i) {
+            AllyRadars@ a;
+            if (!allies.get(keys[i], @a) || a is null || ai.frame - a.frame > stale) continue;
+            if (Near(a.at, site, r)) return true;
+        }
+        return false;
+    }
+
     bool GhostFailed(const AIFloat3 &in site)
     {
         const float r = Global::FrontRadar::GhostFailRadius;
@@ -483,7 +503,7 @@ namespace FrontRadar {
                 if (MapHelpers::SqDist(site, open[k]) <= reach * reach) ++count;
             const float walk = sqrt(MapHelpers::SqDist(pos, site));
             if (count < bestCount || (count == bestCount && walk >= bestWalk)) continue;
-            if (GhostFailed(site) || aiBattle.SurfThreat(site) > Global::FrontRadar::GhostMaxThreat) continue;
+            if (GhostFailed(site) || GhostCrowded(site) || aiBattle.SurfThreat(site) > Global::FrontRadar::GhostMaxThreat) continue;
             if (!aiTerrainMgr.CanReachAt(u, site, u.circuitDef.GetBuildDistance())) continue;
             bestCount = count; bestWalk = walk; best = site;
         }
@@ -491,6 +511,10 @@ namespace FrontRadar {
         @ghostOrder = aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::DEFENCE, Task::Priority::NORMAL, rd, best,
             Global::FrontRadar::GhostShake, true, Global::FrontRadar::GhostOrderSeconds * SECOND));
         if (ghostOrder is null) { ghostNext = ai.frame + 5 * SECOND; return null; }
+        // The radar stands at the planned site, not wherever native finds room
+        // within 1,600 elmos (often back under our own radar)
+        IBuilderTask@ bt = cast<IBuilderTask>(ghostOrder);
+        if (bt !is null) bt.siteRadius = Global::FrontRadar::GhostSiteRadius;
         // The site is off the front anchor: adopted as ladder work, else the front
         // deployment walks the commander back every 2 s and the order times out
         if (!aiBuilderMgr.CommanderFrontAdopt(u, ghostOrder, bestWalk + GHOST_ADOPT_SLACK)) {
