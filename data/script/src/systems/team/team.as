@@ -15,6 +15,7 @@
 #include "../combat/front_radar.as"
 #include "../combat/anti_spam.as"
 #include "../world/coverage_lanes.as"
+#include "../production/rez_replenish.as"
 
 namespace Team {
     // Return true if the def represents a T2 constructor (land or air)
@@ -67,6 +68,7 @@ namespace Team {
         if (AllyClear::HandleMessage(msg, fromTeamId)) return;
         if (Ferry::HandleMessage(msg, fromTeamId)) return;
         if (Donation::HandleMessage(msg, fromTeamId)) return;
+        if (RezReplenish::HandleMessage(msg, fromTeamId)) return;   // rez bot sharing (owner, 2026-10-26)
         if (SeaAssist::HandleMessage(msg, fromTeamId)) return;
         if (AllyClear::HandleMessage(msg, fromTeamId)) return;
         if (AmphibiousBeaches::HandleMessage(msg, fromTeamId)) return;
