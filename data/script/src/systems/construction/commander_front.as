@@ -94,6 +94,9 @@ namespace CommanderFront {
     }
     IUnitTask@ Work(CCircuitUnit@ unit) {
         if(!Ready()) return null;
+        // owner 2026-10-28: a ghost radar this commander ordered is finished before other rungs
+        IUnitTask@ ghost=FrontRadar::GhostKeep(unit);
+        if(ghost !is null) return ghost;
         LoadLadder();
         // Roles choose the order, definitions and spacing.
         const string side=UnitHelpers::GetSideForUnitName(unit.circuitDef.GetName());

@@ -117,6 +117,7 @@ namespace FrontRadar {
     IUnitTask@ ghostOrder;
     AIFloat3 ghostSite(-1.0f, 0.0f, -1.0f);
     int ghostOwner = -1;             // the commander that placed the live ghost order
+    int ghostFrame = -1;             // when the live ghost order was placed
     int ghostNext = 0;               // no new ghost order before this frame
     int ghostOpen = 0;               // unreached images near the last asking commander
     array<AIFloat3> ghostFailed;
@@ -400,6 +401,20 @@ namespace FrontRadar {
             }
             @ghostOrder = null;
             ghostOwner = -1;
+        } else if (ghostOrder !is null && ai.frame - ghostFrame >= Global::FrontRadar::GhostOrderSeconds * SECOND) {
+            // The native timeout counts from the last touch, which the owner renews
+            // on every ask (GhostKeep): an order whose frame never starts is aborted here.
+            IBuilderTask@ bt = cast<IBuilderTask>(ghostOrder);
+            if ((bt is null || bt.target is null) && !Near(oursT1, ghostSite, 400.0f)) {
+                aiBuilderMgr.AbortTask(ghostOrder);
+                @ghostOrder = null;
+                ghostOwner = -1;
+                ghostFailed.insertLast(ghostSite);
+                ghostFailedUntil.insertLast(ai.frame + Global::FrontRadar::GhostFailSeconds * SECOND);
+                GenericHelpers::LogUtil("[FrontRadar] ghost radar order at (" + int(ghostSite.x) + "," + int(ghostSite.z)
+                    + ") aborted: no radar frame after " + Global::FrontRadar::GhostOrderSeconds + " s; spot skipped "
+                    + Global::FrontRadar::GhostFailSeconds + " s", 1);
+            }
         }
         for (int i = int(ghostFailed.length()) - 1; i >= 0; --i) {
             if (ai.frame < ghostFailedUntil[i]) continue;
@@ -412,6 +427,17 @@ namespace FrontRadar {
             allyGhost.removeAt(i);
             allyGhostFrame.removeAt(i);
         }
+    }
+
+    // CommanderFront::Work asks this before its ladder: the commander that placed the
+    // live ghost order keeps it until the order ends. Played 2026-10-28 (All That
+    // Glitters, 2 games): 30 orders, 32 "died with no radar" - an earlier rung (mex,
+    // line turret, repair, reclaim) handed the walking commander other work and the
+    // abandoned order timed out.
+    IUnitTask@ GhostKeep(CCircuitUnit@ u)
+    {
+        if (!GhostEnabled() || u is null || ghostOrder is null || ghostOrder.IsDead() || int(u.id) != ghostOwner) return null;
+        return ghostOrder;
     }
 
     // CommanderFront "radar_ghost" rung: a T1 radar that reaches scouted enemy
@@ -459,6 +485,7 @@ namespace FrontRadar {
         if (ghostOrder is null) { ghostNext = ai.frame + 5 * SECOND; return null; }
         ghostSite = best;
         ghostOwner = int(u.id);
+        ghostFrame = ai.frame;
         ghostNext = ai.frame + Global::FrontRadar::GhostIntervalSeconds * SECOND;
         AiSendMessage(GHOST_PREFIX + int(best.x) + "," + int(best.z));
         GenericHelpers::LogUtil("[FrontRadar] commander " + u.circuitDef.GetName() + " " + u.id + " orders ghost radar " + rd.GetName()

@@ -33,7 +33,7 @@ namespace Global { namespace FrontRadar {
     float GhostFailRadius = 400.0f;     // a failed order blocks sites this close to it
     int GhostMaxCandidates = 48;        // unreached images considered per ask
     int GhostIntervalSeconds = 20;      // least time between two ghost radar orders of this AI
-    int GhostOrderSeconds = 60;         // native timeout of the order
+    int GhostOrderSeconds = 60;         // native timeout of the order; one with no radar frame this long after it was placed is aborted
     int GhostFailSeconds = 180;         // a spot whose order died with no radar is skipped this long
     int GhostAllySeconds = 90;          // an allied SMRTBARb's ghost order counts as a radar this long
 } }
