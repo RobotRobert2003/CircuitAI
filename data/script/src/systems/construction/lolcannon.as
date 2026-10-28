@@ -608,9 +608,13 @@ namespace LolCannon {
     // engine's site search, which also wants the cannon's block_map yard
     // (_default_: 3 cells, 48 elmos, each side) clear of turrets and of held
     // slots - with 16 it found no site once the turrets stood (fix 6 test).
+    // FRONT is told by the layout state before the site search switches the
+    // layout on for its reservations (fix 7 test: read inside it, the gap was
+    // always TECH's).
+    bool unpinnedOrders = false;
     float BlockGap()
     {
-        return aiTerrainMgr.IsLayoutEnabled() ? 16.0f : Global::LolCannon::FrontBlockGap;
+        return (unpinnedOrders || !aiTerrainMgr.IsLayoutEnabled()) ? Global::LolCannon::FrontBlockGap : 16.0f;
     }
 
     // The cannon at gp facing f: the turret block's candidate slots on side `hand`
@@ -816,6 +820,7 @@ namespace LolCannon {
         }
         // FRONT runs no layout: the reservations are taken for the search only.
         const bool layoutOn = aiTerrainMgr.IsLayoutEnabled();
+        unpinnedOrders = !layoutOn;
         if (!layoutOn && !aiTerrainMgr.SetLayoutEnabled(true)) {
             GenericHelpers::LogUtil("[LolCannon] the profile's layout gate is closed; no site can be measured", 1);
             return false;
