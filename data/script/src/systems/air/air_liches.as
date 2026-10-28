@@ -58,7 +58,8 @@ not enter):
                   Armageddon, Apocalypse, Supernova, advanced geothermals
   4 geothermal    geothermals, Prude
   5 gantries      all T3 gantries
-  6 T2 factories  advanced air, vehicle, bot and sea plants
+  6 commanders    every def with the commander role (owner 2026-10-28: above T2 factories)
+  7 T2 factories  advanced air, vehicle, bot and sea plants
 A target counts only while in sight, structures included.
 
 ******************************************************************************/
@@ -68,7 +69,7 @@ namespace AirLiches {
     array<CEscortStrikeTask@> runs;   // live Liche escorts
     array<IUnitTask@> raids;          // parallel to runs: the bomber wave each one flies with
     array<int> runStrikes;            // parallel to runs: strikes issued when last logged
-    AirStrikeTiers::Roster roster;    // the six Liche tiers
+    AirStrikeTiers::Roster roster;    // the seven Liche tiers
     int ordersSinceLiche = 0;
 
     bool Enabled() { return Global::RoleSettings::Air::LichesEnabled && AirEconomy::Active(); }
@@ -90,7 +91,7 @@ namespace AirLiches {
     void InitRoster()
     {
         if (roster.Ready()) return;
-        roster.Begin("Liche", 6);
+        roster.Begin("Liche", 7);
         roster.Add(1, array<string> = {"armgate", "corgate", "legdeflector"}, Global::RoleSettings::Air::LicheWeightShields);
         roster.Add(2, array<string> = {"armanni", "cordoom", "legbastion", "corbhmth"}, Global::RoleSettings::Air::LicheWeightHeavyDefence);
         roster.Add(3, array<string> = {"armamd", "corfmd", "legabm", "legrampart", "armscab", "cormabm", "legavantinuke",
@@ -100,7 +101,14 @@ namespace AirLiches {
         roster.Add(4, array<string> = {"armgeo", "corgeo", "leggeo", "armuwgeo", "coruwgeo", "leguwgeo", "armgmm"},
             Global::RoleSettings::Air::LicheWeightGeo);
         roster.Add(5, UnitHelpers::GetAllGantries(), Global::RoleSettings::Air::LicheWeightGantry);
-        roster.Add(6, array<string> = {"armaap", "armavp", "armalab", "armasy", "coraap", "coravp", "coralab", "corasy",
+        // owner, 2026-10-28: commanders above the T2 factories; every def with the commander role (O(defs), once)
+        array<string> commanders;
+        for (int i = 1; i <= ai.GetDefCount(); ++i) {
+            CCircuitDef@ d = ai.GetCircuitDef(i);
+            if (d !is null && UnitHelpers::IsCommander(d)) commanders.insertLast(d.GetName());
+        }
+        roster.Add(6, commanders, Global::RoleSettings::Air::LicheWeightCommander);
+        roster.Add(7, array<string> = {"armaap", "armavp", "armalab", "armasy", "coraap", "coravp", "coralab", "corasy",
             "legaap", "legavp", "legalab", "legadvshipyard"}, Global::RoleSettings::Air::LicheWeightT2Factory);
         roster.Finish();
     }
