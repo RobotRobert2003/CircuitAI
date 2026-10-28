@@ -18,7 +18,7 @@ namespace LolCannonRecon {
 
     // the package's make-up and where: at (x, z), spread over `spread` round it
     void Send(int t1, int radar, const AIFloat3 &in at, float spread, const string &in why) {
-        int provider=Provider(AiRole::AIR);
+        int provider=(Global::AISettings::Role==AiRole::AIR) ? ai.teamId : Provider(AiRole::AIR);
         string who="AIR";
         if (provider<0) {
             // no AIR: TECH builds them, ourselves when we are TECH (the roster may hold allies only)
@@ -38,7 +38,8 @@ namespace LolCannonRecon {
         array<string>@ parts=msg.split("|");
         Team::Roster::Entry@ sender=Team::Roster::Get(fromTeamId);
         const bool self=(fromTeamId==ai.teamId);
-        if (parts.length()<4 || (!self && (sender is null || (sender.role!=AiRole::TECH && sender.role!=AiRole::FRONT)))) return true;
+        // any allied BARb may ask: the overnuke (team/nuke_recon.as) is whoever owns the silos
+        if (parts.length()<4 || (!self && sender is null)) return true;
         const int t1=parseInt(parts[2]), radar=parseInt(parts[3]);
         AIFloat3 at(-1,0,-1);
         float spread=0.0f;

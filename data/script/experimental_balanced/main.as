@@ -209,6 +209,7 @@ namespace Main {
 			Global::profileController.MainUpdate();
 		}
 		Team::Roster::Update();  // announce ourselves to allied BARb instances until the roster is complete
+		OvernukeRecon::Tick();      // owner, 2026-10-28: AIR scouts the overnuke target every 10 launches
 		Spam::Update();          // economy-gated spam: activation, focus rotation
 		FrontRadar::Update();    // owner, 2026-10-27: long-range radars at the front (census, allies' list)
 		AntiSpam::Update();      // owner, 2026-10-27: spot enemy spam lanes and hold them

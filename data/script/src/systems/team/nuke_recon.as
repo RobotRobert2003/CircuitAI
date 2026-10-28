@@ -38,3 +38,23 @@ namespace NukeRecon {
         return true;
     }
 }
+
+// Overnuke scouting (owner 2026-10-28). With 3+ silos every silo fires at one
+// target (CSuperTask::SelectNuclearTarget); every 10th launch at it the engine
+// raises its scout count and we ask AIR for the lolcannon-style package: each
+// plane to its own point spread over the blast, not all onto the centre
+// (LolCannonRecon::Route). Any role that owns silos asks; AIR flies it.
+namespace OvernukeRecon {
+    const int T1Scouts = 10, RadarScouts = 3;
+    int seen = 0, checked = -SECOND;
+    void Tick() {
+        if (ai.frame - checked < SECOND) return;
+        checked = ai.frame;
+        const int scouts = aiMilitaryMgr.GetOvernukeScouts();
+        if (scouts <= seen) return;
+        seen = scouts;
+        const AIFloat3 at = aiMilitaryMgr.GetOvernukePos();
+        if (at.x < 0.0f) return;
+        LolCannonRecon::Send(T1Scouts, RadarScouts, at, aiMilitaryMgr.GetOvernukeRadius(), "overnuke");
+    }
+}

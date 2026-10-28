@@ -563,6 +563,10 @@ void CMilitaryManager::ReadConfig()
 	nuclearInfo.structuresOnly = nuclear.get("structures_only", true).asBool();
 	nuclearInfo.repeatFrames = std::max(0, nuclear.get("repeat_seconds", 300).asInt()) * FRAMES_PER_SEC;
 	nuclearInfo.repeatRadius = std::max(0.f, nuclear.get("repeat_radius", 0.f).asFloat());
+	nuclearInfo.overnukeSilos = std::max(0, nuclear.get("overnuke_silos", 3).asInt());
+	nuclearInfo.overnukeMin = std::max(1, nuclear.get("overnuke_min", 17).asInt());
+	nuclearInfo.overnukeMax = std::max(nuclearInfo.overnukeMin, nuclear.get("overnuke_max", 30).asInt());
+	nuclearInfo.overnukeScoutEvery = std::max(0, nuclear.get("overnuke_scout_every", 10).asInt());
 	if (!stockCfg.isNull()) {
 		stockInfo.patienceSeconds = std::max(0.f, stockCfg.get("patience_seconds", 240.f).asFloat());
 		stockInfo.minFraction = std::min(1.f, std::max(0.f, stockCfg.get("min_fraction", 0.25f).asFloat()));
@@ -2101,6 +2105,11 @@ void CMilitaryManager::UpdateSensorGuards()
 	if (!surplus.empty()) {
 		circuit->LOG("SENSOR: released %i surplus escort(s)", int(surplus.size()));
 	}
+}
+
+springai::AIFloat3 CMilitaryManager::GetOvernukePos() const
+{
+	return springai::AIFloat3(overnuke.Pos().x, 0.f, overnuke.Pos().z);
 }
 
 springai::AIFloat3 CMilitaryManager::GetCombatFocusPos() const

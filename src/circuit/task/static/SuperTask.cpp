@@ -39,6 +39,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <format>
 #include <limits>
 #include <vector>
@@ -592,19 +593,81 @@ bool CSuperTask::CanAimStrategic(CCircuitUnit* unit, const AIFloat3& pos) const
 	if (!strategic::Valid({pos.x, pos.z}) || pos.x >= CTerrainManager::GetTerrainWidth() || pos.z >= CTerrainManager::GetTerrainHeight()) return false;
 	const int frame = circuit->GetLastFrame();
 	if (IsPulse(unit->GetCircuitDef())) return !circuit->GetAllyTeam()->GetPulseClaims().Blocked({pos.x, pos.z}, unit->GetId(), frame, false);
-	if (IsNukeSilo(unit->GetCircuitDef())) return !circuit->GetAllyTeam()->GetNuclearHistory().Blocked({pos.x, pos.z}, unit->GetId(), frame, true);
+	if (IsNukeSilo(unit->GetCircuitDef())) {
+		const strategic::Overnuke& over = circuit->GetMilitaryManager()->GetOvernuke();
+		if (over.Covers({pos.x, pos.z})) return true;  // the overnuke target: every silo, every shot
+		return !over.Done({pos.x, pos.z}, frame)
+			&& !circuit->GetAllyTeam()->GetNuclearHistory().Blocked({pos.x, pos.z}, unit->GetId(), frame, true);
+	}
 	return true;
 }
 
+int CSuperTask::CountNukeSilos() const
+{
+	int count = 0;
+	for (const IFighterTask* task : manager->GetCircuit()->GetMilitaryManager()->GetTasks(IFighterTask::FightType::SUPER)) {
+		const auto& assignees = task->GetAssignees();
+		if (!assignees.empty() && IsNukeSilo((*assignees.begin())->GetCircuitDef())) ++count;
+	}
+	return count;
+}
+
+/*
+ * Overnuke (owner 2026-10-28). With nuclear.overnuke_silos finished silos or
+ * more, the best aim point the scan finds becomes the target of every silo for
+ * a roll of overnuke_min..overnuke_max launches (CSuperTask::OnLaunch counts
+ * them), then the next best; a target with no known structure left in the blast
+ * ends early. A silo that cannot reach the target picks its own as before.
+ */
 bool CSuperTask::SelectNuclearTarget(CCircuitUnit* unit, CCircuitDef* cdef)
 {
-	const auto& policy = manager->GetCircuit()->GetMilitaryManager()->GetNuclearInfo();
-	const float floor = StockedShotFloor(unit, cdef, manager->GetCircuit()->GetLastFrame(), cdef->GetWeaponDef()->GetCostMShot());
-	return SelectAreaTarget(unit, cdef, "NUCLEAR", SQUARE(cdef->GetAoe()), 1, 0,
-		[&policy](const SEnemyData& e, CCircuitDef* d, int& rank, float& value) {
-			if (!strategic::NuclearTarget(d->IsMobile(), true, policy.structuresOnly)) return false;
-			rank = 0; value = e.cost; return true;
-		}, floor, true, true, false, true);
+	CCircuitAI* circuit = manager->GetCircuit();
+	const int frame = circuit->GetLastFrame();
+	const auto& policy = circuit->GetMilitaryManager()->GetNuclearInfo();
+	const float floor = StockedShotFloor(unit, cdef, frame, cdef->GetWeaponDef()->GetCostMShot());
+	auto scan = [&]() {
+		return SelectAreaTarget(unit, cdef, "NUCLEAR", SQUARE(cdef->GetAoe()), 1, 0,
+			[&policy](const SEnemyData& e, CCircuitDef* d, int& rank, float& value) {
+				if (!strategic::NuclearTarget(d->IsMobile(), true, policy.structuresOnly)) return false;
+				rank = 0; value = e.cost; return true;
+			}, floor, true, true, false, true);
+	};
+	strategic::Overnuke& over = circuit->GetMilitaryManager()->GetOvernuke();
+	const int silos = CountNukeSilos();
+	if ((policy.overnukeSilos <= 0) || (silos < policy.overnukeSilos)) {
+		if (over.Active()) {
+			circuit->LOG("NUKE: overnuke ends at %i of %i launches: %i silos left", over.Fired(), over.Goal(), silos);
+			over.End(frame, policy.repeatFrames);
+		}
+		return scan();
+	}
+	if (over.Active()) {
+		const AIFloat3 at(over.Pos().x, 0.f, over.Pos().z);
+		bool structure = false;
+		const auto* enemies = circuit->GetEnemyManager();
+		for (const auto* pool : {&enemies->GetHostileDatas(), &enemies->GetPeaceDatas()}) for (const auto& e : *pool) {
+			if (!e.IsFake() && !e.IsDead() && !e.IsDying() && !e.IsIgnore() && (e.cdef != nullptr)
+				&& strategic::NuclearTarget(e.cdef->IsMobile(), true, policy.structuresOnly)
+				&& (at.SqDistance2D(e.pos) < SQUARE(over.Radius()))) { structure = true; break; }
+		}
+		if (!structure) {
+			circuit->LOG("NUKE: overnuke at (%.0f, %.0f) ends at %i of %i launches: no target left there",
+					at.x, at.z, over.Fired(), over.Goal());
+			over.End(frame, policy.repeatFrames);
+		} else if (position.SqDistance2D(at) < SQUARE(cdef->GetMaxRange())) {
+			SetTarget(nullptr);
+			targetPos = at;
+			targetPos.y = circuit->GetMap()->GetElevationAt(at.x, at.z);
+			return true;
+		} else {
+			return scan();  // out of this silo's reach: its own target
+		}
+	}
+	if (!scan()) return false;
+	const int roll = policy.overnukeMin + rand() % (policy.overnukeMax - policy.overnukeMin + 1);
+	over.Begin({targetPos.x, targetPos.z}, (policy.repeatRadius > 0.f) ? policy.repeatRadius : cdef->GetAoe(), roll);
+	circuit->LOG("NUKE: overnuke with %i silos at (%.0f, %.0f): %i launches", silos, targetPos.x, targetPos.z, roll);
+	return true;
 }
 
 bool CSuperTask::SelectFogTarget(CCircuitUnit* unit, CCircuitDef* cdef)
@@ -858,6 +921,12 @@ void CSuperTask::OnLaunch(CCircuitUnit* unit, const char* how)
 		const auto& policy = circuit->GetMilitaryManager()->GetNuclearInfo();
 		circuit->GetAllyTeam()->GetNuclearHistory().Add(unit->GetId(), {aim.x, aim.z},
 			policy.repeatRadius > 0.f ? policy.repeatRadius : d->GetAoe(), frame, policy.repeatFrames, false);
+		strategic::Overnuke& over = circuit->GetMilitaryManager()->GetOvernuke();
+		const int scouts = over.Scouts();
+		if (over.Count({aim.x, aim.z}, frame, policy.repeatFrames, policy.overnukeScoutEvery)) {
+			circuit->LOG("NUKE: overnuke launch %i of %i from %s(%i)%s", over.Fired(), over.Goal(),
+					d->GetDef()->GetName(), unit->GetId(), (over.Scouts() > scouts) ? ": scouts asked" : "");
+		}
 	} else {
 		const auto& policy = circuit->GetMilitaryManager()->GetPulseInfo();
 		circuit->GetAllyTeam()->GetPulseClaims().Add(unit->GetId(), {aim.x, aim.z}, d->GetAoe(), frame, policy.coverageFrames, false);

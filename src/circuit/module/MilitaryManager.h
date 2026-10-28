@@ -11,6 +11,7 @@
 #include "module/TaskModule.h"
 #include "setup/DefenceData.h"
 #include "task/fighter/FighterTask.h"
+#include "task/static/StrategicTargeting.h"
 #include "unit/CircuitDef.h"
 #include "util/AvailList.h"
 
@@ -252,8 +253,20 @@ public:
 		bool structuresOnly = true;
 		int repeatFrames = 300 * FRAMES_PER_SEC;
 		float repeatRadius = 0.f; // zero uses the loaded blast radius
+		// Overnuke (owner 2026-10-28): from overnukeSilos finished silos up, all
+		// of them fire at one target for a roll of overnukeMin..overnukeMax
+		// launches; every overnukeScoutEvery launches AIR scouts the area.
+		int overnukeSilos = 3;  // 0 = off
+		int overnukeMin = 17;
+		int overnukeMax = 30;
+		int overnukeScoutEvery = 10;
 	};
 	const SNuclearInfo& GetNuclearInfo() const { return nuclearInfo; }
+	strategic::Overnuke& GetOvernuke() { return overnuke; }
+	// Script reads: a new scout request is a rise in GetOvernukeScouts()
+	int GetOvernukeScouts() const { return overnuke.Scouts(); }
+	springai::AIFloat3 GetOvernukePos() const;
+	float GetOvernukeRadius() const { return overnuke.Radius(); }
 
 	/*
 	 * Mobile sensor escort policy. Mobile radar and jammer units carry the
@@ -513,6 +526,7 @@ private:
 	SBomberInfo bomberInfo;
 	SStockInfo stockInfo;
 	SNuclearInfo nuclearInfo;
+	strategic::Overnuke overnuke;
 	SSensorInfo sensorInfo;
 	SCommSnipeInfo commSnipeInfo;
 

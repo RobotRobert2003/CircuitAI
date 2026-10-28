@@ -81,6 +81,7 @@ private:
 			bool pulseClaims = false, bool nuclearHistory = false);
 	bool IsPulse(CCircuitDef* cdef) const;
 	bool SelectNuclearTarget(CCircuitUnit* unit, CCircuitDef* cdef);
+	int CountNukeSilos() const;  // our finished nuke silos (one super task each)
 	bool SelectFogTarget(CCircuitUnit* unit, CCircuitDef* cdef);
 	bool CanAimStrategic(CCircuitUnit* unit, const springai::AIFloat3& pos) const;
 	// Tactical launchers (Perdition, Catalyst): the richest blast in range.

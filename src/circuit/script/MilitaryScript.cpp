@@ -102,6 +102,10 @@ CMilitaryScript::CMilitaryScript(CScriptManager* scr, CMilitaryManager* mgr)
 	r = engine->RegisterObjectMethod("CMilitaryManager", "array<string>@ GetPorcChain(const string& in, bool) const", asFUNCTION(CMilitaryManager_GetPorcChain), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CMilitaryManager", "bool SetPorcChain(const string& in, bool, const array<string>@+)", asFUNCTION(CMilitaryManager_SetPorcChain), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod("CMilitaryManager", "uint GetGuardTaskNum() const", asMETHOD(CMilitaryManager, GetGuardTaskNum), asCALL_THISCALL); ASSERT(r >= 0);
+	// Overnuke (owner 2026-10-28): a rise in the scout count is a request to scout the target
+	r = engine->RegisterObjectMethod("CMilitaryManager", "int GetOvernukeScouts() const", asMETHOD(CMilitaryManager, GetOvernukeScouts), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CMilitaryManager", "AIFloat3 GetOvernukePos() const", asMETHOD(CMilitaryManager, GetOvernukePos), asCALL_THISCALL); ASSERT(r >= 0);
+	r = engine->RegisterObjectMethod("CMilitaryManager", "float GetOvernukeRadius() const", asMETHOD(CMilitaryManager, GetOvernukeRadius), asCALL_THISCALL); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty("CMilitaryManager", "const float armyCost", asOFFSET(CMilitaryManager, armyCost)); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CMilitaryManager", "void SetAggressionDelta(float)", asMETHOD(CMilitaryManager, SetAggressionDelta), asCALL_THISCALL); ASSERT(r >= 0);
     r = engine->RegisterObjectMethod("CMilitaryManager", "float GetAggressionDelta() const", asMETHOD(CMilitaryManager, GetAggressionDelta), asCALL_THISCALL); ASSERT(r >= 0);
