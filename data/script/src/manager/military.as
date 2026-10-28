@@ -122,8 +122,6 @@ namespace Military {
 
 		IUnitTask@ t = LolCannonScouts::MilitaryTask(u);   // TECH with no AIR: its lolcannon scouts fly to the strike area
 		if (t !is null) return t;
-		@t = AntiSpam::MilitaryMakeTask(u, true);   // owner, 2026-10-27: a unit our factory made for a spam lane parks there
-		if (t !is null) return t;
 		@t = TechCapitalRush::MilitaryTask(u);   // a capital bomber waits at home for its wave
 		if (t !is null) return t;
 		@t = TechHeavyDelivery::MilitaryTask(u);
@@ -131,8 +129,6 @@ namespace Military {
         @t = AmphibiousOps::MilitaryTask(u);
         if (t !is null) return t;
         @t = TechFlank::MilitaryTask(u);
-		if (t !is null) return t;
-		@t = AntiSpam::MilitaryMakeTask(u, false);   // ... and any listed unit while a spam lane is short of it
 		if (t !is null) return t;
 		@t = Spam::MilitaryMakeTask(u);   // spam units join their factory's route
 		if (t !is null) return t;
@@ -196,7 +192,6 @@ namespace Military {
 		TechFlank::UnitRemoved(unit);
         AmphibiousOps::UnitRemoved(unit);
         ScoutRaid::UnitRemoved(unit);
-        AntiSpam::UnitRemoved(unit);
 
 		// Delegate to role-specific handler if registered
 		RoleConfig@ cfg = (Global::profileController is null) ? null : Global::profileController.RoleCfg;

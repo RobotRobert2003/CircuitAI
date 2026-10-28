@@ -43,22 +43,16 @@ go up together, each joined by up to OrderBuilders constructors (arena
 A turret counts for the lane only within NanoSlotRadius of a turret slot, so
 the AI's ordinary turrets nearby are not mistaken for the lane's.
 
-Every SMRTBARb parks units on every known lane (MilitaryMakeTask): at most
-HeavyLimit of each of Razorback, Incinerator, Mammoth, Demon, Prometheus and
-LightLimit of each of Phalanx, Hoplite, Welder, Gunslinger, Jaguar, Centurion,
-counted over the whole team (each AI publishes its own counts,
-antispam|have|lane|def:n;..). A factory that can make one of them, while its
-lane is short and its cost is within CostIncomeSeconds of income, makes it
-(FactoryMakeTask). Parked units sit in rows ParkAlong in front of the guns,
-inside the turrets' reach, on hold position and fire at will, in one route
-task per lane that gives no other orders and never retreats. The lane's
-turrets repair the most damaged lane unit or gun in reach first, then finish
-the lane's frames, then wait a second and look again.
+The lane's turrets (FactoryMakeTask) repair the most damaged lane gun in
+reach first, then finish the lane's frames, then fall back to native assist,
+which repairs and helps build any friendly unit in reach. (Parked anti-spam
+units, made by the factories for each lane, were taken out 2026-10-28: a TECH
+gantry kept making Demons.)
 
 Cost: Tick walks the ground contacts once per 2 s (O(C), one dictionary
 lookup each); the lane search runs at most every 10 s over the kept sightings
 (capped at MaxSamples); the lane census walks our own units once per 2 s only
-while a lane exists. Messages: two per lane per PublishSeconds.
+while a lane exists. Messages: one per owned lane per PublishSeconds.
 
 ******************************************************************************/
 namespace AntiSpam {
@@ -71,11 +65,6 @@ namespace AntiSpam {
         int lastSample = -100000;
     }
 
-    class AllyHave {
-        int frame = -100000;
-        dictionary counts;   // def name -> int
-    }
-
     class Lane {
         string key;               // "<owner team>:<index>"
         int ownerTeam = -1;
@@ -83,14 +72,6 @@ namespace AntiSpam {
         float lateral = 0.0f;
         bool mine = false;
         int publishedFrame = -100000;
-        CRouteTask@ park;
-        dictionary parkedDef;     // unit id -> def name
-        dictionary parkedSlot;    // unit id -> slot
-        dictionary routed;        // unit id -> 1 once its own slot route was issued
-        dictionary joined;        // unit id -> frame it was handed the park task
-        dictionary fireSent;      // unit id -> frame
-        array<bool> slotUsed;
-        dictionary allies;        // team id -> AllyHave@
         // owner only, from the census
         array<int> standing = { 0, 0, 0 };   // light, dragon, nano
         array<CCircuitUnit@> frames(3);
@@ -110,13 +91,6 @@ namespace AntiSpam {
         int firstFrame = -1;
     }
 
-    class Pending {
-        IUnitTask@ task;
-        string lane;
-        string def;
-        int deadFrame = -1;
-    }
-
     dictionary spamSet;
     bool initDone = false;
     dictionary seen;              // contact id -> Sighting@
@@ -125,7 +99,6 @@ namespace AntiSpam {
     int sampleHead = 0;
     array<Lane@> lanes;
     array<Candidate@> candidates;
-    array<Pending@> pending;
     int lastTick = -100000, lastSearch = -100000, lastPrune = -100000, lastPublish = -100000, lastReport = -100000;
     int detectedFrame = -1;
     int windowCount = 0;
@@ -136,11 +109,6 @@ namespace AntiSpam {
 
     bool Enabled() { return Global::AntiSpam::Enabled; }
     float Abs(float v) { return v < 0.0f ? -v : v; }
-    const array<string>@ ListOf(int pass)
-    {
-        if (pass == 0) return Global::AntiSpam::HeavyUnits;
-        return Global::AntiSpam::LightUnits;
-    }
 
     void Init()
     {
@@ -336,232 +304,8 @@ namespace AntiSpam {
     }
 
     /**************************************************************************
-     Parking
+     The lane's turrets
      **************************************************************************/
-    int Limit(const string &in name)
-    {
-        if (Global::AntiSpam::HeavyUnits.find(name) >= 0) return Global::AntiSpam::HeavyLimit;
-        if (Global::AntiSpam::LightUnits.find(name) >= 0) return Global::AntiSpam::LightLimit;
-        return 0;
-    }
-
-    int Own(Lane@ l, const string &in name)
-    {
-        int n = 0;
-        array<string>@ keys = l.parkedDef.getKeys();
-        for (uint i = 0; i < keys.length(); ++i) {
-            string d;
-            if (l.parkedDef.get(keys[i], d) && d == name) ++n;
-        }
-        for (uint i = 0; i < pending.length(); ++i)
-            if (pending[i].lane == l.key && pending[i].def == name) ++n;
-        return n;
-    }
-
-    int Total(Lane@ l, const string &in name)
-    {
-        int n = Own(l, name);
-        const int stale = 3 * Global::AntiSpam::PublishSeconds * SECOND;
-        array<string>@ keys = l.allies.getKeys();
-        for (uint i = 0; i < keys.length(); ++i) {
-            AllyHave@ h;
-            if (!l.allies.get(keys[i], @h) || h is null || ai.frame - h.frame > stale) continue;
-            int c = 0;
-            if (h.counts.get(name, c)) n += c;
-        }
-        return n;
-    }
-
-    int SlotCount() { return Global::AntiSpam::ParkColumns * Global::AntiSpam::ParkRows; }
-
-    // Slot k: columns from the middle out (0, +1, -1, +2 ...), rows front to back within a column
-    AIFloat3 SlotPos(Lane@ l, int k)
-    {
-        const int rows = AiMax(1, Global::AntiSpam::ParkRows);
-        const int c = k / rows, r = k % rows;
-        const int col = (c == 0) ? 0 : (((c % 2) == 1) ? (c + 1) / 2 : -(c / 2));
-        return At(l.anchor, Global::AntiSpam::ParkAlong + float(r) * Global::AntiSpam::ParkRowStep,
-            float(col) * Global::AntiSpam::ParkColumnStep);
-    }
-
-    CRouteTask@ ParkTask(Lane@ l)
-    {
-        if (l.park !is null && !l.park.IsDead()) return l.park;
-        IUnitTask@ t = aiMilitaryMgr.Enqueue(TaskF::Route());
-        IFighterTask@ ft = cast<IFighterTask>(t);
-        @l.park = (ft is null) ? null : cast<CRouteTask>(ft);
-        if (l.park is null) return null;
-        array<AIFloat3> points = { At(l.anchor, Global::AntiSpam::ParkAlong, 0.0f) };
-        l.park.SetRoute(points);
-        l.park.SetLanes(1, 0.0f, 0.0f);
-        l.park.SetHoldPosition(true);
-        l.park.SetTraversal(false, Global::AntiSpam::ArriveRadius, false);
-        l.parkedDef.deleteAll(); l.parkedSlot.deleteAll(); l.routed.deleteAll(); l.fireSent.deleteAll(); l.joined.deleteAll();
-        l.slotUsed.resize(0);
-        return l.park;
-    }
-
-    // The live pending entry this unit was made for (its recruit task is done), or -1
-    int MadeFor(Lane@ l, const string &in name)
-    {
-        for (uint j = 0; j < pending.length(); ++j)
-            if (pending[j].lane == l.key && pending[j].def == name && pending[j].task.IsDead()) return int(j);
-        return -1;
-    }
-
-    // Military::AiMakeTask asks here twice: first (madeOnly) before the specialist
-    // owners, for a unit one of our factories made for a lane; then before spam,
-    // for any listed unit while a lane is short of it.
-    IUnitTask@ MilitaryMakeTask(CCircuitUnit@ u, bool madeOnly)
-    {
-        if (!Enabled() || lanes.length() == 0 || u is null || u.circuitDef is null) return null;
-        const string name = u.circuitDef.GetName();
-        const int limit = Limit(name);
-        if (limit <= 0) return null;
-        const string k = "" + u.id;
-        const AIFloat3 p = u.GetPos(ai.frame);
-        Lane@ best = null;
-        float bestSq = -1.0f;
-        for (uint i = 0; i < lanes.length(); ++i) {
-            Lane@ l = lanes[i];
-            if (l.parkedDef.exists(k)) {
-                // back from an interruption: the same slot, its route issued again
-                CRouteTask@ again = ParkTask(l);
-                if (again is null) return null;
-                if (l.parkedDef.exists(k)) { l.routed.delete(k); l.joined.set(k, ai.frame); return again; }
-                // the task had died: the lane starts over, this unit with it
-            }
-            const int made = MadeFor(l, name);
-            if (madeOnly && made < 0) continue;
-            // the unit made for this lane is still counted as pending
-            if (Total(l, name) - (made >= 0 ? 1 : 0) >= limit) continue;
-            const float sq = MapHelpers::SqDist(p, l.anchor);
-            if (best is null || sq < bestSq) { @best = l; bestSq = sq; }
-        }
-        if (best is null) return null;
-        CRouteTask@ task = ParkTask(best);
-        if (task is null) return null;
-        const int made = MadeFor(best, name);
-        if (made >= 0) pending.removeAt(uint(made));
-        if (int(best.slotUsed.length()) < SlotCount()) best.slotUsed.resize(SlotCount());
-        int slot = -1;
-        // allied units take slots too: each team starts at its own column so they rarely share one
-        const int start = best.mine ? 0 : (ai.teamId * Global::AntiSpam::ParkRows * 2) % SlotCount();
-        for (int j = 0; j < SlotCount() && slot < 0; ++j) {
-            const int s = (start + j) % SlotCount();
-            if (!best.slotUsed[s]) slot = s;
-        }
-        if (slot < 0) slot = int(best.parkedDef.getSize()) % SlotCount();
-        best.slotUsed[slot] = true;
-        best.parkedDef.set(k, name);
-        best.parkedSlot.set(k, slot);
-        best.joined.set(k, ai.frame);
-        const AIFloat3 q = SlotPos(best, slot);
-        GenericHelpers::LogUtil("[AntiSpam] park unit=" + u.id + " def=" + name + " lane=" + best.key + " slot=" + slot
-            + " at (" + int(q.x) + "," + int(q.z) + "), lane has " + Total(best, name) + " of " + limit, 1);
-        return task;
-    }
-
-    // Military::AiUnitRemoved
-    void UnitRemoved(CCircuitUnit@ u)
-    {
-        if (u is null) return;
-        const string k = "" + u.id;
-        for (uint i = 0; i < lanes.length(); ++i) Unpark(lanes[i], k);
-    }
-
-    void Unpark(Lane@ l, const string &in k)
-    {
-        if (!l.parkedDef.exists(k)) return;
-        int slot = -1;
-        if (l.parkedSlot.get(k, slot) && slot >= 0 && slot < int(l.slotUsed.length())) l.slotUsed[slot] = false;
-        l.parkedDef.delete(k); l.parkedSlot.delete(k); l.routed.delete(k); l.fireSent.delete(k); l.joined.delete(k);
-    }
-
-    // Each lane's parked units: own slot route once, fire at will, gone units let go
-    void TendParked(Lane@ l)
-    {
-        array<string>@ keys = l.parkedDef.getKeys();
-        const int resend = Global::AntiSpam::FireStateSeconds * SECOND;
-        for (uint i = 0; i < keys.length(); ++i) {
-            CCircuitUnit@ u = ai.GetTeamUnit(int(parseInt(keys[i])));
-            if (u is null) { Unpark(l, keys[i]); continue; }
-            if (u.task !is l.park) {
-                // not yet given the task, or taken by something else since
-                int since = ai.frame;
-                l.joined.get(keys[i], since);
-                if (ai.frame - since > 10 * SECOND) {
-                    GenericHelpers::LogUtil("[AntiSpam] unit=" + keys[i] + " def=" + u.circuitDef.GetName() + " left lane " + l.key, 1);
-                    Unpark(l, keys[i]);
-                }
-                continue;
-            }
-            if (!l.routed.exists(keys[i])) {
-                int slot = 0;
-                l.parkedSlot.get(keys[i], slot);
-                array<AIFloat3> points = { SlotPos(l, slot) };
-                if (l.park.SetUnitRoute(u, points, Global::AntiSpam::ArriveRadius)) l.routed.set(keys[i], 1);
-            }
-            int sent = -100000;
-            l.fireSent.get(keys[i], sent);
-            if (ai.frame - sent >= resend) {
-                u.SetFireState(2);   // fire at will
-                l.fireSent.set(keys[i], ai.frame);
-            }
-        }
-    }
-
-    /**************************************************************************
-     Production
-     **************************************************************************/
-    void TendPending()
-    {
-        for (int i = int(pending.length()) - 1; i >= 0; --i) {
-            Pending@ p = pending[i];
-            if (p.task is null) { pending.removeAt(uint(i)); continue; }
-            if (p.task.IsDead()) {
-                if (p.deadFrame < 0) p.deadFrame = ai.frame;
-                // made (or cancelled) some time ago and nobody joined: drop it
-                else if (ai.frame - p.deadFrame > 20 * SECOND) pending.removeAt(uint(i));
-            }
-        }
-    }
-
-    IUnitTask@ Produce(CCircuitUnit@ factory)
-    {
-        if (lanes.length() == 0) return null;
-        const float mi = Economy::GetMinMetalIncomeLast10s();
-        const AIFloat3 p = factory.GetPos(ai.frame);
-        for (int pass = 0; pass < 2; ++pass) {
-            const array<string>@ list = ListOf(pass);
-            for (uint j = 0; j < list.length(); ++j) {
-                CCircuitDef@ d = ai.GetCircuitDef(list[j]);
-                if (d is null || !factory.circuitDef.CanBuild(d)) continue;
-                if (d.costM > mi * Global::AntiSpam::CostIncomeSeconds) continue;
-                const int limit = Limit(list[j]);
-                Lane@ best = null;
-                float bestSq = -1.0f;
-                for (uint i = 0; i < lanes.length(); ++i) {
-                    if (Total(lanes[i], list[j]) >= limit) continue;
-                    const float sq = MapHelpers::SqDist(p, lanes[i].anchor);
-                    if (best is null || sq < bestSq) { @best = lanes[i]; bestSq = sq; }
-                }
-                if (best is null) continue;
-                if (d.maxThisUnit < d.count + 1) d.maxThisUnit = d.count + 1;
-                if (!d.IsAvailable(ai.frame)) continue;
-                IUnitTask@ t = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::FIREPOWER, Task::Priority::HIGH, d, p, 64.0f));
-                if (t is null) continue;
-                Pending@ q = Pending();
-                @q.task = t; q.lane = best.key; q.def = list[j];
-                pending.insertLast(q);
-                GenericHelpers::LogUtil("[AntiSpam] factory " + factory.circuitDef.GetName() + " " + factory.id + " makes " + list[j]
-                    + " for lane " + best.key + " (" + (Total(best, list[j])) + " of " + limit + ", mi=" + int(mi) + ")", 1);
-                return t;
-            }
-        }
-        return null;
-    }
-
     // The lane of one of our construction turrets, or null
     Lane@ NanoLane(CCircuitUnit@ u)
     {
@@ -579,9 +323,8 @@ namespace AntiSpam {
         const float r2 = reach * reach;
         CCircuitUnit@ worst = null;
         float worstHp = 0.995f;
-        array<string>@ keys = l.parkedDef.getKeys();
-        for (uint i = 0; i < keys.length() + l.staticIds.length(); ++i) {
-            CCircuitUnit@ u = (i < keys.length()) ? ai.GetTeamUnit(int(parseInt(keys[i]))) : ai.GetTeamUnit(l.staticIds[i - keys.length()]);
+        for (uint i = 0; i < l.staticIds.length(); ++i) {
+            CCircuitUnit@ u = ai.GetTeamUnit(l.staticIds[i]);
             if (u is null || u is nano || u.GetBuildProgress() < 1.0f) continue;
             const float hp = u.GetHealthPercent();
             if (hp >= worstHp || MapHelpers::SqDist(p, u.GetPos(ai.frame)) > r2) continue;
@@ -597,21 +340,17 @@ namespace AntiSpam {
             if (f is null || ai.GetTeamUnit(f.id) is null || MapHelpers::SqDist(p, f.GetPos(ai.frame)) > r2) continue;
             return aiFactoryMgr.Enqueue(TaskS::Repair(Task::Priority::NORMAL, f));
         }
-        // Allies' parked units: the script only reaches our own units, native
-        // assist also repairs (and helps build) friendly units in reach
+        // native assist also repairs (and helps build) friendly units in reach
         return aiFactoryMgr.DefaultMakeTask(nano);
     }
 
-    // Factory::AiMakeTask asks here first: our lane turrets, then lane production
+    // Factory::AiMakeTask asks here first: our lane turrets
     IUnitTask@ FactoryMakeTask(CCircuitUnit@ u)
     {
         if (!Enabled() || lanes.length() == 0 || u is null || u.circuitDef is null) return null;
-        if (UnitHelpers::IsT1Nano(u.circuitDef.GetName())) {
-            Lane@ l = NanoLane(u);
-            return (l is null) ? null : NanoTask(u, l);
-        }
-        if (u.circuitDef.IsMobile()) return null;
-        return Produce(u);
+        if (!UnitHelpers::IsT1Nano(u.circuitDef.GetName())) return null;
+        Lane@ l = NanoLane(u);
+        return (l is null) ? null : NanoTask(u, l);
     }
 
     /**************************************************************************
@@ -796,19 +535,9 @@ namespace AntiSpam {
         lastPublish = ai.frame;
         for (uint i = 0; i < lanes.length(); ++i) {
             Lane@ l = lanes[i];
-            if (l.mine) {
-                const array<string>@ parts = l.key.split(":");
-                AiSendMessage(PREFIX + "lane|" + parts[1] + "|" + int(l.anchor.x) + "," + int(l.anchor.z));
-            }
-            string body = "";
-            for (int pass = 0; pass < 2; ++pass) {
-                const array<string>@ list = ListOf(pass);
-                for (uint j = 0; j < list.length(); ++j) {
-                    const int n = Own(l, list[j]);
-                    if (n > 0) body += (body == "" ? "" : ";") + list[j] + ":" + n;
-                }
-            }
-            AiSendMessage(PREFIX + "have|" + l.key + "|" + body);
+            if (!l.mine) continue;
+            const array<string>@ parts = l.key.split(":");
+            AiSendMessage(PREFIX + "lane|" + parts[1] + "|" + int(l.anchor.x) + "," + int(l.anchor.z));
         }
     }
 
@@ -834,21 +563,6 @@ namespace AntiSpam {
                 GenericHelpers::LogUtil("[AntiSpam] team " + fromTeamId + " holds lane " + key + " at (" + xz[0] + "," + xz[1] + ")", 1);
             }
             l.publishedFrame = ai.frame;
-            return true;
-        }
-        if (parts[1] == "have") {
-            Lane@ l = Find(parts[2]);
-            if (l is null) return true;
-            AllyHave@ h = AllyHave();
-            h.frame = ai.frame;
-            if (parts[3].length() > 0) {
-                array<string>@ items = parts[3].split(";");
-                for (uint i = 0; i < items.length(); ++i) {
-                    array<string>@ kv = items[i].split(":");
-                    if (kv.length() == 2) h.counts.set(kv[0], int(parseInt(kv[1])));
-                }
-            }
-            l.allies.set("" + fromTeamId, @h);
             return true;
         }
         return true;
@@ -893,16 +607,13 @@ namespace AntiSpam {
             TakeOverSilent();
         }
         if (lanes.length() == 0) return;
-        TendPending();
         Census();
-        for (uint i = 0; i < lanes.length(); ++i) if (lanes[i].park !is null) TendParked(lanes[i]);
         Publish(false);
         if (ai.frame - lastReport >= Global::AntiSpam::ReportSeconds * SECOND) {
             lastReport = ai.frame;
             for (uint i = 0; i < lanes.length(); ++i) {
                 Lane@ l = lanes[i];
-                GenericHelpers::LogUtil("[AntiSpam] lane " + l.key + (l.mine ? " (ours)" : "") + ": parked " + l.parkedDef.getSize()
-                    + ", light " + l.standing[0] + ", dragon " + l.standing[1] + ", nano " + l.standing[2] + "; spam seen " + windowCount, 1);
+                GenericHelpers::LogUtil("[AntiSpam] lane " + l.key + (l.mine ? " (ours)" : "") + ": light " + l.standing[0] + ", dragon " + l.standing[1] + ", nano " + l.standing[2] + "; spam seen " + windowCount, 1);
             }
         }
     }
