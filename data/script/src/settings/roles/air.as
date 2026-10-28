@@ -501,6 +501,7 @@ namespace Air {
             float LicheWeightGantry = 20.0f;          // 5) T3 gantries
             float LicheWeightCommander = 4.0f;        // 6) commanders (owner 2026-10-28: above T2 factories; mobile, so not in the in-flight handoff)
             float LicheWeightT2Factory = 1.0f;        // 7) T2 air, vehicle, bot and sea factories
+            float LicheWeightT3Unit = 0.05f;          // 8) every unit a gantry builds (owner 2026-10-28: last; mobile, so not in the in-flight handoff)
             // A Liche guarding the wave breaks off with an ATTACK the moment a roster target is this close
             // to it: this share of the T2 bombers' StrikeImmediateRadius. Owner 2026-10-24 cut it to a third
             // (600); owner 2026-10-26: the Liches share the bombers' full range again (1800).

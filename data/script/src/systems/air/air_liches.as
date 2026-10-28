@@ -60,6 +60,8 @@ not enter):
   5 gantries      all T3 gantries
   6 commanders    every def with the commander role (owner 2026-10-28: above T2 factories)
   7 T2 factories  advanced air, vehicle, bot and sea plants
+  8 T3 units      every unit a gantry builds (owner 2026-10-28: last, so Liches bomb the T3s that
+                  reach our base when nothing above is in range or scouted)
 A target counts only while in sight, structures included.
 
 ******************************************************************************/
@@ -69,7 +71,7 @@ namespace AirLiches {
     array<CEscortStrikeTask@> runs;   // live Liche escorts
     array<IUnitTask@> raids;          // parallel to runs: the bomber wave each one flies with
     array<int> runStrikes;            // parallel to runs: strikes issued when last logged
-    AirStrikeTiers::Roster roster;    // the seven Liche tiers
+    AirStrikeTiers::Roster roster;    // the eight Liche tiers
     int ordersSinceLiche = 0;
 
     bool Enabled() { return Global::RoleSettings::Air::LichesEnabled && AirEconomy::Active(); }
@@ -91,7 +93,7 @@ namespace AirLiches {
     void InitRoster()
     {
         if (roster.Ready()) return;
-        roster.Begin("Liche", 7);
+        roster.Begin("Liche", 8);
         roster.Add(1, array<string> = {"armgate", "corgate", "legdeflector"}, Global::RoleSettings::Air::LicheWeightShields);
         roster.Add(2, array<string> = {"armanni", "cordoom", "legbastion", "corbhmth"}, Global::RoleSettings::Air::LicheWeightHeavyDefence);
         roster.Add(3, array<string> = {"armamd", "corfmd", "legabm", "legrampart", "armscab", "cormabm", "legavantinuke",
@@ -102,14 +104,26 @@ namespace AirLiches {
             Global::RoleSettings::Air::LicheWeightGeo);
         roster.Add(5, UnitHelpers::GetAllGantries(), Global::RoleSettings::Air::LicheWeightGantry);
         // owner, 2026-10-28: commanders above the T2 factories; every def with the commander role (O(defs), once)
-        array<string> commanders;
+        // owner, 2026-10-28: and every unit a gantry builds, last. O(defs x gantries), once.
+        array<string> commanders, t3;
+        array<CCircuitDef@> gantries;
+        array<string> gantryNames = UnitHelpers::GetAllGantries();
+        for (uint g = 0; g < gantryNames.length(); ++g) {
+            CCircuitDef@ gd = ai.GetCircuitDef(gantryNames[g]);
+            if (gd !is null) gantries.insertLast(gd);
+        }
         for (int i = 1; i <= ai.GetDefCount(); ++i) {
             CCircuitDef@ d = ai.GetCircuitDef(i);
-            if (d !is null && UnitHelpers::IsCommander(d)) commanders.insertLast(d.GetName());
+            if (d is null) continue;
+            if (UnitHelpers::IsCommander(d)) { commanders.insertLast(d.GetName()); continue; }
+            if (!d.IsMobile()) continue;
+            for (uint g = 0; g < gantries.length(); ++g)
+                if (gantries[g].CanBuild(d)) { t3.insertLast(d.GetName()); break; }
         }
         roster.Add(6, commanders, Global::RoleSettings::Air::LicheWeightCommander);
         roster.Add(7, array<string> = {"armaap", "armavp", "armalab", "armasy", "coraap", "coravp", "coralab", "corasy",
             "legaap", "legavp", "legalab", "legadvshipyard"}, Global::RoleSettings::Air::LicheWeightT2Factory);
+        roster.Add(8, t3, Global::RoleSettings::Air::LicheWeightT3Unit);
         roster.Finish();
     }
     // Priority = tier rank (tier 1 -> 6 ... tier 6 -> 1): the tier decides, then the native task takes
