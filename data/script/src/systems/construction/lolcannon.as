@@ -300,6 +300,7 @@ namespace LolCannon {
         if (ai.frame < nextTakeBack || phase != BUILD || gunTask is null || gunTask.IsDead()) return;
         nextTakeBack = ai.frame + 5 * SECOND;
         if (Gun() is null || aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun()) !is null) return;
+        ProbeOrder();
         array<string>@ keys = crewOf.getKeys();
         for (uint i = 0; i < keys.length(); ++i) {
             if (CrewKind(parseInt(keys[i])) != STARTER) continue;
@@ -312,6 +313,40 @@ namespace LolCannon {
             GenericHelpers::LogUtil("[LolCannon] starter " + u.circuitDef.GetName() + " " + u.id + " taken back to its cannon order", 1);
             aiBuilderMgr.AssignTask(u, gunTask);
         }
+    }
+
+    // Diagnostic (fix 5 test: FRONT orders on safe, reachable sites still put no
+    // frame down for 300-1264 s): every 30 s while the order stands with no
+    // frame, who is on it, whether the engine found it a build position, and
+    // where each starter is and what it does.
+    int nextProbe = 0;
+    void ProbeOrder()
+    {
+        if (ai.frame < nextProbe || ai.frame - gunOrderedAt < 20 * SECOND) return;
+        nextProbe = ai.frame + 30 * SECOND;
+        IBuilderTask@ bt = cast<IBuilderTask>(gunTask);
+        array<CCircuitUnit@>@ on = gunTask.GetUnits();
+        string s = "[LolCannon] probe: cannon order at (" + int(site.x) + ", " + int(site.z) + ") stands "
+            + ((ai.frame - gunOrderedAt) / SECOND) + " s, " + on.length() + " unit(s) on it";
+        for (uint i = 0; i < on.length(); ++i) s += (i == 0 ? " [" : ", ") + on[i].circuitDef.GetName() + " " + on[i].id;
+        if (on.length() > 0) s += "]";
+        if (bt !is null) {
+            const AIFloat3 bp = bt.GetBuildPos();
+            s += bp.x < 0.0f ? ", no build position" : ", build position (" + int(bp.x) + ", " + int(bp.z) + ") " + int(bp.distance2D(site)) + " off the site";
+        }
+        array<string>@ keys = crewOf.getKeys();
+        for (uint i = 0; i < keys.length(); ++i) {
+            if (CrewKind(parseInt(keys[i])) != STARTER) continue;
+            CCircuitUnit@ u = ai.GetTeamUnit(parseInt(keys[i]));
+            if (u is null) continue;
+            IUnitTask@ t = u.task;
+            IBuilderTask@ ut = cast<IBuilderTask>(t);
+            s += "; starter " + u.circuitDef.GetName() + " " + u.id + " " + int(u.GetPos(ai.frame).distance2D(site)) + " from the site, "
+                + (t is null ? "no task" : (t is gunTask ? "on the order" : "task type " + t.GetType()
+                + (ut is null ? "" : " build " + ut.GetBuildType() + (ut.buildDef is null ? "" : " " + ut.buildDef.GetName()))
+                + (Mine(t) ? " (ours)" : "")));
+        }
+        GenericHelpers::LogUtil(s, 1);
     }
 
     bool Mine(IUnitTask@ t)
@@ -1209,6 +1244,13 @@ namespace LolCannon {
             nextGunTry = ai.frame + 10 * SECOND;
             GunFailed("the order was refused");
             return null;
+        }
+        if (!aiTerrainMgr.IsLayoutEnabled()) {
+            // FRONT (unpinned): the engine searches only round the site and, finding
+            // no room there, ends the order with a "SITE: aborting" line instead of a
+            // silent fallback - or a cannon far off its turret block.
+            IBuilderTask@ bt = cast<IBuilderTask>(gunTask);
+            if (bt !is null) bt.siteRadius = 128.0f;
         }
         if (orderFrame < 0) orderFrame = ai.frame;
         gunOrderedAt = ai.frame;
