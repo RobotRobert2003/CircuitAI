@@ -57,7 +57,9 @@ CRangedEngagement::CRangedEngagement(CCircuitAI* ai,IUnitTask* owner,CCircuitUni
     // Poke hulls open fire only while a peer engagement owns their movement.
     // Ordinary kite/retreat retains explicit targeting; blanket OPEN lost the
     // third Thug in the outmatched-mobile regression (D-355).
-    const bool open=policy.coordinated && policy.fireAtWill && policy.pokeIn<=0.f;
+    // Owner 2026-10-28: always_fire_at_will hulls stay open for the whole
+    // engagement (AI #9's Thugs and Aggravators stood on hold fire in range).
+    const bool open=policy.alwaysFireAtWill || (policy.coordinated && policy.fireAtWill && policy.pokeIn<=0.f);
     fireOpen=open;
     unit->TrySetFireState(open?CCircuitDef::FireType::OPEN:CCircuitDef::HOLD);
     ai->LOG("RANGED: assigned %s(%d) weapons=%u",unit->GetCircuitDef()->GetDef()->GetName(),id,unsigned(caps.weapons.size()));
@@ -141,6 +143,7 @@ bool CRangedEngagement::Spam(const RangedPolicy& p,const CRangedWorld::Contact& 
 void CRangedEngagement::UpdateFireState(CCircuitUnit* unit,bool open)
 {
     // Holding is immediate; reopening waits a second after the last change.
+    if(unit->GetCircuitDef()->GetRangedPolicy().alwaysFireAtWill) return;
     const int frame=ai->GetLastFrame();
     if(open==fireOpen || (open && frame<fireStateFrame+30)) return;
     fireOpen=open; fireStateFrame=frame;
@@ -354,7 +357,7 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
         ai->LOG("[INVARIANT] INV-166 coordinated unit has invalid cohort membership unit=%d",id); return;
     }
     if(group.target<0 && group.mode==cohort::Mode::HOLD) {
-        if(policy.fireAtWill && policy.pokeIn>0.f && unit->GetRequestedFireState()!=CCircuitDef::HOLD)
+        if(policy.fireAtWill && !policy.alwaysFireAtWill && policy.pokeIn>0.f && unit->GetRequestedFireState()!=CCircuitDef::HOLD)
             unit->TrySetFireState(CCircuitDef::HOLD);
         // Cancel the old approach when a protected contact leaves vision.
         // Otherwise Disperse deliberately preserves that in-flight move.
@@ -497,7 +500,7 @@ void CRangedEngagement::UpdateCohort(CCircuitUnit* unit)
     const bool poke=closest!=nullptr;
     // One owner, no polling watchdog or periodic resends. Phase (reload) changes
     // do not toggle fire state; only entering/leaving a peer engagement does.
-    if(policy.fireAtWill && policy.pokeIn>0.f) {
+    if(policy.fireAtWill && !policy.alwaysFireAtWill && policy.pokeIn>0.f) {
         const int fire=poke && !danger?CCircuitDef::FireType::OPEN:CCircuitDef::FireType::HOLD;
         if(unit->GetRequestedFireState()!=fire) unit->TrySetFireState(fire);
     }

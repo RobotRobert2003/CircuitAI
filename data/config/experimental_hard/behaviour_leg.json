@@ -741,7 +741,7 @@
 				"role": ["skirmish"],
 				"attribute": ["ranged"],
 				// Owner 2026-10-22: same micro as Rocketeer/Aggravator.
-				"ranged": {"coordinated": true,
+				"ranged": {"always_fire_at_will": true, "coordinated": true,
                 "sustained_rush": true,
                 "sustained_rush_ratio": 2.0,
                 "sustained_rush_radius": 900.0,
@@ -756,7 +756,7 @@
 				"role": ["skirmish", "spam"],
 				"attribute": ["raider", "ranged"],
 				// Owner 2026-10-22: same micro as Thug/Mace.
-				"ranged": {"coordinated": true,
+				"ranged": {"always_fire_at_will": true, "coordinated": true,
                 "sustained_rush": true,
                 "sustained_rush_ratio": 2.0,
                 "sustained_rush_radius": 900.0,

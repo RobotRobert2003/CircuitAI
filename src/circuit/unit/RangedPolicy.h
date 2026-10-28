@@ -128,6 +128,10 @@ struct RangedPolicy {
     // Individual controller: as above (0 = no spam class). Coordinated cohort:
     // fire at will always, spamMaxCost unused (owner 2026-10-19, Thug/Mace).
     bool fireAtWill = false;
+    // Owner 2026-10-28: permanent fire at will. The controller opens fire when
+    // it takes the unit and never sets hold fire (no poke, cohort-hold or spam
+    // gating); priority targets still steer the guns. Overrides fireAtWill.
+    bool alwaysFireAtWill = false;
     float spamMaxCost = 0.f;
     // Owner 2026-10-27: named spam ("spam_units", def ids resolved at load),
     // in addition to spamMaxCost. Same rules: mobile, never a commander.
