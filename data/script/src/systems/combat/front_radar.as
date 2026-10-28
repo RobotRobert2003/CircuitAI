@@ -72,11 +72,13 @@ Astraeus) can shell them from max range instead of walking in for vision.
 An image counts as reached when it lies within GhostCoverage x the T1 radar's
 range of one of our T1 radars (or GhostCoverage x the long-range radar's range
 of one of those), finished or a frame, of our live order, or of an allied
-SMRTBARb's ghost order of the last GhostAllySeconds (frontradar|ghost|x,z): a
+SMRTBARb's ghost order of the last GhostAllySeconds (frontradar|ghost|x,z; it
+keeps our sites GhostSpacing away for GhostAllySpacingSeconds): a
 jammed or terrain-hidden image is not chased with a second radar. For each
 unreached image within reach + GhostTravel of the commander the site is the
 nearest point to the commander that reaches it (the commander's own spot when
-it already does); sites under enemy surface threat above GhostMaxThreat,
+it already does); sites under enemy surface threat above GhostMaxThreat, or
+with such threat on the straight walk to them (every GhostPathStep),
 unreachable ones, ones within GhostSpacing of another radar (ours, frames
 included, or an ally's) and ones near a failed order are skipped, and the site that
 reaches the most unreached images wins (ties: the shorter walk). One order at
@@ -384,7 +386,25 @@ namespace FrontRadar {
         if (Near(oursT1, g, r1)) return true;
         if (Near(ours, g, Global::FrontRadar::GhostT2RadarRange * Global::FrontRadar::GhostCoverage)) return true;
         if (ghostOrder !is null && !ghostOrder.IsDead() && MapHelpers::SqDist(ghostSite, g) <= r1 * r1) return true;
-        return Near(allyGhost, g, r1);
+        const int recent = Global::FrontRadar::GhostAllySeconds * SECOND;
+        for (uint i = 0; i < allyGhost.length(); ++i)
+            if (ai.frame - allyGhostFrame[i] <= recent && MapHelpers::SqDist(allyGhost[i], g) <= r1 * r1) return true;
+        return false;
+    }
+
+    // Played 2026-10-28 (4 games): 24 of 30 failed orders ended with the commander's
+    // fallback starting on the walk, against an enemy group near the site. The walk
+    // is sampled for enemy surface threat, not only the site.
+    bool GhostPathSafe(const AIFloat3 &in from, const AIFloat3 &in site)
+    {
+        const float d = sqrt(MapHelpers::SqDist(from, site));
+        const int n = int(d / AiMax(64.0f, Global::FrontRadar::GhostPathStep));
+        for (int i = 1; i <= n; ++i) {
+            const float t = float(i) / float(n + 1);
+            const AIFloat3 p(from.x + (site.x - from.x) * t, 0.0f, from.z + (site.z - from.z) * t);
+            if (aiBattle.SurfThreat(p) > Global::FrontRadar::GhostMaxThreat) return false;
+        }
+        return true;
     }
 
     // Owner 2026-10-28: radars not too close together. Any radar of ours (finished
@@ -424,6 +444,8 @@ namespace FrontRadar {
             }
             @ghostOrder = null;
             ghostOwner = -1;
+        } else if (ghostOrder !is null && GhostOwnerGone()) {
+            // GhostDrop has ended the order
         } else if (ghostOrder !is null && ai.frame - ghostFrame >= Global::FrontRadar::GhostOrderSeconds * SECOND) {
             // The native timeout counts from the last touch, which the owner renews
             // on every ask (GhostKeep): an order whose frame never starts is aborted here.
@@ -444,12 +466,38 @@ namespace FrontRadar {
             ghostFailed.removeAt(i);
             ghostFailedUntil.removeAt(i);
         }
-        const int stale = Global::FrontRadar::GhostAllySeconds * SECOND;
+        const int stale = AiMax(Global::FrontRadar::GhostAllySeconds, Global::FrontRadar::GhostAllySpacingSeconds) * SECOND;
         for (int i = int(allyGhost.length()) - 1; i >= 0; --i) {
             if (ai.frame - allyGhostFrame[i] <= stale) continue;
             allyGhost.removeAt(i);
             allyGhostFrame.removeAt(i);
         }
+    }
+
+    // Each update, before a frame stands: the order ends as soon as its commander
+    // is lost or its fallback starts (the adoption is declined then); a commander
+    // pulled into combat keeps it and resumes it afterwards.
+    bool GhostOwnerGone()
+    {
+        IBuilderTask@ bt = cast<IBuilderTask>(ghostOrder);
+        if (bt !is null && bt.target !is null) return false;
+        CCircuitUnit@ u = ai.GetTeamUnit(ghostOwner);
+        if (u is null) { GhostDrop("commander lost"); return true; }
+        const float walk = sqrt(MapHelpers::SqDist(u.GetPos(ai.frame), ghostSite));
+        if (aiBuilderMgr.CommanderFrontAdopt(u, ghostOrder, walk + GHOST_ADOPT_SLACK)) return false;
+        GhostDrop("commander falling back");
+        return true;
+    }
+
+    void GhostDrop(const string &in why)
+    {
+        aiBuilderMgr.AbortTask(ghostOrder);
+        @ghostOrder = null;
+        ghostOwner = -1;
+        ghostFailed.insertLast(ghostSite);
+        ghostFailedUntil.insertLast(ai.frame + Global::FrontRadar::GhostFailSeconds * SECOND);
+        GenericHelpers::LogUtil("[FrontRadar] ghost radar order at (" + int(ghostSite.x) + "," + int(ghostSite.z)
+            + ") dropped: " + why + "; spot skipped " + Global::FrontRadar::GhostFailSeconds + " s", 1);
     }
 
     // CommanderFront::Work asks this before its ladder: the commander that placed the
@@ -464,8 +512,14 @@ namespace FrontRadar {
         // from where it stands, within the distance an order may be placed at
         const float walk = sqrt(MapHelpers::SqDist(u.GetPos(ai.frame), ghostSite));
         const float cap = Global::FrontRadar::GhostRadarRange * Global::FrontRadar::GhostCoverage + Global::FrontRadar::GhostTravel;
-        if (walk > cap || !aiBuilderMgr.CommanderFrontAdopt(u, ghostOrder, walk + GHOST_ADOPT_SLACK)) return null;
-        return ghostOrder;
+        if (walk <= cap && aiBuilderMgr.CommanderFrontAdopt(u, ghostOrder, walk + GHOST_ADOPT_SLACK)) return ghostOrder;
+        // Declined (the commander's fallback is on: an enemy group near it) or
+        // pushed out of reach: the order ends now and its spot is skipped, rather
+        // than hanging to the GhostOrderSeconds abort (2026-10-28: 24 of 30 failures)
+        IBuilderTask@ bt = cast<IBuilderTask>(ghostOrder);
+        if (bt !is null && bt.target !is null) return ghostOrder;   // a frame stands: finish it when asked again
+        GhostDrop((walk > cap) ? "commander pushed out of reach" : "commander falling back");
+        return null;
     }
 
     // CommanderFront "radar_ghost" rung: a T1 radar that reaches scouted enemy
@@ -503,7 +557,8 @@ namespace FrontRadar {
                 if (MapHelpers::SqDist(site, open[k]) <= reach * reach) ++count;
             const float walk = sqrt(MapHelpers::SqDist(pos, site));
             if (count < bestCount || (count == bestCount && walk >= bestWalk)) continue;
-            if (GhostFailed(site) || GhostCrowded(site) || aiBattle.SurfThreat(site) > Global::FrontRadar::GhostMaxThreat) continue;
+            if (GhostFailed(site) || GhostCrowded(site) || aiBattle.SurfThreat(site) > Global::FrontRadar::GhostMaxThreat
+                || !GhostPathSafe(pos, site)) continue;
             if (!aiTerrainMgr.CanReachAt(u, site, u.circuitDef.GetBuildDistance())) continue;
             bestCount = count; bestWalk = walk; best = site;
         }

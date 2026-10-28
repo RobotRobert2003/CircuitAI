@@ -38,4 +38,6 @@ namespace Global { namespace FrontRadar {
     int GhostOrderSeconds = 60;         // native timeout of the order; one with no radar frame this long after it was placed is aborted
     int GhostFailSeconds = 180;         // a spot whose order died with no radar is skipped this long
     int GhostAllySeconds = 90;          // an allied SMRTBARb's ghost order counts as a radar this long
+    int GhostAllySpacingSeconds = 600;  // ...and keeps our sites GhostSpacing away this long (allies' T1 radars are not broadcast)
+    float GhostPathStep = 200.0f;       // the walk to the site is sampled this often for enemy surface threat (GhostMaxThreat)
 } }
