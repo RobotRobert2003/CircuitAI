@@ -53,6 +53,16 @@ namespace LolCannon {
     // site holds when any MinTurrets of the (rows + spare) x cols slots reserve
     int TurretSpareRows = 2;
     int TurretsAtOnce = 8;          // turret orders in flight at once (the crew helps the rest)
+    // turrets first (owner 2026-10-28: two FRONT cannons went up with none): the
+    // cannon is ordered only once TurretsBeforeCannon turrets stand, or every slot
+    // still empty has failed three orders, or TurretWaitSeconds pass with no turret
+    // crew at all. Turrets still short when it stands are finished by the turret
+    // crews, as the storages are (StoreFinishSeconds).
+    int TurretsBeforeCannon = 16;
+    int TurretWaitSeconds = 300;
+    // the block is held for the turrets on FRONT sites too: each slot's reservation
+    // stays until its turret is ordered, so no storage, ally or other build of ours
+    // lands on it; a slot whose order came to nothing is held again
     // advanced (hardened) energy storages, in a narrow strip two wide on the
     // other side of the cannon (armuwadves / coruwadves; legadvestore for the Starfall)
     int Storages = 7;               // owner 2026-10-27: + 1 for a margin of error
@@ -73,12 +83,15 @@ namespace LolCannon {
     // build the storages, then assist. Our own air constructors are claimed
     // first, the rest ordered from our air plants (CrewRecruitBatch a round).
     // With no air plant that can make them, T2 ground constructors stand in.
+    // GroundCrew T1 ground constructors (owner 2026-10-28: "a turret block with
+    // t1 cons") build the turret block beside the air crew while it is short:
+    // our own claimed first, the rest ordered from our T1 bot and vehicle labs.
     int AirCrew = 50;
     int StoreCrew = 5;
+    int GroundCrew = 10;
     int CrewRecruitBatch = 10;
     int CrewOrderSeconds = 20;      // claims and recruit orders this often
     int StarterGraceSeconds = 60;   // no T2 air constructor by then: our own T2 ground constructors may start the cannon
-    int StallSeconds = 240;         // turrets/storages with no work this long: the cannon is ordered anyway
     // firing: only the roster below, best tier first (CSuperTask::SetTargetTier),
     // the engine's own targeting otherwise (FireState)
     bool FireTiers = true;
