@@ -104,5 +104,8 @@ namespace LolCannon {
     // and at once (no more often than ReScoutMinSeconds) when the top area moves
     // further than ReconSpread from where the last package went
     int ReScoutMinSeconds = 60;
+    // a cannon standing this long with no roster target in range (no strike, so no
+    // first package) has the enemy spawn it was sited against scouted instead
+    int BlindScoutSeconds = 60;
 }
 }

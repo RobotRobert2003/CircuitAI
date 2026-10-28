@@ -96,6 +96,9 @@ this program (owner, 2026-10-26):
           ReScoutSeconds (120) after, the same at the gun's current
           highest-rated area, and at once (at most every ReScoutMinSeconds,
           60) when that area moves further than ReconSpread from the last.
+          A cannon that stands BlindScoutSeconds (60) knowing no roster
+          target in range has the enemy spawn it was sited against scouted
+          instead (again whenever a re-scout is due and none knows one).
           With no AIR on the map TECH builds and flies the package itself
           (team/lolcannon_recon.as, lolcannon_scouts.as).
 
@@ -1346,7 +1349,8 @@ namespace LolCannon {
 
     // ---------------------------------------------------------------- scouting the strikes
 
-    int nextScout = -1;             // -1: no strike yet
+    int nextScout = -1;             // -1: no package yet
+    bool struck = false;            // a cannon of ours has fired: its first strike was scouted
     int lastScoutFrame = -1;
     AIFloat3 lastScoutAt(-1, 0, -1);
 
@@ -1377,7 +1381,8 @@ namespace LolCannon {
     void Fired(CCircuitUnit@ u, const AIFloat3 &in aim)
     {
         if (!Enabled() || u is null || u.circuitDef is null || !IsCannon(u.circuitDef.GetName())) return;
-        if (aim.x < 0.0f || aim.z < 0.0f || nextScout >= 0) return;
+        if (aim.x < 0.0f || aim.z < 0.0f || struck) return;
+        struck = true;
         CSuperTask@ st = (u.task is null) ? null : cast<CSuperTask>(u.task);
         if (st !is null) LogAreas(u, st, "first strike");
         SendScouts(aim, "first strike");
@@ -1385,18 +1390,30 @@ namespace LolCannon {
 
     // After the first strike: the scouts to the current highest-rated area of the
     // first standing cannon that has one, every ReScoutSeconds, or sooner when
-    // that area moved. O(done sites) a second.
+    // that area moved. A cannon that has stood BlindScoutSeconds knowing no
+    // roster target in range (b4: twelve cannons never fired, so no scouts flew)
+    // has the enemy spawn it was sited against scouted instead, before any
+    // strike and whenever a re-scout is due and no cannon knows a target.
+    // O(done sites) a second.
+    int blindSince = -1;
     void ScoutAreas()
     {
-        if (nextScout < 0 || Global::LolCannon::ReScoutSeconds <= 0) return;
-        const bool due = ai.frame >= nextScout;
-        if (!due && ai.frame - lastScoutFrame < Global::LolCannon::ReScoutMinSeconds * SECOND) return;
+        if (Global::LolCannon::ReScoutSeconds <= 0) return;
+        const bool due = nextScout >= 0 && ai.frame >= nextScout;
+        if (nextScout >= 0 && !due && ai.frame - lastScoutFrame < Global::LolCannon::ReScoutMinSeconds * SECOND) return;
         CCircuitDef@ gun = Gun();
         if (gun is null) return;
+        int blind = -1;
         for (uint i = 0; i < doneSites.length(); ++i) {
             CCircuitUnit@ g = aiBuilderMgr.FindOwnNear(doneSites[i], 96.0f, gun);
             CSuperTask@ st = (g is null || g.task is null) ? null : cast<CSuperTask>(g.task);
-            if (st is null || st.GetTierAreaCount() <= 0) continue;
+            if (st is null) continue;
+            if (st.GetTierAreaCount() <= 0) {
+                if (blind < 0) blind = int(i);
+                continue;
+            }
+            blindSince = -1;
+            if (nextScout < 0) return;   // the first strike sends the first package
             const AIFloat3 top = st.GetTierAreaPos(0);
             const float spread = Global::LolCannon::ReconSpread;
             const bool moved = MapHelpers::SqDist(top, lastScoutAt) > spread * spread;
@@ -1405,7 +1422,13 @@ namespace LolCannon {
             SendScouts(top, due ? "highest-rated area" : "highest-rated area moved");
             return;
         }
-        if (due) nextScout = ai.frame + Global::LolCannon::ReScoutSeconds * SECOND;
+        if (blind < 0 || doneTargets[blind].x < 0.0f) { blindSince = -1; return; }
+        if (blindSince < 0) blindSince = ai.frame;
+        if (nextScout < 0 ? ai.frame - blindSince >= Global::LolCannon::BlindScoutSeconds * SECOND : due) {
+            GenericHelpers::LogUtil("[LolCannon] AREAS: no cannon of ours knows a roster target in range ("
+                + (ai.frame - blindSince) / SECOND + " s); scouting the enemy spawn it was sited against", 1);
+            SendScouts(doneTargets[blind], "no roster target in range");
+        }
     }
 
     // Every standing lolcannon of ours at its fire state, once a minute (a task or a
