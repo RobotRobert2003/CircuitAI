@@ -102,6 +102,7 @@ namespace Main {
         Global::RoleSettings::Front::TimeTriggerForFirstT2LabMinMetalIncome = 20.0f; // 22-min T2 lab/plant trigger needs +20 metal (AI 11 ordered legavp at +3 after losing its base)
         Global::Team::PinpointerPoolSize = 3;
         Global::Spam::EdgePorcEnabled = true;
+        Global::AntiSpam::Enabled = true;  // owner 2026-10-27: hold enemy spam lanes (systems/combat/anti_spam.as)
         Global::FrontRadar::Enabled = true; // owner 2026-10-27: long-range radars just behind the front (systems/combat/front_radar.as)
         Global::Spam::LaneReleaseAtEnd = true;
 		Global::RoleSettings::MexOwnershipEnabled = true;
@@ -209,6 +210,7 @@ namespace Main {
 		Team::Roster::Update();  // announce ourselves to allied BARb instances until the roster is complete
 		Spam::Update();          // economy-gated spam: activation, focus rotation
 		FrontRadar::Update();    // owner, 2026-10-27: long-range radars at the front (census, allies' list)
+		AntiSpam::Update();      // owner, 2026-10-27: spot enemy spam lanes and hold them
 		Team::Ferry::Update();   // transport ferry: hand-over on arrival, run polling
 		Team::SeaAssist::Update();  // SEA seeds a TACTICAL ally with a construction ship
 		Team::Donation::Update();   // a teammate without T2 asks TECH for a constructor

@@ -134,6 +134,9 @@ namespace Factory {
 		IUnitTask@ recovery = Team::Recovery::FactoryMakeTask(u);
 		if (recovery !is null) return recovery;
 		if (SeaFactories::Hold(u)) return aiFactoryMgr.Enqueue(TaskS::Wait(true, SECOND));
+		// owner, 2026-10-27: spam-lane turrets repair the lane; factories make its parked units
+		IUnitTask@ anti = AntiSpam::FactoryMakeTask(u);
+		if (anti !is null) return anti;
 		// Only AIR changes ordering: transport obligations precede optional spam and combat.
 		if (Global::AISettings::Role == AiRole::AIR || Global::AISettings::Role == AiRole::TECH) {
 			IUnitTask@ ferry = Team::Ferry::FactoryMakeTask(u);
