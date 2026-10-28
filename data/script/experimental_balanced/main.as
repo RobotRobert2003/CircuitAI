@@ -278,6 +278,9 @@ namespace Main {
 		Global::RezReplenish::Enabled = true;
 		Global::RezReplenish::Scale = true;
 		Global::RezReplenish::ShareEnabled = true;
+		// owner, 2026-10-28 ("install second rez lab"): once Spam pumps the first bot lab a second T1 bot lab
+		// keeps the rez bots and the gifts; it spams on the first lab's lane from 1.5x the spam-start income
+		Global::RezReplenish::SecondLab = true;
 	}
 
 }  // namespace Main
