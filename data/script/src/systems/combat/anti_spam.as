@@ -125,10 +125,16 @@ namespace AntiSpam {
     bool Axis()
     {
         if (axisReady) return true;
+        // the ends need our start, the allies' and the enemy's: kept for the game, so not
+        // before a minute in (Baryon Tar Lake 2026-10-27: taken at frame 0 they were the
+        // map's corners, and every lane anchor landed in the enemy half)
+        if (!Global::Map::HasStart || ai.frame < 60 * SECOND) return false;
         if (!EdgeLanes::Ends(s0, e0)) return false;
         EdgeLanes::Axis(s0, e0, fx, fz, nx, nz);
         axisLen = sqrt(MapHelpers::SqDist(s0, e0));
         axisReady = axisLen > 1.0f;
+        if (axisReady) GenericHelpers::LogUtil("[AntiSpam] axis from (" + int(s0.x) + "," + int(s0.z) + ") to (" + int(e0.x) + ","
+            + int(e0.z) + "), " + int(axisLen) + " elmos", 1);
         return axisReady;
     }
     float Along(const AIFloat3 &in p) { return ((p.x - s0.x) * fx + (p.z - s0.z) * fz) / axisLen; }
