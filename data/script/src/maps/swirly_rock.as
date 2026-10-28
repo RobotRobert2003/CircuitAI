@@ -10,27 +10,29 @@ namespace SwirlyRock {
 	// isolated peninsulas requiring hover/amph first. Pass false for all for now.
     // Start positions sourced from resources/data/maps/all_that_glitters.yaml (springName: All That Glitters v2.2)
     // Role mapping: front->FRONT, air->AIR, tech->TECH
+    // Owner 2026-10-28: AIR off the exposed central plateau. Two FRONTs hold the plateau's
+    // west face (the middle pair of the maps JSON), AIR takes the east-edge spot, the north-west
+    // FRONT moves to the 3-mex corner. The left side mirrors the right (x -> 12288 - x).
     StartSpot@[] spots = {
-        StartSpot(AIFloat3(  3200, 0,   550), AiRole::FRONT, false), 
-        StartSpot(AIFloat3( 1700, 0,   600), AiRole::FRONT,   false), 
-        StartSpot(AIFloat3( 900, 0,   2700), AiRole::TECH,  false), 
-        StartSpot(AIFloat3( 2200, 0,   3300), AiRole::FRONT, false), 
+        StartSpot(AIFloat3( 1788, 0,   550), AiRole::FRONT, false),
+        StartSpot(AIFloat3(  488, 0,  7600), AiRole::FRONT, false),
+        StartSpot(AIFloat3( 2288, 0,  3500), AiRole::FRONT, false),
+        StartSpot(AIFloat3(  788, 0,  3000), AiRole::TECH,  false),
 
-        StartSpot(AIFloat3( 400, 0,  4500), AiRole::FRONT, false),
-        StartSpot(AIFloat3( 2000, 0,  4700), AiRole::AIR, false), 
-        StartSpot(AIFloat3( 1800, 0,  6200), AiRole::FRONT, false), 
-        StartSpot(AIFloat3( 3000, 0,  6100), AiRole::FRONT, false), 
+        StartSpot(AIFloat3(  288, 0,  4800), AiRole::AIR,   false),
+        StartSpot(AIFloat3( 3072, 0,  4382), AiRole::FRONT, false),
+        StartSpot(AIFloat3( 3073, 0,  4937), AiRole::FRONT, false),
+        StartSpot(AIFloat3( 1788, 0,  6200), AiRole::FRONT, false),
 
-        StartSpot(AIFloat3(  10500, 0,   550), AiRole::FRONT, false), 
-        StartSpot(AIFloat3( 9100, 0,   3500), AiRole::FRONT,   false), 
-        StartSpot(AIFloat3( 10000, 0,   3500), AiRole::FRONT,  false), 
-        StartSpot(AIFloat3( 11500, 0,   3000), AiRole::TECH, false), 
+        StartSpot(AIFloat3(10500, 0,   550), AiRole::FRONT, false),
+        StartSpot(AIFloat3(11800, 0,  7600), AiRole::FRONT, false),
+        StartSpot(AIFloat3(10000, 0,  3500), AiRole::FRONT, false),
+        StartSpot(AIFloat3(11500, 0,  3000), AiRole::TECH,  false),
 
-        StartSpot(AIFloat3( 10300, 0,  4800), AiRole::AIR, false), 
-        StartSpot(AIFloat3( 12000, 0,  4800), AiRole::FRONT, false),
-        StartSpot(AIFloat3( 10000, 0,  6000), AiRole::FRONT, false), 
-        StartSpot(AIFloat3( 10500, 0,  6200), AiRole::FRONT, false)
-        
+        StartSpot(AIFloat3(12000, 0,  4800), AiRole::AIR,   false),
+        StartSpot(AIFloat3( 9216, 0,  4382), AiRole::FRONT, false),
+        StartSpot(AIFloat3( 9215, 0,  4937), AiRole::FRONT, false),
+        StartSpot(AIFloat3(10500, 0,  6200), AiRole::FRONT, false)
     };
 
     // Base per-map unit limits

@@ -28,6 +28,9 @@ public:
     int GetOperation() const { return operation; }
     bool ReceiveProjectiles(const char* message);
     IUnitTask* FrontWork(CCircuitUnit* unit,int kind,CCircuitDef* buildDef,float radius);
+    // A script-placed task the FRONT commander walks to (the ghost radar):
+    // ladder work up to reach from the commander, so Deploy keeps it.
+    bool AdoptFrontWork(CCircuitUnit* unit,IUnitTask* task,float reach);
     bool CanStartRadar(CCircuitUnit* unit);
     // CCommanderTask hand-back: false when the combat logic owns the cloak
     // and fire state (a handled commander); the task then restores neither.
@@ -86,6 +89,7 @@ private:
         bool lineDone=false,radarCovered=false,workHeld=false; // workHeld: offered under a fallback
         springai::AIFloat3 lineAnchor{-1,0,-1},lineThreat,radarPos{-1,0,-1};
         const IUnitTask* workTask=nullptr;
+        float workReach=0; // AdoptFrontWork: how far workTask may be kept, else front_radius
         commander::FallbackBoundary workBoundary; // perimeter when workTask was offered
         std::map<int,int> timedNext;
         std::vector<routecommand::Command> route;

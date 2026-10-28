@@ -85,6 +85,7 @@ IBuilderTask::IBuilderTask(ITaskModule* mgr, Priority priority,
 		, pinRequired(false)
 		, pinFailed(false)
 		, layoutOwned(false)
+		, siteRadius(-1.f)
 		, nextTask(nullptr)
 		, initiator(nullptr)
 		, buildFails(0)
@@ -112,6 +113,7 @@ IBuilderTask::IBuilderTask(ITaskModule* mgr, Type type, BuildType buildType)
 		, pinRequired(false)
 		, pinFailed(false)
 		, layoutOwned(false)
+		, siteRadius(-1.f)
 		, nextTask(nullptr)
 		, initiator(nullptr)
 		, savedIncome({0.f, 0.f})
@@ -344,13 +346,20 @@ bool IBuilderTask::Execute(CCircuitUnit* unit)
 	AIFloat3 pos = (shake > .0f) ? geom::get_near_pos(position, shake) : position;
 	CTerrainManager::CorrectPosition(pos);
 
-	const float searchRadius = 200 * SQUARE_SIZE;
+	const float searchRadius = (siteRadius > 0.f) ? siteRadius : 200 * SQUARE_SIZE;
 	FindBuildSite(unit, pos, searchRadius);
 
 	if (geom::is_valid(buildPos)) {
 		TRY_UNIT(circuit, unit,
 			unit->CmdBuild(buildDef, buildPos, facing, 0, CmdTimeout(frame));
 		)
+	} else if (siteRadius > 0.f) {
+		// A placed site (the FRONT ghost radar): no room near it is a failed
+		// order, not a structure somewhere up to 1,600 elmos away.
+		circuit->LOG("SITE: aborting %s task, no site within %.0f of (%.0f, %.0f)",
+				buildDef->GetDef()->GetName(), siteRadius, position.x, position.z);
+		manager->AbortTask(this);
+		return false;
 	} else if (pinFailed) {
 		circuit->LOG("RESERVE: aborting %s task after required slot %i failed",
 				buildDef->GetDef()->GetName(), pinnedReservation);

@@ -53,6 +53,29 @@ namespace LolCannon {
     // site holds when any MinTurrets of the (rows + spare) x cols slots reserve
     int TurretSpareRows = 2;
     int TurretsAtOnce = 8;          // turret orders in flight at once (the crew helps the rest)
+    // turrets first (owner 2026-10-28: two FRONT cannons went up with none): the
+    // cannon is ordered only once TurretsBeforeCannon turrets stand, or every slot
+    // still empty has failed three orders, or TurretWaitSeconds pass with no turret
+    // crew at all. Turrets still short when it stands are finished by the turret
+    // crews, as the storages are (StoreFinishSeconds).
+    int TurretsBeforeCannon = 16;
+    int TurretWaitSeconds = 300;
+    int TurretMaxWaitSeconds = 900;  // the cannon is ordered after this long however few stand
+    // a turret slot given up after three orders came to nothing is tried again this often
+    int TurretRetrySeconds = 120;
+    // the block and the cannon's own footprint are held on FRONT sites too: each
+    // reservation stays until its own order, so no storage, ally or other build of
+    // ours lands on them while the turrets go up; one whose order came to nothing
+    // is held again
+    // a cannon order alive this long with no frame down is aborted and counts as failed
+    int GunFrameSeconds = 300;
+    // FRONT: elmos between the cannon's footprint and its turret block / storage
+    // strip (TECH 16). The engine's unpinned site search keeps the cannon's
+    // block_map yard (48 elmos a side) clear of turrets and held slots.
+    float FrontBlockGap = 64.0f;
+    // a site whose turret block stands (TurretsBeforeCannon) moves back only after
+    // this many cannon order failures, not BackOffAfter
+    int BlockSiteFailures = 6;
     // advanced (hardened) energy storages, in a narrow strip two wide on the
     // other side of the cannon (armuwadves / coruwadves; legadvestore for the Starfall)
     int Storages = 7;               // owner 2026-10-27: + 1 for a margin of error
@@ -67,18 +90,24 @@ namespace LolCannon {
     // a storage slot that does not reserve, or whose orders keep coming to nothing,
     // moves to the nearest free spot within this of the strip's centre
     float StoreSearchRadius = 400.0f;
+    // our advanced storages within this of the cannon count toward its storages,
+    // wherever they went up (an unpinned FRONT order goes where native finds room)
+    float StoreCountRadius = 900.0f;
     // the crews. One T2 air constructor orders the cannon; AirCrew air
     // constructors (T1 or T2) are taken off every other task, build the
     // turret block and then assist the cannon; StoreCrew T2 air constructors
     // build the storages, then assist. Our own air constructors are claimed
     // first, the rest ordered from our air plants (CrewRecruitBatch a round).
     // With no air plant that can make them, T2 ground constructors stand in.
+    // GroundCrew T1 ground constructors (owner 2026-10-28: "a turret block with
+    // t1 cons") build the turret block beside the air crew while it is short:
+    // our own claimed first, the rest ordered from our T1 bot and vehicle labs.
     int AirCrew = 50;
     int StoreCrew = 5;
+    int GroundCrew = 10;
     int CrewRecruitBatch = 10;
     int CrewOrderSeconds = 20;      // claims and recruit orders this often
     int StarterGraceSeconds = 60;   // no T2 air constructor by then: our own T2 ground constructors may start the cannon
-    int StallSeconds = 240;         // turrets/storages with no work this long: the cannon is ordered anyway
     // firing: only the roster below, best tier first (CSuperTask::SetTargetTier),
     // the engine's own targeting otherwise (FireState)
     bool FireTiers = true;
@@ -91,7 +120,7 @@ namespace LolCannon {
     // Scouting that changes the top area sends the gun back to it at once.
     float AreaRadius = 300.0f;
     int GunAreas = 6;
-    int GunAreaSeconds = 20;
+    int GunAreaSeconds = 30;        // owner 2026-10-28: 30 (was 20); the Starfall keeps StarfallShotsPerArea
     int StarfallAreas = 3;
     int StarfallShotsPerArea = 2;
     // scouting (owner 2026-10-27): at the first strike, then every ReScoutSeconds at

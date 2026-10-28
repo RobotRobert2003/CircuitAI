@@ -31,7 +31,9 @@ this program (owner, 2026-10-26):
           candidate nearest our base first, facing that start. The ground is
           measured the way TECH's layout measures its turret box (flat x
           buildable fraction, LayoutBoxMaxSlope) over the cannon, the turret
-          block on one side and the storage strip on the other, and must hold
+          block on one side and the storage strip on the other (FRONT keeps
+          FrontBlockGap (64) of ground between them and the cannon, for the
+          engine's own site search; TECH 16), and must hold
           the cannon's footprint and MinTurrets (16) turrets out of the block
           and its TurretSpareRows, centre out: each footprint is reserved
           through the layout reservations. The storages reserve where they can
@@ -46,27 +48,54 @@ this program (owner, 2026-10-26):
           crews stay); a rebuild on a done site that keeps failing gives the
           site up and the cannon is planned afresh. TECH
           keeps the reservations and pins its orders to them; FRONT runs no layout, so
-          its reservations are taken only for the search and its orders go to
-          the same spots unpinned.
+          its orders go to the same spots unpinned: the cannon's, the turret
+          block's and the storage strip's reservations are held (owner
+          2026-10-28), each let go just before its own order and held again
+          every 10 s while empty with no order, so no storage, ally or other
+          build of ours lands on them while the turrets go up. An unpinned
+          order may go up a little off its slot, so the turrets and storages
+          are also counted round the block and the strip, wherever they
+          stand: once there are as many as slots, nothing more is ordered
+          (a live game put up 20+ storages per cannon). A cannon order alive GunFrameSeconds (300)
+          with no frame down is aborted as a failure; a site whose turret
+          block stands moves back only after BlockSiteFailures (6) of them.
+          The engine drops a build order silently when the site has enemy
+          threat on it or the builder cannot reach it, so the cannon is not
+          ordered (logged "held back"); GunFrameSeconds of that is a failure.
+          FRONT orders no storage before the cannon's frame is down (unpinned,
+          one can land in the cannon's yard), and a starter within 400 of a
+          45 s old order with no frame is given the order afresh once a minute.
   crews   taken off every other task (Builder AiMakeTask asks here first):
-            starter  one T2 air constructor: orders the cannon at once;
+            starter  one T2 air constructor: orders the cannon once
+                     TurretsBeforeCannon (16) turrets stand (owner
+                     2026-10-28: two FRONT cannons went up with none), or
+                     TurretWaitSeconds (300) pass with no turret crew at all,
+                     or TurretMaxWaitSeconds (900) in any case; turrets
+                     meanwhile. A slot given up after three orders is tried
+                     again every TurretRetrySeconds (120);
             air      AirCrew (50) air constructors, T1 or T2: build the
                      Turrets (22) of the TurretCols x TurretRows (4x4)
                      block and its spare rows, then assist;
+            T1 ground GroundCrew (10) T1 bot or vehicle constructors
+                     (owner 2026-10-28), while the block is short: the same
+                     as the air crew; ordered from our T1 ground labs, so a
+                     FRONT with no air plant still builds its block;
             store    StoreCrew (5) T2 air constructors: build the storages
                      (7 armuwadves / coruwadves, 9 legadvestore for the
                      Starfall) as a strip StorageCols (2) wide, then assist.
                      A storage slot that does not reserve, or whose orders
                      keep failing, moves to the nearest free spot within
-                     StoreSearchRadius of the strip.
+                     StoreSearchRadius of the strip, off the turret block and
+                     off every other storage slot.
           Our own finished air constructors are claimed first, new ones as
           they come out; the rest are ordered from our air plants,
           CrewRecruitBatch every CrewOrderSeconds. With no plant that makes a
           T2 air constructor, T2 ground constructors stand in for the starter
           and storage crews.
-  done    the air crew is released (the starter and storage crew first finish
-          any storages still short, up to StoreFinishSeconds) and the cannon's
-          fire is tiered (below). A lost cannon is rebuilt on its own site.
+  done    the crews are released (the turret crews first finish any turrets
+          still short, the starter and storage crew any storages, up to
+          StoreFinishSeconds) and the cannon's fire is tiered (below). A lost
+          cannon is rebuilt on its own site.
   fire    Military::AiMakeTask hands each lolcannon's CSuperTask the roster
           below and sets FireState (2, fire at will, owner 2026-10-26; kept
           once a minute); a roster target in range is ordered, best tier first:
@@ -85,7 +114,7 @@ this program (owner, 2026-10-26):
           into areas of AreaRadius (300) round the best target left; an area
           ranks by its best tier, then by its roster metal, and is fired at
           its best target. Ragnarok and Calamity work down the top GunAreas
-          (6), GunAreaSeconds (20) on each; the Starfall the top
+          (6), GunAreaSeconds (30) on each; the Starfall the top
           StarfallAreas (3), StarfallShotsPerArea (2) shots on each; then back
           to the top. Scouting that changes the top area (its best target
           gone, or a better one found) sends the gun back to the top at once
@@ -119,9 +148,10 @@ pass over the defs, CanBuild per constructor def x structure.
 namespace LolCannon {
 
     const int IDLE = 0, BUILD = 1, STORES = 2;   // STORES: the cannon stands, its storage crew finishes the strip
-    const int STARTER = 0, AIR = 1, STORE = 2;
+    const int STARTER = 0, AIR = 1, STORE = 2, GROUND = 3;   // GROUND: the T1 ground turret crew
     const array<string> CANNONS = { "armvulc", "corbuzz", "legstarfall" };
     const array<string> T2_GROUND = { "armack", "armacv", "corack", "coracv", "legack", "legacv" };
+    const array<string> T1_GROUND = { "armck", "armcv", "corck", "corcv", "legck", "legcv" };
 
     int phase = IDLE;
     int built = 0;                   // cannons finished by the program (the gate index)
@@ -132,10 +162,12 @@ namespace LolCannon {
     array<IUnitTask@> mine;
 
     // the crews
-    dictionary crewOf;               // unit id -> STARTER / AIR / STORE
-    array<int> crewCount = { 0, 0, 0 };
+    dictionary crewOf;               // unit id -> STARTER / AIR / STORE / GROUND
+    array<int> crewCount = { 0, 0, 0, 0 };
     array<IUnitTask@> recruitsT2;    // starter and storage crew orders in flight
     array<IUnitTask@> recruitsAir;   // air crew orders in flight
+    array<IUnitTask@> recruitsGround;   // T1 ground crew orders in flight
+    bool turretsOpen = true;         // a turret slot is still neither standing nor given up (Advance, once a second)
     dictionary groundLabs;           // lab id -> true: labs given a T2 ground stand-in order
     int nextCrewOrder = 0;
 
@@ -168,6 +200,8 @@ namespace LolCannon {
     int gunOrderedAt = -1;           // the frame the current cannon order was given
     int gunTryFrom = -1;             // the frame the current try (orders with no frame yet) began, -1 none
     int quickEnds = 0;               // orders of this try that ended with no frame
+    int unsafeFrom = -1;             // the frame the site was first found unsafe for an order, -1 safe
+    int nextUnsafeLog = 0;
     array<AIFloat3> badStoreSpots;   // storage spots whose orders kept failing: not chosen again
     array<AIFloat3> failedSites;     // sites this cannon moved back from: later searches keep SiteAvoidRadius off them
 
@@ -187,6 +221,12 @@ namespace LolCannon {
     int storesUntil = 0;
     int nextStoreFix = 0;
     int nextLog = 0;
+    int nextTurretWaitLog = 0;
+    int nextHold = 0;
+    int nextTurretRetry = 0;
+    int nextGunHoldLog = 0;
+    int nanosNear = 0, nanosNearAll = 0, storesNear = 0, storesNearAll = 0;   // CountSite
+    int blockFails = 0;              // cannon order failures on a site whose turret block stands
 
     bool Enabled() { return Global::LolCannon::Enabled; }
     bool RoleMay() { return Global::AISettings::Role == AiRole::FRONT || Global::AISettings::Role == AiRole::TECH; }
@@ -253,6 +293,88 @@ namespace LolCannon {
         }
     }
 
+    // Public: a lolcannon crew member (other systems leave these alone).
+    bool IsCrew(int id) { return phase != IDLE && CrewKind(id) >= 0; }
+
+    // The starter taken off its cannon order by another system (c18e812e test:
+    // FRONT's mex upgrades pulled it as a "helper" of the shared order, for up to
+    // 15 min): handed the order back while it stands with no frame. Every 5 s.
+    int nextTakeBack = 0;
+    void TakeBackStarter()
+    {
+        if (ai.frame < nextTakeBack || phase != BUILD || gunTask is null || gunTask.IsDead()) return;
+        nextTakeBack = ai.frame + 5 * SECOND;
+        if (Gun() is null || aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun()) !is null) return;
+        ProbeOrder();
+        array<string>@ keys = crewOf.getKeys();
+        for (uint i = 0; i < keys.length(); ++i) {
+            if (CrewKind(parseInt(keys[i])) != STARTER) continue;
+            CCircuitUnit@ u = ai.GetTeamUnit(parseInt(keys[i]));
+            if (u is null) continue;
+            if (u.task is gunTask) {
+                NudgeStarter(u);
+                continue;
+            }
+            IUnitTask@ t = u.task;
+            if (t !is null && Mine(t)) continue;   // on a turret or storage of ours
+            string unsafe;
+            if (!SiteSafe(u, unsafe)) continue;   // the engine would drop it straight off the order again
+            GenericHelpers::LogUtil("[LolCannon] starter " + u.circuitDef.GetName() + " " + u.id + " taken back to its cannon order", 1);
+            aiBuilderMgr.AssignTask(u, gunTask);
+        }
+    }
+
+    // Diagnostic (fix 5 test: FRONT orders on safe, reachable sites still put no
+    // frame down for 300-1264 s): every 30 s while the order stands with no
+    // frame, who is on it, whether the engine found it a build position, and
+    // where each starter is and what it does.
+    int nextProbe = 0;
+    void ProbeOrder()
+    {
+        if (ai.frame < nextProbe || ai.frame - gunOrderedAt < 20 * SECOND) return;
+        nextProbe = ai.frame + 30 * SECOND;
+        IBuilderTask@ bt = cast<IBuilderTask>(gunTask);
+        array<CCircuitUnit@>@ on = gunTask.GetUnits();
+        string s = "[LolCannon] probe: cannon order at (" + int(site.x) + ", " + int(site.z) + ") stands "
+            + ((ai.frame - gunOrderedAt) / SECOND) + " s, " + on.length() + " unit(s) on it";
+        for (uint i = 0; i < on.length(); ++i) s += (i == 0 ? " [" : ", ") + on[i].circuitDef.GetName() + " " + on[i].id;
+        if (on.length() > 0) s += "]";
+        if (bt !is null) {
+            const AIFloat3 bp = bt.GetBuildPos();
+            s += bp.x < 0.0f ? ", no build position" : ", build position (" + int(bp.x) + ", " + int(bp.z) + ") " + int(bp.distance2D(site)) + " off the site";
+        }
+        array<string>@ keys = crewOf.getKeys();
+        for (uint i = 0; i < keys.length(); ++i) {
+            if (CrewKind(parseInt(keys[i])) != STARTER) continue;
+            CCircuitUnit@ u = ai.GetTeamUnit(parseInt(keys[i]));
+            if (u is null) continue;
+            IUnitTask@ t = u.task;
+            IBuilderTask@ ut = cast<IBuilderTask>(t);
+            s += "; starter " + u.circuitDef.GetName() + " " + u.id + " " + int(u.GetPos(ai.frame).distance2D(site)) + " from the site, "
+                + (t is null ? "no task" : (t is gunTask ? "on the order" : "task type " + t.GetType()
+                + (ut is null ? "" : " build " + ut.GetBuildType() + (ut.buildDef is null ? "" : " " + ut.buildDef.GetName()))
+                + (Mine(t) ? " (ours)" : "")));
+        }
+        GenericHelpers::LogUtil(s, 1);
+    }
+
+    // A starter on the order near the site with no frame for a while had never
+    // been given the build command (fix 8 replay: T13's moved round the site and
+    // repaired other units for minutes, 135-182 from it). Taken off for a moment;
+    // TakeBackStarter hands it the order again, which starts it afresh.
+    int nextNudge = 0;
+    void NudgeStarter(CCircuitUnit@ u)
+    {
+        if (ai.frame < nextNudge || ai.frame - gunOrderedAt < 45 * SECOND) return;
+        if (u.GetPos(ai.frame).distance2D(site) > 400.0f) return;   // still on its way
+        nextNudge = ai.frame + 60 * SECOND;
+        GenericHelpers::LogUtil("[LolCannon] starter " + u.circuitDef.GetName() + " " + u.id + " "
+            + int(u.GetPos(ai.frame).distance2D(site)) + " from its cannon order with no frame after "
+            + ((ai.frame - gunOrderedAt) / SECOND) + " s: given the order afresh", 1);
+        aiBuilderMgr.AssignTask(u, Wait(2));
+        nextTakeBack = ai.frame + 3 * SECOND;
+    }
+
     bool Mine(IUnitTask@ t)
     {
         for (uint i = 0; i < mine.length(); ++i) if (mine[i] is t) return true;
@@ -277,12 +399,14 @@ namespace LolCannon {
     {
         if (kind == STARTER) return 1;
         if (kind == STORE) return Global::LolCannon::StoreCrew;
+        if (kind == GROUND) return Global::LolCannon::GroundCrew;
         return Global::LolCannon::AirCrew;
     }
 
     // The crew a constructor of this def may join now, -1 none.
     int KindFor(const string &in name, bool groundStandIn)
     {
+        if (T1_GROUND.find(name) >= 0) return (turretsOpen && crewCount[GROUND] < Wanted(GROUND)) ? GROUND : -1;
         const bool t2 = IsT2Air(name) || (groundStandIn && T2_GROUND.find(name) >= 0);
         if (!t2 && !IsT1Air(name)) return -1;
         const int kind = LolCannonMath::CrewFor(t2, crewCount[STARTER], crewCount[STORE], Wanted(STORE),
@@ -292,10 +416,10 @@ namespace LolCannon {
 
     bool Claim(CCircuitUnit@ u, int kind, const string &in how)
     {
-        if (u is null || kind < 0 || kind > STORE) return false;
+        if (u is null || kind < 0 || kind > GROUND) return false;
         crewOf.set(Key(u.id), int64(kind));
         ++crewCount[kind];
-        GenericHelpers::LogUtil("[LolCannon] " + (kind == STARTER ? "starter" : (kind == STORE ? "storage crew " : "air crew "))
+        GenericHelpers::LogUtil("[LolCannon] " + (kind == STARTER ? "starter" : (kind == STORE ? "storage crew " : (kind == GROUND ? "T1 ground crew " : "air crew ")))
             + (kind == STARTER ? "" : ("" + crewCount[kind] + " of " + Wanted(kind))) + ": " + u.circuitDef.GetName() + " " + u.id + " (" + how + ")", 1);
         return true;
     }
@@ -314,17 +438,18 @@ namespace LolCannon {
         const int kind = CrewKind(unit.id);
         if (kind < 0) return;
         crewOf.delete(Key(unit.id));
-        if (kind <= STORE && crewCount[kind] > 0) --crewCount[kind];
+        if (kind <= GROUND && crewCount[kind] > 0) --crewCount[kind];
     }
 
     void ReleaseCrew(const string &in why)
     {
         GenericHelpers::LogUtil("[LolCannon] crews released (" + crewCount[STARTER] + " starter, " + crewCount[AIR] + " air, "
-            + crewCount[STORE] + " storage): " + why, 1);
+            + crewCount[STORE] + " storage, " + crewCount[GROUND] + " T1 ground): " + why, 1);
         crewOf.deleteAll();
         for (uint k = 0; k < crewCount.length(); ++k) crewCount[k] = 0;
         recruitsT2.resize(0);
         recruitsAir.resize(0);
+        recruitsGround.resize(0);
         groundLabs.deleteAll();
     }
 
@@ -332,7 +457,8 @@ namespace LolCannon {
     // O(our units) per scan, only while a crew is short.
     void ClaimOwn()
     {
-        if (crewCount[STARTER] >= 1 && crewCount[STORE] >= Wanted(STORE) && crewCount[AIR] >= Wanted(AIR)) return;
+        if (crewCount[STARTER] >= 1 && crewCount[STORE] >= Wanted(STORE) && crewCount[AIR] >= Wanted(AIR)
+            && (crewCount[GROUND] >= Wanted(GROUND) || !turretsOpen)) return;
         // no starter StarterGraceSeconds into the program: our own T2 ground
         // constructors may start the cannon (and fill the storage crew)
         const bool groundT2 = crewCount[STARTER] < 1 && ai.frame - started >= Global::LolCannon::StarterGraceSeconds * SECOND;
@@ -349,7 +475,7 @@ namespace LolCannon {
             if (t !is null) aiBuilderMgr.AssignTask(u, t);
             ++taken;
         }
-        if (taken > 0) GenericHelpers::LogUtil("[LolCannon] " + taken + " of our air constructors taken for the crews", 1);
+        if (taken > 0) GenericHelpers::LogUtil("[LolCannon] " + taken + " of our constructors taken for the crews", 1);
     }
 
     int Alive(array<IUnitTask@>@ tasks)
@@ -379,18 +505,27 @@ namespace LolCannon {
     {
         const int needT2 = (1 - crewCount[STARTER]) + (Wanted(STORE) - crewCount[STORE]) - Alive(recruitsT2);
         const int needAir = Wanted(AIR) - crewCount[AIR] - Alive(recruitsAir);
-        if (needT2 <= 0 && needAir <= 0) return;
+        const int needGround = turretsOpen ? Wanted(GROUND) - crewCount[GROUND] - Alive(recruitsGround) : 0;
+        if (needT2 <= 0 && needAir <= 0 && needGround <= 0) return;
         const string s = Side();
         CCircuitDef@ t1Air = ai.GetCircuitDef(UnitHelpers::GetT1AirConstructorNameForSide(s));
         CCircuitDef@ t2Air = ai.GetCircuitDef(UnitHelpers::GetT2AirConstructorNameForSide(s));
-        array<CCircuitUnit@> t1Labs, t2Labs, groundT2Labs;
-        array<CCircuitDef@> groundDefs;
+        array<CCircuitUnit@> t1Labs, t2Labs, groundT2Labs, groundT1Labs;
+        array<CCircuitDef@> groundDefs, groundT1Defs;
         array<string>@ keys = Factory::allFactories.getKeys();
         for (uint i = 0; i < keys.length(); ++i) {
             CCircuitUnit@ f = null;
             if (!Factory::allFactories.get(keys[i], @f) || f is null || f.circuitDef is null || f.GetBuildProgress() < 1.0f) continue;
             if (t2Air !is null && f.circuitDef.CanBuild(t2Air)) { t2Labs.insertLast(f); continue; }
             if (t1Air !is null && f.circuitDef.CanBuild(t1Air)) { t1Labs.insertLast(f); continue; }
+            bool t1Ground = false;
+            for (uint n = 0; n < T1_GROUND.length() && !t1Ground; ++n) {
+                CCircuitDef@ d = ai.GetCircuitDef(T1_GROUND[n]);
+                if (d is null || !f.circuitDef.CanBuild(d)) continue;
+                groundT1Labs.insertLast(f); groundT1Defs.insertLast(d);
+                t1Ground = true;
+            }
+            if (t1Ground) continue;
             for (uint n = 0; n < T2_GROUND.length(); ++n) {
                 CCircuitDef@ d = ai.GetCircuitDef(T2_GROUND[n]);
                 if (d is null || !f.circuitDef.CanBuild(d)) continue;
@@ -416,8 +551,26 @@ namespace LolCannon {
             if (q > 0) how += (how == "" ? "" : ", ") + q + " for the air crew";
             queued += q;
         }
+        if (needGround > 0 && groundT1Labs.length() > 0) {
+            // its own batch: the turret block is the one job T1 ground constructors do here
+            int q = 0;
+            const int n = AiMin(needGround, Global::LolCannon::CrewRecruitBatch);
+            for (int k = 0; k < n; ++k) {
+                const uint i = uint(k) % groundT1Labs.length();
+                CCircuitDef@ d = groundT1Defs[i];
+                if (d.maxThisUnit <= d.count + n) d.maxThisUnit = d.count + n + 1;   // role caps yield to the crew
+                IUnitTask@ r = aiFactoryMgr.Enqueue(TaskS::Recruit(Task::RecruitType::BUILDPOWER, Task::Priority::HIGH, d,
+                    groundT1Labs[i].GetPos(ai.frame), 64.0f));
+                if (r is null) continue;
+                recruitsGround.insertLast(r);
+                ++q;
+            }
+            if (q > 0) how += (how == "" ? "" : ", ") + q + " for the T1 ground crew";
+            queued += q;
+        }
         GenericHelpers::LogUtil("[LolCannon] crews short (starter " + crewCount[STARTER] + "/1, storage " + crewCount[STORE] + "/" + Wanted(STORE)
-            + ", air " + crewCount[AIR] + "/" + Wanted(AIR) + "): " + (queued > 0 ? "queued " + how : "no plant to order them from"), 1);
+            + ", air " + crewCount[AIR] + "/" + Wanted(AIR) + ", T1 ground " + crewCount[GROUND] + "/" + Wanted(GROUND) + (turretsOpen ? "" : ", turrets done") + "): "
+            + (queued > 0 ? "queued " + how : "no plant to order them from"), 1);
     }
 
     void OrderCrews()
@@ -474,6 +627,20 @@ namespace LolCannon {
         return AiMin(slots, AiMax(Global::LolCannon::MinTurrets, Global::LolCannon::Turrets));
     }
 
+    // Ground between the cannon and its turret block / storage strip. TECH's pinned
+    // order goes straight onto its slot; FRONT's unpinned order goes through the
+    // engine's site search, which also wants the cannon's block_map yard
+    // (_default_: 3 cells, 48 elmos, each side) clear of turrets and of held
+    // slots - with 16 it found no site once the turrets stood (fix 6 test).
+    // FRONT is told by the layout state before the site search switches the
+    // layout on for its reservations (fix 7 test: read inside it, the gap was
+    // always TECH's).
+    bool unpinnedOrders = false;
+    float BlockGap()
+    {
+        return (unpinnedOrders || !aiTerrainMgr.IsLayoutEnabled()) ? Global::LolCannon::FrontBlockGap : 16.0f;
+    }
+
     // The cannon at gp facing f: the turret block's candidate slots on side `hand`
     // (+1/-1) and the storage strip's on the other, each centre out, spare rows last.
     void Slots(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in gp, int f, float hand,
@@ -483,7 +650,7 @@ namespace LolCannon {
         const float gunHalf = LolCannonMath::Pitch(Layout::Across(gun, f)) * 0.5f;
         const int cols = Global::LolCannon::TurretCols, rows = Global::LolCannon::TurretRows + AiMax(0, Global::LolCannon::TurretSpareRows);
         const float nA = LolCannonMath::Pitch(Layout::Across(nano, f)), nL = LolCannonMath::Pitch(Layout::Along(nano, f));
-        block = At(gp, side, hand * (gunHalf + 16.0f + float(cols) * nA * 0.5f), fwd, 0.0f);
+        block = At(gp, side, hand * (gunHalf + BlockGap() + float(cols) * nA * 0.5f), fwd, 0.0f);
         turrets.resize(0);
         for (int i = 0; i < rows; ++i) {
             const int r = LolCannonMath::CentreOut(i, rows);
@@ -493,7 +660,7 @@ namespace LolCannon {
         const int sc = Global::LolCannon::StorageCols;
         const int sr = LolCannonMath::Rows(StoresNeeded(), sc) + AiMax(0, Global::LolCannon::StorageSpareRows);
         const float sA = LolCannonMath::Pitch(Layout::Across(st, f)), sL = LolCannonMath::Pitch(Layout::Along(st, f));
-        strip = At(gp, side, -hand * (gunHalf + 16.0f + float(sc) * sA * 0.5f), fwd, 0.0f);
+        strip = At(gp, side, -hand * (gunHalf + BlockGap() + float(sc) * sA * 0.5f), fwd, 0.0f);
         stores.resize(0);
         for (int i = 0; i < sr; ++i) {
             const int r = LolCannonMath::CentreOut(i, sr);
@@ -508,7 +675,7 @@ namespace LolCannon {
         const float gunHalf = LolCannonMath::Pitch(Layout::Across(gun, f)) * 0.5f;
         const float blockW = float(Global::LolCannon::TurretCols) * LolCannonMath::Pitch(Layout::Across(nano, f));
         const float stripW = float(Global::LolCannon::StorageCols) * LolCannonMath::Pitch(Layout::Across(st, f));
-        const float halfAcross = gunHalf + 16.0f + AiMax(blockW, stripW);
+        const float halfAcross = gunHalf + BlockGap() + AiMax(blockW, stripW);
         const float blockL = float(Global::LolCannon::TurretRows) * LolCannonMath::Pitch(Layout::Along(nano, f));
         const float stripL = float(LolCannonMath::Rows(StoresNeeded(), Global::LolCannon::StorageCols)) * LolCannonMath::Pitch(Layout::Along(st, f));
         const float halfAlong = AiMax(LolCannonMath::Pitch(Layout::Along(gun, f)), AiMax(blockL, stripL)) * 0.5f;
@@ -552,7 +719,8 @@ namespace LolCannon {
 
     // One candidate: the cannon and MinTurrets turrets reserved, either hand; the
     // storages reserve where they can and never refuse the site. On success the
-    // slots are kept (TECH) or read and released (FRONT, keep false).
+    // slots are kept (TECH), or held (FRONT, keep false; HoldBlock) and let go
+    // one by one for their own unpinned orders.
     bool TrySite(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in p, int f, bool keep)
     {
         // the cannon at the candidate, else slid sideways (along the ring) up to its own width
@@ -585,11 +753,8 @@ namespace LolCannon {
             turretPos = tp; storePos = sp;
             if (keep) { gunRes = id; turretRes = tr; storeRes = sr; }
             else {
-                aiTerrainMgr.ReleaseReservation(id); ReleaseAll(tr); ReleaseAll(sr);
-                gunRes = -1;
-                turretRes.resize(0); storeRes.resize(0);
-                for (uint i = 0; i < tp.length(); ++i) turretRes.insertLast(-1);
-                for (uint i = 0; i < sp.length(); ++i) storeRes.insertLast(-1);
+                gunRes = id;
+                turretRes = tr; storeRes = sr;
             }
             return true;
         }
@@ -679,6 +844,7 @@ namespace LolCannon {
         }
         // FRONT runs no layout: the reservations are taken for the search only.
         const bool layoutOn = aiTerrainMgr.IsLayoutEnabled();
+        unpinnedOrders = !layoutOn;
         if (!layoutOn && !aiTerrainMgr.SetLayoutEnabled(true)) {
             GenericHelpers::LogUtil("[LolCannon] the profile's layout gate is closed; no site can be measured", 1);
             return false;
@@ -701,7 +867,7 @@ namespace LolCannon {
                     + "), facing " + facing + ", " + int(sqrt(bestD[i])) + " from home, ground " + int(score * 100.0f) + "%; "
                     + turretPos.length() + " turrets and " + storePos.length() + " " + st.GetName() + " beside it ("
                     + storesReserved + " storage slots reserved)"
-                    + (layoutOn ? " (reserved)" : " (FRONT: unpinned)") + "; against the enemy spawn at (" + int(siteTarget.x) + ", "
+                    + (layoutOn ? " (reserved)" : " (FRONT: cannon, turret block and storage strip held, orders unpinned)") + "; against the enemy spawn at (" + int(siteTarget.x) + ", "
                     + int(siteTarget.z) + "), " + int(sqrt(MapHelpers::SqDist(site, siteTarget))) + " away: " + targetWhy + backWhy, 1);
         }
         if (!found && refusedGun > 0) {
@@ -728,6 +894,8 @@ namespace LolCannon {
         for (uint i = 0; i < turretPos.length(); ++i) { turretTask.insertLast(null); turretMiss.insertLast(0); }
         storeTask.resize(0); storeMiss.resize(0); storeDead.resize(0); badStoreSpots.resize(0);
         gunTryFrom = -1; quickEnds = 0;
+        turretsOpen = true; nextHold = 0; nextTurretWaitLog = 0; blockFails = 0;
+        nextTurretRetry = ai.frame + Global::LolCannon::TurretRetrySeconds * SECOND;
         for (uint i = 0; i < storePos.length(); ++i) { storeTask.insertLast(null); storeMiss.insertLast(0); storeDead.insertLast(false); }
         nextStoreFix = 0;
     }
@@ -770,12 +938,16 @@ namespace LolCannon {
 
     // A slot list's next piece of work: finish an unfinished one, order a free slot
     // (at most `atOnce` in flight), or help one on its way; null when the list is done.
+    // With `full` (as many of d stand or are framed round the list as it has slots,
+    // wherever they went up) nothing new is ordered.
     IUnitTask@ SlotWork(CCircuitUnit@ u, CCircuitDef@ d, Task::BuildType type, const array<AIFloat3> &in at, array<int>@ ids,
-        array<IUnitTask@>@ tasks, array<int>@ misses, const AIFloat3 &in centre, int atOnce, const string &in what, float near = 260.0f)
+        array<IUnitTask@>@ tasks, array<int>@ misses, const AIFloat3 &in centre, int atOnce, const string &in what, bool full,
+        float near = 260.0f)
     {
         if (d is null || !u.circuitDef.CanBuild(d)) return null;
         CCircuitUnit@ unf = aiBuilderMgr.FindUnfinishedNear(centre, near, d);
         if (unf !is null) return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, unf, 30 * SECOND));
+        if (full) return null;
         int flying = 0;
         IUnitTask@ help = null;
         for (uint k = 0; k < tasks.length(); ++k)
@@ -784,6 +956,11 @@ namespace LolCannon {
             if ((tasks[k] !is null && !tasks[k].IsDead()) || misses[k] >= 3) continue;
             if (aiBuilderMgr.FindOwnNear(at[k], 24.0f, d) !is null) continue;
             if (tasks[k] !is null) ++misses[k];   // its last order ended with nothing standing
+            if (ids[k] >= 0 && !aiTerrainMgr.IsLayoutEnabled()) {
+                // FRONT: a held slot is let go for its own order, which goes there unpinned
+                aiTerrainMgr.ReleaseReservation(ids[k]);
+                ids[k] = -1;
+            }
             @tasks[k] = OrderAt(type, d, at[k], ids[k]);
             if (tasks[k] is null) { ++misses[k]; continue; }
             GenericHelpers::LogUtil("[LolCannon] " + u.circuitDef.GetName() + " " + u.id + " orders " + what + " " + (k + 1) + " of "
@@ -796,13 +973,163 @@ namespace LolCannon {
     IUnitTask@ TurretWork(CCircuitUnit@ u)
     {
         return SlotWork(u, Nano(), Task::BuildType::NANO, turretPos, turretRes, turretTask, turretMiss, blockCentre,
-            Global::LolCannon::TurretsAtOnce, "turret");
+            Global::LolCannon::TurretsAtOnce, "turret", nanosNearAll >= int(turretPos.length()));
     }
 
     IUnitTask@ StoreWork(CCircuitUnit@ u)
     {
+        // FRONT: no storage before the cannon's frame is down. Unpinned, the engine
+        // put T13's next to the footprint, inside the cannon's yard, while the
+        // cannon was being ordered (fix 8 test: 18 orders refused the ground).
+        if (phase == BUILD && !aiTerrainMgr.IsLayoutEnabled() && StandingGun() is null
+            && (Gun() is null || aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun()) is null)) return null;
+        // full counts the orders in flight too (each may not have its frame down yet):
+        // short for a moment at worst, never over
+        int flying = 0;
+        for (uint k = 0; k < storeTask.length(); ++k) if (storeTask[k] !is null && !storeTask[k].IsDead()) ++flying;
         return SlotWork(u, Store(), Task::BuildType::STORE, storePos, storeRes, storeTask, storeMiss, stripCentre, 2, "storage",
-            Global::LolCannon::StoreSearchRadius + 64.0f);
+            storesNearAll + flying >= int(storePos.length()), Global::LolCannon::StoreSearchRadius + 64.0f);
+    }
+
+    // Our units of d within r of c: finished, and all (frames too).
+    void CountNear(CCircuitDef@ d, const AIFloat3 &in c, float r, int &out done, int &out all)
+    {
+        done = 0; all = 0;
+        if (d is null || c.x < 0.0f) return;
+        array<Id>@ ids = ai.GetOwnedUnitIds();
+        for (uint i = 0; i < ids.length(); ++i) {
+            CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
+            if (u is null || u.circuitDef !is d || MapHelpers::SqDist(u.GetPos(ai.frame), c) > r * r) continue;
+            ++all;
+            if (u.GetBuildProgress() >= 1.0f) ++done;
+        }
+    }
+
+    // The turrets and storages round the block and the strip, wherever each went up
+    // (owner 2026-10-28: a live game put up 20+ storages per cannon, each built a
+    // little off its slot, so the slot saw none and ordered again). Once a second.
+    void CountSite()
+    {
+        CountNear(Nano(), blockCentre, 260.0f, nanosNear, nanosNearAll);
+        // the storages over a wider ring round the cannon: an unpinned order whose
+        // spot was taken goes up wherever native finds room (c18e812e test: 1-6 extra)
+        CountNear(Store(), site, Global::LolCannon::StoreCountRadius, storesNear, storesNearAll);
+    }
+
+    // Turret slots neither standing nor given up (three orders came to nothing);
+    // none once as many turrets stand round the block as it has slots.
+    int OpenTurrets()
+    {
+        CCircuitDef@ nano = Nano();
+        if (nanosNear >= int(turretPos.length())) return 0;
+        int n = 0;
+        for (uint k = 0; k < turretPos.length(); ++k)
+            if ((k >= turretMiss.length() || turretMiss[k] < 3) && (nano is null || aiBuilderMgr.FindOwnNear(turretPos[k], 24.0f, nano) is null)) ++n;
+        return n;
+    }
+
+    // A storage at q would overlap the turret block (its slots and spare rows).
+    bool OnTurretBlock(CCircuitDef@ st, const AIFloat3 &in q)
+    {
+        CCircuitDef@ nano = Nano();
+        if (nano is null || st is null || blockCentre.x < 0.0f) return false;
+        const AIFloat3 side = Layout::Side(facing), fwd = Layout::Fwd(facing);
+        const float dx = q.x - blockCentre.x, dz = q.z - blockCentre.z;
+        const float across = dx * side.x + dz * side.z, along = dx * fwd.x + dz * fwd.z;
+        const int rows = Global::LolCannon::TurretRows + AiMax(0, Global::LolCannon::TurretSpareRows);
+        const float halfA = float(Global::LolCannon::TurretCols) * LolCannonMath::Pitch(Layout::Across(nano, facing)) * 0.5f
+            + LolCannonMath::Pitch(Layout::Across(st, facing)) * 0.5f;
+        const float halfL = float(rows) * LolCannonMath::Pitch(Layout::Along(nano, facing)) * 0.5f
+            + LolCannonMath::Pitch(Layout::Along(st, facing)) * 0.5f;
+        return AiMax(across, -across) < halfA && AiMax(along, -along) < halfL;
+    }
+
+    // Every TurretRetrySeconds a turret slot given up (three orders came to nothing)
+    // is tried again while nothing stands on it.
+    void RetryTurrets()
+    {
+        if (ai.frame < nextTurretRetry) return;
+        nextTurretRetry = ai.frame + Global::LolCannon::TurretRetrySeconds * SECOND;
+        int n = 0;
+        for (uint k = 0; k < turretMiss.length(); ++k)
+            if (turretMiss[k] >= 3) { turretMiss[k] = 0; ++n; }
+        if (n > 0) GenericHelpers::LogUtil("[LolCannon] " + n + " given-up turret slot(s) tried again", 1);
+    }
+
+    // FRONT (layout off): every empty turret and storage slot with no order in
+    // flight, and the cannon's footprint while no cannon order is in flight and no
+    // frame stands, are held again, so nothing else is built there. Every 10 s
+    // while the crews work.
+    void HoldBlock()
+    {
+        if (ai.frame < nextHold || aiTerrainMgr.IsLayoutEnabled()) return;
+        nextHold = ai.frame + 10 * SECOND;
+        CCircuitDef@ nano = Nano();
+        CCircuitDef@ gun = Gun();
+        if (nano is null || gun is null) return;
+        bool switched = false;
+        int held = 0;
+        if (phase == BUILD && gunRes < 0 && (gunTask is null || gunTask.IsDead()) && StandingGun() is null
+            && aiBuilderMgr.FindUnfinishedNear(site, 128.0f, gun) is null) {
+            if (!aiTerrainMgr.SetLayoutEnabled(true)) return;
+            switched = true;
+            if (aiTerrainMgr.CanReserveBuilding(gun, site, facing)) gunRes = aiTerrainMgr.ReserveBuilding(gun, site, facing);
+            if (gunRes >= 0 || ai.frame >= nextGunHoldLog) {
+                nextGunHoldLog = ai.frame + 60 * SECOND;
+                GenericHelpers::LogUtil("[LolCannon] the cannon's footprint at (" + int(site.x) + ", " + int(site.z) + ") "
+                    + (gunRes >= 0 ? "held again" : "not held for now (the engine refuses the ground: a structure or units on it)"), 1);
+            }
+        }
+        for (uint k = 0; k < turretPos.length() && k < turretRes.length(); ++k) {
+            if (turretRes[k] >= 0 || turretMiss[k] >= 3 || (turretTask[k] !is null && !turretTask[k].IsDead())) continue;
+            if (aiBuilderMgr.FindOwnNear(turretPos[k], 24.0f, nano) !is null) continue;
+            if (!switched) {
+                if (!aiTerrainMgr.SetLayoutEnabled(true)) return;
+                switched = true;
+            }
+            if (!aiTerrainMgr.CanReserveBuilding(nano, turretPos[k], facing)) continue;
+            turretRes[k] = aiTerrainMgr.ReserveBuilding(nano, turretPos[k], facing);
+            if (turretRes[k] >= 0) ++held;
+        }
+        CCircuitDef@ st = Store();
+        int heldStores = 0;
+        for (uint k = 0; st !is null && k < storePos.length() && k < storeRes.length(); ++k) {
+            if (storeRes[k] >= 0 || storeDead[k] || storeMiss[k] >= 3 || (storeTask[k] !is null && !storeTask[k].IsDead())) continue;
+            if (storesNear >= int(storePos.length()) || aiBuilderMgr.FindOwnNear(storePos[k], 32.0f, st) !is null) continue;
+            if (!switched) {
+                if (!aiTerrainMgr.SetLayoutEnabled(true)) return;
+                switched = true;
+            }
+            if (!aiTerrainMgr.CanReserveBuilding(st, storePos[k], facing)) continue;
+            storeRes[k] = aiTerrainMgr.ReserveBuilding(st, storePos[k], facing);
+            if (storeRes[k] >= 0) ++heldStores;
+        }
+        if (switched) aiTerrainMgr.SetLayoutEnabled(false);
+        if (held + heldStores > 0)
+            GenericHelpers::LogUtil("[LolCannon] " + held + " empty turret slot(s) and " + heldStores + " storage slot(s) held again", 1);
+    }
+
+    // FRONT's held turret slots still empty when the program ends are let go (and
+    // the cannon's footprint, should it still be held).
+    void ReleaseHeldBlock()
+    {
+        if (aiTerrainMgr.IsLayoutEnabled()) return;   // TECH keeps its layout
+        ReleaseAll(turretRes);
+        for (uint k = 0; k < turretRes.length(); ++k) turretRes[k] = -1;
+        ReleaseAll(storeRes);
+        for (uint k = 0; k < storeRes.length(); ++k) storeRes[k] = -1;
+        if (gunRes >= 0) aiTerrainMgr.ReleaseReservation(gunRes);
+        gunRes = -1;
+    }
+
+    // Another storage slot's spot (still to build or standing) within a storage's
+    // pitch of q: two slots moved in one pass took the same free spot.
+    bool TakenStoreSpot(uint slot, const AIFloat3 &in q, float step)
+    {
+        const float r = step * 0.9f;
+        for (uint j = 0; j < storePos.length(); ++j)
+            if (j != slot && !storeDead[j] && MapHelpers::SqDist(storePos[j], q) < r * r) return true;
+        return false;
     }
 
     bool BadStoreSpot(const AIFloat3 &in q)
@@ -813,8 +1140,9 @@ namespace LolCannon {
     }
 
     // The nearest spot round the strip, ring by ring out to StoreSearchRadius, where
-    // a storage reserves (kept and pinned when `keep`); never within 24 of `avoid`.
-    bool FreeStoreSpot(CCircuitDef@ st, const AIFloat3 &in avoid, bool keep, AIFloat3 &out at, int &out id)
+    // a storage reserves (kept and pinned when `keep`); never within 24 of `avoid`,
+    // never on the turret block (owner 2026-10-28), never on another storage slot's spot.
+    bool FreeStoreSpot(CCircuitDef@ st, uint slot, const AIFloat3 &in avoid, bool keep, AIFloat3 &out at, int &out id)
     {
         id = -1;
         at = avoid;
@@ -826,7 +1154,8 @@ namespace LolCannon {
                 for (int j = -r; j <= r; ++j) {
                     if (AiMax(AiMax(i, -i), AiMax(j, -j)) != r) continue;   // this ring's edge only
                     const AIFloat3 q = At(stripCentre, side, float(i) * step, fwd, float(j) * step);
-                    if (MapHelpers::SqDist(q, avoid) < 24.0f * 24.0f || BadStoreSpot(q) || !aiTerrainMgr.CanReserveBuilding(st, q, facing)) continue;
+                    if (MapHelpers::SqDist(q, avoid) < 24.0f * 24.0f || BadStoreSpot(q) || OnTurretBlock(st, q) || TakenStoreSpot(slot, q, step)
+                        || !aiTerrainMgr.CanReserveBuilding(st, q, facing)) continue;
                     if (keep) {
                         id = aiTerrainMgr.ReserveBuilding(st, q, facing);
                         if (id < 0) continue;
@@ -868,7 +1197,7 @@ namespace LolCannon {
                 if (ok) at = aiTerrainMgr.GetReservationPos(id);
             }
             if (failing) badStoreSpots.insertLast(old);   // never back to a spot whose orders kept failing
-            if (!ok) ok = FreeStoreSpot(st, failing ? old : AIFloat3(-1000.0f, 0.0f, -1000.0f), layoutOn, at, id);
+            if (!ok) ok = FreeStoreSpot(st, k, failing ? old : AIFloat3(-1000.0f, 0.0f, -1000.0f), layoutOn, at, id);
             if (!ok) {
                 storeDead[k] = true;
                 GenericHelpers::LogUtil("[LolCannon] storage " + (k + 1) + " of " + storePos.length() + " at (" + int(old.x) + ", " + int(old.z)
@@ -886,13 +1215,16 @@ namespace LolCannon {
     int OpenStores()
     {
         CCircuitDef@ st = Store();
+        if (storesNear >= int(storePos.length())) return 0;
         int n = 0;
         for (uint k = 0; k < storePos.length(); ++k)
             if (!storeDead[k] && (st is null || aiBuilderMgr.FindOwnNear(storePos[k], 24.0f, st) is null)) ++n;
         return n;
     }
 
-    IUnitTask@ CannonWork(CCircuitUnit@ u)
+    // A new cannon order only with `mayOrder` (the starter, or anyone able with no
+    // starter in the crew); an order in flight is handed to whoever asks, to help.
+    IUnitTask@ CannonWork(CCircuitUnit@ u, bool mayOrder)
     {
         CCircuitDef@ gun = Gun();
         if (gun is null || StandingGun() !is null) return null;
@@ -902,8 +1234,38 @@ namespace LolCannon {
             return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, gf, 60 * SECOND));
         }
         if (!u.circuitDef.CanBuild(gun) || moveBack) return null;
-        if (gunTask !is null && !gunTask.IsDead()) return gunTask;
-        if (ai.frame < nextGunTry) return null;
+        if (gunTask !is null && !gunTask.IsDead()) {
+            if (ai.frame - gunOrderedAt < Global::LolCannon::GunFrameSeconds * SECOND) return gunTask;
+            // alive with no frame down this long (Swirly Rock: 922 s): a failed try
+            aiBuilderMgr.AbortTask(gunTask);
+            gunTryFrom = -1; quickEnds = 0;
+            nextGunTry = ai.frame + 3 * SECOND;
+            GunFailed("the order stood " + ((ai.frame - gunOrderedAt) / SECOND) + " s with no frame down");
+            return null;
+        }
+        if (!mayOrder) return null;
+        if (ai.frame < nextGunTry || !TurretsReady()) return null;
+        string unsafe;
+        if (!SiteSafe(u, unsafe)) {
+            // The engine's build-site search only takes ground with no enemy threat
+            // that the builder can reach, and drops the order silently otherwise
+            // (97cf37d7 test: most FRONT orders never started). Held, not ordered.
+            if (unsafeFrom < 0) unsafeFrom = ai.frame;
+            const int held = (ai.frame - unsafeFrom) / SECOND;
+            nextGunTry = ai.frame + 5 * SECOND;
+            if (held >= Global::LolCannon::GunFrameSeconds) {
+                unsafeFrom = -1;
+                GunFailed("the site stayed " + unsafe + " for " + held + " s");
+                return null;
+            }
+            if (ai.frame >= nextUnsafeLog) {
+                nextUnsafeLog = ai.frame + 60 * SECOND;
+                GenericHelpers::LogUtil("[LolCannon] cannon order at (" + int(site.x) + ", " + int(site.z) + ") held back: the site is "
+                    + unsafe + " for " + u.circuitDef.GetName() + " " + u.id + " (" + held + " s); the engine only builds on safe, reachable ground", 1);
+            }
+            return null;
+        }
+        unsafeFrom = -1;
         if (gunTask !is null) {
             // An order that ended with no frame: a try is GunMinTrySeconds of orders with
             // no frame, so a handover (a starter drafted or reassigned) is ordered again,
@@ -918,11 +1280,23 @@ namespace LolCannon {
                 if (GunFailed(n + " order(s) over " + tried + " s, none put a frame down")) return null;
             }
         }
+        if (gunRes >= 0 && !aiTerrainMgr.IsLayoutEnabled()) {
+            // FRONT: the held footprint is let go for the order, which goes there unpinned
+            aiTerrainMgr.ReleaseReservation(gunRes);
+            gunRes = -1;
+        }
         @gunTask = OrderAt(Task::BuildType::BIG_GUN, gun, site, gunRes);
         if (gunTask is null) {
             nextGunTry = ai.frame + 10 * SECOND;
             GunFailed("the order was refused");
             return null;
+        }
+        if (!aiTerrainMgr.IsLayoutEnabled()) {
+            // FRONT (unpinned): the engine searches only round the site and, finding
+            // no room there, ends the order with a "SITE: aborting" line instead of a
+            // silent fallback - or a cannon far off its turret block.
+            IBuilderTask@ bt = cast<IBuilderTask>(gunTask);
+            if (bt !is null) bt.siteRadius = 128.0f;
         }
         if (orderFrame < 0) orderFrame = ai.frame;
         gunOrderedAt = ai.frame;
@@ -934,10 +1308,59 @@ namespace LolCannon {
         return gunTask;
     }
 
+    // Turrets first (owner 2026-10-28): TurretsBeforeCannon stand, or TurretWaitSeconds
+    // into the program with no turret crew at all, or TurretMaxWaitSeconds in any case.
+    bool TurretsReady()
+    {
+        const int standing = AiMax(CountStanding(Nano(), turretPos, 24.0f), nanosNear);
+        const int want = AiMin(Global::LolCannon::TurretsBeforeCannon, int(turretPos.length()));
+        if (standing >= want) return true;
+        const bool noCrew = crewCount[AIR] + crewCount[GROUND] == 0 && Alive(recruitsAir) + Alive(recruitsGround) == 0;
+        const int waited = (ai.frame - started) / SECOND;
+        if ((noCrew && waited >= Global::LolCannon::TurretWaitSeconds) || waited >= Global::LolCannon::TurretMaxWaitSeconds) {
+            if (ai.frame >= nextTurretWaitLog) {
+                nextTurretWaitLog = ai.frame + 60 * SECOND;
+                GenericHelpers::LogUtil("[LolCannon] " + (noCrew ? "no turret crew" : "the turrets are still short") + " after " + waited
+                    + " s; the cannon is ordered with " + standing + " of " + want + " turrets", 1);
+            }
+            return true;
+        }
+        if (ai.frame >= nextTurretWaitLog) {
+            nextTurretWaitLog = ai.frame + 60 * SECOND;
+            GenericHelpers::LogUtil("[LolCannon] the cannon waits for its turrets: " + standing + " of " + want + " stand (crews "
+                + crewCount[AIR] + " air, " + crewCount[GROUND] + " T1 ground)", 1);
+        }
+        return false;
+    }
+
     // A cannon order that came to nothing; true when the site is to move further back.
+    // The engine's own test for a build site (IBuilderTask::FindBuildSite): no
+    // enemy threat on it and the builder can reach it.
+    bool SiteSafe(CCircuitUnit@ u, string &out why)
+    {
+        const float bd = u.circuitDef.GetBuildDistance();
+        if (aiTerrainMgr.CanReachAtSafe(u, site, bd)) return true;
+        why = aiTerrainMgr.CanReachAt(u, site, bd) ? "under enemy threat" : "out of reach";
+        return false;
+    }
+
     bool GunFailed(const string &in why)
     {
         @gunTask = null;
+        const int want = AiMin(Global::LolCannon::TurretsBeforeCannon, int(turretPos.length()));
+        if (!rebuild && want > 0 && AiMax(CountStanding(Nano(), turretPos, 24.0f), nanosNear) >= want) {
+            // the turret block stands: the site is worth more tries before it is left
+            ++blockFails;
+            const bool leave = blockFails >= Global::LolCannon::BlockSiteFailures;
+            GenericHelpers::LogUtil("[LolCannon] cannon order at (" + int(site.x) + ", " + int(site.z) + ") failed: " + why + " (" + blockFails
+                + " of " + Global::LolCannon::BlockSiteFailures + " failures with the turret block standing" + (leave ? "; moving further back" : "") + ")", 1);
+            if (leave) {
+                fails = (Level() + 1) * Global::LolCannon::BackOffAfter;   // one level further back
+                blockFails = 0;
+                moveBack = true;
+            }
+            return leave;
+        }
         const int before = Level();
         ++fails;
         const bool back = Level() > before || (rebuild && fails >= Global::LolCannon::BackOffAfter);
@@ -985,23 +1408,30 @@ namespace LolCannon {
     }
 
     // Builder AiMakeTask, asked first: a crew member's next piece of work.
-    //   starter: the cannon order, then turrets, then the cannon
-    //   air:     turrets, then the cannon
+    //   starter: the cannon order (once the turrets stand) and its frame, else turrets
+    //   air, T1 ground: turrets, then the cannon
     //   storage: storages, then turrets, then the cannon
+    // Once the cannon stands (STORES): the turret crews finish the turrets, the
+    // starter and storage crew the storages.
     IUnitTask@ BuilderTask(CCircuitUnit@ u)
     {
         if (!Enabled() || (phase != BUILD && phase != STORES) || u is null || u.circuitDef is null || crewOf.isEmpty()) return null;
         const int kind = CrewKind(u.id);
         if (kind < 0) return null;
         if (phase == STORES) {
-            IUnitTask@ w = StoreWork(u);
+            const bool turretCrew = kind == AIR || kind == GROUND;
+            IUnitTask@ w = turretCrew ? TurretWork(u) : StoreWork(u);
+            if (w is null) @w = turretCrew ? StoreWork(u) : TurretWork(u);
             return (w is null) ? Wait(3) : w;   // the phase ends in FinishStores, not on one crew member's empty hand
         }
         IUnitTask@ t = null;
-        if (kind == STARTER && (gunTask is null || gunTask.IsDead())) @t = CannonWork(u);
+        // the starter keeps its cannon order when native asks again (Swirly Rock: a
+        // FRONT ground starter walking out was handed turret work on a re-ask, and
+        // its order stood 300 s untouched)
+        if (kind == STARTER) @t = CannonWork(u, true);
         if (t is null && kind == STORE) @t = StoreWork(u);
         if (t is null) @t = TurretWork(u);
-        if (t is null) @t = CannonWork(u);
+        if (t is null) @t = CannonWork(u, crewCount[STARTER] == 0);
         return (t is null) ? Wait(3) : t;
     }
 
@@ -1132,7 +1562,7 @@ namespace LolCannon {
         phase = BUILD;
         CCircuitDef@ st = Store();
         GenericHelpers::LogUtil("[LolCannon] program " + (again ? "rebuilds the lost cannon" : "starts cannon " + (built + 1)) + ": crews of 1 + "
-            + Wanted(AIR) + " air + " + Wanted(STORE) + " storage; " + turretPos.length() + " turrets, " + storePos.length() + " "
+            + Wanted(AIR) + " air + " + Wanted(STORE) + " storage + " + Wanted(GROUND) + " T1 ground; " + turretPos.length() + " turrets, " + storePos.length() + " "
             + (st is null ? "storages" : st.GetName()) + ", " + (Gun() is null ? "cannon" : Gun().GetName())
             + (siteLevel > 0 ? "; site at back level " + siteLevel : ""), 1);
     }
@@ -1154,7 +1584,7 @@ namespace LolCannon {
             + "s framed=" + (frameFrame < 0 ? -1 : frameFrame / SECOND) + "s finished=" + (ai.frame / SECOND) + "s build=" + int(secs)
             + "s back=" + siteLevel + " fails=" + fails + " nanos=" + CountStanding(Nano(), turretPos, 24.0f) + "/" + turretPos.length()
             + " storages=" + CountStanding(Store(), storePos, 32.0f) + "/" + storePos.length()
-            + " crews=" + crewCount[STARTER] + "+" + crewCount[AIR] + "+" + crewCount[STORE]
+            + " crews=" + crewCount[STARTER] + "+" + crewCount[AIR] + "+" + crewCount[STORE] + "+" + crewCount[GROUND]
             + " metal=" + int(Economy::GetMinMetalIncomeLast10s()) + " energy=" + int(Economy::GetMinEnergyIncomeLast10s()), 1);
         watchIds.insertLast(g.id);
         watchSince.insertLast(ai.frame);
@@ -1191,39 +1621,51 @@ namespace LolCannon {
         }
         rebuild = false;
         fails = 0; siteLevel = 0; moveBack = false; failedSites.resize(0);
-        const int stores = CountStanding(Store(), storePos, 32.0f);
-        if (stores < int(storePos.length()) && Global::LolCannon::StoreFinishSeconds > 0) {
-            // the storages are part of the order: the starter and storage crew stay on them
-            KeepOnly(STARTER, STORE, Gun().GetName() + " stands; " + stores + " of " + storePos.length() + " storages, the storage crew finishes them");
+        CountSite();
+        const int stores = AiMax(CountStanding(Store(), storePos, 32.0f), storesNear);
+        const int turrets = AiMax(CountStanding(Nano(), turretPos, 24.0f), nanosNear);
+        const bool turretsShort = OpenTurrets() > 0;
+        if ((stores < int(storePos.length()) || turretsShort) && Global::LolCannon::StoreFinishSeconds > 0) {
+            // the storages and turrets are part of the order: their crews stay on them
+            KeepOnly(STARTER, STORE, turretsShort, Gun().GetName() + " stands; " + stores + " of " + storePos.length() + " storages, "
+                + turrets + " of " + turretPos.length() + " turrets; their crews finish them");
             phase = STORES;
             storesUntil = ai.frame + Global::LolCannon::StoreFinishSeconds * SECOND;
             return;
         }
+        ReleaseHeldBlock();
         ReleaseCrew(Gun().GetName() + " stands (" + built + " built; the next at " + int(Gate()) + " metal/s)");
         phase = IDLE;
         nextPlan = ai.frame + 30 * SECOND;
     }
 
-    // The storage phase: done when every storage stands, when no slot is left to
-    // build (each short one found no free spot) or after StoreFinishSeconds.
+    // The finishing phase: done when every storage stands or no slot is left to
+    // build (each short one found no free spot), and no turret slot is left open;
+    // or after StoreFinishSeconds. The turret crews go once the turrets are done.
     void FinishStores()
     {
-        const int stores = CountStanding(Store(), storePos, 32.0f);
+        const int stores = AiMax(CountStanding(Store(), storePos, 32.0f), storesNear);
         const bool done = stores >= int(storePos.length());
         const bool stuck = !done && OpenStores() == 0
             && aiBuilderMgr.FindUnfinishedNear(stripCentre, Global::LolCannon::StoreSearchRadius + 64.0f, Store()) is null;
-        if (!done && !stuck && ai.frame < storesUntil) return;
+        const bool turretsDone = !turretsOpen && aiBuilderMgr.FindUnfinishedNear(blockCentre, 260.0f, Nano()) is null;
+        if (turretsDone && crewCount[AIR] + crewCount[GROUND] > 0 && !(done || stuck))
+            KeepOnly(STARTER, STORE, false, "turrets " + CountStanding(Nano(), turretPos, 24.0f) + " of " + turretPos.length() + " done");
+        if (!((done || stuck) && turretsDone) && ai.frame < storesUntil) return;
         string why = "";
         if (stuck) why = " (no free spot near the strip for the other " + (int(storePos.length()) - stores) + ")";
         else if (!done) why = " (gave up after " + Global::LolCannon::StoreFinishSeconds + " s)";
-        GenericHelpers::LogUtil("[LolCannon] REPORT storages " + stores + "/" + storePos.length() + " at=" + (ai.frame / SECOND) + "s" + why, 1);
-        ReleaseCrew("storage strip " + (done ? "done" : "left short"));
+        GenericHelpers::LogUtil("[LolCannon] REPORT storages " + stores + "/" + storePos.length() + " turrets " + CountStanding(Nano(), turretPos, 24.0f)
+            + "/" + turretPos.length() + " at=" + (ai.frame / SECOND) + "s" + why, 1);
+        ReleaseHeldBlock();
+        ReleaseCrew("storage strip " + (done ? "done" : "left short") + ", turrets " + (turretsDone ? "done" : "left short"));
         phase = IDLE;
         nextPlan = ai.frame + 30 * SECOND;
     }
 
-    // Release every crew member but the two kinds given.
-    void KeepOnly(int a, int b, const string &in why)
+    // Release every crew member but the two kinds given (and the turret crews, air
+    // and T1 ground, with `turretCrews`).
+    void KeepOnly(int a, int b, bool turretCrews, const string &in why)
     {
         array<string>@ keys = crewOf.getKeys();
         int let = 0;
@@ -1231,13 +1673,14 @@ namespace LolCannon {
             int64 v = -1;
             crewOf.get(keys[i], v);
             const int kind = int(v);
-            if (kind == a || kind == b) continue;
+            if (kind == a || kind == b || (turretCrews && (kind == AIR || kind == GROUND))) continue;
             crewOf.delete(keys[i]);
-            if (kind >= 0 && kind <= STORE && crewCount[kind] > 0) --crewCount[kind];
+            if (kind >= 0 && kind <= GROUND && crewCount[kind] > 0) --crewCount[kind];
             ++let;
         }
-        recruitsAir.resize(0);
-        GenericHelpers::LogUtil("[LolCannon] " + let + " crew released, " + (crewCount[a] + crewCount[b]) + " kept: " + why, 1);
+        if (!turretCrews) { recruitsAir.resize(0); recruitsGround.resize(0); }
+        GenericHelpers::LogUtil("[LolCannon] " + let + " crew released, " + (crewCount[a] + crewCount[b] + (turretCrews ? crewCount[AIR] + crewCount[GROUND] : 0))
+            + " kept: " + why, 1);
     }
 
     // A done site whose cannon is gone: rebuilt on the same spot, unpinned.
@@ -1267,7 +1710,13 @@ namespace LolCannon {
 
     void Advance()
     {
-        if (phase == BUILD || phase == STORES) ReplaceStores();
+        if (phase == BUILD || phase == STORES) {
+            CountSite();
+            RetryTurrets();
+            turretsOpen = OpenTurrets() > 0;
+            HoldBlock();
+            ReplaceStores();
+        }
         if (phase == STORES) {
             FinishStores();
             return;
@@ -1308,6 +1757,7 @@ namespace LolCannon {
             if (phase != BUILD) return;
         }
         OrderCrews();
+        TakeBackStarter();
         if (frameFrame < 0 && Gun() !is null && aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun()) !is null) {
             frameFrame = ai.frame;
             GenericHelpers::LogUtil("[LolCannon] REPORT framed at=" + (ai.frame / SECOND) + "s ordered=" + (orderFrame < 0 ? -1 : orderFrame / SECOND) + "s", 1);
@@ -1320,8 +1770,8 @@ namespace LolCannon {
             nextLog = ai.frame + 60 * SECOND;
             const int turrets = CountStanding(Nano(), turretPos, 24.0f), stores = CountStanding(Store(), storePos, 32.0f);
             CCircuitUnit@ gf = (Gun() is null) ? null : aiBuilderMgr.FindUnfinishedNear(site, 128.0f, Gun());
-            GenericHelpers::LogUtil("[LolCannon] building: crews " + crewCount[STARTER] + "+" + crewCount[AIR] + "+" + crewCount[STORE]
-                + " (" + recruitsT2.length() + "+" + recruitsAir.length() + " ordered), turrets " + turrets + " of " + turretPos.length()
+            GenericHelpers::LogUtil("[LolCannon] building: crews " + crewCount[STARTER] + "+" + crewCount[AIR] + "+" + crewCount[STORE] + "+" + crewCount[GROUND]
+                + " (" + recruitsT2.length() + "+" + recruitsAir.length() + "+" + recruitsGround.length() + " ordered), turrets " + turrets + " of " + turretPos.length()
                 + ", storages " + stores + " of " + storePos.length() + ", cannon " + (gf is null ? "not started" : int(gf.GetBuildProgress() * 100.0f) + "%"), 1);
         }
     }

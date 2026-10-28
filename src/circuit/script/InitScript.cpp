@@ -1743,6 +1743,7 @@ void CInitScript::RegisterIBuilderTask(asIScriptEngine* engine, const char* cls)
 	r = engine->RegisterObjectProperty(cls, "CCircuitDef@ const buildDef", asOFFSET(T, buildDef)); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty(cls, "CCircuitUnit@ const target", asOFFSET(T, target)); ASSERT(r >= 0);
 	r = engine->RegisterObjectProperty(cls, "bool canAutoAbort", asOFFSET(T, canAutoAbort)); ASSERT(r >= 0);
+	r = engine->RegisterObjectProperty(cls, "float siteRadius", asOFFSET(T, siteRadius)); ASSERT(r >= 0);
 	r = engine->RegisterObjectMethod(cls, "int GetGuardTargetId() const", asFUNCTION(IBuilderTask_GuardTargetId), asCALL_CDECL_OBJFIRST); ASSERT(r >= 0);
 }
 
