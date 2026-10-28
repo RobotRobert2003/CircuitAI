@@ -60,9 +60,18 @@ namespace LolCannon {
     // crews, as the storages are (StoreFinishSeconds).
     int TurretsBeforeCannon = 16;
     int TurretWaitSeconds = 300;
-    // the block is held for the turrets on FRONT sites too: each slot's reservation
-    // stays until its turret is ordered, so no storage, ally or other build of ours
-    // lands on it; a slot whose order came to nothing is held again
+    int TurretMaxWaitSeconds = 900;  // the cannon is ordered after this long however few stand
+    // a turret slot given up after three orders came to nothing is tried again this often
+    int TurretRetrySeconds = 120;
+    // the block and the cannon's own footprint are held on FRONT sites too: each
+    // reservation stays until its own order, so no storage, ally or other build of
+    // ours lands on them while the turrets go up; one whose order came to nothing
+    // is held again
+    // a cannon order alive this long with no frame down is aborted and counts as failed
+    int GunFrameSeconds = 300;
+    // a site whose turret block stands (TurretsBeforeCannon) moves back only after
+    // this many cannon order failures, not BackOffAfter
+    int BlockSiteFailures = 6;
     // advanced (hardened) energy storages, in a narrow strip two wide on the
     // other side of the cannon (armuwadves / coruwadves; legadvestore for the Starfall)
     int Storages = 7;               // owner 2026-10-27: + 1 for a margin of error

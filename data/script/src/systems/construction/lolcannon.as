@@ -46,17 +46,22 @@ this program (owner, 2026-10-26):
           crews stay); a rebuild on a done site that keeps failing gives the
           site up and the cannon is planned afresh. TECH
           keeps the reservations and pins its orders to them; FRONT runs no layout, so
-          its orders go to the same spots unpinned: the cannon's and the
-          storages' reservations are taken only for the search, while the
-          turret block's are held (owner 2026-10-28), each slot let go just
+          its orders go to the same spots unpinned: the storages'
+          reservations are taken only for the search, while the cannon's and
+          the turret block's are held (owner 2026-10-28), each let go just
           before its own order and held again every 10 s while empty with no
-          order, so no storage, ally or other build of ours lands on the block.
+          order, so no storage, ally or other build of ours lands on them
+          while the turrets go up. A cannon order alive GunFrameSeconds (300)
+          with no frame down is aborted as a failure; a site whose turret
+          block stands moves back only after BlockSiteFailures (6) of them.
   crews   taken off every other task (Builder AiMakeTask asks here first):
             starter  one T2 air constructor: orders the cannon once
                      TurretsBeforeCannon (16) turrets stand (owner
-                     2026-10-28: two FRONT cannons went up with none), or no
-                     empty slot is left to try, or TurretWaitSeconds (300)
-                     pass with no turret crew at all; turrets meanwhile;
+                     2026-10-28: two FRONT cannons went up with none), or
+                     TurretWaitSeconds (300) pass with no turret crew at all,
+                     or TurretMaxWaitSeconds (900) in any case; turrets
+                     meanwhile. A slot given up after three orders is tried
+                     again every TurretRetrySeconds (120);
             air      AirCrew (50) air constructors, T1 or T2: build the
                      Turrets (22) of the TurretCols x TurretRows (4x4)
                      block and its spare rows, then assist;
@@ -205,6 +210,8 @@ namespace LolCannon {
     int nextLog = 0;
     int nextTurretWaitLog = 0;
     int nextHold = 0;
+    int nextTurretRetry = 0;
+    int blockFails = 0;              // cannon order failures on a site whose turret block stands
 
     bool Enabled() { return Global::LolCannon::Enabled; }
     bool RoleMay() { return Global::AISettings::Role == AiRole::FRONT || Global::AISettings::Role == AiRole::TECH; }
@@ -465,7 +472,7 @@ namespace LolCannon {
             queued += q;
         }
         GenericHelpers::LogUtil("[LolCannon] crews short (starter " + crewCount[STARTER] + "/1, storage " + crewCount[STORE] + "/" + Wanted(STORE)
-            + ", air " + crewCount[AIR] + "/" + Wanted(AIR) + ", T1 ground " + crewCount[GROUND] + "/" + (turretsOpen ? Wanted(GROUND) : 0) + "): "
+            + ", air " + crewCount[AIR] + "/" + Wanted(AIR) + ", T1 ground " + crewCount[GROUND] + "/" + Wanted(GROUND) + (turretsOpen ? "" : ", turrets done") + "): "
             + (queued > 0 ? "queued " + how : "no plant to order them from"), 1);
     }
 
@@ -601,8 +608,8 @@ namespace LolCannon {
 
     // One candidate: the cannon and MinTurrets turrets reserved, either hand; the
     // storages reserve where they can and never refuse the site. On success the
-    // slots are kept (TECH), or (FRONT, keep false) the cannon's and the storages'
-    // are read and released and the turret block's held (HoldBlock).
+    // slots are kept (TECH), or (FRONT, keep false) the storages' are read and
+    // released and the cannon's and the turret block's held (HoldBlock).
     bool TrySite(CCircuitDef@ gun, CCircuitDef@ nano, CCircuitDef@ st, const AIFloat3 &in p, int f, bool keep)
     {
         // the cannon at the candidate, else slid sideways (along the ring) up to its own width
@@ -635,8 +642,8 @@ namespace LolCannon {
             turretPos = tp; storePos = sp;
             if (keep) { gunRes = id; turretRes = tr; storeRes = sr; }
             else {
-                aiTerrainMgr.ReleaseReservation(id); ReleaseAll(sr);
-                gunRes = -1;
+                ReleaseAll(sr);
+                gunRes = id;
                 turretRes = tr; storeRes.resize(0);
                 for (uint i = 0; i < sp.length(); ++i) storeRes.insertLast(-1);
             }
@@ -750,7 +757,7 @@ namespace LolCannon {
                     + "), facing " + facing + ", " + int(sqrt(bestD[i])) + " from home, ground " + int(score * 100.0f) + "%; "
                     + turretPos.length() + " turrets and " + storePos.length() + " " + st.GetName() + " beside it ("
                     + storesReserved + " storage slots reserved)"
-                    + (layoutOn ? " (reserved)" : " (FRONT: turret block held, orders unpinned)") + "; against the enemy spawn at (" + int(siteTarget.x) + ", "
+                    + (layoutOn ? " (reserved)" : " (FRONT: cannon and turret block held, orders unpinned)") + "; against the enemy spawn at (" + int(siteTarget.x) + ", "
                     + int(siteTarget.z) + "), " + int(sqrt(MapHelpers::SqDist(site, siteTarget))) + " away: " + targetWhy + backWhy, 1);
         }
         if (!found && refusedGun > 0) {
@@ -777,7 +784,8 @@ namespace LolCannon {
         for (uint i = 0; i < turretPos.length(); ++i) { turretTask.insertLast(null); turretMiss.insertLast(0); }
         storeTask.resize(0); storeMiss.resize(0); storeDead.resize(0); badStoreSpots.resize(0);
         gunTryFrom = -1; quickEnds = 0;
-        turretsOpen = true; nextHold = 0; nextTurretWaitLog = 0;
+        turretsOpen = true; nextHold = 0; nextTurretWaitLog = 0; blockFails = 0;
+        nextTurretRetry = ai.frame + Global::LolCannon::TurretRetrySeconds * SECOND;
         for (uint i = 0; i < storePos.length(); ++i) { storeTask.insertLast(null); storeMiss.insertLast(0); storeDead.insertLast(false); }
         nextStoreFix = 0;
     }
@@ -886,16 +894,38 @@ namespace LolCannon {
         return AiMax(across, -across) < halfA && AiMax(along, -along) < halfL;
     }
 
-    // FRONT (layout off): every empty turret slot with no order in flight is held
-    // again, so nothing else is built on the block. Every 10 s while the crews work.
+    // Every TurretRetrySeconds a turret slot given up (three orders came to nothing)
+    // is tried again while nothing stands on it.
+    void RetryTurrets()
+    {
+        if (ai.frame < nextTurretRetry) return;
+        nextTurretRetry = ai.frame + Global::LolCannon::TurretRetrySeconds * SECOND;
+        int n = 0;
+        for (uint k = 0; k < turretMiss.length(); ++k)
+            if (turretMiss[k] >= 3) { turretMiss[k] = 0; ++n; }
+        if (n > 0) GenericHelpers::LogUtil("[LolCannon] " + n + " given-up turret slot(s) tried again", 1);
+    }
+
+    // FRONT (layout off): every empty turret slot with no order in flight, and the
+    // cannon's footprint while no cannon order is in flight and no frame stands, are
+    // held again, so nothing else is built there. Every 10 s while the crews work.
     void HoldBlock()
     {
         if (ai.frame < nextHold || aiTerrainMgr.IsLayoutEnabled()) return;
         nextHold = ai.frame + 10 * SECOND;
         CCircuitDef@ nano = Nano();
-        if (nano is null) return;
+        CCircuitDef@ gun = Gun();
+        if (nano is null || gun is null) return;
         bool switched = false;
         int held = 0;
+        if (phase == BUILD && gunRes < 0 && (gunTask is null || gunTask.IsDead()) && StandingGun() is null
+            && aiBuilderMgr.FindUnfinishedNear(site, 128.0f, gun) is null) {
+            if (!aiTerrainMgr.SetLayoutEnabled(true)) return;
+            switched = true;
+            if (aiTerrainMgr.CanReserveBuilding(gun, site, facing)) gunRes = aiTerrainMgr.ReserveBuilding(gun, site, facing);
+            GenericHelpers::LogUtil("[LolCannon] the cannon's footprint at (" + int(site.x) + ", " + int(site.z) + ") "
+                + (gunRes >= 0 ? "held again" : "could not be held again (something stands on it)"), 1);
+        }
         for (uint k = 0; k < turretPos.length() && k < turretRes.length(); ++k) {
             if (turretRes[k] >= 0 || turretMiss[k] >= 3 || (turretTask[k] !is null && !turretTask[k].IsDead())) continue;
             if (aiBuilderMgr.FindOwnNear(turretPos[k], 24.0f, nano) !is null) continue;
@@ -908,15 +938,18 @@ namespace LolCannon {
             if (turretRes[k] >= 0) ++held;
         }
         if (switched) aiTerrainMgr.SetLayoutEnabled(false);
-        if (held > 0) GenericHelpers::LogUtil("[LolCannon] " + held + " empty turret slot(s) held again", 2);
+        if (held > 0) GenericHelpers::LogUtil("[LolCannon] " + held + " empty turret slot(s) held again", 1);
     }
 
-    // FRONT's held turret slots still empty when the program ends are let go.
+    // FRONT's held turret slots still empty when the program ends are let go (and
+    // the cannon's footprint, should it still be held).
     void ReleaseHeldBlock()
     {
         if (aiTerrainMgr.IsLayoutEnabled()) return;   // TECH keeps its layout
         ReleaseAll(turretRes);
         for (uint k = 0; k < turretRes.length(); ++k) turretRes[k] = -1;
+        if (gunRes >= 0) aiTerrainMgr.ReleaseReservation(gunRes);
+        gunRes = -1;
     }
 
     // Another storage slot's spot (still to build or standing) within a storage's
@@ -1028,7 +1061,15 @@ namespace LolCannon {
             return aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, gf, 60 * SECOND));
         }
         if (!u.circuitDef.CanBuild(gun) || moveBack) return null;
-        if (gunTask !is null && !gunTask.IsDead()) return gunTask;
+        if (gunTask !is null && !gunTask.IsDead()) {
+            if (ai.frame - gunOrderedAt < Global::LolCannon::GunFrameSeconds * SECOND) return gunTask;
+            // alive with no frame down this long (Swirly Rock: 922 s): a failed try
+            aiBuilderMgr.AbortTask(gunTask);
+            gunTryFrom = -1; quickEnds = 0;
+            nextGunTry = ai.frame + 3 * SECOND;
+            GunFailed("the order stood " + ((ai.frame - gunOrderedAt) / SECOND) + " s with no frame down");
+            return null;
+        }
         if (ai.frame < nextGunTry || !TurretsReady()) return null;
         if (gunTask !is null) {
             // An order that ended with no frame: a try is GunMinTrySeconds of orders with
@@ -1043,6 +1084,11 @@ namespace LolCannon {
                 gunTryFrom = ai.frame; quickEnds = 0;
                 if (GunFailed(n + " order(s) over " + tried + " s, none put a frame down")) return null;
             }
+        }
+        if (gunRes >= 0 && !aiTerrainMgr.IsLayoutEnabled()) {
+            // FRONT: the held footprint is let go for the order, which goes there unpinned
+            aiTerrainMgr.ReleaseReservation(gunRes);
+            gunRes = -1;
         }
         @gunTask = OrderAt(Task::BuildType::BIG_GUN, gun, site, gunRes);
         if (gunTask is null) {
@@ -1060,19 +1106,20 @@ namespace LolCannon {
         return gunTask;
     }
 
-    // Turrets first (owner 2026-10-28): TurretsBeforeCannon stand, or no empty slot is
-    // left to try, or TurretWaitSeconds into the program with no turret crew at all.
+    // Turrets first (owner 2026-10-28): TurretsBeforeCannon stand, or TurretWaitSeconds
+    // into the program with no turret crew at all, or TurretMaxWaitSeconds in any case.
     bool TurretsReady()
     {
         const int standing = CountStanding(Nano(), turretPos, 24.0f);
         const int want = AiMin(Global::LolCannon::TurretsBeforeCannon, int(turretPos.length()));
-        if (standing >= want || !turretsOpen) return true;
+        if (standing >= want) return true;
         const bool noCrew = crewCount[AIR] + crewCount[GROUND] == 0 && Alive(recruitsAir) + Alive(recruitsGround) == 0;
-        if (noCrew && ai.frame - started >= Global::LolCannon::TurretWaitSeconds * SECOND) {
+        const int waited = (ai.frame - started) / SECOND;
+        if ((noCrew && waited >= Global::LolCannon::TurretWaitSeconds) || waited >= Global::LolCannon::TurretMaxWaitSeconds) {
             if (ai.frame >= nextTurretWaitLog) {
                 nextTurretWaitLog = ai.frame + 60 * SECOND;
-                GenericHelpers::LogUtil("[LolCannon] no turret crew after " + Global::LolCannon::TurretWaitSeconds + " s; the cannon is ordered with "
-                    + standing + " of " + want + " turrets", 1);
+                GenericHelpers::LogUtil("[LolCannon] " + (noCrew ? "no turret crew" : "the turrets are still short") + " after " + waited
+                    + " s; the cannon is ordered with " + standing + " of " + want + " turrets", 1);
             }
             return true;
         }
@@ -1088,6 +1135,20 @@ namespace LolCannon {
     bool GunFailed(const string &in why)
     {
         @gunTask = null;
+        const int want = AiMin(Global::LolCannon::TurretsBeforeCannon, int(turretPos.length()));
+        if (!rebuild && want > 0 && CountStanding(Nano(), turretPos, 24.0f) >= want) {
+            // the turret block stands: the site is worth more tries before it is left
+            ++blockFails;
+            const bool leave = blockFails >= Global::LolCannon::BlockSiteFailures;
+            GenericHelpers::LogUtil("[LolCannon] cannon order at (" + int(site.x) + ", " + int(site.z) + ") failed: " + why + " (" + blockFails
+                + " of " + Global::LolCannon::BlockSiteFailures + " failures with the turret block standing" + (leave ? "; moving further back" : "") + ")", 1);
+            if (leave) {
+                fails = (Level() + 1) * Global::LolCannon::BackOffAfter;   // one level further back
+                blockFails = 0;
+                moveBack = true;
+            }
+            return leave;
+        }
         const int before = Level();
         ++fails;
         const bool back = Level() > before || (rebuild && fails >= Global::LolCannon::BackOffAfter);
@@ -1434,6 +1495,7 @@ namespace LolCannon {
     void Advance()
     {
         if (phase == BUILD || phase == STORES) {
+            RetryTurrets();
             turretsOpen = OpenTurrets() > 0;
             HoldBlock();
             ReplaceStores();
