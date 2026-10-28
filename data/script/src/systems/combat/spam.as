@@ -108,6 +108,21 @@ namespace Spam {
     int fundedSinceFrame = -1;     // frame the inactive gate last became funded, -1 not funded
     int lastFundedLogFrame = -100000;
     dictionary pumpLabs;           // TECH factory id that ran a repeat -> frame idle since paused, -1 busy
+    // owner, 2026-10-28: the rez lab (RezReplenish SecondLab) fills in with spam on the lane of the
+    // AI's first pump, "repeat order, same calculated path": follower factory id -> lead factory id.
+    // A follower gets no spread lane of its own; its units join the lead's route task and its factory
+    // route is the lead's lane drawn from the follower. Set by RezReplenish only.
+    dictionary laneLead;
+
+    // The lane key a factory's pump runs: the lead's while it lives and has a route, else its own.
+    string _LaneKey(const string &in key)
+    {
+        int lead = -1;
+        if (laneLead.getSize() == 0 || !laneLead.get(key, lead)) return key;
+        const string lk = "" + lead;
+        if (ai.GetTeamUnit(lead) is null || !routeByFactory.exists(lk)) return key;
+        return lk;
+    }
     array<int> retiredPumps;       // pumps retired for idling, until gone (rule lab.spam.reclaim)
 
     bool IsEnabled()
@@ -314,6 +329,7 @@ namespace Spam {
     {
         array<string>@ keys = repeatTask.getKeys();
         array<CCircuitUnit@> labs;
+        array<CCircuitUnit@> followers;   // laneLead: they run their lead's lane, no spread lane of their own
         for (uint i = 0; i < keys.length(); ++i) {
             CCircuitUnit@ f = ai.GetTeamUnit(int(parseInt(keys[i])));
             IUnitTask@ task;
@@ -324,12 +340,19 @@ namespace Spam {
             if (!enabled || Lifecycle::IsRetiring(f) || Team::Recovery::WantsFactory(f)) {
                 repeatTask.delete(keys[i]); task.Abort(); continue;
             }
+            const string lk = _LaneKey(keys[i]);
+            if (lk == keys[i] && laneLead.exists(keys[i])) {
+                // its lead is gone: stop it; asked again, it pumps on a lane of its own
+                laneLead.delete(keys[i]);
+                repeatTask.delete(keys[i]); task.Abort(); continue;
+            }
             CRouteTask@ route;
-            if (!routeByFactory.get(keys[i], @route) || route is null || route.GetRouteSize() == 0)
+            if (!routeByFactory.get(lk, @route) || route is null || route.GetRouteSize() == 0)
                 Invariants::Violation("INV-157", keys[i], "repeating spam factory lacks a reachable MOVE route");
             CCircuitDef@ d = ai.GetCircuitDef(SpamUnitFor(f.circuitDef));
             if (d !is null && d.maxThisUnit < d.count + 50) d.maxThisUnit = d.count + 50;
-            labs.insertLast(f);
+            if (lk == keys[i]) labs.insertLast(f);
+            else followers.insertLast(f);
         }
         // O(F^2) stable ordering is bounded by MaxLabs (6), never unit count.
         // Geometry only changes on new labs/front displacement; equality in
@@ -340,6 +363,14 @@ namespace Spam {
             int previous = -1;
             if (!factoryVersion.get(key, previous) || previous != routesVersion) {
                 labs[i].CmdFactoryRoute(RouteOf(labs[i]));
+                factoryVersion.set(key, routesVersion);
+            }
+        }
+        for (uint i = 0; i < followers.length(); ++i) {
+            const string key = "" + followers[i].id;
+            int previous = -1;
+            if (!factoryVersion.get(key, previous) || previous != routesVersion) {
+                followers[i].CmdFactoryRoute(_RouteOfKey(_LaneKey(key), followers[i].GetPos(ai.frame)));
                 factoryVersion.set(key, routesVersion);
             }
         }
@@ -817,7 +848,7 @@ namespace Spam {
         if (factory is null) return null;
         const string key = "" + factory.id;
         CRouteTask@ task = null;
-        if (routeByFactory.get(key, @task) && task !is null) return task;
+        if (routeByFactory.get(_LaneKey(key), @task) && task !is null) return task;   // a follower: its lead's
 
         _EnsureFocus();
         array<AIFloat3> points = _RouteOfKey(key, factory.GetPos(ai.frame));
@@ -1036,6 +1067,7 @@ namespace Spam {
         CCircuitUnit@ factory = null;
         int saved = -1;
         if (producerOf.get(ukey, saved)) fid = saved;
+        if (laneLead.getSize() > 0) fid = int(parseInt(_LaneKey("" + fid)));   // a follower's units run its lead's lane
         if (routeByFactory.exists("" + fid)) @factory = ai.GetTeamUnit(fid);
         if (factory is null) {
             // A known non-spam producer's raiders remain ordinary combat.
@@ -1167,6 +1199,7 @@ namespace Spam {
         repeatTask.delete(key);
         factoryVersion.delete(key);
         pumpLabs.delete(key);
+        laneLead.delete(key);
     }
 
     void OnTaskRemoved(IUnitTask@ task)

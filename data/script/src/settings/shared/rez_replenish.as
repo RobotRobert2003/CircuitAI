@@ -49,6 +49,25 @@ namespace RezReplenish {
         // two AIs over 65 m/s for 10 s at minute 2.7 while the sustained income was ~22).
         float CutoffIncomeSeconds = 60.0f;
 
+        // Owner (2026-10-28): a second T1 bot lab, the rez lab. Spam, its vision, pressure, scouting and
+        // defence come before rez bots, so once Spam pumps the first T1 bot lab of an AI that started on
+        // a bot lab, no pump is taken back for rez bots (ReleaseSpamLabs is ignored) and the builders add
+        // one more T1 bot lab. That lab keeps the rez bot stock, gifts to vehicle-plant allies included.
+        // With the stock full it waits; from SpamFillIncomeRatio x the income at which the first lab
+        // started spamming it pumps spam too, on the first lab's lane (repeat order, same calculated
+        // path: Spam::laneLead), until a rez bot is short or the income falls under
+        // SpamFillReleaseFraction of that bar. Sharing then runs by start factory: AIs that started on a
+        // bot lab give, AIs that started on a vehicle plant ask (a vehicle AI's own spam bot lab no
+        // longer turns it into a donor).
+        bool SecondLab = false;
+        float SpamFillIncomeRatio = 1.5f;
+        float SpamFillReleaseFraction = 0.85f;
+        // a builder starts the lab only from this bank (0: any; played 2026-10-28: a pumping lab keeps the
+        // bank under 300, and 1,600 asks were refused for 6 minutes while the rez stock fell 20 -> 6)
+        float SecondLabMinMetalBank = 0.0f;
+        int SecondLabRetrySeconds = 30;         // between build orders while none stands or is queued
+        float SecondLabRingStep = 450.0f;       // placement rings around the first lab: 1, 2, 3 x this
+
         // Sharing: an AI with a T1 bot lab gives rez bots to allied BARb AIs that have a vehicle
         // plant and no T1 bot lab. Such an AI asks (AiSendMessage "barbrez|req") when it has fewer
         // than RequestBelow rez bots and an alive army above RequestMinArmy, for enough to reach

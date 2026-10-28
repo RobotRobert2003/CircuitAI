@@ -33,8 +33,19 @@ an army above RequestMinArmy. The bot-lab AI adds n to what its labs keep in
 stock and gives each finished rez bot above max(own target, ShareKeepMin) to
 the oldest requester with ai.GiveUnits ("barbrez|sent|id|def").
 
+SECOND LAB (SecondLab, owner 2026-10-28). Spam comes first: once Spam pumps
+the first T1 bot lab of an AI that started on one (the lead), no pump is
+released for rez bots and a builder adds one more T1 bot lab (BuilderTask),
+the rez lab. It takes the rez bot orders; with the stock full it waits, and
+from SpamFillIncomeRatio x the income the lead started spamming at it pumps
+spam on the lead's lane (Spam::laneLead) until a rez bot is short or the
+income falls under SpamFillReleaseFraction of that bar (_ReleaseSpamLab).
+Donors are then the AIs that started on a bot lab, requesters the ones that
+started on a vehicle plant.
+
 Log lines (level 1), all "[RezRep] ...": stat (every LogSeconds), trigger,
-order, give, request, request-from, received.
+order, give, request, request-from, received, lab2 (spam-start, lead, build,
+designate, lost, fill, release).
 
 ******************************************************************************/
 namespace RezReplenish {
@@ -62,6 +73,15 @@ namespace RezReplenish {
     int t2Frame = -1;            // our first finished T2 factory
     int incomeAboveSince = -1;   // first frame of the current run at or above CutoffMetalIncome
     dictionary capBeforeCut;     // rez def -> int64 maxThisUnit before the cutoff capped it (non-sticky undo)
+
+    // SecondLab (owner, 2026-10-28)
+    string firstFactory = "";    // our first finished factory (T1 bot lab, vehicle plant or air plant)
+    float spamStartIncome = -1.0f;   // 10 s minimum metal income when Spam first pumped a bot lab of ours
+    int leadLabId = -1;          // the bot lab pump whose lane the rez lab's spam runs
+    int rezLabId = -1;           // the rez lab
+    bool rezLabFilling = false;  // the rez lab is a Spam pump right now
+    int lab2Builds = 0;
+    int lastLab2Attempt = -100000;
 
     // production
     array<int> orderFrames;
@@ -130,6 +150,11 @@ namespace RezReplenish {
                 army += d.costM;
                 ++armyUnits;
                 continue;
+            }
+            if (firstFactory.length() == 0 && (UnitHelpers::IsT1BotLab(name) || UnitHelpers::IsT1VehicleLab(name)
+                || UnitHelpers::IsT1AircraftPlant(name))) {
+                firstFactory = name;
+                GenericHelpers::LogUtil("[RezRep] first-factory def=" + name + " min=" + (float(ai.frame) / MINUTE), 1);
             }
             if (UnitHelpers::IsT1BotLab(name)) {
                 if (!Lifecycle::IsRetiring(u)) { ++botLabs; botLabIds.insertLast(int(u.id)); }
@@ -206,6 +231,22 @@ namespace RezReplenish {
         const string fname = factory.circuitDef.GetName();
         if (!UnitHelpers::IsT1BotLab(fname) || Lifecycle::IsRetiring(factory) || !RoleEligible()) return null;
         Scan();
+        if (_SecondLabOn()) {
+            _Designate(factory);   // a new lab asks before Update sees it
+            // spam first: while Spam is on, only the rez lab makes rez bots (played 2026-10-28: the
+            // lead's repeat ended between spam batches and it took rez orders instead)
+            if (spamStartIncome >= 0.0f && Spam::IsActive() && factory.id != rezLabId) return null;
+        }
+        IUnitTask@ t = _Order(factory, fname);
+        if (t !is null || !_SecondLabOn() || factory.id != rezLabId) return t;
+        // the rez lab with its stock full (or orders in flight): spam on the lead's lane from the
+        // fill-in income, else wait for the next shortage
+        if (_FillOpen()) return null;   // Spam::FactoryMakeTask pumps it
+        return aiFactoryMgr.Enqueue(TaskS::Wait(true, 5 * SECOND));
+    }
+
+    IUnitTask@ _Order(CCircuitUnit@ factory, const string &in fname)
+    {
         const int want = Want();
         if (want <= 0 || spamTookOver) return null;
         if (rezAll + int(orderFrames.length()) >= want) return null;
@@ -250,6 +291,7 @@ namespace RezReplenish {
         if (Global::RezReplenish::ShareEnabled) _Share();
         _CheckCutoff();
         _CheckSpamTakeover();
+        _SecondLabUpdate();
         _ReleaseSpamLab();
         if (ai.frame - lastLogFrame >= Global::RezReplenish::LogSeconds * SECOND) {
             lastLogFrame = ai.frame;
@@ -258,7 +300,10 @@ namespace RezReplenish {
                 + " vehPlants=" + vehPlants + " native=" + int(aiMilitaryMgr.armyCost) + " orders=" + ordersTotal
                 + " given=" + giftsGiven + " received=" + received + " requests=" + requestsSent
                 + " spam=" + (spamTookOver ? 1 : 0) + " cut=" + (cut ? 1 : 0)
-                + " income=" + int(Economy::GetMinMetalIncomeLast10s()), 1);
+                + " income=" + int(Economy::GetMinMetalIncomeLast10s())
+                + (_SecondLabOn() ? " lab2=" + rezLabId + " fill=" + (rezLabFilling ? 1 : 0) + " spamStart="
+                    + int(spamStartIncome) + " lead=" + leadLabId + " lab2Builds=" + lab2Builds
+                    + " lab2Rej=" + lab2Rej[0] + "/" + lab2Rej[1] + "/" + lab2Rej[2] + "/" + lab2Rej[3] + "/" + lab2Rej[4] : ""), 1);
         }
     }
 
@@ -341,6 +386,7 @@ namespace RezReplenish {
     void _ReleaseSpamLab()
     {
         if (!Global::RezReplenish::Enabled && !Global::RezReplenish::ShareEnabled) return;
+        if (_SecondLabOn()) { _ReleaseRezLab(); return; }   // spam first: only the rez lab's pump comes back
         if (!RoleEligible() || !Global::RezReplenish::ReleaseSpamLabs || Global::RezReplenish::StopRezWhenSpam) return;
         const int want = Want();
         if (want <= 0 || rezAll + int(orderFrames.length()) >= want) return;
@@ -362,8 +408,207 @@ namespace RezReplenish {
         }
     }
 
-    bool _IsDonor() { return botLabs > 0 && RoleEligible() && !cut; }
-    bool _IsRequester() { return botLabs == 0 && vehPlants > 0; }
+    // SecondLab: by start factory, so a vehicle AI's own spam bot lab does not make it a donor
+    bool _IsDonor()
+    {
+        if (_SecondLabOn()) return _StartedOnBotLab() && botLabs > 0 && !cut;
+        return botLabs > 0 && RoleEligible() && !cut;
+    }
+    bool _IsRequester()
+    {
+        if (_SecondLabOn()) return firstFactory.length() > 0 && !_StartedOnBotLab() && vehPlants > 0;
+        return botLabs == 0 && vehPlants > 0;
+    }
+
+    /**************************************************************************
+     SecondLab (owner, 2026-10-28): the rez lab. See the header.
+     **************************************************************************/
+    bool _SecondLabOn() { return Global::RezReplenish::SecondLab && Global::RezReplenish::Enabled && RoleEligible(); }
+    bool _StartedOnBotLab() { return UnitHelpers::IsT1BotLab(firstFactory); }
+
+    bool _IsPump(int id) { return Spam::repeatTask.exists("" + id); }
+
+    float _FillBar() { return spamStartIncome * Global::RezReplenish::SpamFillIncomeRatio; }
+
+    // The rez lab may pump spam: Spam on and the income at the fill-in bar.
+    bool _FillOpen()
+    {
+        return spamStartIncome > 0.0f && Spam::IsActive() && Economy::GetMinMetalIncomeLast10s() >= _FillBar();
+    }
+
+    // Make `f` the rez lab when none is set: a finished T1 bot lab of ours, after Spam took the
+    // lead, that is neither the lead, an edge lane lab nor a pump.
+    void _Designate(CCircuitUnit@ f)
+    {
+        if (rezLabId >= 0 || spamStartIncome < 0.0f || !_StartedOnBotLab() || f is null || f.circuitDef is null) return;
+        if (f.id == leadLabId || _IsPump(f.id) || EdgeLanes::IsEdgeLab(f) || Lifecycle::IsRetiring(f)) return;
+        if (!UnitHelpers::IsT1BotLab(f.circuitDef.GetName()) || f.GetBuildProgress() < 1.0f) return;
+        rezLabId = f.id;
+        rezLabFilling = false;
+        if (leadLabId >= 0) Spam::laneLead.set("" + rezLabId, leadLabId);
+        GenericHelpers::LogUtil("[RezRep] lab2 designate lab=" + rezLabId + " lead=" + leadLabId + " rez=" + rezFinished
+            + " want=" + Want() + " army=" + int(army) + " min=" + (float(ai.frame) / MINUTE), 1);
+    }
+
+    // Update (every 2 s): the spam start, the lead, the rez lab's life and its fill-in state.
+    // O(our T1 bot labs), a handful.
+    void _SecondLabUpdate()
+    {
+        if (!_SecondLabOn() || !_StartedOnBotLab()) return;
+        // the lead: a non-edge bot lab pump other than the rez lab; the first one marks the spam start
+        if (leadLabId < 0 || ai.GetTeamUnit(leadLabId) is null || !_IsPump(leadLabId)) {
+            int lead = -1;
+            for (uint i = 0; i < botLabIds.length() && lead < 0; ++i) {
+                const int id = botLabIds[i];
+                if (id == rezLabId || !_IsPump(id) || EdgeLanes::IsEdgeKey("" + id)) continue;
+                lead = id;
+            }
+            if (lead >= 0 && lead != leadLabId) {
+                leadLabId = lead;
+                if (spamStartIncome < 0.0f) {
+                    spamStartIncome = AiMax(1.0f, Economy::GetMinMetalIncomeLast10s());
+                    GenericHelpers::LogUtil("[RezRep] lab2 spam-start lead=" + lead + " income=" + int(spamStartIncome)
+                        + " fillBar=" + int(_FillBar()) + " rez=" + rezFinished + " army=" + int(army)
+                        + " min=" + (float(ai.frame) / MINUTE), 1);
+                } else {
+                    GenericHelpers::LogUtil("[RezRep] lab2 lead lead=" + lead + " lab2=" + rezLabId, 1);
+                }
+                if (rezLabId >= 0) Spam::laneLead.set("" + rezLabId, leadLabId);
+            }
+        }
+        if (spamStartIncome < 0.0f) return;
+        if (rezLabId >= 0) {
+            CCircuitUnit@ f = ai.GetTeamUnit(rezLabId);
+            if (f is null || Lifecycle::IsRetiring(f)) {
+                GenericHelpers::LogUtil("[RezRep] lab2 lost lab=" + rezLabId + (f is null ? " (gone)" : " (retiring)"), 1);
+                Spam::laneLead.delete("" + rezLabId);
+                rezLabId = -1;
+                rezLabFilling = false;
+            }
+        }
+        if (rezLabId < 0) {
+            for (uint i = 0; i < botLabIds.length() && rezLabId < 0; ++i) _Designate(ai.GetTeamUnit(botLabIds[i]));
+            return;
+        }
+        const bool pumping = _IsPump(rezLabId);
+        if (pumping != rezLabFilling) {
+            rezLabFilling = pumping;
+            GenericHelpers::LogUtil("[RezRep] lab2 fill " + (pumping ? "on" : "off") + " lab=" + rezLabId + " lead=" + leadLabId
+                + " income=" + int(Economy::GetMinMetalIncomeLast10s()) + " bar=" + int(_FillBar()) + " rez=" + rezFinished
+                + " rezAll=" + rezAll + " want=" + Want(), 1);
+        }
+    }
+
+    // The rez lab's spam pump comes back when a rez bot is short or the income fell under
+    // SpamFillReleaseFraction of the fill-in bar. The lead and every other pump are never released.
+    void _ReleaseRezLab()
+    {
+        if (rezLabId < 0 || !rezLabFilling) return;
+        const string key = "" + rezLabId;
+        IUnitTask@ task;
+        if (!Spam::repeatTask.get(key, @task) || task is null || task.IsDead()) return;
+        CCircuitUnit@ f = ai.GetTeamUnit(rezLabId);
+        if (f is null || f.task !is task) return;
+        const int want = Want();
+        const bool isShort = want > 0 && rezAll + int(orderFrames.length()) < want;
+        const float income = Economy::GetMinMetalIncomeLast10s();
+        const bool poor = income < _FillBar() * Global::RezReplenish::SpamFillReleaseFraction;
+        if (!isShort && !poor) return;
+        if (ai.frame - _Get(releasedAt, rezLabId, -100000) < Global::RezReplenish::ReleaseSpacingSeconds * SECOND) return;
+        Spam::repeatTask.delete(key);
+        task.Abort();
+        _Set(releasedAt, rezLabId, ai.frame);
+        ++releases;
+        GenericHelpers::LogUtil("[RezRep] lab2 release lab=" + key + " reason=" + (isShort ? "rez" : "income")
+            + " rez=" + rezFinished + " rezAll=" + rezAll + " want=" + want + " income=" + int(income)
+            + " bar=" + int(_FillBar()) + " releases=" + releases, 1);
+    }
+
+    // Builder::AiMakeTask, before Spam's: one more T1 bot lab once Spam took the lead and no other
+    // bot lab can be the rez lab. Native re-asks a builder every few seconds and swaps it to another
+    // kind of job (played 2026-10-28: both smoke-test orders sat unbuilt), so a builder on our order
+    // keeps it, up to two more join the order or help the frame, and a dead order with no frame is
+    // ordered again after SecondLabRetrySeconds.
+    IUnitTask@ lab2Task;
+    array<IUnitTask@> lab2Help;
+    int lab2FrameId = -1;
+    array<int> lab2Rej = {0, 0, 0, 0, 0};   // asks refused: spacing, bank/energy, busy builder, want 0, no spot
+
+    bool _OwnsTask(IUnitTask@ t)
+    {
+        if (t is null || t.IsDead()) return false;
+        if (t is lab2Task) return true;
+        for (uint i = 0; i < lab2Help.length(); ++i) if (t is lab2Help[i]) return true;
+        return false;
+    }
+
+    // The frame our order raised, wherever native put it; null when none stands
+    CCircuitUnit@ _Lab2Frame(CCircuitDef@ lab)
+    {
+        if (lab2FrameId >= 0) {
+            CCircuitUnit@ f = ai.GetTeamUnit(lab2FrameId);
+            if (f !is null) return f;
+            lab2FrameId = -1;
+        }
+        IBuilderTask@ bt = (lab2Task is null || lab2Task.IsDead()) ? null : cast<IBuilderTask>(lab2Task);
+        if (bt is null || bt.target is null || bt.target.circuitDef !is lab) return null;
+        lab2FrameId = bt.target.id;
+        return bt.target;
+    }
+
+    IUnitTask@ BuilderTask(CCircuitUnit@ u)
+    {
+        if (!_SecondLabOn() || spamStartIncome < 0.0f || !_StartedOnBotLab()) return null;
+        if (u is null || u.circuitDef is null || !u.circuitDef.IsMobile() || UnitHelpers::IsCommander(u.circuitDef)) return null;
+        if (_OwnsTask(u.task)) return u.task;
+        if (rezLabId >= 0) return null;
+        CCircuitDef@ lab = ai.GetCircuitDef(UnitHelpers::GetT1BotLabForSide(Global::AISettings::Side));
+        if (lab is null || !u.circuitDef.CanBuild(lab)) return null;
+        for (int i = int(lab2Help.length()) - 1; i >= 0; --i)
+            if (lab2Help[i] is null || lab2Help[i].IsDead()) lab2Help.removeAt(i);
+        CCircuitUnit@ frame = _Lab2Frame(lab);
+        if (frame !is null) {
+            if (frame.GetBuildProgress() >= 1.0f || lab2Help.length() >= 2) return null;
+            IUnitTask@ h = aiBuilderMgr.Enqueue(TaskB::Repair(Task::Priority::HIGH, frame, 30 * SECOND));
+            if (h !is null) lab2Help.insertLast(h);
+            return h;
+        }
+        if (lab2Task !is null && !lab2Task.IsDead()) return (lab2Task.GetUnits().length() < 2) ? lab2Task : null;
+        if (ai.frame - lastLab2Attempt < Global::RezReplenish::SecondLabRetrySeconds * SECOND) { ++lab2Rej[0]; return null; }
+        if (aiEconomyMgr.isEnergyEmpty || aiEconomyMgr.metal.current < Global::RezReplenish::SecondLabMinMetalBank) { ++lab2Rej[1]; return null; }
+        IBuilderTask@ current = u.task is null ? null : cast<IBuilderTask>(u.task);
+        if (current !is null && Task::BuildType(current.GetBuildType()) < Task::BuildType::REPAIR) { ++lab2Rej[2]; return null; }
+        Scan();
+        if (Want() <= 0) { ++lab2Rej[3]; return null; }
+        array<string> defs = UnitHelpers::GetRezBots(UnitHelpers::GetSideForUnitName(lab.GetName()));
+        CCircuitDef@ rez = defs.length() == 0 ? null : ai.GetCircuitDef(defs[0]);
+        lastLab2Attempt = ai.frame;
+        CCircuitUnit@ lead = leadLabId < 0 ? null : ai.GetTeamUnit(leadLabId);
+        const AIFloat3 home = lead is null ? Global::Map::StartPos : lead.GetPos(ai.frame);
+        const float w = float(aiTerrainMgr.GetTerrainWidth()), h = float(aiTerrainMgr.GetTerrainHeight());
+        // rings around the first lab, on bot ground the builder reaches, clear of allied layouts;
+        // the ring start turns with each order so a refused spot is not ordered again
+        for (int ring = 1; ring <= 3; ++ring) for (int k = 0; k < 8; ++k) {
+            const float angle = float((k + lab2Builds * 3) % 8) * 0.785398f;
+            const float r = float(ring) * Global::RezReplenish::SecondLabRingStep;
+            const AIFloat3 p = AIFloat3(AiMax(256.0f, AiMin(w - 256.0f, home.x + cos(angle) * r)), 0,
+                AiMax(256.0f, AiMin(h - 256.0f, home.z + sin(angle) * r)));
+            if (!aiBattle.IsPassable(p, Lanes::BOT) || !aiTerrainMgr.CanReachAt(u, p, u.circuitDef.GetBuildDistance())
+                || aiTerrainMgr.IsAllyLayoutBlocked(lab, p, 0)) continue;
+            if (lab.maxThisUnit <= lab.count) lab.maxThisUnit = lab.count + 1;
+            if (!lab.IsAvailable(ai.frame)) return null;
+            @lab2Task = aiBuilderMgr.Enqueue(TaskB::Factory(Task::Priority::HIGH, lab, p, rez is null ? lab : rez, 128.0f,
+                false, true, 120 * SECOND));
+            if (lab2Task is null) return null;
+            ++lab2Builds;
+            GenericHelpers::LogUtil("[RezRep] lab2 build at " + int(p.x) + "," + int(p.z) + " builder=" + u.id
+                + " lead=" + leadLabId + " rez=" + rezFinished + " want=" + Want() + " bank=" + int(aiEconomyMgr.metal.current)
+                + " builds=" + lab2Builds + " min=" + (float(ai.frame) / MINUTE), 1);
+            return lab2Task;
+        }
+        ++lab2Rej[4];
+        return null;
+    }
 
     void _Share()
     {
