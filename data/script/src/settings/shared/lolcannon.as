@@ -113,7 +113,7 @@ namespace LolCannon {
     // Scouting that changes the top area sends the gun back to it at once.
     float AreaRadius = 300.0f;
     int GunAreas = 6;
-    int GunAreaSeconds = 20;
+    int GunAreaSeconds = 30;        // owner 2026-10-28: 30 (was 20); the Starfall keeps StarfallShotsPerArea
     int StarfallAreas = 3;
     int StarfallShotsPerArea = 2;
     // scouting (owner 2026-10-27): at the first strike, then every ReScoutSeconds at

@@ -103,7 +103,7 @@ this program (owner, 2026-10-26):
           into areas of AreaRadius (300) round the best target left; an area
           ranks by its best tier, then by its roster metal, and is fired at
           its best target. Ragnarok and Calamity work down the top GunAreas
-          (6), GunAreaSeconds (20) on each; the Starfall the top
+          (6), GunAreaSeconds (30) on each; the Starfall the top
           StarfallAreas (3), StarfallShotsPerArea (2) shots on each; then back
           to the top. Scouting that changes the top area (its best target
           gone, or a better one found) sends the gun back to the top at once
