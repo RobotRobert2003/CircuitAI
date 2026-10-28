@@ -626,11 +626,14 @@ bool CSuperTask::SelectNuclearTarget(CCircuitUnit* unit, CCircuitDef* cdef)
 	const auto& policy = circuit->GetMilitaryManager()->GetNuclearInfo();
 	const float floor = StockedShotFloor(unit, cdef, frame, cdef->GetWeaponDef()->GetCostMShot());
 	auto scan = [&]() {
-		return SelectAreaTarget(unit, cdef, "NUCLEAR", SQUARE(cdef->GetAoe()), 1, 0,
+		const bool found = SelectAreaTarget(unit, cdef, "NUCLEAR", SQUARE(cdef->GetAoe()), 1, 0,
 			[&policy](const SEnemyData& e, CCircuitDef* d, int& rank, float& value) {
 				if (!strategic::NuclearTarget(d->IsMobile(), true, policy.structuresOnly)) return false;
 				rank = 0; value = e.cost; return true;
 			}, floor, true, true, false, true);
+		// nuke rush scouting (team/nuke_recon.as) sends AIR to the latest aim
+		if (found) circuit->GetMilitaryManager()->SetNuclearAim(targetPos, cdef->GetAoe());
+		return found;
 	};
 	strategic::Overnuke& over = circuit->GetMilitaryManager()->GetOvernuke();
 	const int silos = CountNukeSilos();

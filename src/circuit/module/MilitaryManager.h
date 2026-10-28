@@ -267,6 +267,11 @@ public:
 	int GetOvernukeScouts() const { return overnuke.Scouts(); }
 	springai::AIFloat3 GetOvernukePos() const;
 	float GetOvernukeRadius() const { return overnuke.Radius(); }
+	// Nuke rush scouting (owner 2026-10-28): the latest aim point the nuclear
+	// scan chose and its blast radius; x < 0 before the first one
+	void SetNuclearAim(const springai::AIFloat3& pos, float radius) { nuclearAim = pos; nuclearAimRadius = radius; }
+	springai::AIFloat3 GetNuclearAim() const { return nuclearAim; }
+	float GetNuclearAimRadius() const { return nuclearAimRadius; }
 
 	/*
 	 * Mobile sensor escort policy. Mobile radar and jammer units carry the
@@ -527,6 +532,8 @@ private:
 	SStockInfo stockInfo;
 	SNuclearInfo nuclearInfo;
 	strategic::Overnuke overnuke;
+	springai::AIFloat3 nuclearAim = springai::AIFloat3(-1.f, 0.f, -1.f);
+	float nuclearAimRadius = 0.f;
 	SSensorInfo sensorInfo;
 	SCommSnipeInfo commSnipeInfo;
 

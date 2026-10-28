@@ -27,6 +27,9 @@ namespace AirScoutSweep {
     AIFloat3 pendAt(-1,0,-1), wantAt(-1,0,-1);
     float pendSpread = 0.0f, wantSpread = 0.0f;
     bool Targeted() { return wantAt.x >= 0.0f; }
+    // The nuke rush's request (owner 2026-10-28) skips the T2-plant and income
+    // gates: T1 scouts at once, radar planes only once a T2 plant is up.
+    bool pendUrgent = false, wantUrgent = false;
     int Wanted(int kind) {
         if (kind == 0) return wantT1 >= 0 ? wantT1 : Global::RoleSettings::Air::ScoutSweepT1Count;
         return wantRadar >= 0 ? wantRadar : Global::RoleSettings::Air::ScoutSweepRadarCount;
@@ -60,6 +63,18 @@ namespace AirScoutSweep {
             return;
         }
         pendT1 = AiMax(0, t1); pendRadar = AiMax(0, radar); pendAt = at; pendSpread = spread; requested = true;
+    }
+    void Urgent(const AIFloat3 &in at, float spread) {
+        if (!Enabled() || !AirEconomy::Active()) return;
+        if (forming && !dispatching) {
+            // the package already forming takes the nuke's target and loses its gates
+            if (at.x >= 0.0f) { wantAt = at; wantSpread = spread; }
+            wantUrgent = true;
+            GenericHelpers::LogUtil("[AIR][ScoutSweep] forming package takes the nuke request x="+int(at.x)+" z="+int(at.z),1);
+            return;
+        }
+        pendT1 = Global::RoleSettings::Air::ScoutSweepT1Count; pendRadar = Global::RoleSettings::Air::ScoutSweepRadarCount;
+        pendAt = at; pendSpread = spread; pendUrgent = true; requested = true;
     }
 
     AIFloat3 Mean(const array<AIFloat3> &in points, const AIFloat3 &in fallback) {
@@ -111,9 +126,10 @@ namespace AirScoutSweep {
     }
     void Begin() {
         if (ai.frame<planAfter) return;
-        wantT1=pendT1; wantRadar=pendRadar; wantAt=pendAt; wantSpread=pendSpread;
-        if (!Plan()) { wantT1=-1; wantRadar=-1; wantAt=AIFloat3(-1,0,-1); planAfter=ai.frame+10*SECOND; return; }
-        pendT1=-1; pendRadar=-1; pendAt=AIFloat3(-1,0,-1);
+        wantT1=pendT1; wantRadar=pendRadar; wantAt=pendAt; wantSpread=pendSpread; wantUrgent=pendUrgent;
+        if (wantUrgent && firstPlantFrame<0) wantRadar=0;  // radar planes need the T2 plant
+        if (!Plan()) { wantT1=-1; wantRadar=-1; wantAt=AIFloat3(-1,0,-1); wantUrgent=false; planAfter=ai.frame+10*SECOND; return; }
+        pendT1=-1; pendRadar=-1; pendAt=AIFloat3(-1,0,-1); pendUrgent=false;
         excluded.deleteAll(); members.deleteAll(); arrived.deleteAll();
         array<Id>@ ids = ai.GetOwnedUnitIds();
         for (uint i=0;i<ids.length();++i) {
@@ -127,7 +143,7 @@ namespace AirScoutSweep {
         assembly.SetAirControl(true); assembly.SetPatrol(true); assembly.SetTraversal(true,128,false);
         assembly.SetRoute(array<AIFloat3> = {starts[0]});
         forming=true; requested=false; dispatching=false;
-        GenericHelpers::LogUtil("[AIR][ScoutSweep] package requested scouts="+Wanted(0)+" radar="+Wanted(1),1);
+        GenericHelpers::LogUtil("[AIR][ScoutSweep] package requested scouts="+Wanted(0)+" radar="+Wanted(1)+(wantUrgent ? " (nuke, ungated)" : ""),1);
     }
     IUnitTask@ TaskFor(CCircuitUnit@ u) {
         if (!Enabled() || !AirEconomy::Active() || !AirRecon::Controlled(u)) return null;
@@ -146,7 +162,7 @@ namespace AirScoutSweep {
     }
     IUnitTask@ Produce(CCircuitUnit@ plant) {
         if (!Enabled() || !AirEconomy::Active() || !forming || dispatching || !AirRecon::Controlled(plant)
-            || Lifecycle::IsRetiring(plant) || !Gate()) return null;
+            || Lifecycle::IsRetiring(plant) || (!wantUrgent && !Gate())) return null;
         const string side=UnitHelpers::GetSideForUnitName(plant.circuitDef.GetName());
         const int kind=UnitHelpers::IsT1AircraftPlant(plant.circuitDef.GetName()) ? 0 : 1;
         CCircuitDef@ def=ai.GetCircuitDef(kind==0 ? UnitHelpers::GetT1AirScoutForSide(side) : AirRecon::Name(side));
@@ -193,10 +209,11 @@ namespace AirScoutSweep {
             flying.delete(away[i]); endpoints.delete(away[i]); expires.delete(away[i]);
             if (task !is null && !task.IsDead()) task.Abort();
         }
-        if (!forming && requested && firstPlantFrame>=0 && Gate()) Begin();
+        if (!forming && requested && ((firstPlantFrame>=0 && Gate()) || pendUrgent)) Begin();
         if (!forming) return;
         if (assembly is null || assembly.IsDead()) {
             if (Targeted() && pendAt.x < 0.0f) { pendT1=wantT1; pendRadar=wantRadar; pendAt=wantAt; pendSpread=wantSpread; }
+            if (wantUrgent) pendUrgent=true;
             forming=false; requested=true; return;
         }
         array<string>@ ids=members.getKeys(); ids.sortAsc();
@@ -224,7 +241,7 @@ namespace AirScoutSweep {
             }
             if (MapHelpers::SqDist(u.GetPos(ai.frame),starts[slot])<=480.0f*480.0f) arrived.set(ids[i],true);
         }
-        if (!dispatching && (!Gate() || Count(0)!=Wanted(0) || Count(1)!=Wanted(1) || arrived.getSize()!=members.getSize())) return;
+        if (!dispatching && ((!wantUrgent && !Gate()) || Count(0)!=Wanted(0) || Count(1)!=Wanted(1) || arrived.getSize()!=members.getSize())) return;
         dispatching=true;
         // One task per aircraft lets a surviving route be released independently.
         for (uint i=0;i<ids.length();++i) {
@@ -243,7 +260,7 @@ namespace AirScoutSweep {
             GenericHelpers::LogUtil("[AIR][ScoutSweep] crossing unit="+u.id+" def="+u.circuitDef.GetName()+" x="+int(route[0].x)+" z="+int(route[0].z)
                 +(route.length()>1 ? " then x="+int(end.x)+" z="+int(end.z) : ""),1);
         }
-        if (members.isEmpty()) { assembly.Abort(); @assembly=null; forming=false; excluded.deleteAll(); wantT1=-1; wantRadar=-1; wantAt=AIFloat3(-1,0,-1); }
+        if (members.isEmpty()) { assembly.Abort(); @assembly=null; forming=false; excluded.deleteAll(); wantT1=-1; wantRadar=-1; wantAt=AIFloat3(-1,0,-1); wantUrgent=false; }
     }
     void Reset() {
         array<string>@ controlled=members.getKeys();
@@ -259,7 +276,7 @@ namespace AirScoutSweep {
         for(uint i=0;i<ids.length();++i) { CRouteTask@ task; flying.get(ids[i],@task); if(task !is null && !task.IsDead()) task.Abort(); }
         @ids=caps.getKeys();
         for(uint i=0;i<ids.length();++i) { CCircuitDef@ def=ai.GetCircuitDef(ids[i]); int cap=0; if(def !is null && caps.get(ids[i],cap)) def.maxThisUnit=cap; }
-        pendT1=-1; pendRadar=-1; wantT1=-1; wantRadar=-1; pendAt=AIFloat3(-1,0,-1); wantAt=AIFloat3(-1,0,-1);
+        pendT1=-1; pendRadar=-1; wantT1=-1; wantRadar=-1; pendAt=AIFloat3(-1,0,-1); wantAt=AIFloat3(-1,0,-1); pendUrgent=false; wantUrgent=false;
         @assembly=null; forming=false; dispatching=false; requested=false; firstPlantFrame=-1; nextPeriodic=-1; checked=-SECOND; planAfter=0;
         excluded.deleteAll(); members.deleteAll(); arrived.deleteAll(); flying.deleteAll(); endpoints.deleteAll(); expires.deleteAll(); caps.deleteAll(); starts.resize(0); goals.resize(0);
     }
