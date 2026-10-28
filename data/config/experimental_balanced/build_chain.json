@@ -4,10 +4,10 @@
 		"unit": {
 		//             	   0          1         2          3            4         5          6          7            8         9        10
 			"armada": ["armllt",  "armtl",  "armrl",   "armbeamer", "armhlt", "armjuno", "armclaw", "armcir",  "armferret", "armpb", "armatl",
-					   "armflak", "armamb", "armanni", "armguard",  "armamd", "armtarg", "armgate", "armmercury", "armnanotc", "armbrtha", "armvulc", "armemp", "armbeamer", "armarad", "armveil", "armpb", "armbeamer"],
+					   "armflak", "armamb", "armanni", "armguard",  "armamd", "armtarg", "armgate", "armmercury", "armnanotc", "armbrtha", "armvulc", "armemp", "armbeamer", "armarad", "armveil", "armpb", "armbeamer", "armclaw"],
 		//            	   0          1           2          3          4         5          6            7          8          9      10
 			"cortex": ["corllt",  "cortl",    "corrl",   "corhllt", "corhlt", "corjuno", "cormaw",  "cormadsam", "corerad", "corvipe", "coratl",
-					   "corflak", "cortoast", "cordoom", "corpun",  "corfmd", "cortarg", "corgate", "corscreamer", "cornanotc", "corint", "corbuzz", "cortron", "corhllt", "corarad", "corshroud", "corvipe", "corhllt"]
+					   "corflak", "cortoast", "cordoom", "corpun",  "corfmd", "cortarg", "corgate", "corscreamer", "cornanotc", "corint", "corbuzz", "cortron", "corhllt", "corarad", "corshroud", "corvipe", "corhllt", "cormaw"]
 		},
 		// Actual number of defences per cluster bounded by income - the order of defenses that should be build with numbers as above.
 		// 23: a second Beamer / Twin Guard / Dragon's Jaw, right after the T2 flak (11) and the HLT (4).
@@ -17,6 +17,10 @@
 		// 27: Beamer / Twin Guard for the "base" defence only. Legion's list has no slot 27, so the
 		//     native loader skips it: Legion no longer builds a Hive 7 min after its first factory,
 		//     Armada/Cortex keep their Beamer / Twin Guard there (owner, 2026-10-17).
+		// 28: Dragon's Claw / Dragon's Maw (armclaw / cormaw), right after the 2nd, 3rd and 4th Beamer /
+		//     Twin Guard, so a full point holds 3 pop-ups to 4 light guns (owner, 2026-10-28). Legion's list
+		//     has no slot 28, so the native loader skips it: Legion already builds Dragon's Jaw in the
+		//     three slot-23 entries, one more Jaw than Hives.
 		// Juno (5) is the 4th entry, after the Sentry, the light AA and one Beamer.
 		// 24: long-range radar (armarad / corarad / legarad: 400 metal, 14000 energy, T2, radar 3500), once,
 		//     right after the first T2 entries (12, 11): a cluster gets there only with T2 constructors about.
@@ -25,7 +29,7 @@
 		// 25: long-range jammer (armveil / corshroud / legajam: 125-130 metal but 19000-20000 energy and
 		//     125 E/s upkeep), once, after the first Annihilator / Doomsday / Bastion (13): late, hiding
 		//     the cluster's heavy guns from enemy radar (owner, 2026-10-11: both back in the chain).
-		"land":  [0, 2, 23, 5, 23, 4, 3, 7, 12, 11, 24, 26, 23, 12, 15, 13, 25, 18, 17, 18, 20, 22, 20, 19, 19, 20, 20, 18, 17, 17, 22, 12, 12, 21, 12, 12, 12],
+		"land":  [0, 2, 23, 5, 23, 28, 4, 3, 28, 7, 12, 11, 24, 26, 23, 28, 12, 15, 13, 25, 18, 17, 18, 20, 22, 20, 19, 19, 20, 20, 18, 17, 17, 22, 12, 12, 21, 12, 12, 12],
 		"water": [1, 1, 19, 1, 4, 9, 10, 9, 10],
 		"prevent": 1,  // number of preventive defences
 		"amount": {  // income bound factor
