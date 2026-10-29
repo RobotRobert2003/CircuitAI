@@ -79,6 +79,70 @@ namespace Layout {
 
     CCircuitDef@ nano;
 
+    // One reusable pad, reserved before economy packing. Native zone slots
+    // retain their footprint through task failure, completion and destruction.
+    // Failed terrain searches retry at most once per ten seconds per AI.
+    int antiNukeSearchAfter = 0;
+    CCircuitUnit@ AntiNukeFrameInReach(CCircuitUnit@ u)
+    {
+        CCircuitUnit@ frame = aiTerrainMgr.GetReservationUnit(aiTerrainMgr.GetLayoutInt("tech.antinuke.slot", -1));
+        if (frame is null || frame.GetBuildProgress() >= 1.0f) return null;
+        const float reach = u.circuitDef.GetBuildDistance();
+        return MapHelpers::SqDist(u.GetPos(ai.frame), frame.GetPos(ai.frame)) <= reach * reach ? frame : null;
+    }
+    int ReserveAntiNuke()
+    {
+        int slot = aiTerrainMgr.GetLayoutInt("tech.antinuke.slot", -1);
+        const int state = aiTerrainMgr.GetReservationState(slot);
+        if (state >= 0 && state != 4) return slot;
+        if (ai.frame < antiNukeSearchAfter || nano is null) return -1;
+        antiNukeSearchAfter = ai.frame + 10 * SECOND;
+        if (state == 4) {
+            if (aiTerrainMgr.GetLayoutInt("tech.antinuke.private", 0) != 0) aiTerrainMgr.ReleasePersistentBuilding(slot);
+            else aiTerrainMgr.ReleaseReservation(slot);
+        }
+        CCircuitDef@ d = ai.GetCircuitDef(UnitHelpers::GetAntiNukeNameForSide(Global::AISettings::Side));
+        if (d is null) return -1;
+        slot = nanoGroup > 0 ? aiTerrainMgr.PackNearGroup(aiTerrainMgr.GetGroupZone(nanoGroup), d,
+            nanoGroup, facing, BaseCentre(), nano.GetBuildDistance() - 16.0f, 0.0f, 0) : -1;
+        for (uint i = 0; i < CompactEco::groups.length() && slot < 0; ++i)
+            slot = aiTerrainMgr.PackNearGroup(CompactEco::zones[i], d, CompactEco::groups[i],
+                facing, BaseCentre(), nano.GetBuildDistance() - 16.0f, 0.0f, 0);
+        // Cramped/no-box layouts have no packable group. One owned-unit scan
+        // per failed retry finds the nearest real nano, then at most 72 sites.
+        // A successful persistent pad makes later calls constant-time again.
+        if (slot < 0 && !HasBox() && CompactEco::groups.length() == 0) {
+            CCircuitUnit@ support = null;
+            float best = 1.0e20f;
+            array<Id>@ ids = ai.GetOwnedUnitIds();
+            for (uint i = 0; i < ids.length(); ++i) {
+                CCircuitUnit@ u = ai.GetTeamUnit(ids[i]);
+                if (u is null || !UnitHelpers::IsT1Nano(u.circuitDef.GetName())) continue;
+                const float distance = MapHelpers::SqDist(u.GetPos(ai.frame), BaseCentre());
+                if (distance < best) { best = distance; @support = u; }
+            }
+            if (support !is null) {
+                const AIFloat3 at = support.GetPos(ai.frame);
+                const float reach = support.circuitDef.GetBuildDistance() - 16.0f;
+                for (int ring = 1; ring <= 3 && slot < 0; ++ring) {
+                    const float radius = reach * float(ring) / 4.0f;
+                    for (int k = 0; k < 24 && slot < 0; ++k) {
+                        const float angle = 6.2831853f * float(k) / 24.0f;
+                        const AIFloat3 p(at.x + cos(angle) * radius, 0.0f, at.z + sin(angle) * radius);
+                        if (!aiTerrainMgr.IsZoneAlly(p)) slot = aiTerrainMgr.ReservePersistentBuilding(d, p, facing);
+                    }
+                }
+                if (slot >= 0) aiTerrainMgr.SetLayoutInt("tech.antinuke.private", 1);
+            }
+        } else if (slot >= 0) aiTerrainMgr.SetLayoutInt("tech.antinuke.private", 0);
+        aiTerrainMgr.SetLayoutInt("tech.antinuke.slot", slot);
+        if (slot >= 0) {
+            const AIFloat3 p = aiTerrainMgr.GetReservationPos(slot);
+            GenericHelpers::LogUtil("[TECH][AntiNuke] reserved slot=" + slot + " at=" + int(p.x) + "," + int(p.z), 1);
+        }
+        return slot;
+    }
+
     bool HasComplex()
     {
         return planned && !fallback && aiTerrainMgr.IsLayoutEnabled();
@@ -100,6 +164,7 @@ namespace Layout {
     void ClearScriptState()
     {
         CompactEco::Clear();
+        antiNukeSearchAfter = 0;
         planned = false;
         fallback = false;
         facing = 0;
@@ -558,6 +623,7 @@ namespace Layout {
                     }
                 }
                 PlanForwardBox();   // D-081: at least one cluster forward in clear space
+                ReserveAntiNuke();
                 return slots > 0;
             }
         }
@@ -939,6 +1005,7 @@ namespace Layout {
     void Update(float metalIncome, bool t2LabStands, int t2ConstructorCount)
     {
         LayoutHelpers::CheckAlliedPlacements();
+        ReserveAntiNuke();
         if (!planned && aiTerrainMgr.IsLayoutEnabled()) {
             Adopt(Global::AISettings::Side);
         } else if (planned) {

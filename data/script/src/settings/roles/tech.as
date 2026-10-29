@@ -870,8 +870,9 @@ namespace Tech {
             /******************** ANTI-NUKE THRESHOLDS ********************/
             // Minimum economy thresholds to allow building anti-nuke defenses
             // and the minimum number of anti-nuke structures to maintain
-            float MinimumMetalIncomeForAntiNuke = 80.0f;
-            float MinimumEnergyIncomeForAntiNuke = 3000.0f;
+            int AntiNukeAfterSeconds = 10 * 60;
+            float MinimumMetalIncomeForAntiNuke = 100.0f;
+            float MinimumEnergyIncomeForAntiNuke = 2000.0f;
             int MinimumAntiNukeCount = 1;
             // Income-scaling for anti-nukes: allowed count = floor(metalIncome / MetalIncomePerAntiNuke)
             float MetalIncomePerAntiNuke = 80.0f;

@@ -2123,6 +2123,10 @@ namespace RoleTech
 	// Steps 1-2. Also SUPPORT's turret assist (support_build.as) and rule turret.assist.
 	IUnitTask @Tech_TurretAssist(CCircuitUnit @u, bool factorySide = false)
 	{
+        if (Global::AISettings::Role == AiRole::TECH) {
+            CCircuitUnit@ anti = Layout::AntiNukeFrameInReach(u);
+            if (anti !is null) return Tech_TurretRepair(anti, factorySide, Task::Priority::HIGH);
+        }
 		if (u is null || u.circuitDef is null) return null;
 		const bool nukeRush = TechChain::NukeRush();
 		// step 1: a reclaim of ours in reach (D-290: only one the gate allows now)
@@ -3008,7 +3012,9 @@ namespace RoleTech
 		int allowedAnti = EconomyHelpers::AllowedAntiNukesFromIncome(
 			/*metalIncome*/ metalIncome,
 			/*per*/ Global::RoleSettings::Tech::MetalIncomePerAntiNuke);
-		if (EconomyHelpers::ShouldBuildAntiNuke(
+		if ((!Global::RoleSettings::Tech::ExperimentalBuild || antiNukeTotal > 0)
+            && ai.frame >= Global::RoleSettings::Tech::AntiNukeAfterSeconds * SECOND
+            && EconomyHelpers::ShouldBuildAntiNuke(
 				/*mi*/ metalIncome,
 				/*ei*/ energyIncome,
 				/*current*/ antiNukeTotal,

@@ -295,6 +295,25 @@ namespace TechRules {
     IUnitTask@ DoKeepCurrent(Ctx@ c)    { return TechBuild::KeepCurrent(c.u); }
     IUnitTask@ DoRecovery(Ctx@ c)       { return TechBuild::RecoverEconomy(c.u); }
     IUnitTask@ DoEcoFlak(Ctx@ c)        { return EcoFlak::Work(c.u); }
+    IUnitTask@ DoAntiNuke(Ctx@ c)
+    {
+        if (ai.frame < Global::RoleSettings::Tech::AntiNukeAfterSeconds * SECOND
+            || c.mi < Global::RoleSettings::Tech::MinimumMetalIncomeForAntiNuke
+            || c.ei < Global::RoleSettings::Tech::MinimumEnergyIncomeForAntiNuke) return null;
+        CCircuitDef@ d = ai.GetCircuitDef(UnitHelpers::GetAntiNukeNameForSide(Global::AISettings::Side));
+        if (d is null || !c.u.circuitDef.CanBuild(d) || !d.IsAvailable(ai.frame)
+            || EconomyHelpers::GetAntiNukeCount() > 0
+            || aiBuilderMgr.GetQueuedBuildCount(int(Task::BuildType::DEFENCE), d) > 0) return null;
+        const int slot = Layout::ReserveAntiNuke();
+        if (slot < 0 || aiTerrainMgr.GetReservationState(slot) != 0) return null;
+        const AIFloat3 p = aiTerrainMgr.GetReservationPos(slot);
+        if (!aiTerrainMgr.CanReachAt(c.u, p, c.u.circuitDef.GetBuildDistance())) return null;
+        IUnitTask@ t = aiBuilderMgr.Enqueue(TaskB::Common(Task::BuildType::DEFENCE, Task::Priority::HIGH,
+            d, p, 0.0f, true, 300 * SECOND));
+        if (t !is null && !AiPinReservation(t, slot)) { aiBuilderMgr.AbortTask(t); return null; }
+        if (t !is null) GenericHelpers::LogUtil("[TECH][AntiNuke] ordered income=" + c.mi + "/" + c.ei + " slot=" + slot, 1);
+        return t;
+    }
     IUnitTask@ DoCompactSupport(Ctx@ c) { return c.draining ? null : CompactEco::SupportTask(c.u); }
     IUnitTask@ DoLocalGeo(Ctx@ c) {
         // Keep the committed silo/first-stockpile budget intact. Geothermal
@@ -490,6 +509,7 @@ namespace TechRules {
         table.insertLast(Rule("land.recall",       CONSTRUCTORS, W0(), @DoLandRecall,   "D-109: a tier whose air constructors went down: its land constructors drop a forward job for the eco rows"));
         table.insertLast(Rule("weapons.super",     CONSTRUCTORS, W0(), @DoWeaponsSuper, "D-126 (owner): a super cannon framed or startable: every air constructor builds it"));
         table.insertLast(Rule("keep.current",      MOBILE,       W0(), @DoKeepCurrent,  "the construction the builder is on, when native re-asks"));
+        table.insertLast(Rule("defence.antinuke", CON_T2, W0(), @DoAntiNuke, "first antinuke from ten minutes at sustained +100 metal/+2000 energy, on its reserved nano-range pad"));
         table.insertLast(Rule("eco.recover",       MOBILE,       W0(), @DoRecovery, "D-306: restore safe lost layout capacity before discretionary growth"));
         table.insertLast(Rule("eco.flak", CON_T2, W0(), @DoEcoFlak, "D-321: perimeter flak minimum, air response and replacement; shared cooldown and per-cluster cap"));
         table.insertLast(Rule("nuke.afus",         CON_T2,       W0(), @DoNukeAfus,     "owner 2026-10-17: a nuke rush adds a silo after each completed advanced fusion (1 + AFUS, NukeLimit), one at a time, on the regular silo gates, packed on the base layout"));

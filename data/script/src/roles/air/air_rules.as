@@ -30,6 +30,8 @@ namespace AirRules {
         }
         @t = AirBuild::Resume(u);
         if (t !is null) return AirBuild::Record(t, "project.resume", u);
+        @t = AirDefence::MakeTask(u, true);
+        if (t !is null) return AirBuild::Record(t, "defence.antinuke", u);
         // Home spots precede the starter. Recovery never repeats a paid opening.
         if (AirEconomy::t1 + AirEconomy::t2 == 0 && aiTerrainMgr.GetLayoutInt("air.starter.retired",0) == 0) {
             // maxSpots limits native search candidates, not owned extractors.

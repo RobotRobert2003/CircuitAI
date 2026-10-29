@@ -56,6 +56,10 @@ namespace AirProduction {
         const bool fundedProduction = advanced && Global::RoleSettings::Air::ContinuousFactoryProduction
             && aiEconomyMgr.metal.current > 0.0f;
         if (!advanced && !basic) {
+            // The reserved defensive frame takes local nano power before
+            // factory output. One slot lookup; no scan across projects/units.
+            CCircuitUnit@ anti = AirLayout::AntiNukeFrameInReach(u);
+            if (anti !is null) return aiFactoryMgr.Enqueue(TaskS::Repair(Task::Priority::HIGH, anti));
             if (AirEcoLayout::Owns(u.GetPos(ai.frame))) {
                 CCircuitUnit@ frame = AirBuild::FindAssistTarget(u, false, null, true);
                 IUnitTask@ task = frame is null ? aiFactoryMgr.Enqueue(TaskS::Wait(false, SECOND))

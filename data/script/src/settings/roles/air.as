@@ -45,9 +45,9 @@ namespace Air {
             float HomeEconomyRadius = 2400.0f;
             float HomeDefenceRadius = 1500.0f;
             float AntiNukeCoreRadius = 800.0f;
-            float AntiNukeMetalIncome = 40.0f;
-            float AntiNukeEnergyIncome = 1200.0f;
-            int AntiNukeAfterSeconds = 15 * 60;
+            float AntiNukeMetalIncome = 100.0f;
+            float AntiNukeEnergyIncome = 2000.0f;
+            int AntiNukeAfterSeconds = 10 * 60;
             int EnergyParallel = 6;
             float AdvancedSolarMinimumBankEnergy = 500.0f; // Keep solar growth reachable on low-wind maps.
             float SmallProjectSeconds = 12.0f;

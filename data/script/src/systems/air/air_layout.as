@@ -37,6 +37,58 @@ namespace AirLayout {
     dictionary placeRetry;
     dictionary originalFactoryCaps;
 
+    // One pad outside production reservations but inside the first bay's
+    // planned nano reach. O(384 * N) geometry checks (N <= 20), only until a
+    // pad exists; failed searches retry after ten seconds. No unit-list scan.
+    int antiNukeSearchAfter = 0;
+    CCircuitUnit@ AntiNukeFrameInReach(CCircuitUnit@ u)
+    {
+        CCircuitUnit@ frame = aiTerrainMgr.GetReservationUnit(aiTerrainMgr.GetLayoutInt("air.antinuke.slot", -1));
+        if (frame is null || frame.GetBuildProgress() >= 1.0f) return null;
+        const float reach = u.circuitDef.GetBuildDistance();
+        return MapHelpers::SqDist(u.GetPos(ai.frame), frame.GetPos(ai.frame)) <= reach * reach ? frame : null;
+    }
+    int ReserveAntiNuke()
+    {
+        int slot = aiTerrainMgr.GetLayoutInt("air.antinuke.slot", -1);
+        const int state = aiTerrainMgr.GetReservationState(slot);
+        if (state >= 0 && state != 4) return slot;
+        if (!enabled || bays.length() == 0 || ai.frame < antiNukeSearchAfter) return -1;
+        antiNukeSearchAfter = ai.frame + 10 * SECOND;
+        if (state == 4) aiTerrainMgr.ReleasePersistentBuilding(slot);
+        const string side = Global::AISettings::Side;
+        CCircuitDef@ d = ai.GetCircuitDef(UnitHelpers::GetAntiNukeNameForSide(side));
+        CCircuitDef@ nano = ai.GetCircuitDef(UnitHelpers::GetT1NanoNameForSide(side));
+        if (d is null || nano is null) return -1;
+        Bay@ bay = bays[0];
+        const float reach = nano.GetBuildDistance() - 16.0f;
+        const float coverage = aiBattle.InterceptorCoverage(d);
+        for (int ring = 1; ring <= 16; ++ring) {
+            for (int k = 0; k < 24; ++k) {
+                const float angle = 6.2831853f * float(k) / 24.0f;
+                const AIFloat3 p(bay.centre.x + cos(angle) * float(ring) * 48.0f, 0.0f,
+                    bay.centre.z + sin(angle) * float(ring) * 48.0f);
+                if (!Inside(p, 96.0f) || !AirHome::EconomySite(p) || aiTerrainMgr.IsZoneAlly(p)
+                    || !PlacementMath::CoversCore(coverage, MapHelpers::SqDist(Global::Map::StartPos, p),
+                        Global::RoleSettings::Air::AntiNukeCoreRadius + 16.0f)) continue;
+                bool supported = false;
+                for (uint n = 0; n < bay.nanos.length() && !supported; ++n)
+                    supported = aiTerrainMgr.GetReservationState(bay.nanos[n]) >= 0
+                        && aiTerrainMgr.GetReservationState(bay.nanos[n]) != 4
+                        && MapHelpers::SqDist(p, aiTerrainMgr.GetReservationPos(bay.nanos[n])) <= reach * reach;
+                if (!supported || !aiTerrainMgr.CanReserveBuilding(d, p, bay.facing)) continue;
+                slot = aiTerrainMgr.ReservePersistentBuilding(d, p, bay.facing);
+                if (slot < 0) continue;
+                aiTerrainMgr.SetLayoutInt("air.antinuke.slot", slot);
+                const AIFloat3 snapped = aiTerrainMgr.GetReservationPos(slot);
+                GenericHelpers::LogUtil("[AIR][AntiNuke] reserved slot=" + slot + " at=" + int(snapped.x) + "," + int(snapped.z), 1);
+                return slot;
+            }
+        }
+        aiTerrainMgr.SetLayoutInt("air.antinuke.slot", -1);
+        return -1;
+    }
+
     void UnlockCampus()
     {
         const array<string> names = UnitHelpers::GetAllT2AircraftPlants();
@@ -83,6 +135,7 @@ namespace AirLayout {
         if (!enabled) return;
         UnlockCampus();
         AirEconomy::Reset(); AirProduction::Reset();
+        antiNukeSearchAfter = 0;
         AirBuild::AdoptExisting();
         aiBuilderMgr.experimentalBuild = true;
         aiBuilderMgr.experimentalAirDirect = true;
@@ -256,6 +309,16 @@ namespace AirLayout {
                 (x1 - x0) * AllyClearHalfExtentScale + AllyClearMargin, (z1 - z0) * AllyClearHalfExtentScale + AllyClearMargin)) { held = true; return null; }
         }
         GenericHelpers::LogUtil("[AIR][Layout] relocate blocked unused cluster=" + bay.cluster, 1);
+        // An unclaimed defense pad follows its support campus. A claimed or
+        // framed pad keeps native task ownership; a started campus cannot move.
+        if (bays.length() > 0 && members.findByRef(bays[0]) >= 0) {
+            const int pad = aiTerrainMgr.GetLayoutInt("air.antinuke.slot", -1);
+            if (aiTerrainMgr.GetReservationState(pad) == 0) {
+                aiTerrainMgr.ReleasePersistentBuilding(pad);
+                aiTerrainMgr.SetLayoutInt("air.antinuke.slot", -1);
+                antiNukeSearchAfter = 0;
+            }
+        }
         for (uint i = 0; i < slots.length(); ++i) aiTerrainMgr.ReleasePersistentBuilding(slots[i]);
         aiTerrainMgr.ReleaseZone(bay.envelope);
         for (uint i = 0; i < members.length(); ++i) { members[i].slot = -1; members[i].envelope = 0; members[i].nanos.resize(0); Save(members[i]); }
@@ -276,6 +339,7 @@ namespace AirLayout {
         // allied expansion use the land. Reservation spends no resources and
         // does not advance the actual mex/energy/factory build sequence.
         if (bays.length() == 0) Reserve(ai.GetCircuitDef(UnitHelpers::GetT1AirPlantForSide(side)), Global::Map::StartPos);
+        ReserveAntiNuke();
         AirEcoLayout::PlanAhead();
         if (bays.length() == 0 || ai.frame < searchAfter) return;
         const array<string> names = {UnitHelpers::GetT2AirPlantForSide(side), UnitHelpers::GetT1AirPlantForSide(side)};
